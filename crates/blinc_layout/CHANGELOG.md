@@ -22,6 +22,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - An element that keeps a pointer state across a restyle now eases to its new look. Unchecking a hovered switch changes the rule that applies from `:checked:hover` to `:hover`; that was applied without a transition, so the fill snapped.
 
 ### Added
+- `Canvas::flow(graph)` draws a flow shader over the canvas's bounds, and `Canvas::rounded(r)` rounds its corners.
 - `TextInput::invalid(..)` and `TextArea::invalid(..)` mark a field invalid whatever its value, as a field with an error is: a bool, Signal or Computed. The box carries `data-invalid` while it is; a `TextArea` now carries the attribute at all. `TextInputData::invalid` and `TextAreaState::invalid` hold it. `TextInput`, `TextArea` and `NumberInput` `placeholder(..)` take a signal too, followed in place.
 - `Stylesheet::resolve_color(value)` resolves a CSS colour, `var(..)` chains included, against the variables the stylesheet defines and was parsed with, so drawing code such as a canvas can take its colours from the stylesheet.
 - A CSS `animation` set by a rule keyed on more than a single class (an attribute such as `.grid[data-enter="next"]`, a compound, a descendant) plays. It starts when an element is built matching the rule, and when a bound attribute or class makes a different animation the one that applies; when none applies any more, the animation stops. Only single-class rules started before.
@@ -45,6 +46,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - `@layer name { ... }` in stylesheets: its class rules sit below every unlayered rule regardless of specificity. `CN_STYLES` is wrapped in one, so an app stylesheet themes cn components whichever was added first.
 
 ### Changed
+- **Breaking:** flow shaders are not part of CSS. `@flow` blocks, the `flow:` property, `div().flow(..)`, `FlowRef`, `RenderProps::flow`, `ElementStyle::flow`, `css_style!`/`style!` `flow` entries and `Stylesheet::get_flow` are removed. A flow is drawn by a canvas: `canvas(..).flow(graph)`, with `.rounded(r)` for its corners. The `flow!` macro and `parse_flow_string` are unchanged and now come from the new `blinc_flow` crate, which `blinc_layout` re-exports. Pointer queries stay in CSS.
 - **Breaking:** the CSS `theme(token)` function is removed, for colours (`theme(primary)`), radii (`theme(radius-lg)`) and shadows (`theme(shadow-md)`). A theme's tokens are `:root` variables, so write `var(--primary)`, `var(--radius-lg)`, `var(--shadow-md)`. The `--shadow-*` variables, which were the text `theme(shadow-md)`, are the real `box-shadow` lists now (`0px 4px 6px -1px rgba(0,0,0,0.3)`), so they read in any CSS engine and nest in other values. `blinc_css`'s value parsers no longer read the global `ThemeState`.
 - **Breaking:** `widgets::rich_text_editor::selection_toolbar` takes the editor's version as a `&Signal<u32>`; it was a `&State<u32>`. The editor keeps its version in a keyed signal.
 - `typography::heading(level, ..)` takes a string or a signal; a signal replaces the text in place. `h1`..`h6` are unchanged.

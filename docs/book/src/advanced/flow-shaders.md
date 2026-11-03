@@ -1,10 +1,10 @@
 # Flow Shaders
 
-Flow shaders are a DAG-based (directed acyclic graph) real-time shader compute system that compiles to WGSL. They support fragment, compute, vertex, and material targets — powering 2D effects, GPU simulation, and 3D mesh rendering from a single declarative language. Flows can be defined in CSS stylesheets or directly in Rust using the `flow!` macro.
+Flow shaders are a DAG-based (directed acyclic graph) real-time shader compute system that compiles to WGSL. They support fragment, compute, vertex, and material targets — powering 2D effects, GPU simulation, and 3D mesh rendering from a single declarative language. A flow is drawn by a canvas element, and is written inline with the `flow!` macro or parsed from `@flow` source text. Flows are not part of CSS.
 
 ## Quick Start
 
-The fastest way to add a flow shader to an element:
+The fastest way to draw a flow shader:
 
 ```rust
 use blinc_layout::flow;
@@ -17,10 +17,10 @@ let ripple = flow!(ripple, fragment, {
     output color = vec4(wave, wave, wave, 1.0);
 });
 
-div().flow(ripple).w(400.0).h(400.0)
+canvas(|_, _| {}).flow(ripple).w(400.0).h(400.0)
 ```
 
-The `flow!` macro produces a `FlowGraph` using Rust identifiers and primitives. Pass it directly to any element via `.flow()`.
+The `flow!` macro produces a `FlowGraph` using Rust identifiers and primitives. Pass it to a canvas with `Canvas::flow`; the shader covers the canvas's bounds and `.rounded(r)` rounds its corners.
 
 ## Anatomy of a Flow Shader
 
@@ -328,11 +328,11 @@ The scene texture is automatically captured before flow rendering begins. Elemen
 
 ## Applying Flow Shaders
 
-There are three ways to apply flow shaders to elements:
+A flow shader is drawn by a canvas, after the canvas's own render callback.
 
-### 1. `flow!` Macro (Recommended)
+### `flow!` Macro
 
-Define the shader in Rust and pass it directly to the element:
+Define the shader in Rust and pass it to the canvas:
 
 ```rust
 use blinc_layout::flow;
@@ -344,56 +344,29 @@ let shader = flow!(my_effect, fragment, {
     output color = vec4(wave, 0.2, 0.5, 1.0);
 });
 
-div().flow(shader).w(300.0).h(300.0)
+canvas(|_, _| {}).flow(shader).w(300.0).h(300.0)
 ```
 
-The `FlowGraph` carries its own name and is auto-persisted by the GPU pipeline cache.
+The `FlowGraph` carries its own name and is persisted by the GPU pipeline cache.
 
-### 2. CSS Stylesheet
+### Source text
 
-Define flows in CSS and reference them by name:
+Semantic steps with hyphenated names and `#rrggbb` colour stops are not Rust tokens, so the macro cannot carry them. Write them as `@flow` source and parse it:
 
 ```rust
-ctx.add_css(r#"
+use blinc_layout::parse_flow_string;
+
+let terrain = parse_flow_string(r#"
     @flow terrain {
         target: fragment;
         input uv: builtin(uv);
         step noise: pattern-noise { scale: 4.0; detail: 6; };
         output color = vec4(noise, noise, noise, 1.0);
     }
+"#)
+.expect("flow parses");
 
-    #my-element {
-        flow: terrain;
-        border-radius: 16px;
-    }
-"#);
-
-div().id("my-element").w(300.0).h(300.0)
-```
-
-### 3. Style Macros
-
-Reference CSS-defined flows from `css_style!` or `style!` macros:
-
-```rust
-let style = css_style! {
-    flow: "terrain";
-    border-radius: 16px;
-};
-
-// Or with style! macro:
-let style = style! {
-    flow: "terrain",
-    corner_radius: 16.0,
-};
-```
-
-### 4. Name Reference
-
-Reference a previously-defined flow by name string:
-
-```rust
-div().flow("terrain").w(300.0).h(300.0)
+canvas(|_, _| {}).flow(terrain).w(300.0).h(300.0).rounded(16.0)
 ```
 
 ## Complete Example
@@ -452,7 +425,7 @@ let wetglass = flow!(wetglass, fragment, {
     output color = vec4(out_r, out_g, out_b, 0.97);
 });
 
-div().flow(wetglass).w(800.0).h(600.0)
+canvas(|_, _| {}).flow(wetglass).w(800.0).h(600.0)
 ```
 
 ## Output Targets
@@ -546,40 +519,6 @@ let material_flow = flow!(pbr_material, material, {
     output roughness = 0.3;
     output emissive = vec3(0.0, 0.0, 0.0);
 });
-```
-
-### CSS-Defined 3D Flows
-
-3D flows work identically in CSS stylesheets:
-
-```css
-@flow terrain_vertex {
-    target: vertex;
-    input pos: builtin(vertex_position);
-    input normal: builtin(vertex_normal);
-    input model: builtin(model_matrix);
-    input vp: builtin(view_proj);
-
-    node world = mat4_mul_vec4(model, vec4(pos.x, pos.y, pos.z, 1.0));
-
-    output position = mat4_mul_vec4(vp, world);
-    output world_normal = transform_normal(model, normal);
-    output world_position = world.xyz;
-}
-
-@flow terrain_material {
-    target: material;
-    input uv: builtin(uv);
-    input normal: builtin(world_normal);
-
-    node height = fbm(uv * 10.0, 6);
-    node grass = vec4(0.2, 0.6, 0.1, 1.0);
-    node rock = vec4(0.5, 0.45, 0.4, 1.0);
-    node surface = mix(rock, grass, smoothstep(0.3, 0.6, height));
-
-    output albedo = surface;
-    output roughness = mix(0.8, 0.4, height);
-}
 ```
 
 ### Compute → 3D Pipeline

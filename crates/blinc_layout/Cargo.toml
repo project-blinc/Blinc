@@ -41,6 +41,7 @@ text_measurer = ["dep:blinc_text"]
 [dependencies]
 blinc_core = { path = "../blinc_core", version = "0.6.0" }
 blinc_css = { path = "../blinc_css", version = "0.6.0" }
+blinc_flow = { path = "../blinc_flow", version = "0.6.0" }
 blinc_animation = { path = "../blinc_animation", version = "0.6.0" }
 blinc_theme = { path = "../blinc_theme", version = "0.6.0" }
 

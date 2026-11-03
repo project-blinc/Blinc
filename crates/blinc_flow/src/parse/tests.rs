@@ -1,8 +1,8 @@
-//! `@flow` DAG parsing.
+//! Flow parsing.
 
 use blinc_core::{FlowExpr, FlowFunc, FlowTarget};
 
-use crate::parser::*;
+use super::*;
 
 #[test]
 fn test_flow_basic_fragment() {
@@ -16,9 +16,8 @@ fn test_flow_basic_fragment() {
             output color = vec4(wave, wave, wave, 1.0);
         }
     "#;
-    let result = Stylesheet::parse_with_errors(css);
-    assert!(result.stylesheet.contains_flow("ripple"));
-    let flow = result.stylesheet.get_flow("ripple").unwrap();
+    let flow = parse_flow_string(css).unwrap();
+    assert_eq!(flow.name, "ripple");
     assert_eq!(flow.target, FlowTarget::Fragment);
     assert_eq!(flow.inputs.len(), 2);
     assert_eq!(flow.nodes.len(), 2);
@@ -36,8 +35,7 @@ fn test_flow_compute_target() {
             output buffer(positions) = new_pos;
         }
     "#;
-    let result = Stylesheet::parse_with_errors(css);
-    let flow = result.stylesheet.get_flow("sim").unwrap();
+    let flow = parse_flow_string(css).unwrap();
     assert_eq!(flow.target, FlowTarget::Compute);
     assert_eq!(flow.workgroup_size, Some(64));
     assert_eq!(flow.inputs.len(), 1);
@@ -124,15 +122,8 @@ fn test_flow_cycle_reported_as_error() {
             output color = a;
         }
     "#;
-    let result = Stylesheet::parse_with_errors(css);
-    // Should still parse but with errors
-    assert!(!result.errors.is_empty());
-    let has_cycle_error = result.errors.iter().any(|e| e.message.contains("cycle"));
-    assert!(
-        has_cycle_error,
-        "expected cycle error, got: {:?}",
-        result.errors
-    );
+    let err = parse_flow_string(css).unwrap_err();
+    assert!(err.contains("cycle"), "expected a cycle error, got: {err}");
 }
 
 #[test]
@@ -146,50 +137,7 @@ fn test_flow_with_comments() {
             output color = vec4(x, x, x, 1.0);
         }
     "#;
-    let result = Stylesheet::parse_with_errors(css);
-    assert!(result.stylesheet.contains_flow("test"));
-}
-
-#[test]
-fn test_flow_alongside_rules() {
-    let css = r#"
-        #card { opacity: 0.5; }
-
-        @flow glow {
-            target: fragment;
-            input uv;
-            node c = length(uv);
-            output color = vec4(c, c, c, 1.0);
-        }
-
-        #button { background: #ff0000; }
-    "#;
-    let result = Stylesheet::parse_with_errors(css);
-    assert!(result.stylesheet.get("card").is_some());
-    assert!(result.stylesheet.get("button").is_some());
-    assert!(result.stylesheet.contains_flow("glow"));
-}
-
-#[test]
-fn test_flow_multiple_flows() {
-    let css = r#"
-        @flow a {
-            target: fragment;
-            input uv;
-            node x = length(uv);
-            output color = vec4(x, x, x, 1.0);
-        }
-        @flow b {
-            target: fragment;
-            input time;
-            node y = sin(time);
-            output color = vec4(y, y, y, 1.0);
-        }
-    "#;
-    let result = Stylesheet::parse_with_errors(css);
-    assert_eq!(result.stylesheet.flow_count(), 2);
-    assert!(result.stylesheet.contains_flow("a"));
-    assert!(result.stylesheet.contains_flow("b"));
+    assert!(parse_flow_string(css).is_ok());
 }
 
 #[test]
@@ -202,9 +150,7 @@ fn test_flow_bare_output() {
             output color;
         }
     "#;
-    let result = Stylesheet::parse_with_errors(css);
-    assert!(result.stylesheet.contains_flow("test"));
-    let flow = result.stylesheet.get_flow("test").unwrap();
+    let flow = parse_flow_string(css).unwrap();
     assert_eq!(flow.outputs.len(), 1);
     assert!(flow.outputs[0].expr.is_none());
 }

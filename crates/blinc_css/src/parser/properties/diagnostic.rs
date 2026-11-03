@@ -1152,14 +1152,6 @@ pub(crate) fn apply_property_with_errors(
             "luminance" => style.mask_mode = Some(blinc_core::MaskMode::Luminance),
             _ => errors.push(ParseError::invalid_value(name, value, line, column)),
         },
-        "flow" => {
-            let v = value.trim();
-            if v == "none" {
-                style.flow = None;
-            } else {
-                style.flow = Some(v.to_string());
-            }
-        }
         "pointer-space" => {
             use crate::pointer::{PointerSpace, PointerSpaceConfig};
             let v = value.trim();

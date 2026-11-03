@@ -1,18 +1,18 @@
 //! @flow Shader Demo
 //!
 //! Demonstrates the @flow DAG-based shader system.
-//! Custom GPU fragment shaders are defined in CSS via `@flow` blocks
-//! and applied to elements with `flow: <name>`.
+//! Custom GPU fragment shaders are written as `@flow` blocks, parsed into a graph and
+//! drawn by a canvas with `Canvas::flow`.
 //!
 //! Run with: cargo run -p blinc_app_examples --example flow_demo
 
 use blinc_app::prelude::*;
 use blinc_app::windowed::WindowedApp;
 use blinc_app::windowed::WindowedContext;
-use blinc_core::Color;
+use blinc_core::{Color, FlowGraph};
+use blinc_layout::parse_flow_string;
 
-const STYLESHEET: &str = r#"
-    /* ====== Ripple: animated concentric rings ====== */
+const RIPPLE: &str = r#"
     @flow ripple {
         target: fragment;
         input uv: builtin(uv);
@@ -26,8 +26,9 @@ const STYLESHEET: &str = r#"
 
         output color = vec4(intensity * 0.3, intensity * 0.6, intensity, intensity * 0.9);
     }
+"#;
 
-    /* ====== Plasma: classic plasma shader ====== */
+const PLASMA: &str = r#"
     @flow plasma {
         target: fragment;
         input uv: builtin(uv);
@@ -49,8 +50,9 @@ const STYLESHEET: &str = r#"
             0.85
         );
     }
+"#;
 
-    /* ====== Gradient Pulse: breathing radial gradient ====== */
+const PULSE: &str = r#"
     @flow pulse {
         target: fragment;
         input uv: builtin(uv);
@@ -63,8 +65,9 @@ const STYLESHEET: &str = r#"
 
         output color = vec4(0.2 * edge, 0.8 * edge, 0.6 * edge, edge * 0.9);
     }
+"#;
 
-    /* ====== SDF Circle: distance field shape ====== */
+const SDF_CIRCLE: &str = r#"
     @flow sdf_circle {
         target: fragment;
         input uv: builtin(uv);
@@ -81,11 +84,6 @@ const STYLESHEET: &str = r#"
 
         output color = vec4(r * glow, g * glow, b * glow, glow);
     }
-
-    #ripple-box { flow: ripple; border-radius: 16px; }
-    #plasma-box { flow: plasma; border-radius: 16px; }
-    #pulse-box  { flow: pulse;  border-radius: 16px; }
-    #sdf-box    { flow: sdf_circle; border-radius: 16px; }
 "#;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -109,9 +107,10 @@ fn main() -> Result<()> {
 }
 
 pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
-    if ctx.rebuild_count == 0 {
-        ctx.add_css(STYLESHEET);
-    }
+    let card = |source: &str, title: &str, desc: &str| {
+        let graph = parse_flow_string(source).expect("flow parses");
+        flow_card(graph, title, desc)
+    };
 
     div()
         .w(ctx.width)
@@ -128,7 +127,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                 .color(Color::WHITE),
         )
         .child(
-            text("Custom GPU shaders defined in CSS via @flow blocks")
+            text("Custom GPU shaders drawn by a canvas")
                 .size(14.0)
                 .color(Color::rgba(0.6, 0.6, 0.7, 1.0)),
         )
@@ -142,27 +141,27 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                         .flex_row()
                         .gap_px(20.0)
                         .p(10.0)
-                        .child(flow_card("ripple-box", "Ripple", "Concentric ring waves"))
-                        .child(flow_card("plasma-box", "Plasma", "Classic plasma effect"))
-                        .child(flow_card("pulse-box", "Pulse", "Breathing radial gradient"))
-                        .child(flow_card("sdf-box", "SDF Circle", "Distance field ring")),
+                        .child(card(RIPPLE, "Ripple", "Concentric ring waves"))
+                        .child(card(PLASMA, "Plasma", "Classic plasma effect"))
+                        .child(card(PULSE, "Pulse", "Breathing radial gradient"))
+                        .child(card(SDF_CIRCLE, "SDF Circle", "Distance field ring")),
                 ),
         )
 }
 
-fn flow_card(id: &str, title: &str, desc: &str) -> impl ElementBuilder + use<> {
+fn flow_card(graph: FlowGraph, title: &str, desc: &str) -> impl ElementBuilder + use<> {
     div()
         .flex_col()
         .flex_shrink_0()
         .items_center()
         .gap(8.0)
         .child(
-            // The flow element — shader renders here
-            div()
-                .id(id)
+            // The shader renders over the canvas's bounds.
+            canvas(|_, _| {})
                 .w(200.0)
                 .h(200.0)
-                .bg(Color::rgba(0.1, 0.1, 0.15, 1.0)),
+                .rounded(16.0)
+                .flow(graph),
         )
         .child(
             h2(title)

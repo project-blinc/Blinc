@@ -34,12 +34,12 @@ fn style_block_collected_into_compiled_stylesheets() {
     );
 }
 
-/// Multi-line CSS + `@flow` block survive end-to-end. Author
-/// writes declarations one per line without `;` — the extractor
-/// injects `;` at end-of-line inside rule / flow bodies so the
-/// CSS parser sees a well-formed sheet.
+/// Multi-line CSS survives end-to-end. Author writes declarations
+/// one per line without `;` — the extractor injects `;` at
+/// end-of-line inside rule bodies so the CSS parser sees a
+/// well-formed sheet.
 #[test]
-fn style_block_preserves_multiline_and_flow_without_semicolons() {
+fn style_block_preserves_multiline_without_semicolons() {
     let _ = tracing_subscriber::fmt::try_init();
 
     let dsl = BlincDsl::new().expect("runtime init");
@@ -49,13 +49,6 @@ fn style_block_preserves_multiline_and_flow_without_semicolons() {
             .card {
                 background: #3b82f6
                 border-radius: 12px
-            }
-            @flow ripple {
-                target: fragment
-                input uv: builtin(uv)
-                input time: builtin(time)
-                node wave = sin(uv.x * 10.0 + time)
-                output color = vec4(wave, wave, wave, 1.0)
             }
         }
         view { Text("hi") }
@@ -67,17 +60,13 @@ fn style_block_preserves_multiline_and_flow_without_semicolons() {
     let sheets = dsl.compiled_stylesheets();
     assert_eq!(sheets.len(), 1);
     let sheet = &sheets[0];
-    // Verify auto-injection produced terminators inside rule
-    // / flow bodies so the host CSS parser can split decls.
+    // Verify auto-injection produced terminators inside the rule
+    // body so the host CSS parser can split decls.
     assert!(
         sheet.contains("background: #3b82f6;"),
         "missing `;` after first decl: {sheet:?}"
     );
     assert!(sheet.contains("border-radius: 12px;"));
-    assert!(sheet.contains("target: fragment;"));
-    assert!(sheet.contains("input uv: builtin(uv);"));
-    assert!(sheet.contains("node wave = sin(uv.x * 10.0 + time);"));
-    assert!(sheet.contains("output color = vec4(wave, wave, wave, 1.0);"));
 }
 
 /// Inline `class = "..."` on Div lands on the constructed

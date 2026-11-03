@@ -895,18 +895,18 @@ impl RenderContext {
                 }
             }
 
-            // Collect flow element if this node has a @flow shader reference.
-            // Flow elements render via custom GPU pipelines instead of (or on top of) the SDF path.
-            if let Some(ref flow_name) = render_node.props.flow {
+            // A flow shader renders over the node's bounds through its own GPU pipeline.
+            if let Some(ref flow_graph) = render_node.props.flow_graph {
                 flows.push(FlowElement {
-                    flow_name: flow_name.clone(),
-                    flow_graph: render_node.props.flow_graph.clone(),
+                    flow_graph: flow_graph.clone(),
                     x: abs_x * scale,
                     y: abs_y * scale,
                     width: bounds.width * scale,
                     height: bounds.height * scale,
                     z_index: *z_layer,
                     corner_radius: render_node.props.border_radius.top_left * scale,
+                    clip: effective_single_clip(current_clip, current_scroll_clip)
+                        .map(|[cx, cy, cw, ch]| [cx * scale, cy * scale, cw * scale, ch * scale]),
                 });
             }
         }

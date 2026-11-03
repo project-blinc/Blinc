@@ -13,12 +13,9 @@ use blinc_app::prelude::*;
 use blinc_app::windowed::WindowedApp;
 use blinc_app::windowed::WindowedContext;
 use blinc_core::{Color, Shadow};
-use blinc_layout::flow;
+use blinc_layout::{flow, parse_flow_string};
 
-const STYLESHEET: &str = r#"
-    /* ====== Semantic flow: steps + chains + raw nodes ====== */
-
-    /* Step demo: noise pattern with color ramp */
+const TERRAIN: &str = r#"
     @flow terrain {
         target: fragment;
         input uv: builtin(uv);
@@ -42,8 +39,9 @@ const STYLESHEET: &str = r#"
 
         output color = palette;
     }
+"#;
 
-    /* Chain demo: ripple effect with falloff */
+const RIPPLE: &str = r#"
     @flow ripple {
         target: fragment;
         input uv: builtin(uv);
@@ -62,8 +60,9 @@ const STYLESHEET: &str = r#"
 
         output color = tint;
     }
+"#;
 
-    /* Mixed demo: raw math + translucent step */
+const WAVES: &str = r#"
     @flow waves {
         target: fragment;
         input uv: builtin(uv);
@@ -85,20 +84,6 @@ const STYLESHEET: &str = r#"
         }
 
         output color = colored;
-    }
-
-    /* ====== Card styling ====== */
-    #terrain-card {
-        flow: terrain;
-        border-radius: 24px;
-    }
-    #ripple-card {
-        flow: ripple;
-        border-radius: 24px;
-    }
-    #waves-card {
-        flow: waves;
-        border-radius: 24px;
     }
 "#;
 
@@ -123,10 +108,6 @@ fn main() -> Result<()> {
 }
 
 pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
-    if ctx.rebuild_count == 0 {
-        ctx.add_css(STYLESHEET);
-    }
-
     let bg = Color::rgba(0.12, 0.12, 0.14, 1.0);
     // Scale cards to fit: 2 columns on narrow screens, up to 4 on wide.
     // Available width = viewport - padding (16px each side)
@@ -142,7 +123,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
     let sub_color = Color::rgba(0.55, 0.55, 0.60, 1.0);
     let default_bg = Color::WHITE;
 
-    // Define a flow shader using the flow! macro — pure Rust, no CSS strings
+    // The fourth shader is written inline with the flow! macro.
     let plasma = flow!(plasma, fragment, {
         input uv: builtin(uv);
         input time: builtin(time);
@@ -158,6 +139,19 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
         output color = vec4(r, g, b, 1.0);
     });
 
+    let graph = |source: &str| parse_flow_string(source).expect("flow parses");
+    let cards = [
+        (graph(TERRAIN), "Terrain", "step + node + step", default_bg),
+        (graph(RIPPLE), "Ripple", "chain + step", default_bg),
+        (
+            graph(WAVES),
+            "Waves",
+            "translucent",
+            Color::rgba(0.85, 0.55, 0.15, 1.0),
+        ),
+        (plasma, "Plasma", "flow! macro", Color::BLACK),
+    ];
+
     div()
         .w(ctx.width)
         .h(ctx.height)
@@ -172,86 +166,30 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                 .gap(16.0)
                 .items_center()
                 .justify_center()
-                .child(card(
-                    "terrain-card",
-                    "Terrain",
-                    "step + node + step",
-                    card_w,
-                    card_h,
-                    default_bg,
-                    label_color,
-                    sub_color,
-                ))
-                .child(card(
-                    "ripple-card",
-                    "Ripple",
-                    "chain + step",
-                    card_w,
-                    card_h,
-                    default_bg,
-                    label_color,
-                    sub_color,
-                ))
-                .child(card(
-                    "waves-card",
-                    "Waves",
-                    "translucent",
-                    card_w,
-                    card_h,
-                    Color::rgba(0.85, 0.55, 0.15, 1.0),
-                    label_color,
-                    sub_color,
-                ))
-                .child(flow_macro_card(
-                    plasma,
-                    "Plasma",
-                    "flow! macro",
-                    card_w,
-                    card_h,
-                    label_color,
-                    sub_color,
-                )),
+                .children(cards.into_iter().map(|(graph, title, subtitle, backdrop)| {
+                    card(
+                        graph,
+                        title,
+                        subtitle,
+                        card_w,
+                        card_h,
+                        backdrop,
+                        label_color,
+                        sub_color,
+                    )
+                })),
         )
 }
 
+/// A card whose canvas draws a flow shader over a backdrop.
 #[allow(clippy::too_many_arguments)]
 fn card(
-    id: &str,
-    title: &str,
-    subtitle: &str,
-    w: f32,
-    h: f32,
-    bg_color: Color,
-    label_color: Color,
-    sub_color: Color,
-) -> impl ElementBuilder + use<> {
-    div()
-        .flex_col()
-        .items_center()
-        .gap(12.0)
-        .child(div().id(id).w(w).h(h).bg(bg_color).shadow(Shadow::new(
-            0.0,
-            4.0,
-            20.0,
-            Color::rgba(0.0, 0.0, 0.0, 0.4),
-        )))
-        .child(
-            text(title)
-                .size(20.0)
-                .weight(FontWeight::Bold)
-                .color(label_color),
-        )
-        .child(text(subtitle).size(14.0).color(sub_color))
-}
-
-/// Card that uses a flow! macro-defined shader — no CSS string, no stylesheet registration.
-/// The FlowGraph is passed directly to the div via `.flow(graph)`.
-fn flow_macro_card(
     graph: blinc_core::FlowGraph,
     title: &str,
     subtitle: &str,
     w: f32,
     h: f32,
+    backdrop: Color,
     label_color: Color,
     sub_color: Color,
 ) -> impl ElementBuilder + use<> {
@@ -263,10 +201,10 @@ fn flow_macro_card(
             div()
                 .w(w)
                 .h(h)
-                .bg(Color::BLACK)
+                .bg(backdrop)
                 .rounded(24.0)
-                .flow(graph)
-                .shadow(Shadow::new(0.0, 4.0, 20.0, Color::rgba(0.0, 0.0, 0.0, 0.4))),
+                .shadow(Shadow::new(0.0, 4.0, 20.0, Color::rgba(0.0, 0.0, 0.0, 0.4)))
+                .child(canvas(|_, _| {}).w(w).h(h).rounded(24.0).flow(graph)),
         )
         .child(
             text(title)

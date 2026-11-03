@@ -1,9 +1,9 @@
-//! The `flow!` macro: a `FlowGraph` from an inline `@flow` body.
+//! The `flow!` macro.
 
-/// Define a `@flow` shader using Rust-like syntax that compiles to a [`FlowGraph`](blinc_core::FlowGraph).
+/// Define a flow shader with Rust-like syntax, as a [`FlowGraph`](blinc_core::FlowGraph).
 ///
-/// The macro accepts Rust identifiers and primitives — no raw strings needed.
-/// Produces a `blinc_core::FlowGraph` that can be passed directly to `div().flow(graph)`.
+/// The macro accepts Rust identifiers and primitives, with no raw strings. A canvas draws the
+/// graph it produces.
 ///
 /// # Syntax
 ///
@@ -20,8 +20,7 @@
 /// # Usage
 ///
 /// ```rust,ignore
-/// // Define and apply directly to an element
-/// div().flow(flow!(ripple, fragment, {
+/// canvas(|_, _| {}).w(200.0).h(200.0).flow(flow!(ripple, fragment, {
 ///     input uv: builtin(uv);
 ///     input time: builtin(time);
 ///     node d = distance(uv, vec2(0.5, 0.5));
@@ -32,7 +31,7 @@
 #[macro_export]
 macro_rules! flow {
     ($name:ident, $target:ident, { $($body:tt)* }) => {{
-        $crate::parser::parse_flow_string(concat!(
+        $crate::parse_flow_string(concat!(
             "@flow ", stringify!($name), " {\n  target: ", stringify!($target), ";\n  ",
             stringify!($($body)*),
             "\n}"

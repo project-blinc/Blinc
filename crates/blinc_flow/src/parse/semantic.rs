@@ -10,7 +10,8 @@ use blinc_core::{
     ChainLink, FlowChain, FlowExpr, FlowGraph, FlowStep, FlowUse, StepParam, StepType,
 };
 
-use crate::parser::*;
+use super::expr::*;
+use crate::util::*;
 
 /// Find matching closing brace, tracking nested brace depth.
 /// Input starts AFTER the opening `{`.

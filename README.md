@@ -15,7 +15,7 @@
 
 ## Highlights
 
-- **GPU-Accelerated**: SDF rendering, glassmorphism, spring physics, @flow custom shaders
+- **GPU-Accelerated**: SDF rendering, glassmorphism, spring physics, flow custom shaders
 - **Cross-Platform**: Desktop (macOS/Windows/Linux), Android, iOS, Web (WebGPU)
 - **Builder API**: Declarative, chainable: `div().flex_col().gap(16.0).child(text("Hello"))`
 - **40+ Components**: shadcn/ui-style library with CSS-overridable theming

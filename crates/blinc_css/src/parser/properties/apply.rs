@@ -949,14 +949,6 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
             "luminance" => style.mask_mode = Some(blinc_core::MaskMode::Luminance),
             _ => {}
         },
-        "flow" => {
-            let v = value.trim();
-            if v == "none" {
-                style.flow = None;
-            } else {
-                style.flow = Some(v.to_string());
-            }
-        }
         "pointer-space" => {
             use crate::pointer::{PointerSpace, PointerSpaceConfig};
             let v = value.trim();

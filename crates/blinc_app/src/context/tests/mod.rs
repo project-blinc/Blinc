@@ -1,7 +1,13 @@
 //! Rendering regression tests and shared test helpers.
 use super::*;
 
+/// A graph whose only use is to make its node draw through a separate flow pass.
+fn separate_pass_flow() -> std::sync::Arc<blinc_core::FlowGraph> {
+    std::sync::Arc::new(blinc_core::FlowGraph::new("separate-pass"))
+}
+
 mod cached_text_clip_tests;
+mod canvas_flow_tests;
 mod composite_layers_tests;
 mod cross_stream_tests;
 mod css_lifecycle_tests;

@@ -340,12 +340,6 @@ pub struct ElementStyle {
     pub mask_mode: Option<blinc_core::MaskMode>,
 
     // =========================================================================
-    // Flow DAG Reference
-    // =========================================================================
-    /// Name of a @flow DAG to apply to this element
-    pub flow: Option<String>,
-
-    // =========================================================================
     // Pointer Query
     // =========================================================================
     /// Pointer tracking configuration (enables continuous pointer data on this element)

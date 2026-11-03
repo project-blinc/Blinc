@@ -556,10 +556,6 @@ impl RenderTree {
         if let Some(ref mode) = style.mask_mode {
             props.mask_mode = Some(mode.clone());
         }
-        // @flow shader
-        if let Some(ref flow_name) = style.flow {
-            props.flow = Some(flow_name.clone());
-        }
     }
 
     /// Apply layout properties from an ElementStyle to a taffy Style.

@@ -1,5 +1,6 @@
 //! Inline overlay roots compose together above ordinary foreground content.
 use super::gpu_pass_group_tests::frame;
+use super::separate_pass_flow;
 use super::*;
 
 pub(super) const IMAGE: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg+M/wHwAEAQH/cetH5QAAAABJRU5ErkJggg==";
@@ -494,7 +495,7 @@ fn overlay_group_unsupported_materials_and_transforms_keep_fallback() {
         tree.update_render_props(owner, |p| match boundary {
             0 => p.material = Some(blinc_layout::Material::Glass(GlassMaterial::new())),
             1 => p.rotate_y = Some(20.0),
-            _ => p.flow = Some("separate-pass".into()),
+            _ => p.flow_graph = Some(separate_pass_flow()),
         });
         let mut paint = GpuPaintContext::new(160.0, 120.0);
         paint.enable_deferred_text();

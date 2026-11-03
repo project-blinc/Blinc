@@ -1,7 +1,7 @@
 //! The CSS grammar: comments, declarations, rules, and the sheet driver.
 //!
 //! `parse_stylesheet_with_errors` is the entry point. It walks top-level
-//! blocks, dispatches `@keyframes` and `@flow` to their own parsers, and
+//! blocks, dispatches `@keyframes` to its own parser, and
 //! turns everything else into rules. A rule that fails to parse is skipped
 //! to its closing brace and recorded as an error, so the rest of the sheet
 //! still loads.
@@ -11,7 +11,6 @@
 
 use std::collections::HashMap;
 
-use blinc_core::FlowGraph;
 use nom::{
     IResult,
     branch::alt,
@@ -195,7 +194,6 @@ pub(crate) struct ParsedStylesheet {
     pub(crate) complex_rules: Vec<(ComplexSelector, ElementStyle)>,
     pub(crate) variables: HashMap<String, String>,
     pub(crate) keyframes: Vec<CssKeyframes>,
-    pub(crate) flows: Vec<FlowGraph>,
 }
 
 /// Parse an entire stylesheet with error collection
@@ -211,8 +209,6 @@ pub(crate) fn parse_stylesheet_with_errors<'a>(
     let mut complex_rules = Vec::new();
     let mut parsed_variables = variables.clone();
     let mut parsed_keyframes = Vec::new();
-    let mut parsed_flows = Vec::new();
-    let mut flow_registry: HashMap<String, FlowGraph> = HashMap::new();
     let mut remaining = input;
 
     loop {
@@ -265,7 +261,6 @@ pub(crate) fn parse_stylesheet_with_errors<'a>(
                     complex_rules.extend(layered.complex_rules);
                     parsed_variables.extend(layered.variables);
                     parsed_keyframes.extend(layered.keyframes);
-                    parsed_flows.extend(layered.flows);
                 }
                 remaining = rest;
                 continue;
@@ -282,26 +277,6 @@ pub(crate) fn parse_stylesheet_with_errors<'a>(
                 }
                 Err(_) => {
                     // Not a valid @keyframes block, try as a rule
-                }
-            }
-        }
-
-        // Try to parse @flow block (pass registry of already-parsed flows for `use`)
-        if trimmed.starts_with("@flow") {
-            let registry = if flow_registry.is_empty() {
-                None
-            } else {
-                Some(&flow_registry)
-            };
-            match flow_block(trimmed, errors, registry) {
-                Ok((rest, flow)) => {
-                    flow_registry.insert(flow.name.clone(), flow.clone());
-                    parsed_flows.push(flow);
-                    remaining = rest;
-                    continue;
-                }
-                Err(_) => {
-                    // Not a valid @flow block, try as a rule
                 }
             }
         }
@@ -370,7 +345,6 @@ pub(crate) fn parse_stylesheet_with_errors<'a>(
             complex_rules,
             variables: parsed_variables,
             keyframes: parsed_keyframes,
-            flows: parsed_flows,
         },
     ))
 }

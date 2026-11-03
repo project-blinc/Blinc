@@ -1,6 +1,6 @@
 //! Fluid Surface Demo
 //!
-//! Combines `@flow` GPU shaders with `pointer-query` CSS-driven interaction.
+//! Combines a canvas flow shader with `pointer-query` CSS-driven interaction.
 //! A central card renders a pointer-reactive fluid shader, while surrounding
 //! labels respond to cursor proximity via `calc(env(pointer-distance))`.
 //!
@@ -10,8 +10,9 @@ use blinc_app::prelude::*;
 use blinc_app::windowed::WindowedApp;
 use blinc_app::windowed::WindowedContext;
 use blinc_core::{Color, Shadow};
+use blinc_layout::parse_flow_string;
 
-const STYLESHEET: &str = r#"
+const FLUID: &str = r#"
     /* ====== Silk satin — pale steel blue, very subtle S-curve folds ======
        Reference: nearly white/silver surface with barely perceptible folds.
        Cursor angle drives fold direction; distance drives fold visibility.
@@ -116,17 +117,9 @@ const STYLESHEET: &str = r#"
 
         output color = vec4(clamp(r, 0.0, 1.0), clamp(g, 0.0, 1.0), clamp(b, 0.0, 1.0), 1.0);
     }
+"#;
 
-    /* ====== Central card with flow shader ====== */
-    #fluid-card {
-        flow: fluid;
-        border-radius: 150px;
-        pointer-space: self;
-        pointer-origin: center;
-        pointer-range: 0.0 1.0;
-        pointer-smoothing: 0.06;
-    }
-
+const STYLESHEET: &str = r#"
     /* ====== Label proximity — wrapping divs carry the pointer query ====== */
     .label-wrap {
         pointer-space: self;
@@ -162,6 +155,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
         ctx.add_css(STYLESHEET);
     }
 
+    let fluid = parse_flow_string(FLUID).expect("flow parses");
     let bg = Color::rgba(0.93, 0.93, 0.93, 1.0);
     let card_size = 300.0;
     let label_color = Color::rgba(0.25, 0.25, 0.30, 1.0);
@@ -206,7 +200,15 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                                         .id("fluid-card")
                                         .w(card_size)
                                         .h(card_size)
+                                        .rounded(card_size / 2.0)
                                         .bg(Color::rgba(0.78, 0.82, 0.88, 1.0))
+                                        .child(
+                                            canvas(|_, _| {})
+                                                .w(card_size)
+                                                .h(card_size)
+                                                .rounded(card_size / 2.0)
+                                                .flow(fluid),
+                                        )
                                         .shadow(Shadow::new(
                                             0.0,
                                             -8.0,

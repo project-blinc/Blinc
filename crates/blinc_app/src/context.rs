@@ -551,13 +551,10 @@ struct SvgElement {
     composite_ancestor: Option<blinc_layout::tree::StableNodeId>,
 }
 
-/// Flow shader element — an element with `flow: <name>` that renders via a custom GPU pipeline
+/// A flow shader drawn over an element's bounds by a custom GPU pipeline (`Canvas::flow`).
 #[derive(Clone)]
 struct FlowElement {
-    /// Name referencing a @flow DAG in the stylesheet
-    flow_name: String,
-    /// Direct FlowGraph (from `flow!` macro), bypasses stylesheet lookup
-    flow_graph: Option<std::sync::Arc<blinc_core::FlowGraph>>,
+    flow_graph: std::sync::Arc<blinc_core::FlowGraph>,
     /// Bounds in physical pixels (DPI-scaled)
     x: f32,
     y: f32,
@@ -567,6 +564,8 @@ struct FlowElement {
     z_index: u32,
     /// Corner radius in physical pixels
     corner_radius: f32,
+    /// What the element's ancestors leave visible, in physical pixels
+    clip: Option<[f32; 4]>,
 }
 
 /// Debug bounds element for layout visualization

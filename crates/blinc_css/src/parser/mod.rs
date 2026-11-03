@@ -64,15 +64,12 @@
 //!   diagnostics.
 //! - [`value`] — one module per family of value: colors, gradients,
 //!   lengths, transforms, shadows, filters, clip paths.
-//! - [`flow`] — the `@flow` shader DAG: statements, semantic forms, and the
-//!   expression grammar.
 //! - `util` — paren-aware splitting shared by the value grammars.
 
 use nom::{IResult, error::VerboseError};
 
 pub mod animation;
 pub mod error;
-pub mod flow;
 pub mod grammar;
 pub mod keyframes;
 pub mod properties;
@@ -91,7 +88,6 @@ mod tests;
 // only, so the split did not widen the public surface.
 pub use animation::*;
 pub use error::*;
-pub use flow::*;
 pub(crate) use grammar::*;
 pub use keyframes::*;
 pub(crate) use properties::*;

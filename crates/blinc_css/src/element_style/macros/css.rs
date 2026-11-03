@@ -296,17 +296,6 @@ macro_rules! css_impl {
     };
 
     // =========================================================================
-    // Flow (CSS: flow)
-    // =========================================================================
-    ($style:ident; flow: $value:expr; $($rest:tt)*) => {
-        $style = $style.flow($value);
-        $crate::css_impl!($style; $($rest)*);
-    };
-    ($style:ident; flow: $value:expr) => {
-        $style = $style.flow($value);
-    };
-
-    // =========================================================================
     // Transform (CSS: transform)
     // =========================================================================
     ($style:ident; transform: $value:expr; $($rest:tt)*) => {

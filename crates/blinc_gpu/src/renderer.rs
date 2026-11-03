@@ -4897,6 +4897,7 @@ impl GpuRenderer {
         flow_name: &str,
         uniforms: &crate::flow_pipeline::FlowUniformData,
         viewport: Option<[f32; 4]>,
+        clip: Option<[f32; 4]>,
     ) -> bool {
         // If this flow uses sample_scene(), ensure scene copy is ready
         let scene_view_owned: Option<*const wgpu::TextureView> =
@@ -4938,24 +4939,41 @@ impl GpuRenderer {
                 occlusion_query_set: None,
             });
 
-            // Scope the flow quad to the element's bounds via viewport + scissor.
-            // Clamp to render target bounds to avoid wgpu validation errors.
+            // The viewport is the element's whole bounds, so the shader's uv covers the element
+            // even where part of it is off the target or clipped. The scissor is what remains
+            // visible: the bounds within the target and within `clip`.
+            let mut draw = true;
             if let Some([x, y, w, h]) = viewport {
                 let (tw, th) = self.viewport_size;
-                let tw = tw as f32;
-                let th = th as f32;
-                let cx = x.max(0.0);
-                let cy = y.max(0.0);
-                let cw = (w - (cx - x)).min(tw - cx).max(1.0);
-                let ch = (h - (cy - y)).min(th - cy).max(1.0);
-                if cx < tw && cy < th {
-                    pass.set_viewport(cx, cy, cw, ch, 0.0, 1.0);
-                    pass.set_scissor_rect(cx as u32, cy as u32, cw as u32, ch as u32);
+                let (tw, th) = (tw as f32, th as f32);
+                let (mut left, mut top, mut right, mut bottom) =
+                    (x.max(0.0), y.max(0.0), (x + w).min(tw), (y + h).min(th));
+                if let Some([cx, cy, cw, ch]) = clip {
+                    left = left.max(cx);
+                    top = top.max(cy);
+                    right = right.min(cx + cw);
+                    bottom = bottom.min(cy + ch);
+                }
+                if right - left >= 1.0 && bottom - top >= 1.0 {
+                    let limit = self.device.limits().max_texture_dimension_2d as f32;
+                    if w <= limit && h <= limit {
+                        pass.set_viewport(x, y, w.max(1.0), h.max(1.0), 0.0, 1.0);
+                    }
+                    pass.set_scissor_rect(
+                        left as u32,
+                        top as u32,
+                        (right - left) as u32,
+                        (bottom - top) as u32,
+                    );
+                } else {
+                    draw = false;
                 }
             }
 
-            self.flow_pipeline_cache
-                .render_fragment(&mut pass, flow_name);
+            if draw {
+                self.flow_pipeline_cache
+                    .render_fragment(&mut pass, flow_name);
+            }
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

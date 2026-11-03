@@ -13,7 +13,7 @@
 //! - [`element_style`] — [`ElementStyle`], the resolved style schema every
 //!   visual property lands in, plus the `css_style!`, `style!` and `css!` macros.
 //! - [`parser`] — the CSS subset parser: selectors, at-rules, properties,
-//!   value grammars, and the `@flow` shader DAG.
+//!   value grammars.
 //! - [`calc`] — `calc()` expression trees and their evaluation context.
 //! - [`units`] — [`Length`], the length/percentage model.
 //! - [`material`] — surface materials (glass, metal, wood) and cursors.

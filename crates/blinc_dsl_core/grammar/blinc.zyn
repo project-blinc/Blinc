@@ -205,7 +205,7 @@ top_level_item = { import_stmt | exported_signal_init | exported_signal | export
 // (selector bodies like `.foo { ... }`) capture as part of the
 // content. Multi-line by construction. Supports the full CSS
 // surface (`#id`, `.class`, combinators, pseudo-classes,
-// `@flow` shader DAGs, animations).
+// animations).
 //
 // Valid at file top level and inside `component { ... }`. Each
 // block lands in `BlincDsl::compiled_stylesheets()`; hosts feed

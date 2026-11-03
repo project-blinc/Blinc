@@ -1,7 +1,7 @@
 //! Continuous pointer query system for CSS-driven pointer interaction.
 //!
 //! Exposes per-element pointer data (position, velocity, distance, angle)
-//! as CSS environment variables usable in `calc()` and `@flow` inputs.
+//! as CSS environment variables usable in `calc()`.
 //!
 //! # CSS Properties
 //!

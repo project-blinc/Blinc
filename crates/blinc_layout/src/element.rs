@@ -14,38 +14,6 @@ use taffy::Layout;
 
 use crate::tree::LayoutNodeId;
 
-// =============================================================================
-// FlowRef — polymorphic flow reference (name string or direct FlowGraph)
-// =============================================================================
-
-/// A reference to a `@flow` shader — either by name (for CSS-defined flows) or
-/// by direct `FlowGraph` (for `flow!` macro-defined flows).
-#[derive(Clone, Debug)]
-pub enum FlowRef {
-    /// Name of a @flow DAG defined in a CSS stylesheet
-    Name(String),
-    /// Direct FlowGraph (e.g. from `flow!` macro), auto-persisted by name
-    Graph(Arc<FlowGraph>),
-}
-
-impl From<&str> for FlowRef {
-    fn from(s: &str) -> Self {
-        FlowRef::Name(s.to_string())
-    }
-}
-
-impl From<String> for FlowRef {
-    fn from(s: String) -> Self {
-        FlowRef::Name(s)
-    }
-}
-
-impl From<FlowGraph> for FlowRef {
-    fn from(g: FlowGraph) -> Self {
-        FlowRef::Graph(Arc::new(g))
-    }
-}
-
 /// Per-tag SVG style overrides for CSS tag-name selectors (e.g., `path { fill: red; }`)
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SvgTagStyle {
@@ -484,9 +452,7 @@ pub struct RenderProps {
     pub mask_image: Option<blinc_core::MaskImage>,
     /// CSS mask-mode
     pub mask_mode: Option<blinc_core::MaskMode>,
-    /// @flow shader name (references a FlowGraph in the stylesheet)
-    pub flow: Option<String>,
-    /// Direct @flow graph (from `flow!` macro), bypasses stylesheet lookup
+    /// A flow shader drawn over the element's bounds: set by `Canvas::flow`.
     pub flow_graph: Option<Arc<FlowGraph>>,
 }
 
@@ -581,7 +547,6 @@ impl Default for RenderProps {
             white_space: None,
             mask_image: None,
             mask_mode: None,
-            flow: None,
             flow_graph: None,
         }
     }

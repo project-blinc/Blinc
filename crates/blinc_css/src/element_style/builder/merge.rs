@@ -178,8 +178,6 @@ impl ElementStyle {
                 .or(self.mask_image.as_ref())
                 .cloned(),
             mask_mode: other.mask_mode.clone().or(self.mask_mode.clone()),
-            // Flow DAG
-            flow: other.flow.clone().or_else(|| self.flow.clone()),
             // Pointer query
             pointer_space: other
                 .pointer_space

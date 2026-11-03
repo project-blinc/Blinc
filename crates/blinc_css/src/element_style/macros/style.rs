@@ -289,13 +289,6 @@ macro_rules! style_impl {
         $crate::style_impl!($style; $($($rest)*)?);
     };
 
-    // =========================================================================
-    // Flow shader
-    // =========================================================================
-    ($style:ident; flow: $value:expr $(, $($rest:tt)*)?) => {
-        $style = $style.flow($value);
-        $crate::style_impl!($style; $($($rest)*)?);
-    };
     ($style:ident; opaque $(, $($rest:tt)*)?) => {
         $style = $style.opaque();
         $crate::style_impl!($style; $($($rest)*)?);
@@ -849,7 +842,3 @@ macro_rules! style_impl {
         $crate::style_impl!($style; $($($rest)*)?);
     };
 }
-
-// =============================================================================
-// flow! macro — define @flow shaders using Rust identifiers and primitives
-// =============================================================================

@@ -75,10 +75,4 @@ impl ElementStyle {
         self.mask_mode = Some(mode);
         self
     }
-
-    /// Set @flow shader reference by name
-    pub fn flow(mut self, name: impl Into<String>) -> Self {
-        self.flow = Some(name.into());
-        self
-    }
 }

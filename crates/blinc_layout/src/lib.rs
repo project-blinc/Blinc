@@ -110,10 +110,11 @@ pub mod window_actions;
 pub use blinc_css::parser as css_parser;
 pub use blinc_css::{calc, element_style, units};
 
-// `css!`, `css_style!`, `style!` and `flow!` are `#[macro_export]`ed by `blinc_css`, which
-// puts them at that crate's root. Re-export them so they stay callable as
+// `css!`, `css_style!` and `style!` are `#[macro_export]`ed by `blinc_css`, which puts them at
+// that crate's root, and `flow!` by `blinc_flow`. Re-export them so they stay callable as
 // `blinc_layout::css!` and through the prelude.
-pub use blinc_css::{css, css_impl, css_style, flow, style, style_impl};
+pub use blinc_css::{css, css_impl, css_style, style, style_impl};
+pub use blinc_flow::{flow, parse_flow_string};
 
 pub use key::{InstanceKey, reset_call_counters};
 
@@ -137,7 +138,7 @@ pub use motion_texture_cache::{
 
 // Core types
 pub use element::{
-    BorderBuilder, BorderSide, BorderSides, CursorStyle, DynRenderProps, ElementBounds, FlowRef,
+    BorderBuilder, BorderSide, BorderSides, CursorStyle, DynRenderProps, ElementBounds,
     MotionAnimation, MotionKeyframe, RenderLayer, RenderProps, ResolvedRenderProps,
 };
 

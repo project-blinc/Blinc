@@ -1,0 +1,16 @@
+[package]
+name = "blinc_flow"
+description = "Blinc flow shaders - the flow! macro and the parser behind it, over blinc_core's FlowGraph"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/blinc_flow"
+rust-version.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
+nom = "7"

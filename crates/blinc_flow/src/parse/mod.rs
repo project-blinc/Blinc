@@ -15,10 +15,12 @@ use blinc_core::{
 };
 use nom::{bytes::complete::tag, character::complete::char};
 
-use crate::parser::*;
+use crate::util::*;
 
 mod expr;
 mod semantic;
+#[cfg(test)]
+mod tests;
 
 pub(crate) use expr::*;
 pub(crate) use semantic::*;
@@ -121,14 +123,22 @@ pub(crate) fn flow_block<'a>(
 
 /// Parse a standalone `@flow name { ... }` string into a validated FlowGraph.
 ///
-/// Used by the `flow!` macro to convert stringified Rust tokens into a FlowGraph at runtime.
+/// Used by the `flow!` macro to convert stringified Rust tokens into a FlowGraph.
 pub fn parse_flow_string(src: &str) -> Result<FlowGraph, String> {
+    parse_flow_string_with(src, None)
+}
+
+/// [`parse_flow_string`] with the flows a `use` statement may name.
+pub fn parse_flow_string_with(
+    src: &str,
+    registry: Option<&HashMap<String, FlowGraph>>,
+) -> Result<FlowGraph, String> {
     // Normalize: stringify!() may insert literal \n between tokens when
     // the macro body spans multiple source lines. Replace them with spaces
     // so the parser sees a single continuous line of declarations.
     let normalized = src.replace('\n', " ");
     let mut errors = Vec::new();
-    match flow_block(&normalized, &mut errors, None) {
+    match flow_block(&normalized, &mut errors, registry) {
         Ok((_, graph)) => {
             let fatal: Vec<_> = errors
                 .iter()

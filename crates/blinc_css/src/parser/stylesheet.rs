@@ -2,7 +2,7 @@
 //!
 //! A [`Stylesheet`] holds simple `#id` and `.class` rules in hash maps for
 //! O(1) lookup, complex selector chains in a list that is walked on match,
-//! plus `:root` variables, `@keyframes` and `@flow` definitions.
+//! plus `:root` variables and `@keyframes` definitions.
 //!
 //! One stylesheet at a time can be installed as the process-wide active
 //! sheet, which is how widgets reach theme rules without threading a
@@ -11,7 +11,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use blinc_core::FlowGraph;
 use nom::Finish;
 
 use crate::element_style::ElementStyle;
@@ -36,8 +35,6 @@ pub struct Stylesheet {
     variables: HashMap<String, String>,
     /// Keyframe animations defined with @keyframes
     keyframes: HashMap<String, CssKeyframes>,
-    /// Flow DAGs defined with @flow
-    flows: HashMap<String, FlowGraph>,
     /// Identifiers (ids without `#`, classes without `.`) that appear in
     /// a compound containing `:hover`. Computed at parse time by
     /// [`Self::index_hover_participants`]; consulted by the windowed
@@ -108,9 +105,6 @@ impl Stylesheet {
                     stylesheet
                         .keyframes
                         .insert(keyframes.name.clone(), keyframes);
-                }
-                for flow in parsed.flows {
-                    stylesheet.flows.insert(flow.name.clone(), flow);
                 }
 
                 CssParseResult { stylesheet, errors }
@@ -186,9 +180,6 @@ impl Stylesheet {
                     stylesheet
                         .keyframes
                         .insert(keyframes.name.clone(), keyframes);
-                }
-                for flow in parsed.flows {
-                    stylesheet.flows.insert(flow.name.clone(), flow);
                 }
 
                 CssParseResult { stylesheet, errors }
@@ -742,35 +733,6 @@ impl Stylesheet {
     /// Add a keyframe animation to the stylesheet
     pub fn add_keyframes(&mut self, keyframes: CssKeyframes) {
         self.keyframes.insert(keyframes.name.clone(), keyframes);
-    }
-
-    // =========================================================================
-    // Flow DAGs (@flow)
-    // =========================================================================
-
-    /// Look up a flow DAG by name
-    pub fn get_flow(&self, name: &str) -> Option<&FlowGraph> {
-        self.flows.get(name)
-    }
-
-    /// Check if a flow exists with the given name
-    pub fn contains_flow(&self, name: &str) -> bool {
-        self.flows.contains_key(name)
-    }
-
-    /// Get all flow names
-    pub fn flow_names(&self) -> impl Iterator<Item = &str> {
-        self.flows.keys().map(|s| s.as_str())
-    }
-
-    /// Get the number of flows defined
-    pub fn flow_count(&self) -> usize {
-        self.flows.len()
-    }
-
-    /// Add a flow DAG to the stylesheet
-    pub fn add_flow(&mut self, flow: FlowGraph) {
-        self.flows.insert(flow.name.clone(), flow);
     }
 
     // =========================================================================
