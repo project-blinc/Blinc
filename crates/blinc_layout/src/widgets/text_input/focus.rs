@@ -407,3 +407,8 @@ pub fn focused_text_area_node_id() -> Option<LayoutNodeId> {
 // =============================================================================
 // Input Types and Validation
 // =============================================================================
+
+/// Focus is process-wide (`FOCUSED_TEXT_INPUT`, the pending focus queue), and the tests that
+/// focus, blur or send key events through it, in this module and the OTP input, take turns.
+#[cfg(test)]
+pub(crate) static FOCUS_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());

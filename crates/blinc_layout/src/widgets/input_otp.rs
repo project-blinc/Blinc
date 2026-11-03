@@ -503,13 +503,10 @@ mod tests {
 
     use super::*;
 
-    /// Focus is process-global, so these take turns.
-    ///
-    /// Poison is ignored deliberately: `.unwrap()` here turned one
-    /// failing assertion into every other test in the module reporting
-    /// a lock error instead of its own result, which hides which test
-    /// actually broke.
-    static OTP_FOCUS_TEST_LOCK: Mutex<()> = Mutex::new(());
+    // Focus is process-global: these take the lock shared with the text input tests.
+    // Poison is ignored deliberately: `.unwrap()` here turned one failing assertion into every
+    // other test reporting a lock error instead of its own result.
+    use crate::widgets::text_input::FOCUS_TEST_LOCK as OTP_FOCUS_TEST_LOCK;
 
     fn test_state(initial: impl Into<String>) -> Signal<String> {
         blinc_core::reactive::signal(initial.into())

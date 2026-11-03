@@ -62,11 +62,14 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-llvm-cov
+          tool: cargo-llvm-cov,cargo-nextest
 
+      # nextest runs each test in its own process, as the CI job does: plain `cargo test` runs a
+      # binary's tests as threads of one process, which the tests' global state does not allow.
+      # Doctests are not part of this report.
       - name: Generate LCOV coverage report
         run: |
-          xvfb-run --auto-servernum cargo llvm-cov --workspace --all-features --lcov --output-path coverage.info --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
+          xvfb-run --auto-servernum cargo llvm-cov nextest --no-fail-fast --workspace --all-features --lcov --output-path coverage.info --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
