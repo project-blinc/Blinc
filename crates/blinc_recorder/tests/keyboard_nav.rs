@@ -215,3 +215,33 @@ fn the_interactive_cn_controls_are_tab_stops() {
     let stops = ui.tree().tab_stops().len();
     assert!(stops >= 5, "got {stops} stops");
 }
+
+#[test]
+fn arrows_move_a_slider_focused_by_tab() {
+    use blinc_core::reactive::signal;
+    let Some(mut ui) = session() else { return };
+    let value = signal(50.0f32);
+    ui.mount(move |_| {
+        div()
+            .p(4.0)
+            .child(
+                blinc_cn::components::slider::slider(value)
+                    .min(0.0)
+                    .max(100.0)
+                    .step(5.0),
+            )
+            .child(button("Next"))
+    });
+    ui.settle();
+    ui.key(39);
+    assert_eq!(value.get(), 50.0, "an unfocused slider ignores keys");
+    ui.key(TAB);
+    ui.key(39);
+    assert_eq!(value.get(), 55.0);
+    ui.key(37);
+    ui.key(37);
+    assert_eq!(value.get(), 45.0);
+    ui.key(TAB);
+    ui.key(39);
+    assert_eq!(value.get(), 45.0, "Tab moved focus away");
+}

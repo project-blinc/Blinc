@@ -91,6 +91,18 @@ pub struct HitTestResult {
 /// Callback for element events
 pub type EventCallback = Box<dyn FnMut(LayoutNodeId, u32)>;
 
+thread_local! {
+    static KEYBOARD_FOCUSED: std::cell::Cell<Option<LayoutNodeId>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// The node Tab traversal has focused, for a key handler to test itself
+/// against: key events reach every handler, and each decides if it is the
+/// target.
+pub fn keyboard_focused_node() -> Option<LayoutNodeId> {
+    KEYBOARD_FOCUSED.with(std::cell::Cell::get)
+}
+
 /// Routes platform input events to layout elements
 ///
 /// Maintains state for:
@@ -505,6 +517,7 @@ impl EventRouter {
     pub fn focus_via_keyboard(&mut self, node: LayoutNodeId) {
         self.set_focus(Some(node));
         self.keyboard_focus = true;
+        KEYBOARD_FOCUSED.with(|k| k.set(Some(node)));
     }
 
     /// Follow the focused text input (`None` when none is). Focus held by
@@ -515,6 +528,7 @@ impl EventRouter {
         }
         if text_focus.is_some() {
             self.keyboard_focus = false;
+            KEYBOARD_FOCUSED.with(|k| k.set(None));
         }
         if text_focus != self.focused {
             self.set_focus(text_focus);
@@ -582,6 +596,8 @@ impl EventRouter {
 
         self.focused = node;
         self.focused_ancestors = ancestors;
+        self.keyboard_focus = false;
+        KEYBOARD_FOCUSED.with(|k| k.set(None));
     }
 
     /// Get current mouse position

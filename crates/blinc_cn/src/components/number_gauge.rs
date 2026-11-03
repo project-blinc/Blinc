@@ -441,7 +441,8 @@ pub(crate) fn interactive(
         })
         .on_hover_leave(move |_| *wheel_left.lock().unwrap() = 0.0)
         .on_key_down(move |ctx: &EventContext| {
-            if !disabled.get() && focus.focused.get() && key(ctx.key_code) {
+            let tabbed = blinc_layout::event_router::keyboard_focused_node() == Some(ctx.node_id);
+            if !disabled.get() && (focus.focused.get() || tabbed) && key(ctx.key_code) {
                 focus.key();
             }
         })
