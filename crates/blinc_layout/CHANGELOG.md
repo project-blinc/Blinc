@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- CSS colours follow CSS. `rgb()` and `rgba()` components are 0 to 255: any component at or under 1 was read as a fraction, so `rgb(1, 1, 1)` came out white. Named colours take their CSS values (`orange` is `#ffa500`, `purple` `#800080`, `gray` `#808080`; they were the `Color` constants), and all 148 are known, with `rebeccapurple`. `blinc_css` also reads `hsl()` and `hsla()`, the space form of `rgb()` and `hsl()` with `/ alpha`, percentage components, and 4-digit hex (`#f00a`). Fractional components such as `rgb(0.2, 0.4, 0.9)` are 0 to 255 now, like any other.
 - `Code` and `CodeEditor` report their classes and id to the renderer, so `.class(..)` on them matches rules.
 - `Link::on_click` keeps the link's id and classes; it dropped them.
 - A `:root` block that sets ordinary properties beside its custom properties keeps the custom properties; they were dropped.
@@ -44,6 +45,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - `@layer name { ... }` in stylesheets: its class rules sit below every unlayered rule regardless of specificity. `CN_STYLES` is wrapped in one, so an app stylesheet themes cn components whichever was added first.
 
 ### Changed
+- **Breaking:** the CSS `theme(token)` function is removed, for colours (`theme(primary)`), radii (`theme(radius-lg)`) and shadows (`theme(shadow-md)`). A theme's tokens are `:root` variables, so write `var(--primary)`, `var(--radius-lg)`, `var(--shadow-md)`. The `--shadow-*` variables, which were the text `theme(shadow-md)`, are the real `box-shadow` lists now (`0px 4px 6px -1px rgba(0,0,0,0.3)`), so they read in any CSS engine and nest in other values. `blinc_css`'s value parsers no longer read the global `ThemeState`.
 - **Breaking:** `widgets::rich_text_editor::selection_toolbar` takes the editor's version as a `&Signal<u32>`; it was a `&State<u32>`. The editor keeps its version in a keyed signal.
 - `typography::heading(level, ..)` takes a string or a signal; a signal replaces the text in place. `h1`..`h6` are unchanged.
 - **Breaking:** `widgets::checkbox`, `checkbox_labeled` and `widgets::toggle` take a `Signal<bool>` instead of a `&State<bool>`, `widgets::radio_group` a `Signal<String>`, `widgets::number_input` a `Signal<f64>`, and `widgets::input_otp` a `Signal<String>`. `TextInput::class_when` adds a class while a condition holds. `TextInput::disabled` and `TextArea::disabled` take a bool, Signal or Computed too. `.disabled(..)` and `.label(..)` take a value, Signal or Computed and follow it in place; the label's colour is the `.blinc-checkbox-label` rules, dimmed under `.blinc-checkbox-row:disabled`.

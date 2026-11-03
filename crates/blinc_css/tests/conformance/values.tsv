@@ -1,0 +1,177 @@
+# property	value	blinc_css	blinc_abi::css	note
+# Verdicts are ok, reject (the property is known and the value is not) or unrouted (the engine does not read the property).
+# A row where the engines differ names the step of edadd7d that closes it. Both repos test their column; see crates/blinc_css/tests/css_conformance.rs
+# and blinc_abi/src/css/tests_conformance.rs. Update a row when a gap closes; a stale row fails.
+background-color	#f00	ok	ok	
+background-color	#ff0000cc	ok	ok	
+background-color	#f00a	ok	ok	
+background-color	rgb(255 0 0 / 50%)	ok	ok	
+background-color	rgb(255, 0, 0)	ok	ok	
+background-color	rgba(255,0,0,.5)	ok	ok	
+background-color	hsl(120 100% 25%)	ok	ok	
+background-color	hsla(120,100%,25%,.5)	ok	ok	
+background-color	hwb(120 0% 0%)	reject	reject	
+background-color	lab(50% 40 59)	reject	reject	
+background-color	oklch(60% 0.2 30)	reject	reject	
+background-color	oklab(60% 0.1 0.1)	reject	reject	
+background-color	color(srgb 1 0 0)	reject	reject	
+background-color	color-mix(in srgb, red 30%, blue)	ok	ok	
+background-color	color-mix(in oklab, red, blue)	reject	reject	
+background-color	currentcolor	reject	reject	
+background-color	transparent	ok	ok	
+background-color	rebeccapurple	ok	ok	
+background-color	light-dark(red, blue)	reject	reject	
+background-color	theme(primary)	reject	reject	
+background-color	Red	ok	ok	
+background-color	inherit	reject	reject	
+background-color	initial	reject	reject	
+width	10px	ok	ok	
+width	50%	ok	ok	
+width	2em	reject	ok	blinc gap; edadd7d steps 1-2
+width	1.5rem	reject	ok	blinc gap; edadd7d steps 1-2
+width	10vw	reject	ok	blinc gap; edadd7d steps 1-2
+width	10vh	reject	ok	blinc gap; edadd7d steps 1-2
+width	10vmin	reject	ok	blinc gap; edadd7d steps 1-2
+width	10vmax	reject	ok	blinc gap; edadd7d steps 1-2
+width	10ch	reject	reject	
+width	10pt	reject	reject	
+width	1in	reject	reject	
+width	auto	ok	ok	
+width	fit-content	ok	reject	abi gap; edadd7d step 3
+width	max-content	ok	reject	abi gap; edadd7d step 3
+width	min-content	reject	reject	
+width	calc(100% - 10px)	ok	ok	
+width	calc(2 * (1px + 3px))	ok	ok	
+width	min(10px, 5vw)	reject	ok	blinc gap; edadd7d steps 1-2
+width	max(10px, 5vw)	reject	ok	blinc gap; edadd7d steps 1-2
+width	clamp(10px, 5vw, 100px)	reject	ok	blinc gap; edadd7d steps 1-2
+width	calc(100% / 3)	ok	ok	
+width	10dvh	reject	reject	
+width	10svw	reject	reject	
+width	0	ok	ok	
+width	-5px	ok	ok	
+width	1e2px	ok	ok	
+width	.5px	ok	ok	
+width	stretch	reject	reject	
+max-width	none	ok	ok	
+max-width	100%	ok	ok	
+max-width	calc(100% - 2rem)	ok	ok	
+top	auto	reject	ok	blinc gap; edadd7d steps 1-2
+top	10px	ok	ok	
+top	50%	reject	ok	blinc gap; edadd7d steps 1-2
+top	calc(50% - 1rem)	ok	ok	
+background-image	linear-gradient(red, blue)	unrouted	ok	blinc does not know the property; edadd7d step 2
+background-image	linear-gradient(to right, red 0%, blue 100%)	unrouted	ok	blinc does not know the property; edadd7d step 2
+background-image	linear-gradient(45deg, red, yellow, blue)	unrouted	ok	blinc does not know the property; edadd7d step 2
+background-image	radial-gradient(circle, red, blue)	unrouted	ok	blinc does not know the property; edadd7d step 2
+background-image	radial-gradient(circle at 30% 40%, red, blue)	unrouted	ok	blinc does not know the property; edadd7d step 2
+background-image	conic-gradient(red, blue)	unrouted	ok	blinc does not know the property; edadd7d step 2
+background-image	repeating-linear-gradient(red 0, blue 10px)	unrouted	reject	blinc does not know the property; edadd7d step 2
+background-image	url(a.png)	unrouted	ok	blinc does not know the property; edadd7d step 2
+background-image	linear-gradient(red, blue), url(a.png)	unrouted	reject	blinc does not know the property; edadd7d step 2
+background-image	none	unrouted	ok	blinc does not know the property; edadd7d step 2
+background-image	image-set(url(a.png) 1x)	unrouted	reject	blinc does not know the property; edadd7d step 2
+background-image	linear-gradient(in oklab, red, blue)	unrouted	reject	blinc does not know the property; edadd7d step 2
+background	red	ok	ok	
+background	linear-gradient(red, blue)	ok	ok	
+background	url(a.png) no-repeat center / cover	reject	ok	blinc gap; edadd7d steps 1-2
+background	red url(a.png)	reject	reject	
+background	glass(blur(10px))	reject	reject	
+transform	translate(10px, 20px)	ok	ok	
+transform	translateX(10px)	ok	ok	
+transform	translateX(50%)	ok	reject	abi gap; edadd7d step 3
+transform	rotate(45deg)	ok	ok	
+transform	rotate(0.5turn)	ok	ok	
+transform	scale(1.5)	ok	ok	
+transform	scale(1.5, 2)	ok	ok	
+transform	skew(10deg, 5deg)	ok	ok	
+transform	skewX(10deg)	ok	ok	
+transform	matrix(1,0,0,1,10,20)	reject	ok	blinc gap; edadd7d steps 1-2
+transform	translate3d(1px, 2px, 3px)	reject	reject	
+transform	rotateX(45deg)	ok	reject	abi gap; edadd7d step 3
+transform	rotateY(45deg)	ok	reject	abi gap; edadd7d step 3
+transform	perspective(500px)	ok	reject	abi gap; edadd7d step 3
+transform	none	ok	ok	
+transform	translate(10px, 20px) rotate(45deg) scale(2)	ok	ok	
+transform	scale(calc(1 + 0.5))	reject	reject	
+transform	rotate(1rad)	ok	ok	
+transform	rotate(100grad)	reject	ok	blinc gap; edadd7d steps 1-2
+filter	blur(4px)	ok	ok	
+filter	brightness(1.2)	ok	ok	
+filter	contrast(0.8)	ok	ok	
+filter	grayscale(1)	ok	ok	
+filter	drop-shadow(0 2px 4px rgba(0,0,0,.5))	ok	ok	
+filter	hue-rotate(90deg)	ok	ok	
+filter	invert(1)	ok	ok	
+filter	saturate(2)	ok	ok	
+filter	sepia(0.5)	ok	ok	
+filter	blur(4px) brightness(1.2)	ok	ok	
+filter	none	ok	ok	
+filter	url(#f)	reject	reject	
+box-shadow	0 1px 2px red	ok	ok	
+box-shadow	0 1px 2px 1px rgba(0,0,0,.3)	ok	ok	
+box-shadow	inset 0 1px 2px red	ok	ok	
+box-shadow	0 1px 2px red, 0 4px 8px blue	ok	ok	
+box-shadow	none	ok	ok	
+box-shadow	theme(shadow-sm)	reject	reject	
+border-radius	4px	ok	ok	
+border-radius	4px 8px	ok	ok	
+border-radius	50%	ok	reject	abi gap; edadd7d step 3
+border-radius	10px / 20px	reject	reject	
+border-radius	1rem	reject	ok	blinc gap; edadd7d steps 1-2
+border-radius	calc(4px + 2px)	ok	ok	
+opacity	0.5	ok	ok	
+opacity	50%	ok	ok	
+opacity	1	ok	ok	
+opacity	calc(1 - 0.5)	ok	reject	abi gap; edadd7d step 3
+mask-image	linear-gradient(black, transparent)	ok	ok	
+mask-image	radial-gradient(black, transparent)	ok	ok	
+mask-image	url(m.png)	ok	reject	abi gap; edadd7d step 3
+mask-image	none	ok	ok	
+clip-path	circle(50%)	ok	ok	
+clip-path	inset(10px)	ok	ok	
+clip-path	polygon(0 0, 100% 0, 50% 100%)	ok	ok	
+clip-path	path("M0 0L10 10")	reject	reject	
+clip-path	ellipse(50% 40%)	ok	ok	
+clip-path	inset(10px round 4px)	ok	ok	
+padding	4px	ok	ok	
+padding	4px 8px	ok	ok	
+padding	4px 8px 12px 16px	ok	ok	
+padding	1rem	reject	ok	blinc gap; edadd7d steps 1-2
+padding	calc(1rem + 2px)	ok	ok	
+padding	5%	reject	ok	blinc gap; edadd7d steps 1-2
+margin	auto	ok	ok	
+margin	0 auto	ok	ok	
+margin	-4px	ok	ok	
+margin	4px 8px	ok	ok	
+gap	8px	ok	ok	
+gap	8px 16px	reject	ok	blinc gap; edadd7d steps 1-2
+gap	1rem	reject	ok	blinc gap; edadd7d steps 1-2
+flex-grow	1	ok	ok	
+flex-grow	0	ok	ok	
+flex-grow	0.5	ok	ok	
+flex-basis	0%	ok	ok	
+flex-basis	auto	ok	ok	
+flex-basis	100px	ok	ok	
+flex-basis	content	reject	reject	
+z-index	1	ok	ok	
+z-index	-1	ok	ok	
+z-index	auto	reject	ok	blinc gap; edadd7d steps 1-2
+border-color	red	ok	ok	
+border-color	red blue	reject	ok	blinc gap; edadd7d steps 1-2
+border-color	#fff	ok	ok	
+outline-offset	2px	ok	ok	
+outline-offset	-2px	ok	ok	
+background-color	rgb(1, 1, 1)	ok	ok	
+background-color	rgba(1, 1, 1, 0.1)	ok	ok	
+background-color	#f00a	ok	ok	
+max-height	none	ok	ok	
+min-width	none	ok	reject	blinc is lenient: none is not a min-width; edadd7d
+border-radius	theme(radius-lg)	reject	reject	
+box-shadow	0px 25px 50px -12px rgba(0,0,0,0.5)	ok	ok	
+box-shadow	0px 1px 3px 0px rgba(0,0,0,0.3)	ok	ok	
+box-shadow	inset 0px 2px 4px 0px rgba(0,0,0,0.15)	ok	ok	
+box-shadow	0px 10px 15px -3px rgba(0,0,0,0.3)	ok	ok	
+box-shadow	0px 4px 6px -1px rgba(0,0,0,0.3)	ok	ok	
+box-shadow	0px 1px 2px 0px rgba(0,0,0,0.2)	ok	ok	
+box-shadow	0px 20px 25px -5px rgba(0,0,0,0.3)	ok	ok	

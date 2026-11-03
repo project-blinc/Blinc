@@ -130,25 +130,44 @@ fn test_css_variables_names_iterator() {
     assert!(names.contains(&"c"));
 }
 
+/// The theme's tokens arrive as `:root` variables, so a rule reads them with `var()`: a colour, a
+/// radius and a stacked shadow.
 #[test]
-fn test_css_variables_with_theme_fallback() {
-    // Initialize theme (required for theme() functions)
+fn test_theme_variables_resolve_in_a_rule() {
     ThemeState::init_default();
+    let theme = ThemeState::get();
+    let vars = theme.to_css_variable_map();
 
     let css = r#"
-        :root {
-            --card-shadow: theme(shadow-md);
-        }
         #card {
-            box-shadow: var(--card-shadow);
+            background: var(--surface);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
         }
     "#;
-    let result = Stylesheet::parse_with_errors(css);
-
-    // The variable stores the raw value "theme(shadow-md)"
-    // which gets resolved when applied to the style
+    let result = Stylesheet::parse_with_errors_and_variables(css, &vars);
+    assert!(result.errors.is_empty(), "{:?}", result.errors);
     let style = result.stylesheet.get("card").unwrap();
-    assert!(!style.shadow.is_empty());
+    assert!(style.background.is_some());
+    assert_eq!(
+        style.corner_radius,
+        Some(blinc_core::CornerRadius::uniform(theme.radii().radius_lg))
+    );
+    assert_eq!(style.shadow.len(), theme.shadows().shadow_md.len());
+}
+
+/// `theme(token)` is gone: a theme's tokens are variables, and the function is not a value.
+#[test]
+fn test_theme_function_is_no_longer_a_value() {
+    ThemeState::init_default();
+    for decl in [
+        "background: theme(primary)",
+        "border-radius: theme(radius-lg)",
+        "box-shadow: theme(shadow-md)",
+    ] {
+        let result = Stylesheet::parse_with_errors(&format!("#a {{ {decl}; }}"));
+        assert!(!result.errors.is_empty(), "{decl} was read");
+    }
 }
 
 #[test]

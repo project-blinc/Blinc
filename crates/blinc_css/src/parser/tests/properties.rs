@@ -145,18 +145,74 @@ mod inset_shadow_tests {
         assert_eq!(s.inner_shadow[0].blur, 2.0);
     }
 
-    /// `theme(shadow-inner)` is the token form, and the token is inset in
-    /// every theme, so it must route to the inner list.
+    /// `--shadow-inner` is inset in every theme, so it must route to the inner list.
     #[test]
-    fn the_inner_theme_token_routes_to_the_inner_list() {
-        // theme() reads the global ThemeState, which panics when unset.
-        // Each test gets its own process under nextest, so no sibling
-        // test can have installed it.
-        blinc_theme::ThemeState::init_default();
-
-        let s = parse("box-shadow: theme(shadow-inner);");
+    fn the_inner_shadow_variable_routes_to_the_inner_list() {
+        let value = theme_shadow("shadow-inner");
+        let s = parse(&format!("box-shadow: {value};"));
         assert!(!s.inner_shadow.is_empty(), "shadow-inner produced no layer");
         assert!(s.shadow.is_empty(), "shadow-inner is not an outer shadow");
+    }
+
+    /// The `box-shadow` string a theme publishes for a token.
+    fn theme_shadow(token: &str) -> String {
+        blinc_theme::ThemeState::init_default();
+        blinc_theme::ThemeState::get().to_css_variable_map()[token].clone()
+    }
+
+    /// Every shadow variable of every theme reads back as the stack it was made from: the same
+    /// layers, offsets, blur, spread and colour (to the channel the 8-bit text keeps).
+    #[test]
+    fn a_themes_shadow_variables_read_back_as_its_stacks() {
+        use blinc_theme::{ColorScheme, HybridTheme, ThemeState};
+        for scheme in [ColorScheme::Light, ColorScheme::Dark] {
+            ThemeState::init(HybridTheme::bundle(), scheme);
+            let theme = ThemeState::get();
+            let vars = theme.to_css_variable_map();
+            let shadows = theme.shadows();
+            for (name, stack) in [
+                ("shadow-sm", &shadows.shadow_sm),
+                ("shadow-default", &shadows.shadow_default),
+                ("shadow-md", &shadows.shadow_md),
+                ("shadow-lg", &shadows.shadow_lg),
+                ("shadow-xl", &shadows.shadow_xl),
+                ("shadow-2xl", &shadows.shadow_2xl),
+                ("shadow-inner", &shadows.shadow_inner),
+            ] {
+                let s = parse(&format!("box-shadow: {};", vars[name]));
+                let (outer, inner): (Vec<_>, Vec<_>) = stack.iter().partition(|l| !l.inset);
+                assert_eq!(
+                    s.shadow.len(),
+                    outer.len(),
+                    "{name} outer layers: {}",
+                    vars[name]
+                );
+                assert_eq!(s.inner_shadow.len(), inner.len(), "{name} inner layers");
+                for (got, want) in s
+                    .shadow
+                    .iter()
+                    .zip(outer)
+                    .chain(s.inner_shadow.iter().zip(inner))
+                {
+                    assert_eq!(
+                        [got.offset_x, got.offset_y, got.blur, got.spread],
+                        [want.offset_x, want.offset_y, want.blur, want.spread],
+                        "{name}: {}",
+                        vars[name]
+                    );
+                    let c = got.color;
+                    for (a, b) in [
+                        (c.r, want.color.r),
+                        (c.g, want.color.g),
+                        (c.b, want.color.b),
+                    ] {
+                        assert!((a - b).abs() <= 1.0 / 255.0 + 1e-6, "{name}: {a} vs {b}");
+                    }
+                    assert!((c.a - want.color.a).abs() < 1e-3, "{name} alpha");
+                }
+            }
+            assert_eq!(vars["shadow-none"], "none");
+        }
     }
 
     /// `text-shadow` takes no `inset`, so such a layer yields nothing

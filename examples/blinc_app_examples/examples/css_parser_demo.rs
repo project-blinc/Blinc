@@ -14,8 +14,10 @@ use blinc_layout::prelude::{CssElementState, CssParseResult, Stylesheet};
 use blinc_theme::ThemeState;
 
 fn main() {
-    // Initialize theme (required for theme() function in CSS)
+    // The theme's tokens arrive as `:root` variables: `var(--primary)`, `var(--radius-lg)`,
+    // `var(--shadow-md)`.
     ThemeState::init_default();
+    let vars = ThemeState::get().to_css_variable_map();
 
     println!("\n=== CSS Parser Demo ===\n");
 
@@ -30,9 +32,9 @@ fn main() {
 }
 
 #button-primary {
-    background: theme(primary);
+    background: var(--primary);
     transform: scale(1.0);
-    border-radius: theme(radius-default);
+    border-radius: var(--radius-default);
 }
 
 #button-primary:hover {
@@ -49,7 +51,7 @@ fn main() {
 }
 "#;
 
-    let result = Stylesheet::parse_with_errors(valid_css);
+    let result = Stylesheet::parse_with_errors_and_variables(valid_css, &vars);
     print_result(&result, valid_css);
 
     // Example 2: CSS with unknown properties (warnings)
@@ -65,7 +67,7 @@ fn main() {
 }
 "#;
 
-    let result = Stylesheet::parse_with_errors(css_with_unknowns);
+    let result = Stylesheet::parse_with_errors_and_variables(css_with_unknowns, &vars);
     print_result(&result, css_with_unknowns);
 
     // Example 3: CSS with invalid values
@@ -80,7 +82,7 @@ fn main() {
 }
 "#;
 
-    let result = Stylesheet::parse_with_errors(css_with_invalid);
+    let result = Stylesheet::parse_with_errors_and_variables(css_with_invalid, &vars);
     print_result(&result, css_with_invalid);
 
     // Example 4: Mixed valid and invalid
@@ -88,9 +90,9 @@ fn main() {
     println!("{}", "-".repeat(50));
     let mixed_css = r#"
 #header {
-    background: theme(surface);
-    border-radius: theme(radius-lg);
-    box-shadow: theme(shadow-md);
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
 }
 
 #sidebar {
@@ -105,14 +107,14 @@ fn main() {
 }
 "#;
 
-    let result = Stylesheet::parse_with_errors(mixed_css);
+    let result = Stylesheet::parse_with_errors_and_variables(mixed_css, &vars);
     print_result(&result, mixed_css);
 
     // Example 5: Show error collection API
     println!("\n5. Error Collection API Demo:");
     println!("{}", "-".repeat(50));
     let css = "#test { unknown: x; opacity: bad; background: blue; weird-prop: y; }";
-    let result = Stylesheet::parse_with_errors(css);
+    let result = Stylesheet::parse_with_errors_and_variables(css, &vars);
 
     println!("CSS: {}", css);
     println!("\nUsing CssParseResult API:");
@@ -169,7 +171,7 @@ fn main() {
 }
 "#;
 
-    let result = Stylesheet::parse_with_errors(css_with_vars);
+    let result = Stylesheet::parse_with_errors_and_variables(css_with_vars, &vars);
     print_result(&result, css_with_vars);
 
     // Show variable access
@@ -200,7 +202,7 @@ fn main() {
     opacity: 0.4;
 }
 "#;
-    let result = Stylesheet::parse_with_errors(css);
+    let result = Stylesheet::parse_with_errors_and_variables(css, &vars);
 
     println!("CSS: {}", css.trim());
     println!("\nQuerying state-specific styles:");
@@ -269,12 +271,12 @@ fn main() {
 }
 
 #modal {
-    background: theme(surface);
-    border-radius: theme(radius-lg);
+    background: var(--surface);
+    border-radius: var(--radius-lg);
 }
 "#;
 
-    let result = Stylesheet::parse_with_errors(css_with_keyframes);
+    let result = Stylesheet::parse_with_errors_and_variables(css_with_keyframes, &vars);
     print_result(&result, css_with_keyframes);
 
     println!("\nKeyframe animations defined:");

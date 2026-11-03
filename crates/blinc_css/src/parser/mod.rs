@@ -15,7 +15,7 @@
 //!
 //! - ID-based selectors: `#element-id { ... }` (matches `.id("element-id")`)
 //! - Properties: `background`, `border-radius`, `box-shadow`, `transform`, `opacity`
-//! - Theme references: `theme(primary)`, `theme(radius-lg)`, `theme(shadow-md)`
+//! - Theme tokens as variables: `var(--primary)`, `var(--radius-lg)`, `var(--shadow-md)`
 //! - Colors: hex (#rgb, #rrggbb, #rrggbbaa), rgb(), rgba(), named colors
 //! - Units: px, %, unitless numbers
 //!
@@ -26,17 +26,18 @@
 //!
 //! let css = r#"
 //!     #card {
-//!         background: theme(surface);
-//!         border-radius: theme(radius-lg);
-//!         box-shadow: theme(shadow-md);
+//!         background: var(--surface);
+//!         border-radius: var(--radius-lg);
+//!         box-shadow: var(--shadow-md);
 //!     }
 //!     #button-primary {
-//!         background: theme(primary);
+//!         background: var(--primary);
 //!         opacity: 0.9;
 //!     }
 //! "#;
 //!
-//! let result = Stylesheet::parse_with_errors(css);
+//! let vars = ThemeState::get().to_css_variable_map();
+//! let result = Stylesheet::parse_with_errors_and_variables(css, &vars);
 //! let stylesheet = result.stylesheet;
 //!
 //! // Report any errors that occurred

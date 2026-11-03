@@ -197,13 +197,19 @@ Combine any of the above:
 
 ### Background
 
-Supports solid colors, gradients, and image URLs:
+Supports solid colors, gradients, and image URLs. A colour is a hex value in 3, 4, 6 or 8 digits,
+`rgb()` or `rgba()`, `hsl()` or `hsla()` (the comma form, or the space form with `/ alpha`), one of
+CSS's named colours, or `color-mix(in srgb, …)`. `rgb()` components are 0 to 255, so `rgb(1, 1, 1)`
+is nearly black, not white; percentages are read as percentages.
 
 ```css
 /* Solid colors */
 #el { background: #3b82f6; }
 #el { background: rgb(59, 130, 246); }
 #el { background: rgba(255, 255, 255, 0.15); }
+#el { background: rgb(59 130 246 / 15%); }
+#el { background: hsl(217 91% 60%); }
+#el { background: rebeccapurple; }
 
 /* Linear gradient */
 #el { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
@@ -226,7 +232,7 @@ Supports solid colors, gradients, and image URLs:
 ```css
 #card { border-radius: 12px; }
 #avatar { border-radius: 50px; }          /* Circle */
-#card { border-radius: theme(radius-lg); } /* Theme token */
+#card { border-radius: var(--radius-lg); } /* Theme token */
 ```
 
 ### Corner Shape
@@ -1065,26 +1071,33 @@ if let Some(value) = stylesheet.get_variable("brand-color") {
 
 ## Theme Integration
 
-The `theme()` function references design tokens that adapt to the current app theme:
+The theme's design tokens are `:root` variables, so a rule reads them with `var()` and they follow
+the current app theme and colour scheme:
 
 ```css
 #card {
-    background: theme(surface);
-    border-radius: theme(radius-lg);
-    box-shadow: theme(shadow-md);
-    color: theme(text-primary);
-    border-color: theme(border);
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    color: var(--text-primary);
+    border-color: var(--border);
 }
 
 #button {
-    background: theme(primary);
+    background: var(--primary);
 }
 #button:hover {
-    background: theme(primary-hover);
+    background: var(--primary-hover);
 }
 ```
 
+The variables are published by the app's theme (`ThemeState::to_css_variable_map()`) and by the
+user-agent stylesheet, and a `--shadow-*` variable is the real `box-shadow` list, so it can be
+used anywhere a shadow can. The `theme()` function that earlier versions had is gone.
+
 ### Available Theme Tokens
+
+Each is the variable of that name, `--primary`, `--radius-lg`, `--shadow-md`.
 
 **Colors:**
 
@@ -1102,7 +1115,7 @@ The `theme()` function references design tokens that adapt to the current app th
 
 **Radii:** `radius-none`, `radius-sm`, `radius-default`, `radius-md`, `radius-lg`, `radius-xl`, `radius-2xl`, `radius-3xl`, `radius-full`
 
-**Shadows:** `shadow-none`, `shadow-sm`, `shadow-default`, `shadow-md`, `shadow-lg`, `shadow-xl`
+**Shadows:** `shadow-none`, `shadow-sm`, `shadow-default`, `shadow-md`, `shadow-lg`, `shadow-xl`, `shadow-2xl`, `shadow-inner`
 
 ---
 

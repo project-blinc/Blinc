@@ -762,7 +762,7 @@ pub const CN_STYLES: &str = concat!(
 .cn-tabs-indicator {
     background: var(--cn-tabs-active-bg, var(--surface));
     border-radius: var(--radius-default);
-    box-shadow: theme(shadow-sm);
+    box-shadow: var(--shadow-sm);
 }
 .cn-tabs-trigger--disabled {
     opacity: 0.5;

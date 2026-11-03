@@ -1,17 +1,10 @@
 //! Fills, corner radii, and render layers.
 
 use blinc_core::{Brush, CornerRadius, CornerShape, ImageBrush};
-use blinc_theme::ThemeState;
 use nom::{
-    IResult,
-    branch::alt,
-    bytes::complete::{tag_no_case, take_while1},
-    character::complete::char,
-    combinator::value,
+    IResult, branch::alt, bytes::complete::tag_no_case, combinator::value,
     error::ParseError as NomParseError,
-    sequence::delimited,
 };
-use tracing::debug;
 
 use crate::material::RenderLayer;
 use crate::parser::*;
@@ -42,11 +35,6 @@ pub(crate) fn parse_brush(value: &str) -> Option<Brush> {
         return parse_conic_gradient(trimmed).map(Brush::Gradient);
     }
 
-    // Try theme() function
-    if let Ok((_, color)) = parse_theme_color::<nom::error::Error<&str>>(trimmed) {
-        return Some(Brush::Solid(color));
-    }
-
     // Try parsing as color
     parse_color(trimmed).map(Brush::Solid)
 }
@@ -69,11 +57,6 @@ pub(crate) fn parse_url_value(value: &str) -> Option<String> {
 }
 
 pub(crate) fn parse_radius(value: &str) -> Option<CornerRadius> {
-    // Try theme() function first
-    if let Ok((_, radius)) = parse_theme_radius::<nom::error::Error<&str>>(value) {
-        return Some(radius);
-    }
-
     // Two to four values name the corners: top-left, top-right,
     // bottom-right, bottom-left, repeated as CSS does for the missing ones.
     let words = crate::parser::util::split_whitespace_respecting_parens(value);
@@ -159,41 +142,6 @@ pub(crate) fn parse_corner_shape_value(value: &str) -> Option<CornerShape> {
         }
         _ => None,
     }
-}
-
-/// Parse theme(radius-*) tokens
-pub(crate) fn parse_theme_radius<'a, E: NomParseError<&'a str>>(
-    input: &'a str,
-) -> IResult<&'a str, CornerRadius, E> {
-    let (input, _) = ws(input)?;
-    let (input, _) = tag_no_case("theme")(input)?;
-    let (input, _) = ws(input)?;
-    let (input, token_name) =
-        delimited(char('('), take_while1(|c: char| c != ')'), char(')'))(input)?;
-
-    let token_name = token_name.trim();
-    let radii = ThemeState::get().radii();
-
-    let radius = match token_name.to_lowercase().replace('_', "-").as_str() {
-        "radius-none" => radii.radius_none,
-        "radius-sm" => radii.radius_sm,
-        "radius-default" => radii.radius_default,
-        "radius-md" => radii.radius_md,
-        "radius-lg" => radii.radius_lg,
-        "radius-xl" => radii.radius_xl,
-        "radius-2xl" => radii.radius_2xl,
-        "radius-3xl" => radii.radius_3xl,
-        "radius-full" => radii.radius_full,
-        _ => {
-            debug!(token = token_name, "Unknown theme radius token");
-            return Err(nom::Err::Error(E::from_error_kind(
-                input,
-                nom::error::ErrorKind::Tag,
-            )));
-        }
-    };
-
-    Ok((input, CornerRadius::uniform(radius)))
 }
 
 /// Parse render layer

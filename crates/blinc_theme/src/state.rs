@@ -482,6 +482,26 @@ impl ThemeState {
                 )
             }
         }
+        fn shadow_list(stack: &[crate::tokens::Shadow]) -> String {
+            if stack.is_empty() {
+                return "none".to_string();
+            }
+            stack
+                .iter()
+                .map(|s| {
+                    format!(
+                        "{}{} {} {} {} {}",
+                        if s.inset { "inset " } else { "" },
+                        px(s.offset_x),
+                        px(s.offset_y),
+                        px(s.blur),
+                        px(s.spread),
+                        hex(s.color)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
         fn px(v: f32) -> String {
             // Strip trailing `.0` so `12.0` becomes `"12px"`, matching
             // hand-written CSS conventions. Fractional values keep
@@ -748,19 +768,22 @@ impl ThemeState {
         }
 
         // ===== Shadow tokens =====
-        // A `box-shadow` reads the stack through `theme(...)`, which the CSS
-        // parser resolves against the current theme.
-        for name in [
-            "shadow-sm",
-            "shadow-default",
-            "shadow-md",
-            "shadow-lg",
-            "shadow-xl",
-            "shadow-2xl",
-            "shadow-inner",
-            "shadow-none",
-        ] {
-            vars.insert(name.into(), format!("theme({name})"));
+        // Each as the `box-shadow` list it stands for, so `box-shadow: var(--shadow-md)`
+        // reads in any CSS engine.
+        {
+            let shadows = self.shadows();
+            for (name, stack) in [
+                ("shadow-sm", &shadows.shadow_sm),
+                ("shadow-default", &shadows.shadow_default),
+                ("shadow-md", &shadows.shadow_md),
+                ("shadow-lg", &shadows.shadow_lg),
+                ("shadow-xl", &shadows.shadow_xl),
+                ("shadow-2xl", &shadows.shadow_2xl),
+                ("shadow-inner", &shadows.shadow_inner),
+                ("shadow-none", &shadows.shadow_none),
+            ] {
+                vars.insert(name.into(), shadow_list(stack));
+            }
         }
 
         // ===== Motion tokens =====
@@ -1019,5 +1042,38 @@ mod tests {
         let vars = ThemeState::get().to_css_variable_map();
         assert_eq!(vars["radius-xl"], "18px"); // Hybrid: 18
         assert_eq!(vars["text-sm"], "13px"); // Universal HID: 13 (vs default 14)
+    }
+
+    /// A shadow variable is the `box-shadow` list of its stack, layer by layer.
+    #[test]
+    fn shadow_variables_are_box_shadow_lists() {
+        ThemeState::init(HybridTheme::bundle(), ColorScheme::Light);
+        let theme = ThemeState::get();
+        let vars = theme.to_css_variable_map();
+        let shadows = theme.shadows();
+        for (name, stack) in [
+            ("shadow-sm", &shadows.shadow_sm),
+            ("shadow-md", &shadows.shadow_md),
+            ("shadow-lg", &shadows.shadow_lg),
+            ("shadow-inner", &shadows.shadow_inner),
+        ] {
+            let value = &vars[name];
+            assert!(!value.contains("theme("), "{name}: {value}");
+            assert_eq!(
+                value.matches("px").count(),
+                stack.len() * 4,
+                "{name}: {value}"
+            );
+            assert_eq!(
+                value.matches("inset").count(),
+                stack.iter().filter(|s| s.inset).count()
+            );
+        }
+        assert_eq!(vars["shadow-none"], "none");
+        assert!(
+            shadows.shadow_md.len() > 1,
+            "a stacked shadow is the case that needs a list"
+        );
+        assert!(vars["shadow-md"].contains(", "), "a stack is a comma list");
     }
 }
