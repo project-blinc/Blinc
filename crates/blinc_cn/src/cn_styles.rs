@@ -99,6 +99,7 @@ pub const CN_STYLES: &str = concat!(
    each variant (Restrained / Hybrid / Expressive) gets its own corner reach. */
 .cn-button {
     border-radius: var(--radius-default);
+    cursor: pointer;
     transition:
         background-color var(--duration-fast) var(--ease-state),
         color var(--duration-fast) var(--ease-state),
@@ -106,6 +107,7 @@ pub const CN_STYLES: &str = concat!(
         box-shadow var(--duration-fast) var(--ease-state),
         transform var(--duration-faster) var(--ease-state);
 }
+.cn-button:disabled { cursor: not-allowed; }
 /* Press feedback: a pressed button shrinks a little and eases back. A link
    button is flat, so it dims instead. */
 .cn-button:active:not(:disabled) {

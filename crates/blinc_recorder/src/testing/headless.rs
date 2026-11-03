@@ -823,6 +823,19 @@ impl Headless {
         (b.x + b.width / 2.0, b.y + b.height / 2.0)
     }
 
+    /// The cursor the window would set with the pointer at `(x, y)`.
+    pub fn cursor_at(&self, x: f32, y: f32) -> Option<blinc_layout::element::CursorStyle> {
+        self.tree
+            .as_ref()?
+            .get_cursor_at(&self.ctx.event_router, x, y)
+    }
+
+    /// The cursor over the centre of the first node matching `selector`.
+    pub fn cursor_over(&self, selector: &str) -> Option<blinc_layout::element::CursorStyle> {
+        let (x, y) = self.centre(selector);
+        self.cursor_at(x, y)
+    }
+
     // ---- capture -------------------------------------------------------
 
     /// Paint the current frame and read it back.
