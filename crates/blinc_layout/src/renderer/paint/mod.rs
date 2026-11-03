@@ -28,6 +28,7 @@
 //!   `has_glass`, `apply_opacity_to_brush`).
 
 pub mod basic;
+mod canvas_order;
 pub mod collect;
 mod cross_stream;
 pub mod helpers;

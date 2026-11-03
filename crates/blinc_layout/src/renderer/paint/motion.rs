@@ -1639,10 +1639,13 @@ impl RenderTree {
 
                     // Retained callbacks paint with their owning group or batch.
                     // Independent callbacks defer to overlay replay when requested.
+                    // A canvas something later in the tree is drawn over also paints with its
+                    // batch, in order: the independent replay comes after everything cached.
                     let retained_canvas = !canvas_data.is_static
                         && (!ctx.can_promote_composite_layer()
                             || ctx.bg_batch_is_dynamic()
-                            || ctx.bg_batch_is_composite());
+                            || ctx.bg_batch_is_composite()
+                            || self.later_content_overlaps(node));
                     if retained_canvas {
                         self.had_retained_canvas_painted.set(true);
                         self.retained_canvas_redraws
