@@ -12,7 +12,7 @@ import time
 
 # Keep experimental and independently maintained packages outside this release set.
 RELEASE_CRATES = (
-    "blinc_macros", "blinc_platform", "blinc_icons", "blinc_core",
+    "blinc_macros", "blinc_flow", "blinc_platform", "blinc_icons", "blinc_core",
     "blinc_animation", "blinc_paint", "blinc_svg", "blinc_text",
     "blinc_theme", "blinc_css", "blinc_image", "blinc_media", "blinc_layout",
     "blinc_noto_emoji", "blinc_noto_symbols", "blinc_gpu", "blinc_cn",

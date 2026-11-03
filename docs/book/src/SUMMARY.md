@@ -8,6 +8,10 @@
 - [Your First App](./getting-started/first-app.md)
 - [Project Structure](./getting-started/project-structure.md)
 
+# Migrating
+
+- [From 0.5 to 0.6](./migration/0.5-to-0.6.md)
+
 # Mobile Development
 
 - [Overview](./mobile/overview.md)

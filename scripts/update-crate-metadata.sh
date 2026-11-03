@@ -15,6 +15,7 @@ CRATES=(
     "crates/blinc_cn"
     "crates/blinc_core"
     "crates/blinc_debugger"
+    "crates/blinc_flow"
     "crates/blinc_gpu"
     "crates/blinc_icons"
     "crates/blinc_image"

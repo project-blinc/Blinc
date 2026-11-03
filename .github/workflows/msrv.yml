@@ -9,7 +9,6 @@ jobs:
   msrv:
     name: MSRV
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Strip local-dev [patch] block (CI-only)
@@ -41,7 +40,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: '1.75'
+          toolchain: '1.89'
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -53,5 +52,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-msrv-
 
-      - name: Check workspace on MSRV
-        run: cargo check --workspace --all-targets
+      # The release crates only: the DSL crates are outside the release and their
+      # dependencies need a newer compiler.
+      - name: Check release crates on MSRV
+        run: |
+          packages=$(python3 scripts/publish_crates.py --plan | awk '/^ *[0-9]+\./ {sub(/@.*/, "", $2); printf "-p %s ", $2}')
+          cargo check $packages --all-targets

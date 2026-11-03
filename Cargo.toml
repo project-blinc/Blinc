@@ -88,7 +88,7 @@ version = "0.6.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/project-blinc/Blinc"
-rust-version = "1.85"
+rust-version = "1.89"
 
 [workspace.dependencies]
 # Krio (async runtime) — mirror the rev Zyntax's `krio_adapter` pins

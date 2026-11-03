@@ -1,12 +1,17 @@
 [package]
 name = "blinc_flow"
-description = "Blinc flow shaders - the flow! macro and the parser behind it, over blinc_core's FlowGraph"
+description = "Blinc flow shaders: the shader-graph language parser and WGSL generator over blinc_core's FlowGraph"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 documentation = "https://docs.rs/blinc_flow"
 rust-version.workspace = true
+keywords = ["ui", "gui", "shader", "wgsl", "blinc"]
+categories = ["gui", "graphics", "rendering"]
+readme = "README.md"
+# The example-validation test reads the workspace's example sources.
+exclude = ["tests/examples_validate.rs"]
 
 [lib]
 crate-type = ["lib"]

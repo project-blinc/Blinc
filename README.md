@@ -1,7 +1,7 @@
 # Blinc
 
 [![Build Status](https://github.com/project-blinc/Blinc/actions/workflows/ci.yml/badge.svg)](https://github.com/project-blinc/Blinc/actions/workflows/ci.yml)
-[![Rust Version](https://img.shields.io/badge/rust-1.85%2B-blue.svg)](https://www.rust-lang.org)
+[![Rust Version](https://img.shields.io/badge/rust-1.89%2B-blue.svg)](https://www.rust-lang.org)
 [![Edition](https://img.shields.io/badge/edition-2024-blue.svg)](https://doc.rust-lang.org/edition-guide/rust-2024/)
 [![Crates.io](https://img.shields.io/crates/v/blinc_app.svg)](https://crates.io/crates/blinc_app)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
