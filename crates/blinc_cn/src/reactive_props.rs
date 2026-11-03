@@ -179,19 +179,23 @@ pub fn bind_bool_targets(
         }
     }
 
-    blinc_core::reactive::effect(move |graph| {
-        // Read through the PASSED graph, not `State::get`. The first
-        // run happens inside `create_effect` with the global graph
-        // mutex already held, so the global path deadlocks on a
-        // non-reentrant lock. The argument exists for this and tracks
-        // the read the same way.
-        let on = graph.get(signal).unwrap_or(false);
-        for t in &targets {
-            t.anim
-                .lock()
-                .unwrap()
-                .set_target(if on { t.on } else { t.off });
-        }
+    // Registered once per signal, so it must not belong to the build that happened to be first:
+    // the next fresh tree would dispose it, and nothing would register it again.
+    blinc_core::owner::Owner::detached(|| {
+        blinc_core::reactive::effect(move |graph| {
+            // Read through the PASSED graph, not `State::get`. The first
+            // run happens inside `create_effect` with the global graph
+            // mutex already held, so the global path deadlocks on a
+            // non-reentrant lock. The argument exists for this and tracks
+            // the read the same way.
+            let on = graph.get(signal).unwrap_or(false);
+            for t in &targets {
+                t.anim
+                    .lock()
+                    .unwrap()
+                    .set_target(if on { t.on } else { t.off });
+            }
+        });
     });
 }
 

@@ -141,6 +141,8 @@ pub struct Headless {
     height: u32,
     now_ms: u64,
     needs_rebuild: bool,
+    /// The scope each build runs in, as a runner holds it.
+    build_scope: blinc_core::owner::BuildScope,
     pointer: (f32, f32),
     frames: u64,
     recording: Option<Arc<SharedRecordingSession>>,
@@ -204,6 +206,7 @@ impl Headless {
             height,
             now_ms: 0,
             needs_rebuild: false,
+            build_scope: blinc_core::owner::BuildScope::new(),
             pointer: (-1.0, -1.0),
             frames: 0,
             recording: None,
@@ -412,6 +415,10 @@ impl Headless {
             return;
         };
 
+        // What the widgets create while building belongs to this build; a fresh tree disposes the
+        // builds before it.
+        let build_pass = self.build_scope.begin();
+        let replaces_tree = self.tree.is_none();
         blinc_layout::reset_call_counters();
         blinc_layout::clear_stateful_base_updaters();
         blinc_layout::click_outside::clear_click_outside_handlers();
@@ -458,6 +465,20 @@ impl Headless {
             self.ctx.rebuild_count = self.ctx.rebuild_count.saturating_add(1);
             self.tree = Some(tree);
         }
+        if replaces_tree {
+            self.build_scope.finish(build_pass);
+        } else {
+            self.build_scope.keep(build_pass);
+        }
+    }
+
+    /// Build the mounted UI again into a new tree, as a runner does on a resize: the tree is
+    /// replaced, and what the builds before it created is disposed.
+    pub fn rebuild_fresh(&mut self) -> &mut Self {
+        self.tree = None;
+        self.needs_rebuild = true;
+        self.frame(0);
+        self
     }
 
     /// Land what widgets and signals queued: property writes, subtree

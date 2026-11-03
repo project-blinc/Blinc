@@ -363,6 +363,7 @@ impl IOSApp {
             windowed_ctx,
             render_state,
             render_tree: None,
+            build_scope: blinc_core::owner::BuildScope::new(),
             ref_dirty_flag,
             animations,
             ready_callbacks,
@@ -394,6 +395,8 @@ pub struct IOSRenderContext {
     render_state: blinc_layout::RenderState,
     /// Render tree (created on first render)
     render_tree: Option<RenderTree>,
+    /// The scope each build runs in; see [`blinc_core::owner::BuildScope`].
+    build_scope: blinc_core::owner::BuildScope,
     /// Dirty flag for reactive updates
     ref_dirty_flag: RefDirtyFlag,
     /// Animation scheduler
@@ -584,6 +587,9 @@ impl IOSRenderContext {
         // (legacy + new OverlayStack + ToastTray). Without these
         // children the corresponding `.show()` calls would push
         // content into managers that never reach the tree.
+        // What the widgets create while building, the effects above all, belongs to this build
+        // and goes when the next one has replaced the tree.
+        let build_pass = self.build_scope.begin();
         let element = {
             let user_ui = ui_builder(&mut self.windowed_ctx);
             let ctx = &mut self.windowed_ctx;
@@ -653,6 +659,7 @@ impl IOSRenderContext {
             tree.update_flip_bounds();
             tree.start_all_css_animations();
         }
+        self.build_scope.finish(build_pass);
 
         // Tick and apply CSS animations/transitions synchronously with rendering
         if let Some(ref mut tree) = self.render_tree {

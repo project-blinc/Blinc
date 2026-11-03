@@ -407,6 +407,8 @@ pub struct WebApp {
     /// dirty, when the user explicitly requests a rebuild, or when
     /// `take_needs_rebuild` flips the global widget rebuild flag.
     needs_rebuild: bool,
+    /// The scope each build runs in; see [`blinc_core::owner::BuildScope`].
+    build_scope: blinc_core::owner::BuildScope,
     /// Whether the next rebuild must bypass `incremental_update` and
     /// fall back to a full `from_element_with_registry`. Set by
     /// [`Self::handle_resize`] because viewport-size changes don't
@@ -805,6 +807,7 @@ impl WebApp {
             ui_builder: None,
             current_tree: None,
             needs_rebuild: true,
+            build_scope: blinc_core::owner::BuildScope::new(),
             needs_full_rebuild: false,
             last_logical_size: (logical_width, logical_height),
             last_touch_pos: None,
@@ -2747,6 +2750,9 @@ impl WebApp {
                 }
             }
 
+            // What the widgets create while building, the effects above all, belongs to this
+            // build; a fresh tree disposes the builds before it.
+            let build_pass = self.build_scope.begin();
             blinc_layout::reset_call_counters();
             blinc_layout::clear_stateful_base_updaters();
             blinc_layout::click_outside::clear_click_outside_handlers();
@@ -2755,6 +2761,7 @@ impl WebApp {
                 self.current_tree = None;
                 self.needs_full_rebuild = false;
             }
+            let replaces_tree = self.current_tree.is_none();
 
             if let Some(ref mut existing_tree) = self.current_tree {
                 use blinc_layout::UpdateResult;
@@ -2805,6 +2812,11 @@ impl WebApp {
             }
 
             self.needs_rebuild = false;
+            if replaces_tree {
+                self.build_scope.finish(build_pass);
+            } else {
+                self.build_scope.keep(build_pass);
+            }
             self.ctx.rebuild_count = self.ctx.rebuild_count.saturating_add(1);
         }
 

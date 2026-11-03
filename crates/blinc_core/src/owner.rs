@@ -37,6 +37,10 @@ struct Owned {
 #[derive(Clone, Default)]
 pub struct Owner(Rc<RefCell<Owned>>);
 
+/// Keeps a scope current until it is dropped, and pops it then, even if the closure
+/// panics or the code between returns early. Made by [`Owner::enter`].
+pub struct OwnerGuard(#[allow(dead_code)] Pop);
+
 /// Pops the scope `run` pushed, even if the closure panics.
 struct Pop;
 
@@ -69,6 +73,20 @@ impl Owner {
         CURRENT.with(|stack| stack.borrow_mut().push(Rc::clone(&self.0)));
         let _pop = Pop;
         f()
+    }
+
+    /// Run `f` owned by no scope: what it creates is not disposed with the build or the row that
+    /// happens to be running it. For what a widget makes once and shares, keyed by something that
+    /// outlives a build, such as an effect registered once per signal.
+    pub fn detached<R>(f: impl FnOnce() -> R) -> R {
+        Owner::default().run(f)
+    }
+
+    /// Make this scope current until the returned guard is dropped: what is created meanwhile
+    /// belongs to it. [`Self::run`] for code that cannot be wrapped in a closure.
+    pub fn enter(&self) -> OwnerGuard {
+        CURRENT.with(|stack| stack.borrow_mut().push(Rc::clone(&self.0)));
+        OwnerGuard(Pop)
     }
 
     /// Run `cleanup` when the current scope is disposed. Without one, it
@@ -111,6 +129,62 @@ impl Owner {
     /// Whether [`Self::dispose`] has run.
     pub fn is_disposed(&self) -> bool {
         self.0.borrow().disposed
+    }
+}
+
+/// What a runner holds to build its UI under an [`Owner`].
+///
+/// A build that makes a fresh tree runs in a new scope, and the scopes of the builds before it are
+/// disposed once the new tree has replaced the old: what a widget creates while building, the
+/// computeds and above all the effects that run on each write, would otherwise live as long as the
+/// process. A build whose result is merged into the existing tree is [kept](Self::keep) instead:
+/// what it made for the nodes that stayed is still in use, so it lives until the next fresh tree.
+/// Keyed state is made outside any scope and is never disposed.
+#[derive(Default)]
+pub struct BuildScope {
+    current: Option<Owner>,
+    kept: Vec<Owner>,
+}
+
+/// One build in progress: what is created while it is held belongs to its scope. Hand it back to
+/// [`BuildScope::finish`] or [`BuildScope::keep`] once the build is in place.
+pub struct BuildPass {
+    owner: Owner,
+    enter: OwnerGuard,
+}
+
+impl BuildScope {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Start a build: a new scope is current until the pass is handed back or dropped. The pass is
+    /// a root scope, not a child of whatever is current.
+    pub fn begin(&mut self) -> BuildPass {
+        let owner = Owner::default();
+        let enter = owner.enter();
+        BuildPass { owner, enter }
+    }
+
+    /// The build made a fresh tree, now in place: dispose what the builds before it created, the
+    /// kept ones included, and hold this one's.
+    pub fn finish(&mut self, pass: BuildPass) {
+        let BuildPass { owner, enter } = pass;
+        drop(enter);
+        if let Some(previous) = self.current.replace(owner) {
+            previous.dispose();
+        }
+        for kept in self.kept.drain(..) {
+            kept.dispose();
+        }
+    }
+
+    /// The build was merged into the tree that was there: nothing is disposed, and this build's
+    /// scope goes with the next fresh tree.
+    pub fn keep(&mut self, pass: BuildPass) {
+        let BuildPass { owner, enter } = pass;
+        drop(enter);
+        self.kept.push(owner);
     }
 }
 
@@ -281,5 +355,84 @@ mod tests {
         assert!(Owner::current().is_none());
         let s = signal(5_i32);
         assert_eq!(s.try_get(), Some(5));
+    }
+
+    #[test]
+    fn a_build_scope_disposes_the_previous_build_when_the_next_finishes() {
+        let _guard = serial();
+        let writes = Arc::new(AtomicUsize::new(0));
+        let source = signal(0_i32);
+        let mut scope = BuildScope::new();
+        let build = |scope: &mut BuildScope, writes: &Arc<AtomicUsize>| {
+            let pass = scope.begin();
+            let counted = Arc::clone(writes);
+            effect(move |g| {
+                let _ = g.get(source);
+                counted.fetch_add(1, Ordering::SeqCst);
+            });
+            pass
+        };
+
+        let first = build(&mut scope, &writes);
+        scope.finish(first);
+        let second = build(&mut scope, &writes);
+        // Both builds' effects are live until the second finishes.
+        let before = writes.load(Ordering::SeqCst);
+        source.set(1);
+        assert_eq!(writes.load(Ordering::SeqCst) - before, 2);
+
+        scope.finish(second);
+        let before = writes.load(Ordering::SeqCst);
+        source.set(2);
+        assert_eq!(
+            writes.load(Ordering::SeqCst) - before,
+            1,
+            "only the last build's effect is left"
+        );
+    }
+
+    #[test]
+    fn a_pass_is_current_while_held_and_not_after_it_is_dropped() {
+        let _guard = serial();
+        let mut scope = BuildScope::new();
+        let pass = scope.begin();
+        assert!(Owner::current().is_some(), "a pass is current while held");
+        drop(pass);
+        assert!(Owner::current().is_none());
+    }
+
+    #[test]
+    fn a_kept_build_lives_until_the_next_fresh_tree() {
+        let _guard = serial();
+        let runs = Arc::new(AtomicUsize::new(0));
+        let source = signal(0_i32);
+        let mut scope = BuildScope::new();
+        let make = |scope: &mut BuildScope| {
+            let pass = scope.begin();
+            let counted = Arc::clone(&runs);
+            effect(move |g| {
+                let _ = g.get(source);
+                counted.fetch_add(1, Ordering::SeqCst);
+            });
+            pass
+        };
+        let first = make(&mut scope);
+        scope.finish(first);
+        let merged = make(&mut scope);
+        scope.keep(merged);
+
+        let before = runs.load(Ordering::SeqCst);
+        source.set(1);
+        assert_eq!(runs.load(Ordering::SeqCst) - before, 2, "both stay live");
+
+        let fresh = make(&mut scope);
+        scope.finish(fresh);
+        let before = runs.load(Ordering::SeqCst);
+        source.set(2);
+        assert_eq!(
+            runs.load(Ordering::SeqCst) - before,
+            1,
+            "only the fresh one"
+        );
     }
 }

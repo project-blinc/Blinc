@@ -5,6 +5,7 @@ All notable changes to `blinc_core` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `owner::BuildScope` is what a runner holds to build its UI under an `Owner`: `begin` a pass, then `finish` it when the build made a fresh tree (the scopes of the builds before it are disposed) or `keep` it when the build was merged into the tree that was there. `Owner::enter` makes a scope current until its guard drops, and `Owner::detached` runs code owned by no scope, for what a widget registers once for a signal that outlives builds.
 - `DrawContext::draw_shader(shader, rect, inputs)` draws a flow shader over a rect in the current transform and clip, and `ShaderInputs` holds what it reads besides `uv`: `pointer`, `time` and `corner_radius`. Contexts without a GPU ignore it.
 - `FlowShader` and `FlowBuffer`: a flow compiled to WGSL with what a pipeline binds for it (target, scene sampling, whether it reads `time`, dynamic uniform fields, storage buffers). `flow!` builds one at compile time as a constant.
 

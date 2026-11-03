@@ -441,6 +441,8 @@ impl AndroidApp {
         let mut surface_config: Option<wgpu::SurfaceConfiguration> = None;
         let mut ctx: Option<WindowedContext> = None;
         let mut render_tree: Option<RenderTree> = None;
+        // The scope each build runs in; see `blinc_core::owner::BuildScope`.
+        let mut build_scope = blinc_core::owner::BuildScope::new();
         let mut render_state: Option<blinc_layout::RenderState> = None;
         let mut native_window: Option<NativeWindow> = None;
         let mut needs_rebuild = true;
@@ -1658,6 +1660,9 @@ impl AndroidApp {
                     // these children the `.show()` / `.present()` calls
                     // would push content into managers that never reach
                     // the tree.
+                    // What the widgets create while building, the effects above all, belongs to
+                    // this build and goes when the next one has replaced the tree.
+                    let build_pass = build_scope.begin();
                     let element = {
                         let user_ui = ui_builder(windowed_ctx);
                         let overlay_layer = windowed_ctx.overlay_manager.build_overlay_layer();
@@ -1726,6 +1731,7 @@ impl AndroidApp {
                         // Clear dirty on the NEW tree to prevent immediate re-rebuild
                         tree.clear_dirty();
                     }
+                    build_scope.finish(build_pass);
                     needs_redraw = true;
                 }
                 // Reset rebuild flag after successful rebuild

@@ -379,6 +379,8 @@ pub(crate) struct WindowState {
         Arc<std::sync::RwLock<std::collections::HashMap<String, blinc_core::MotionAnimationState>>>,
     /// Whether the UI tree needs rebuilding
     pub needs_rebuild: bool,
+    /// The scope each build runs in; a fresh tree disposes the builds before it.
+    pub build_scope: blinc_core::owner::BuildScope,
     /// Whether layout needs recomputing
     pub needs_relayout: bool,
     /// A hot reload landed: re-run the stylesheet passes on the next
@@ -482,6 +484,7 @@ impl WindowState {
             css_anim_store,
             shared_motion_states,
             needs_rebuild: true,
+            build_scope: blinc_core::owner::BuildScope::new(),
             needs_relayout: false,
             hot_reload_restyle: false,
             last_frame_time_ms: 0,
@@ -3324,6 +3327,7 @@ impl WindowedApp {
                                 {
                                     // Build render tree on first frame or after resize
                                     if sws.render_tree.is_none() || sws.needs_rebuild {
+                                        let build_pass = sws.build_scope.begin();
                                         let (w, h) = sws.ctx.as_ref()
                                             .map(|c| (c.width, c.height))
                                             .unwrap_or((400.0, 300.0));
@@ -3372,6 +3376,7 @@ impl WindowedApp {
                                         tree.compute_layout(w, h);
                                         sws.render_tree = Some(tree);
                                         sws.needs_rebuild = false;
+                                        sws.build_scope.finish(build_pass);
                                     }
 
                                     if let Some(tree) = sws.render_tree.as_mut() {
@@ -6160,6 +6165,9 @@ impl WindowedApp {
                             }
 
                             if ws.needs_rebuild || ws.render_tree.is_none() {
+                                // What the widgets create while building, the effects above
+                                // all, belongs to this build and goes when the next replaces it.
+                                let build_pass = ws.build_scope.begin();
                                 // Reset call counters for stable key generation
                                 reset_call_counters();
                                 blinc_layout::click_outside::clear_click_outside_handlers();
@@ -6232,6 +6240,9 @@ impl WindowedApp {
                                     .child(overlay_layer)
                                     .child(stack_layer)
                                     .child(tray_layer);
+
+                                // A fresh tree replaces the old one when there is none or on a resize.
+                                let replaces_tree = ws.render_tree.is_none() || ws.needs_relayout;
 
                                 // Use incremental update if we have an existing tree
                                 // BUT: Skip incremental update during resize - do full rebuild instead
@@ -6409,6 +6420,11 @@ impl WindowedApp {
                                 }
 
                                 ws.needs_rebuild = false;
+                                if replaces_tree {
+                                    ws.build_scope.finish(build_pass);
+                                } else {
+                                    ws.build_scope.keep(build_pass);
+                                }
                                 did_rebuild = true;
                                 let was_first_rebuild = windowed_ctx.rebuild_count == 0;
                                 windowed_ctx.rebuild_count = windowed_ctx.rebuild_count.saturating_add(1);
