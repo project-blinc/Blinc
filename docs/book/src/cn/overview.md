@@ -13,64 +13,58 @@ blinc_cn = { path = "path/to/blinc_cn" }
 
 ## Quick Start
 
-Install the cn theme bundle with [`WindowedApp::run_with_theme`]. `cn_bundle()` is the framework's platform-detected
+Install the cn theme bundle with `WindowedApp::run_with_theme`. `cn_bundle()` is the framework's platform-detected
 theme pre-loaded with `CN_STYLES`, so cn components look right out of the box without any manual `add_css` calls:
 
 ```rust
-use blinc_app::prelude::*;
+use blinc_app::prelude::{ColorScheme, Result, WindowConfig};
+use blinc_app::windowed::WindowedApp;
 use blinc_cn::{cn_bundle, prelude::*};
+use blinc_layout::prelude::{div, text};
 
 fn main() -> Result<()> {
-    let config = WindowConfig {
-        title: "My cn app".to_string(),
-        ..Default::default()
-    };
-
     WindowedApp::run_with_theme(
-        config,
+        WindowConfig {
+            title: "My cn app".to_string(),
+            ..Default::default()
+        },
         cn_bundle(),
         ColorScheme::Light,
-        // Closure wrapper: on edition 2024, `fn build_ui(ctx) -> impl Element`
-        // captures `ctx`'s lifetime in the return type, which breaks the
-        // higher-ranked `FnMut` bound when passed by name. The closure
-        // dodges this. See `WindowedApp::run` docs for the alternative
-        // (`+ use<>` on the named fn).
-        |ctx| build_ui(ctx),
+        |_ctx| {
+            div().flex_col().gap(4.0).p(6.0)
+                .child(card()
+                    .child(card_header()
+                        .title("Welcome")
+                        .description("Get started with blinc_cn"))
+                    .child(card_content().child(text("Components styled by CSS.")))
+                    .child(card_footer().child(button("Get Started"))))
+        },
     )
-}
-
-fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder {
-    div()
-        .flex_col()
-        .gap(16.0)
-        .p(24.0)
-        .child(
-            card()
-                .child(card_header()
-                    .child(card_title("Welcome"))
-                    .child(card_description("Get started with blinc_cn")))
-                .child(card_content()
-                    .child(text("Beautiful, accessible components.")))
-                .child(card_footer()
-                    .child(button("Get Started")))
-        )
 }
 ```
 
 ### Layering CSS overrides
 
 Chain [`with_css`](../core/theming.md#themebundlewith_css) (or `with_css_file`) on the bundle to attach extra
-stylesheets — they cascade after `CN_STYLES`, so they win on conflicts:
+stylesheets. Application rules take precedence over the component layer:
 
 ```rust
-let bundle = cn_bundle()
-    .with_css(r#"
-        .cn-button--primary { border-radius: 0; }
-        .cn-card { border-width: 2px; }
-    "#)
-    .with_css_file("./styles/brand.css");
+use blinc_app::prelude::{ColorScheme, WindowConfig};
+use blinc_app::windowed::WindowedApp;
+use blinc_cn::{cn_bundle, prelude::*};
+use blinc_layout::prelude::div;
 
-WindowedApp::run_with_theme(config, bundle, ColorScheme::Light, |ctx| build_ui(ctx))
+let bundle = cn_bundle().with_css(r#"
+    .cn-button--primary { border-radius: 0; }
+    .cn-card { border-width: 2px; }
+"#);
+
+WindowedApp::run_with_theme(
+    WindowConfig::default(),
+    bundle,
+    ColorScheme::Light,
+    |_ctx| div().child(button("Get started")),
+)
 ```
 
 ### Using a custom theme
@@ -86,13 +80,17 @@ references theme tokens via `var()`.
 Components are built from smaller primitives that can be combined:
 
 ```rust
-// Compose dialog from parts
-dialog()
-    .child(dialog_trigger().child(button("Open")))
-    .child(dialog_content()
-        .child(dialog_header().child(dialog_title("Title")))
-        .child(/* content */)
-        .child(dialog_footer().child(button("Close"))))
+use blinc_cn::prelude::*;
+use blinc_layout::prelude::{div, text};
+
+button("Open").on_click(|_| {
+    dialog()
+        .title("Title")
+        .content(|| div().child(text("Dialog content")))
+        .confirm_text("Close")
+        .hide_cancel()
+        .show();
+})
 ```
 
 ### Themeable
@@ -100,11 +98,12 @@ dialog()
 All components use theme tokens and automatically support dark mode:
 
 ```rust
-// Components adapt to theme automatically
-button("Click me") // Uses theme.colors.primary
+use blinc_cn::prelude::*;
+use blinc_theme::{ColorScheme, ThemeState};
 
-// Override theme
-ThemeState::set_color_scheme(ColorScheme::Dark);
+button("Use dark mode").on_click(|_| {
+    ThemeState::get().set_scheme(ColorScheme::Dark);
+})
 ```
 
 `CN_STYLES` gives the document a text colour, `:root { color: var(--text-primary) }`,

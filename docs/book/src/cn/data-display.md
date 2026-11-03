@@ -1,96 +1,83 @@
 # Data Display Components
 
-Components for displaying data: tooltips, popovers, hover cards, charts, and trees.
-
-## Tooltip
-
-Brief information on hover:
+Tooltips, popovers, charts, tables and trees present information around the
+application's content. Install `cn_bundle()` as described in
+[Getting Started](overview.md). Examples use these imports and the application
+builder's `ctx`:
 
 ```rust
 use blinc_cn::prelude::*;
-
-tooltip()
-    .child(tooltip_trigger()
-        .child(button("Hover me")))
-    .child(tooltip_content()
-        .child(text("This is a tooltip")))
+use blinc_layout::binding::IntoReactive;
+use blinc_layout::prelude::{FontWeight, Text, div, text};
 ```
 
-### Tooltip Position
+## Tooltip
+
+Pass a trigger builder and supply its text:
 
 ```rust
-tooltip()
-    .side(TooltipSide::Top)     // Top (default)
-    .side(TooltipSide::Bottom)  // Bottom
-    .side(TooltipSide::Left)    // Left
-    .side(TooltipSide::Right)   // Right
+tooltip(|| div().child(button("Hover me")))
+    .text("More information about this action")
+    .side(TooltipSide::Top)
 ```
 
-### With Arrow
+`TooltipSide` has `Top` (the default), `Bottom`, `Left` and `Right`.
+`.align(..)`, `.offset(..)`, `.open_delay_ms(..)` and `.close_delay_ms(..)`
+control placement and timing. The text accepts a Signal or Computed:
 
 ```rust
-tooltip()
-    .child(tooltip_trigger().child(icon(icons::INFO)))
-    .child(tooltip_content()
-        .with_arrow(true)
-        .child(text("More information")))
+let hint = ctx.use_signal("Ready to upload".to_string());
+
+tooltip(|| div().child(button("Upload"))).text(hint)
 ```
+
+The popup uses `.cn-tooltip` and a side class such as `.cn-tooltip--top`.
+Its look comes from CSS. There is no configurable arrow part.
 
 ## Hover Card
 
-Rich content on hover:
+A hover card takes trigger and content builders returning `Div`:
 
 ```rust
-hover_card()
-    .child(hover_card_trigger()
-        .child(text("@username").color(Color::BLUE)))
-    .child(hover_card_content()
-        .child(
-            div().flex_row().gap(12.0)
-                .child(avatar().src("user.jpg").size(AvatarSize::Lg))
-                .child(
-                    div().flex_col().gap(4.0)
-                        .child(text("John Doe").weight(FontWeight::Bold))
-                        .child(text("@johndoe").color(Color::GRAY))
-                        .child(text("Software developer at Acme Inc."))
-                )
-        ))
+hover_card(|| div().child(text("@jane")))
+    .content(|| {
+        div().flex_row().gap(3.0)
+            .child(avatar().fallback("JD").size(AvatarSize::Large))
+            .child(div().flex_col().gap(1.0)
+                .child(text("Jane Doe").weight(FontWeight::Bold))
+                .child(muted("Software developer")))
+    })
+    .side(HoverCardSide::Bottom)
+    .align(HoverCardAlign::Start)
 ```
+
+Its popup is `.cn-hover-card-content`. `.open_delay_ms(..)` and
+`.close_delay_ms(..)` tune the interaction delays.
 
 ## Popover
 
-Interactive content in a popup:
+A popover opens on click. Its trigger builder receives the current open
+value; the component manages toggling and dismissal:
 
 ```rust
-let is_open = use_state_keyed("popover_open", || false);
+let notifications = ctx.use_signal(true);
 
-popover()
-    .open(is_open.clone())
-    .on_open_change({
-        let is_open = is_open.clone();
-        move |open| is_open.set(open)
+popover(|_open| div().child(button("Preferences")))
+    .content(move || {
+        div().flex_col().gap(3.0)
+            .child(text("Notifications"))
+            .child(switch(notifications).label("Email notifications"))
     })
-    .child(popover_trigger()
-        .child(button("Open Popover")))
-    .child(popover_content()
-        .child(
-            div().flex_col().gap(12.0)
-                .child(text("Settings").weight(FontWeight::Bold))
-                .child(
-                    div().flex_col().gap(8.0)
-                        .child(
-                            div().flex_row().justify_between()
-                                .child(label("Notifications"))
-                                .child(switch_())
-                        )
-                        .child(
-                            div().flex_row().justify_between()
-                                .child(label("Dark Mode"))
-                                .child(switch_())
-                        )
-                )
-        ))
+    .side(PopoverSide::Bottom)
+    .align(PopoverAlign::Start)
+    .offset(8.0)
 ```
+
+The content builder returns a `Div`. Runtime values inside it bind to
+Signals; there is no public `.open(signal)` or `.on_open_change(...)` builder.
+`.class(..)` targets the trigger wrapper. The separately mounted panel is
+`.cn-popover-content`, so use that class to restyle the panel rather than a
+descendant selector rooted at the trigger.
 
 ## Chart
 
@@ -122,7 +109,8 @@ cn::bar_chart()
     .series("Mobile", &[80.0, 200.0, 120.0])
     .labels(vec!["Jan".into(), "Feb".into(), "Mar".into()])
 ```
- `.curve(ChartCurve::Linear)` or `Step` replace
+
+`.curve(ChartCurve::Linear)` or `Step` replace
 the smooth curve, `.height(..)` and `.width(..)` size it (it fills its parent's
 width unless set), `.min(..)` and `.max(..)` fix the value axis, and
 `.no_grid()`, `.no_axes()`, `.no_tooltip()` and `.legend(false)` leave parts
@@ -185,18 +173,21 @@ and `.cn-chart-swatch`, and `.cn-chart-tooltip` with its `-title`, `-row`,
 These are drawn on the same plot:
 
 ```rust
+let frame_times = vec![12.0, 18.0, 15.0, 22.0];
+let diffs = vec![1.0, 2.0, 2.5, 3.0, 5.0];
+
 // A trend beside text: no axes, grid, legend or tooltip, 100 by 24.
-cn::spark_line(vec![1.0, 2.5, 2.0, 3.5, 3.0]).color("var(--success)").filled()
+cn::spark_line(vec![1.0, 2.5, 2.0, 3.5, 3.0]).color("var(--success)").filled();
 
 // Values against budgets: each dot takes its band's colour.
 cn::threshold_line_chart()
     .values(frame_times)
     .band(ChartBand::new(0.0, 16.67).label("60 fps"))
     .band(ChartBand::new(16.67, 33.33).label("30 fps"))
-    .baseline(16.67)
+    .baseline(16.67);
 
 // Values counted into equal-width bins.
-cn::histogram(diffs).bins(30).log_scale().marker(5.0)
+cn::histogram(diffs).bins(30).log_scale().marker(5.0);
 
 // Baseline against current per category, the change written beside it.
 cn::comparison_bar_chart()
@@ -252,19 +243,29 @@ selected row carries `data-state="selected"`. The variables
 
 ## Tree
 
-A selectable tree whose items open and close:
+`tree_view()` adds roots with `.node(key, label, configure)` and nested nodes
+with `.child(key, label, configure)`:
 
 ```rust
-tree_view()
-    .node("src", "src", |n| {
-        n.expanded()
-            .child("main", "main.rs", |c| c.icon(to_svg(icons::FILE, 16.0)))
-            .child("ui", "ui", |c| c.child("button", "button.rs", |c| c.icon(to_svg(icons::FILE, 16.0))))
-    })
-    .node("cargo", "Cargo.toml", |n| n.icon(to_svg(icons::FILE, 16.0)))
-    .selected("main")
-    .on_select(|key| println!("selected {key}"))
+let chosen = ctx.use_signal("main".to_string());
+
+div().flex_col().gap(2.0)
+    .child(tree_view()
+        .node("src", "src", |n| {
+            n.expanded()
+                .child("main", "main.rs", |n| n.icon(to_svg(icons::FILE, 16.0)))
+                .child("ui", "ui", |n| {
+                    n.child("button", "button.rs", |n| n)
+                })
+        })
+        .node("cargo", "Cargo.toml", |n| n)
+        .selected("main")
+        .on_select(move |key| chosen.set(key.to_string())))
+    .child(Text::bound(chosen.into_reactive()))
 ```
+
+`.selected(..)` sets an initial key. `.on_select(..)` reports subsequent
+selection; it does not bind the tree's selection to an external signal.
 
 Clicking a row selects it and opens or closes it. Once the tree has been
 clicked, Up and Down walk the shown rows, Right opens a row or enters its
@@ -272,18 +273,16 @@ children, Left closes it or goes to its parent, Home and End jump to the ends,
 and Enter or Space selects.
 
 A node's `.diff(TreeNodeDiff::Added)` (or `Removed`, `Modified`) colours its
-row. Guide lines run beside open groups; `.guides(false)` hides them, and
-`.indent(px)` sets how far a group sits in (14px by default).
+row. `.guides(false)` hides the guide lines; `.indent(px)` sets the indent
+(14px by default).
 
 ### Styling
 
 Each `.cn-tree-item` holds a `.cn-tree-row` and, with children, a
 `.cn-tree-group`. A row carries `data-selected`, `data-diff` and, while the
-keys are on it, `data-focus-visible`; an item and its group carry
-`data-state="open"` or `"closed"`. A closed group is at no height by rule, and
-the change eases over the theme's normal duration with the rows below moving
-with it. The parts are `.cn-tree-chevron`, `.cn-tree-icon`, `.cn-tree-label`
-and `.cn-tree-guide`:
+keys are on it, `data-focus-visible`. An item and its group carry
+`data-state="open"` or `"closed"`. The other parts are `.cn-tree-chevron`,
+`.cn-tree-icon`, `.cn-tree-label` and `.cn-tree-guide`:
 
 ```css
 .cn-tree-row[data-selected] { background: var(--accent-subtle); }
@@ -293,70 +292,38 @@ and `.cn-tree-guide`:
 
 ## Kbd
 
-Keyboard shortcut display:
+Keyboard shortcuts can combine several keycaps:
 
 ```rust
-// Single key
-kbd("⌘")
-
-// Key combination
-div().flex_row().gap(4.0)
-    .child(kbd("⌘"))
-    .child(kbd("K"))
-
-// In context
-div().flex_row().items_center().gap(8.0)
+div().flex_row().items_center().gap(2.0)
     .child(text("Search"))
-    .child(
-        div().flex_row().gap(2.0)
-            .child(kbd("⌘"))
-            .child(kbd("K"))
-    )
+    .child(div().flex_row().gap(0.5)
+        .child(kbd("⌘"))
+        .child(kbd("K")))
 ```
 
-The key's fill, border (3px at the bottom), radius, shadow and text colour are
-the `.cn-kbd` rule; `--cn-kbd-bg` and `--cn-kbd-border` recolour it.
+The fill, border, radius, shadow and text colour come from `.cn-kbd`.
+`--cn-kbd-bg` and `--cn-kbd-border` recolour it.
 
 ## Examples
 
 ### User Profile Card
 
 ```rust
-hover_card()
-    .child(hover_card_trigger()
-        .child(
-            div().flex_row().items_center().gap(8.0)
-                .child(avatar().src(&user.avatar).size(AvatarSize::Sm))
-                .child(text(&user.name))
-        ))
-    .child(hover_card_content()
-        .w(300.0)
-        .child(
-            div().flex_col().gap(12.0)
-                .child(
-                    div().flex_row().gap(12.0)
-                        .child(avatar().src(&user.avatar).size(AvatarSize::Lg))
-                        .child(
-                            div().flex_col()
-                                .child(text(&user.name).weight(FontWeight::Bold))
-                                .child(text(&user.title).color(Color::GRAY))
-                        )
-                )
-                .child(text(&user.bio))
-                .child(
-                    div().flex_row().gap(16.0)
-                        .child(
-                            div().flex_col()
-                                .child(text(&user.followers.to_string()).weight(FontWeight::Bold))
-                                .child(text("Followers").size(12.0).color(Color::GRAY))
-                        )
-                        .child(
-                            div().flex_col()
-                                .child(text(&user.following.to_string()).weight(FontWeight::Bold))
-                                .child(text("Following").size(12.0).color(Color::GRAY))
-                        )
-                )
-        ))
+hover_card(|| {
+    div().flex_row().items_center().gap(2.0)
+        .child(avatar().fallback("JD").size(AvatarSize::Small))
+        .child(text("Jane Doe"))
+})
+.content(|| {
+    div().flex_col().gap(3.0)
+        .child(text("Jane Doe").weight(FontWeight::Bold))
+        .child(muted("Developer and designer"))
+        .child(text("Building desktop tools with Blinc."))
+        .child(div().flex_row().gap(4.0)
+            .child(label("120 followers"))
+            .child(label("42 following")))
+})
 ```
 
 ### Dashboard Chart
@@ -364,41 +331,13 @@ hover_card()
 ```rust
 card()
     .child(card_header()
-        .child(card_title("Revenue Overview"))
-        .child(card_description("Monthly revenue for 2024")))
-    .child(card_content()
-        .child(
-            chart()
-                .chart_type(ChartType::Area)
-                .h(300.0)
-                .data(&monthly_revenue)
-                .color(Color::rgba(0.2, 0.5, 1.0, 0.5))
-                .stroke_color(Color::BLUE)
-                .x_label("Month")
-                .y_label("Revenue ($)")
-                .grid(true)
-        ))
-```
-
-### File Tree
-
-```rust
-tree()
-    .child(tree_item("src")
-        .expandable(true)
-        .expanded(true)
-        .child(tree_item_trigger()
-            .child(icon(icons::FOLDER_OPEN))
-            .child(text("src")))
-        .child(tree_item_content()
-            .child(tree_item("main")
-                .on_click(|| open_file("src/main.rs"))
-                .child(tree_item_content()
-                    .child(icon(icons::FILE_CODE))
-                    .child(text("main.rs"))))
-            .child(tree_item("lib")
-                .on_click(|| open_file("src/lib.rs"))
-                .child(tree_item_content()
-                    .child(icon(icons::FILE_CODE))
-                    .child(text("lib.rs"))))))
+        .title("Revenue overview")
+        .description("Monthly revenue"))
+    .child(card_content().child(
+        area_chart()
+            .series("Revenue", &[1200.0, 1500.0, 1400.0])
+            .labels(vec!["Jan".into(), "Feb".into(), "Mar".into()])
+            .height(300.0)
+            .format(|value| format!("${value:.0}")),
+    ))
 ```

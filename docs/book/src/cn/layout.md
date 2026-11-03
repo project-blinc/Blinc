@@ -1,287 +1,232 @@
 # Layout Components
 
-Components for layout and structure: avatar, separator, accordion, and more.
-
-## Avatar
-
-User profile images with fallback:
+Avatars, separators, scroll areas and expandable sections provide structure
+around application content. Install `cn_bundle()` as described in
+[Getting Started](overview.md). Examples use these imports and the application
+builder's `ctx`:
 
 ```rust
 use blinc_cn::prelude::*;
-
-avatar()
-    .src("user.jpg")
-    .fallback("JD")
+use blinc_layout::prelude::{div, img, text};
 ```
 
-### Avatar Sizes
+## Avatar
+
+An image can fall back to initials:
 
 ```rust
-avatar().size(AvatarSize::ExtraSmall) // 24px
-avatar().size(AvatarSize::Small)      // 32px
-avatar().size(AvatarSize::Medium)     // 40px (default)
-avatar().size(AvatarSize::Large)      // 48px
-avatar().size(AvatarSize::ExtraLarge) // 64px
+avatar().src("user.jpg").alt("Jane Doe").fallback("JD")
 ```
 
-### Avatar Fallback and Status
+Sizes are `ExtraSmall` (24px), `Small` (32px), `Medium` (40px, the default),
+`Large` (48px) and `ExtraLarge` (64px):
 
 ```rust
-// Initials when there is no image
-avatar().fallback("JD")
+div().flex_row().gap(2.0)
+    .child(avatar().fallback("JD").size(AvatarSize::Small))
+    .child(avatar().fallback("AL").size(AvatarSize::Large))
+```
 
-// A status dot: online, offline, away or busy
+`.online()`, `.offline()`, `.away()` and `.busy()` add a status dot:
+
+```rust
 avatar().fallback("JD").online()
 ```
 
-The avatar is `.cn-avatar`: its fill and the initials' colour are that rule
-(`--cn-avatar-bg`, `--cn-avatar-fg`), and with nothing to show it draws a
-`.cn-avatar-placeholder`. The dot is `.cn-avatar-status` with `data-status`.
-`.fallback_bg(..)` and `.fallback_color(..)` override the rules for one avatar.
+The root is `.cn-avatar`; its fill and initials use `--cn-avatar-bg` and
+`--cn-avatar-fg`. An empty avatar shows `.cn-avatar-placeholder`. The status
+dot is `.cn-avatar-status` with `data-status`.
 
 ### Avatar Group
 
 ```rust
 avatar_group()
-    .max(3)  // Show max 3, then "+N"
-    .child(avatar().src("user1.jpg"))
-    .child(avatar().src("user2.jpg"))
-    .child(avatar().src("user3.jpg"))
-    .child(avatar().src("user4.jpg"))
-    .child(avatar().src("user5.jpg"))
-// Displays: [avatar1] [avatar2] [avatar3] [+2]
+    .max(3)
+    .child(avatar().fallback("JD"))
+    .child(avatar().fallback("AL"))
+    .child(avatar().fallback("MK"))
+    .child(avatar().fallback("RS"))
+    .child(avatar().fallback("TW"))
 ```
 
-Avatars in a `.cn-avatar-group` are ringed so they read apart where they
-overlap; the ring's colour, and the `.cn-avatar-group__more` chip, are rules.
+This shows three avatars and a `+2` chip. The group is `.cn-avatar-group`;
+the overflow chip is `.cn-avatar-group__more`. Their rings and fills are CSS.
 
 ## Separator
 
-Visual divider:
+The default separator is horizontal. Set an explicit height on a vertical
+separator:
 
 ```rust
-// Horizontal (default)
-separator()
-
-// Vertical
-separator().vertical()
+div().flex_row().items_center().gap(2.0)
+    .child(text("Account"))
+    .child(separator().vertical().h(24.0))
+    .child(text("Settings"))
 ```
 
-It carries `data-orientation`; its colour is `.cn-separator`, recoloured by
+A labelled horizontal divider uses flexible containers around the lines:
+
+```rust
+div().flex_row().items_center().gap(2.0)
+    .child(div().flex_grow().child(separator()))
+    .child(muted("or"))
+    .child(div().flex_grow().child(separator()))
+```
+
+The separator carries `data-orientation`. Its `.cn-separator` rule reads
 `--cn-separator-color`.
-
-### With Label
-
-```rust
-div()
-    .flex_row()
-    .items_center()
-    .gap(8.0)
-    .child(separator().flex_1())
-    .child(text("or").color(Color::GRAY))
-    .child(separator().flex_1())
-```
 
 ## Aspect Ratio
 
-Maintain aspect ratio:
+Wrap content in a fixed ratio:
 
 ```rust
 aspect_ratio(16.0 / 9.0)
+    .w(320.0)
     .child(img("video-thumbnail.jpg").cover())
 ```
 
-### Common Ratios
-
-```rust
-// 16:9 (video)
-aspect_ratio(16.0 / 9.0)
-
-// 4:3 (classic)
-aspect_ratio(4.0 / 3.0)
-
-// 1:1 (square)
-aspect_ratio(1.0)
-
-// 3:4 (portrait)
-aspect_ratio(3.0 / 4.0)
-```
+Convenience builders include `aspect_ratio_16_9()`, `aspect_ratio_4_3()`,
+`aspect_ratio_square()`, `aspect_ratio_9_16()` and `aspect_ratio_21_9()`.
 
 ## Scroll Area
 
-Custom scrollbars:
-
 ```rust
-scroll_area()
-    .h(400.0)
-    .child(
-        div()
-            .flex_col()
-            .gap(8.0)
-            .children((0..50).map(|i| text(format!("Item {}", i))))
-    )
+scroll_area().h(240.0).child(
+    div().flex_col().gap(2.0)
+        .children((0..50).map(|i| text(format!("Item {i}")))),
+)
 ```
 
-### Horizontal Scroll
+Use `.horizontal()` or `.both_directions()` to change the scroll direction:
 
 ```rust
-scroll_area()
-    .orientation(Orientation::Horizontal)
-    .w(300.0)
-    .child(
-        div()
-            .flex_row()
-            .gap(8.0)
-            .children((0..20).map(|i|
-                card().w(150.0).child(text(format!("Card {}", i)))
-            ))
-    )
+scroll_area().horizontal().w(320.0).h(120.0).child(
+    div().flex_row().gap(2.0)
+        .children((0..10).map(|i| {
+            div().w(150.0).flex_shrink_0()
+                .child(card().child(text(format!("Card {i}"))))
+        })),
+)
 ```
+
+`.scrollbar(ScrollbarVisibility::Always)` keeps the bars visible;
+`Auto` is the default. Scrollbar thumb and track colours currently use
+`.thumb_color(..)` and `.track_color(..)` rather than CSS `scrollbar-color`.
 
 ## Collapsible
 
-Expandable content:
+Pass a `Signal<bool>` to both the trigger and content:
 
 ```rust
-let is_open = use_state_keyed("collapsible_open", || false);
+let open = ctx.use_signal(false);
 
-collapsible()
-    .open(is_open.clone())
-    .on_open_change({
-        let is_open = is_open.clone();
-        move |open| is_open.set(open)
-    })
-    .child(collapsible_trigger()
-        .child(
-            div().flex_row().items_center().gap(8.0)
-                .child(text("Show more"))
-                .child(icon(if is_open.get() { icons::CHEVRON_UP } else { icons::CHEVRON_DOWN }))
-        ))
-    .child(collapsible_content()
-        .child(text("Hidden content that expands...")))
+div().flex_col()
+    .child(CollapsibleTrigger::new("Show details", open))
+    .child(collapsible(open).content(|| {
+        div().child(text("Details remain mounted while this section folds."))
+    }))
 ```
+
+Writing `open.set(true)` from an event or application callback opens the same
+section. `collapsible_section` combines the trigger and body:
+
+```rust
+let open = ctx.use_signal(false);
+
+collapsible_section("Details", open, || {
+    div().child(text("Additional information"))
+})
+```
+
+There are no separate `collapsible_trigger()` or `collapsible_content()`
+functions. The parts are `.cn-collapsible-trigger`, `.cn-collapsible-content`
+and `.cn-chevron`; their `data-state` is `open` or `closed`. CSS sets the
+closed height and chevron transform, with theme-timed expansion.
 
 ## Accordion
 
-Multiple collapsible sections:
+Add each section with a key, label and body builder. One section opens at a
+time by default:
 
 ```rust
 accordion()
-    .accordion_type(AccordionType::Single)  // Only one open at a time
-    .child(accordion_item("item-1")
-        .child(accordion_trigger()
-            .child(text("Section 1")))
-        .child(accordion_content()
-            .child(text("Content for section 1"))))
-    .child(accordion_item("item-2")
-        .child(accordion_trigger()
-            .child(text("Section 2")))
-        .child(accordion_content()
-            .child(text("Content for section 2"))))
-    .child(accordion_item("item-3")
-        .child(accordion_trigger()
-            .child(text("Section 3")))
-        .child(accordion_content()
-            .child(text("Content for section 3"))))
+    .default_open("start")
+    .item("start", "How do I get started?", || {
+        div().child(text("Install Blinc and create an application."))
+    })
+    .item("toolchain", "Which toolchain do I need?", || {
+        div().child(text("Blinc 0.6 requires Rust 1.89 or newer."))
+    })
 ```
 
-### Multiple Open
+`.multi_open()` allows several sections to stay open:
 
 ```rust
-accordion()
-    .accordion_type(AccordionType::Multiple)  // Multiple can be open
-    // ... accordion items
+accordion().multi_open()
+    .item("account", "Account", || div().child(text("Account details")))
+    .item("billing", "Billing", || div().child(text("Billing details")))
 ```
+
+For application-controlled sections, use `.item_with_state(...)`:
+
+```rust
+let open = ctx.use_signal(true);
+
+accordion().item_with_state("help", "Help", open, || {
+    div().child(text("The application can open or close this section."))
+})
+```
+
+Each section's trigger and body use `.cn-accordion-trigger` and
+`.cn-accordion-content`, with `data-state="open"` or `"closed"`.
+Override those rules instead of selecting colours in the body builder.
 
 ## Resizable
 
-Panels with handles between them that drag to resize. Sizes are pixels; a
-`flex_grow()` panel takes the rest:
+Panel sizes and limits are pixels. A `flex_grow()` panel takes the remaining
+space, and the group inserts its handles between panels:
 
 ```rust
-cn::resizable_group()
-    .horizontal()
-    .panel(
-        cn::resizable_panel()
-            .default_size(200.0)
-            .min_size(100.0)
-            .max_size(400.0)
-            .child(text("Left Panel")),
-    )
-    .panel(cn::resizable_panel().flex_grow().child(text("Right Panel")))
-    .on_resize(|sizes| println!("{sizes:?}"))
+resizable_group().horizontal()
+    .panel(resizable_panel()
+        .default_size(200.0).min_size(100.0).max_size(400.0)
+        .child(text("Left panel")))
+    .panel(resizable_panel().flex_grow().child(text("Right panel")))
+    .on_resize(|sizes| {
+        let _ = sizes;
+    })
 ```
 
-### Vertical Resizable
+A vertical group uses the same panel builder:
 
 ```rust
-cn::resizable_group()
-    .vertical()
-    .panel(cn::resizable_panel().default_size(150.0).child(text("Top Panel")))
-    .panel(cn::resizable_panel().flex_grow().child(text("Bottom Panel")))
+resizable_group().vertical()
+    .panel(resizable_panel().default_size(150.0).child(text("Top panel")))
+    .panel(resizable_panel().flex_grow().child(text("Bottom panel")))
 ```
 
-Each handle is a `.cn-resizable-handle` around a `.cn-resizable-line`; the line
-turns `--primary` on hover and while its handle carries
-`data-state="dragging"`.
+The `.cn-resizable-handle` contains `.cn-resizable-line`. Its hover and
+`data-state="dragging"` rules control the line's appearance. There is no
+standalone `resizable_handle()` builder.
 
-## Examples
+## Split Pane Example
 
-### User List Item
+Nested groups combine horizontal navigation with vertically split content:
 
 ```rust
-div()
-    .flex_row()
-    .items_center()
-    .gap(12.0)
-    .p(12.0)
-    .child(avatar().src(&user.avatar).fallback(&user.initials))
-    .child(
-        div().flex_col()
-            .child(text(&user.name).weight(FontWeight::Medium))
-            .child(text(&user.email).size(14.0).color(Color::GRAY))
-    )
+resizable_group().horizontal()
+    .panel(resizable_panel().default_size(200.0).min_size(120.0)
+        .child(tree_view().node("src", "src", |n| {
+            n.expanded().child("main", "main.rs", |n| n)
+        })))
+    .panel(resizable_panel().flex_grow().child(
+        resizable_group().vertical()
+            .panel(resizable_panel().flex_grow().child(text("Editor area")))
+            .panel(resizable_panel().default_size(120.0)
+                .child(text("Output area"))),
+    ))
 ```
 
-### FAQ Accordion
-
-```rust
-accordion()
-    .accordion_type(AccordionType::Single)
-    .child(accordion_item("faq-1")
-        .child(accordion_trigger()
-            .child(text("How do I get started?")))
-        .child(accordion_content()
-            .child(text("To get started, first install the package..."))))
-    .child(accordion_item("faq-2")
-        .child(accordion_trigger()
-            .child(text("What are the system requirements?")))
-        .child(accordion_content()
-            .child(text("You need Rust 1.70+ and..."))))
-```
-
-### Split Pane Editor
-
-```rust
-resizable()
-    .direction(ResizeDirection::Horizontal)
-    .h_full()
-    .child(resizable_panel()
-        .default_size(25.0)
-        .min_size(15.0)
-        .child(sidebar()))  // File tree
-    .child(resizable_handle())
-    .child(resizable_panel()
-        .default_size(75.0)
-        .child(
-            resizable()
-                .direction(ResizeDirection::Vertical)
-                .child(resizable_panel()
-                    .default_size(70.0)
-                    .child(editor()))  // Code editor
-                .child(resizable_handle())
-                .child(resizable_panel()
-                    .default_size(30.0)
-                    .child(terminal()))  // Terminal
-        ))
-```
+Place the group in a parent with a definite width and height so its flexible
+panels have space to divide.

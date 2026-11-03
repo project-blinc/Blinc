@@ -1,215 +1,204 @@
 # Feedback Components
 
-Components for user feedback: alerts, badges, progress indicators, and toasts.
-
-## Alert
-
-Display important messages:
+Alerts, badges, progress indicators and toasts report application status.
+Install `cn_bundle()` as described in [Getting Started](overview.md).
+Examples use these imports and the application builder's `ctx`:
 
 ```rust
 use blinc_cn::prelude::*;
-
-alert()
-    .child(alert_title("Heads up!"))
-    .child(alert_description("This is an important message."))
+use blinc_layout::prelude::{div, text};
 ```
 
-### Alert Variants
+## Alert
+
+`alert(message)` displays a single message. `alert_box()` adds a title and
+description:
 
 ```rust
-// Default
-alert()
-    .child(alert_title("Note"))
-    .child(alert_description("This is a note."))
-
-// Destructive (error/warning)
-alert()
-    .variant(AlertVariant::Destructive)
-    .child(alert_title("Error"))
-    .child(alert_description("Something went wrong."))
+alert("Your changes are ready to save.")
 ```
-
-### With Icon
 
 ```rust
-alert()
-    .child(icon(icons::INFO).size(16.0))
-    .child(alert_title("Information"))
-    .child(alert_description("Here's some useful info."))
+alert_box()
+    .title("Heads up!")
+    .description("Review the details before continuing.")
 ```
+
+### Variants
+
+Both accept `Default`, `Success`, `Warning` or `Destructive`:
+
+```rust
+div().flex_col().gap(2.0)
+    .child(alert("Saved").variant(AlertVariant::Success))
+    .child(alert("Low disk space").variant(AlertVariant::Warning))
+    .child(alert_box()
+        .variant(AlertVariant::Destructive)
+        .title("Upload failed")
+        .description("Check your connection and try again."))
+```
+
+Messages, titles and descriptions can bind to Signals or Computeds. The root
+is `.cn-alert` or `.cn-alert-box`, with a variant class such as
+`.cn-alert--success` or `.cn-alert--error`. Restyle those rules rather than
+picking colours in the component builder.
 
 ## Badge
 
-Small labels for status or counts:
+A badge has a semantic variant and a visual treatment:
 
 ```rust
-badge("New")
-badge("3").variant(BadgeVariant::Secondary)
-badge("Error").variant(BadgeVariant::Destructive)
-badge("Beta").style(BadgeStyle::Outline)
+div().flex_row().gap(2.0)
+    .child(badge("New"))
+    .child(badge("3").variant(BadgeVariant::Secondary))
+    .child(badge("Error").variant(BadgeVariant::Destructive))
+    .child(badge("Beta").style(BadgeStyle::Outline))
 ```
 
-### Variants and styles
-
-A badge has a **variant**, its semantic colour, and a **style**, how that
-colour is applied:
+Variants are `Default`, `Secondary`, `Success`, `Warning` and `Destructive`.
+Styles are `Soft` (the default), `Solid` and `Outline`:
 
 ```rust
-// Variants: Default (primary), Secondary (muted), Success, Warning, Destructive
-badge("Done").variant(BadgeVariant::Success)
-
-// Styles: Soft (default, a tinted fill and a same-hue border and text),
-// Solid (filled, inverse text), Outline (transparent with a coloured border)
 badge("Done").variant(BadgeVariant::Success).style(BadgeStyle::Solid)
-badge("Done").variant(BadgeVariant::Success).style(BadgeStyle::Outline)
 ```
 
-### With Icon
+### With an Icon
+
+`.icon(..)` accepts an element builder:
 
 ```rust
 badge("Verified")
-    .icon(icon(icons::CHECK).size(12.0))
+    .variant(BadgeVariant::Success)
     .icon_position(IconPosition::Start)
+    .icon(icon(icons::CHECK).size_px(12.0))
 ```
-
-Call `.icon(..)` last in the chain: the other builder methods rebuild the
-badge and drop an icon added before them.
 
 ### A Bound Label
 
-`reactive_label` follows a signal in place, and takes the same colours as a
-static label:
+Convert a Signal or Computed with `IntoReactive`:
 
 ```rust
-badge("").reactive_label(blinc_layout::binding::Reactive::Bound(count_text))
+use blinc_core::reactive::computed;
+use blinc_layout::binding::IntoReactive;
+
+let count = ctx.use_signal(3usize);
+let shown = computed(move |graph| format!("{} new", graph.get(count).unwrap_or(0)));
+
+badge("").reactive_label(shown.into_reactive())
 ```
 
-### Styling
-
-A badge's fill, border, radius and text colour are the
-`.cn-badge--{style}-{variant}` rules of `CN_STYLES`, for example
-`.cn-badge--soft-success` or `.cn-badge--outline-default`. The label inherits
-its `color` from the rule, so a rule of your own changes it, bound or not:
-
-```css
-.cn-badge--soft-success { background: #052e16; border-color: #16a34a; color: #4ade80; }
-.my-badge { border-radius: 4px; }
-```
+The root is `.cn-badge`. Its fill, border and text colour come from
+`.cn-badge--{style}-{variant}`, such as `.cn-badge--soft-success`.
+A custom class supports application overrides:
 
 ```rust
 badge("Done").variant(BadgeVariant::Success).class("my-badge")
 ```
 
+```css
+.my-badge { border-radius: 4px; }
+.cn-badge--soft-success { background: #052e16; border-color: #16a34a; color: #4ade80; }
+```
+
 ## Progress
 
-Progress bar — value is in the 0..=100 range:
+Values are in the `0..=100` range:
 
 ```rust
 progress(75.0)
 ```
 
-### Bound to a signal
+### Bound to a Signal
 
-The value is an `f32`, a `Signal<f32>` or a `Computed<f32>`. A bound
-value moves the bar in place, without a rebuild, easing to each new value
-by the `transition` on `.cn-progress-bar`:
+An `f32`, `Signal<f32>` or `Computed<f32>` can drive the bar. Bound values
+change in place and ease by the transition on `.cn-progress-bar`:
 
 ```rust
 let pct = ctx.use_signal(0.0_f32);
 
 div()
     .child(progress(pct).w(300.0))
-    .child(
-        button("Advance")
-            .on_click(move |_| pct.update(|v| (v + 10.0).min(100.0))),
-    )
+    .child(button("Advance").on_click(move |_| {
+        pct.update(|value| (value + 10.0).min(100.0));
+    }))
 ```
 
 ### Indeterminate
 
-For work of unknown length, part of the track pulses:
+For work of unknown length:
 
 ```rust
 progress_indeterminate().w(300.0)
 ```
 
-### Styling
+The track is `.cn-progress`, with `data-size` and, when applicable,
+`data-indeterminate`. The bar is `.cn-progress-bar`. Their colours read
+`--cn-progress-track` and `--cn-progress-bar`; the transition and
+`cn-progress-pulse` keyframes control motion.
 
-The track is `.cn-progress` (with `data-size` and, when indeterminate,
-`data-indeterminate`) and the bar `.cn-progress-bar`. `--cn-progress-track`
-and `--cn-progress-bar` recolour them; the bar's `flex-grow` transition and
-the `cn-progress-pulse` keyframes are the motion. `.indicator_color(..)`,
-`.track_color(..)` and `.rounded(..)` override the rules for one bar.
-
-### With Label
-
-A label bound to a `Computed` follows the same signal:
+### With a Label
 
 ```rust
 use blinc_core::reactive::computed;
 
 let pct = ctx.use_signal(0.0_f32);
-let shown = computed(move |g| format!("{}%", g.get(pct).unwrap_or(0.0) as i32));
+let shown = computed(move |graph| format!("{}%", graph.get(pct).unwrap_or(0.0) as i32));
 
-div()
-    .flex_col()
-    .gap(1.0)
-    .child(
-        div()
-            .flex_row()
-            .justify_between()
-            .child(cn::label("Uploading..."))
-            .child(cn::label(shown)),
-    )
+div().flex_col().gap(1.0)
+    .child(div().flex_row().justify_between()
+        .child(label("Uploading"))
+        .child(label(shown)))
     .child(progress(pct))
 ```
 
 ## Spinner
 
-Loading indicator:
-
 ```rust
-spinner()
+spinner().size(SpinnerSize::Medium)
 ```
 
-### Spinner Sizes
-
-```rust
-spinner().size(SpinnerSize::Small)    // 16px
-spinner().size(SpinnerSize::Medium)   // 24px, the default
-spinner().size(SpinnerSize::Large)    // 32px
-```
-
-### Styling
-
-A spinner is a faint track ring (`.cn-spinner__track`) with a half-circle arc
-(`.cn-spinner__arc`) turning once a second by the `cn-spinner-turn`
-keyframes. `.color(..)` and `.track_color(..)` set the colours on one
-spinner; rules set them, and the speed, for any you give a class:
+Sizes are `Small` (16px), `Medium` (24px, the default) and `Large` (32px).
+The track is `.cn-spinner__track`; `.cn-spinner__arc` turns by the
+`cn-spinner-turn` keyframes. Set speed through CSS:
 
 ```css
 .slow-spinner .cn-spinner__arc { animation-duration: 2000ms; }
 ```
 
-### In Button
+### Beside a Busy Button
+
+A button binds its label and disabled prop. Compose a spinner while it is busy:
 
 ```rust
-button(if is_loading { "" } else { "Save" })
-    .loading(is_loading)
-    .disabled(is_loading)
+use blinc_core::reactive::computed;
+
+let busy = ctx.use_signal(false);
+let caption = computed(move |graph| {
+    if graph.get(busy).unwrap_or(false) { "Saving" } else { "Save" }.to_string()
+});
+
+div().flex_row().items_center().gap(2.0)
+    .child(button(caption).disabled(busy).on_click(move |_| busy.set(true)))
+    .show(busy, || div().child(spinner().size(SpinnerSize::Small)))
+    .child(button("Finish").on_click(move |_| busy.set(false)))
 ```
+
+In an application, the request completion callback clears `busy`; the Finish
+button makes that completion explicit in this example. There is no button
+`.loading(...)` prop.
 
 ## Skeleton
 
-Placeholder for loading content:
+A skeleton pulses by the `cn-skeleton-pulse` keyframes:
 
 ```rust
-skeleton().w(200.0).h(20.0)
-skeleton_circle(48.0)
+div().flex_col().gap(2.0)
+    .child(skeleton().w(200.0).h(20.0))
+    .child(skeleton_circle(48.0))
 ```
 
-It pulses by the `cn-skeleton-pulse` keyframes on `.cn-skeleton`;
-`.cn-skeleton--circle` rounds the circle. Restyle or slow it with a rule:
+The root is `.cn-skeleton`; a circle also has `.cn-skeleton--circle`.
+Override the animation through a custom class:
 
 ```css
 .my-skeleton { animation-duration: 3000ms; }
@@ -218,78 +207,55 @@ It pulses by the `cn-skeleton-pulse` keyframes on `.cn-skeleton`;
 ### Card Skeleton
 
 ```rust
-card()
-    .child(card_header()
-        .child(skeleton().w(150.0).h(24.0))  // Title placeholder
-        .child(skeleton().w(200.0).h(16.0))) // Description placeholder
-    .child(card_content()
-        .child(skeleton().w_full().h(100.0))) // Content placeholder
-```
-
-### List Skeleton
-
-```rust
-div()
-    .flex_col()
-    .gap(12.0)
-    .child(
-        div().flex_row().gap(12.0)
-            .child(skeleton().w(48.0).h(48.0).rounded_full())  // Avatar
-            .child(
-                div().flex_col().gap(4.0)
-                    .child(skeleton().w(150.0).h(16.0))  // Name
-                    .child(skeleton().w(100.0).h(14.0))) // Subtitle
-    )
-    // Repeat for more items...
+card().child(card_content().child(
+    div().flex_col().gap(2.0)
+        .child(skeleton().w(150.0).h(24.0))
+        .child(skeleton().w(200.0).h(16.0))
+        .child(skeleton().w_full().h(100.0)),
+))
 ```
 
 ## Toast
 
-Temporary notifications, stacked in a corner:
+Show notifications from an event or application callback:
 
 ```rust
-cn::toast("Success")
-    .description("Your changes have been saved.")
-    .show();
-
-// With a variant
-cn::toast("Error")
-    .description("Failed to save changes.")
-    .variant(ToastVariant::Destructive)
-    .show();
-
-// Shorthands
-cn::toast_success("Saved").show();
-cn::toast_warning("Low disk space").show();
-cn::toast_error("Upload failed").show();
+button("Notify").on_click(|_| {
+    toast("Success")
+        .description("Your changes have been saved.")
+        .show();
+})
 ```
 
-### With Action
+`toast_success`, `toast_warning` and `toast_error` select variants directly.
+`.duration_ms(..)` sets the lifetime; `.persistent()` waits for dismissal.
+`.corner(..)` sets the tray corner. `.show()` returns a handle whose
+`.dismiss()` method removes that toast.
+
+### With an Action
 
 ```rust
-cn::toast("Event created")
-    .description("Friday, February 10, 2024")
-    .action("Undo", || undo_action())
-    .show();
+let undone = ctx.use_signal(false);
+
+button("Create event").on_click(move |_| {
+    toast("Event created")
+        .description("The event is on your calendar.")
+        .action("Undo", move || undone.set(true))
+        .duration_ms(5000)
+        .show();
+})
 ```
 
-`.corner(Corner::TopRight)` places it, `.duration_ms(..)` or `.persistent()`
-sets how long it stays, and `.show()` returns a handle to `dismiss()` it.
+### Styling and Motion
 
-### Toast Styling
+The root is `.cn-toast` with `data-variant`: `default`, `success`, `warning`
+or `destructive`. Parts include `.cn-toast-icon`, `.cn-toast-title`,
+`.cn-toast-description` and `.cn-toast-close`. Set `--cn-toast-bg` and
+`--cn-toast-border` to override their defaults.
 
-The toast is `.cn-toast` with `data-variant` (`default`, `success`, `warning`
-or `destructive`); success, warning and destructive toasts colour their border
-and `.cn-toast-icon`. The title and description are `.cn-toast-title` and
-`.cn-toast-description`, the close button `.cn-toast-close`. `--cn-toast-bg`
-and `--cn-toast-border` recolour it.
-
-### Toast Motion
-
-A toast slides in from beyond the side of its corner and back out when it is
-dismissed, by the `.cn-toast-motion-right` and `.cn-toast-motion-left` rules.
-Its wrapper carries `data-motion="enter"`, then `"exit"` while it leaves, and
-stays until its exit has played:
+The wrapper is `.cn-toast-motion-right` or `.cn-toast-motion-left`, depending
+on its corner. It carries `data-motion="enter"` or `"exit"` and remains
+mounted until the exit completes:
 
 ```css
 .cn-toast-motion-right[data-motion="exit"] {
@@ -301,65 +267,70 @@ stays until its exit has played:
 
 ### Loading State
 
-```rust
-let is_loading = use_state_keyed("feedback_loading", || true);
+Use a conditional region so content follows the Signal after construction:
 
-if is_loading.get() {
-    div()
-        .flex_col()
-        .items_center()
-        .gap(16.0)
-        .child(spinner().size(SpinnerSize::Lg))
-        .child(text("Loading..."))
-} else {
-    // Actual content
-}
+```rust
+let loading = ctx.use_signal(true);
+
+div().flex_col().gap(3.0)
+    .child(button("Toggle loading").on_click(move |_| loading.update(|value| !value)))
+    .show_or(loading,
+        || div().flex_col().items_center().gap(2.0)
+            .child(spinner().size(SpinnerSize::Large))
+            .child(text("Loading")),
+        || div().child(text("Content is ready")),
+    )
 ```
 
 ### Form Submission Feedback
 
-```rust
-let status = use_state_keyed("form_status", || FormStatus::Idle);
+The application owns request state. Bind the button to it, and mount feedback
+through a computed condition. The completion button stands in for a request
+callback in this interactive example:
 
-div()
-    .flex_col()
-    .gap(16.0)
-    .child(/* form fields */)
-    .child(
-        match status.get() {
-            FormStatus::Idle => button("Submit").on_click(move |_| submit()),
-            FormStatus::Submitting => button("").loading(true).disabled(true),
-            FormStatus::Success => alert()
-                .child(alert_title("Success"))
-                .child(alert_description("Form submitted successfully!")),
-            FormStatus::Error(msg) => alert()
-                .variant(AlertVariant::Destructive)
-                .child(alert_title("Error"))
-                .child(alert_description(msg)),
-        }
-    )
+```rust
+use blinc_core::reactive::computed;
+
+let submitting = ctx.use_signal(false);
+let message = ctx.use_signal(String::new());
+let has_message = computed(move |graph| !graph.get(message).unwrap_or_default().is_empty());
+
+div().flex_col().gap(3.0)
+    .child(button("Submit").disabled(submitting).on_click(move |_| {
+        message.set(String::new());
+        submitting.set(true);
+    }))
+    .show(submitting, move || {
+        div().flex_col().gap(2.0)
+            .child(spinner())
+            .child(button("Complete request").on_click(move |_| {
+                submitting.set(false);
+                message.set("Form submitted successfully.".to_string());
+            }))
+    })
+    .show(has_message, move || {
+        div().child(alert(message).variant(AlertVariant::Success))
+    })
 ```
 
-### Notification Center
+Signals update props or regions; neither example branches on a value read
+once at build time. Error feedback can use a separate error Signal and a
+`Destructive` alert, with the same binding pattern.
+
+### Notification Helpers
 
 ```rust
 fn notify_success(message: &str) {
-    show_toast(
-        toast()
-            .variant(ToastVariant::Success)
-            .title("Success")
-            .description(message)
-            .duration(Duration::from_secs(5))
-    );
+    blinc_cn::cn::toast_success("Success")
+        .description(message)
+        .duration_ms(5000)
+        .show();
 }
 
 fn notify_error(message: &str) {
-    show_toast(
-        toast()
-            .variant(ToastVariant::Destructive)
-            .title("Error")
-            .description(message)
-            .duration(Duration::from_secs(10))
-    );
+    blinc_cn::cn::toast_error("Error")
+        .description(message)
+        .duration_ms(10000)
+        .show();
 }
 ```

@@ -1,181 +1,198 @@
-# Dialog
+# Dialog, Sheet and Drawer
 
-Dialogs display content in a modal overlay that requires user interaction.
+Dialogs ask for a decision. Sheets and drawers place content beside the main
+view. Install `cn_bundle()` as described in [Getting Started](overview.md)
+to load their styles and motion.
 
-## Basic Usage
+The examples use these imports. `ctx` is the `WindowedContext` supplied to
+the application builder:
 
 ```rust
 use blinc_cn::prelude::*;
-use blinc_core::use_state_keyed;
+use blinc_layout::prelude::{div, text};
+```
 
-let is_open = use_state_keyed("dialog_open", || false);
+## Open a Dialog
 
-dialog()
-    .open(is_open.clone())
-    .on_open_change({
-        let is_open = is_open.clone();
-        move |open| is_open.set(open)
+Configure a builder and call `.show()` from an event handler:
+
+```rust
+button("Open dialog").on_click(|_| {
+    dialog()
+        .title("Continue?")
+        .description("Review the details before continuing.")
+        .content(|| div().child(text("Your current selection will be used.")))
+        .confirm_text("Continue")
+        .on_confirm(|| {
+            toast_success("Confirmed").show();
+        })
+        .show();
+})
+```
+
+`.show()` returns an `OverlayHandle`. Keep it when the application needs to
+call `handle.close()`. The default footer has Cancel and Confirm buttons,
+which close the dialog. Escape and a backdrop click also dismiss it.
+
+`on_confirm` and `on_cancel` report their respective buttons.
+`on_close` reports dismissal by any route, including Escape and the backdrop.
+These callbacks take no arguments.
+
+### Confirmation Dialog
+
+Use `confirm_destructive(true)` for a destructive action:
+
+```rust
+let deleted = ctx.use_signal(false);
+
+button("Delete draft")
+    .variant(ButtonVariant::Destructive)
+    .on_click(move |_| {
+        dialog()
+            .title("Delete draft?")
+            .description("This removes the draft from this session.")
+            .confirm_text("Delete")
+            .cancel_text("Keep draft")
+            .confirm_destructive(true)
+            .on_confirm(move || deleted.set(true))
+            .show();
     })
-    .child(dialog_trigger()
-        .child(button("Open Dialog")))
-    .child(dialog_content()
-        .child(dialog_header()
-            .child(dialog_title("Dialog Title"))
-            .child(dialog_description("Dialog description")))
-        .child(text("Dialog content goes here."))
-        .child(dialog_footer()
-            .child(button("Close").on_click({
-                let is_open = is_open.clone();
-                move |_| is_open.set(false)
-            }))))
 ```
 
-## Dialog Parts
-
-### dialog()
-
-The root component that manages open state.
+`alert_dialog()` is an acknowledgement dialog: it hides Cancel. It is not a
+separate set of trigger, content or action components.
 
 ```rust
-dialog()
-    .open(is_open)
-    .on_open_change(|open| set_open(open))
+button("Show notice").on_click(|_| {
+    alert_dialog()
+        .title("Import complete")
+        .description("Your files are ready to use.")
+        .confirm_text("OK")
+        .size(DialogSize::Small)
+        .show();
+})
 ```
 
-### dialog_trigger()
+## Form Dialog
 
-The element that opens the dialog when clicked.
+Create editor data once and clone its handle into the deferred body. Input
+changes can update a Signal that the confirmation callback reads:
 
 ```rust
-dialog_trigger()
-    .child(button("Open"))
+use blinc_layout::widgets::text_input::text_input_data;
+
+let name_data = text_input_data();
+let name = ctx.use_signal(String::new());
+
+button("Edit profile").on_click(move |_| {
+    let name_data = name_data.clone();
+    dialog()
+        .title("Edit profile")
+        .description("Update the name shown on your profile.")
+        .content(move || {
+            div().child(
+                input(&name_data)
+                    .label("Name")
+                    .placeholder("Your name")
+                    .on_change(move |value| name.set(value.to_string())),
+            )
+        })
+        .confirm_text("Save")
+        .on_confirm(move || {
+            toast_success("Profile saved")
+                .description(name.get())
+                .show();
+        })
+        .show();
+})
 ```
 
-### dialog_content()
+The default footer suits this form. `.footer(|| div()...)` replaces the
+entire footer, including its automatic Cancel and Confirm buttons; custom
+actions must arrange dismissal themselves.
 
-The modal content container with backdrop.
+## Text That Changes
+
+Titles, descriptions, `confirm_text` and `cancel_text` accept strings,
+Signals or Computeds. Bind them before showing the dialog:
 
 ```rust
-dialog_content()
-    .child(/* dialog parts */)
+let remaining = ctx.use_signal("3 files".to_string());
+
+button("Review files").on_click(move |_| {
+    dialog()
+        .title("Selected files")
+        .description(remaining)
+        .content(move || {
+            div().child(button("Remove one from selection").on_click(move |_| {
+                remaining.set("2 files".to_string());
+            }))
+        })
+        .confirm_text("Done")
+        .show();
+})
 ```
 
-### dialog_header()
-
-Contains title and description.
-
-```rust
-dialog_header()
-    .child(dialog_title("Title"))
-    .child(dialog_description("Description"))
-```
-
-### dialog_footer()
-
-Contains action buttons.
-
-```rust
-dialog_footer()
-    .child(button("Cancel").variant(ButtonVariant::Outline))
-    .child(button("Confirm"))
-```
-
-### dialog_close()
-
-A button that closes the dialog.
-
-```rust
-dialog_close()
-    .child(button("Close"))
-```
-
-## Alert Dialog
-
-For destructive or important confirmations:
-
-```rust
-let is_open = use_state_keyed("alert_dialog_open", || false);
-
-alert_dialog()
-    .open(is_open.clone())
-    .on_open_change({
-        let is_open = is_open.clone();
-        move |open| is_open.set(open)
-    })
-    .child(alert_dialog_trigger()
-        .child(button("Delete").variant(ButtonVariant::Destructive)))
-    .child(alert_dialog_content()
-        .child(alert_dialog_header()
-            .child(alert_dialog_title("Are you sure?"))
-            .child(alert_dialog_description(
-                "This action cannot be undone."
-            )))
-        .child(alert_dialog_footer()
-            .child(alert_dialog_cancel().child(button("Cancel")))
-            .child(alert_dialog_action()
-                .child(button("Delete").variant(ButtonVariant::Destructive)))))
-```
+The description changes in place while the dialog remains open.
 
 ## Sheet
 
-A panel that slides in from the edge:
+A sheet can enter from any edge. The default is the right edge:
 
 ```rust
-let is_open = use_state_keyed("sheet_open", || false);
-
-sheet()
-    .open(is_open.clone())
-    .side(SheetSide::Right)  // Left, Right, Top, Bottom
-    .on_open_change({
-        let is_open = is_open.clone();
-        move |open| is_open.set(open)
-    })
-    .child(sheet_trigger()
-        .child(button("Open Sheet")))
-    .child(sheet_content()
-        .child(sheet_header()
-            .child(sheet_title("Settings")))
-        .child(/* content */)
-        .child(sheet_footer()
-            .child(button("Save changes"))))
+button("Open settings").on_click(|_| {
+    sheet()
+        .side(SheetSide::Right)
+        .size(SheetSize::Medium)
+        .title("Settings")
+        .description("Preferences for this workspace.")
+        .content(|| div().child(text("Settings content")))
+        .footer(|| div().child(muted("Changes are saved automatically.")))
+        .show();
+})
 ```
+
+`sheet_left()`, `sheet_right()`, `sheet_top()` and `sheet_bottom()` select the
+edge directly. `SheetSize` is `Small`, `Medium`, `Large` or `Full`.
+`.show_close(false)` hides the close button; `.on_close(|| ...)` observes
+dismissal. The title and description accept reactive values.
 
 ## Drawer
 
-A mobile-friendly bottom sheet:
+A drawer is a left or right navigation panel, with the left as the default:
 
 ```rust
-let is_open = use_state_keyed("drawer_open", || false);
-
-drawer()
-    .open(is_open.clone())
-    .on_open_change({
-        let is_open = is_open.clone();
-        move |open| is_open.set(open)
-    })
-    .child(drawer_trigger()
-        .child(button("Open Drawer")))
-    .child(drawer_content()
-        .child(drawer_header()
-            .child(drawer_title("Menu")))
-        .child(/* content */))
+button("Open navigation").on_click(|_| {
+    drawer_left()
+        .size(DrawerSize::Medium)
+        .title("Workspace")
+        .child(|| div().child(text("Projects and recent activity")))
+        .footer(|| div().child(muted("Signed in as Jane")))
+        .show();
+})
 ```
 
-## Motion
+`DrawerSide` has `Left` and `Right`; `DrawerSize` has `Narrow`, `Medium` and
+`Wide`. Use a bottom sheet for a panel entering from below. `.header(|| ...)`
+replaces the title header. Each `.child(|| ...)` adds a body section.
 
-Dialogs, sheets and drawers enter and leave by rules of `CN_STYLES`. Each one's
-wrapper carries `data-motion="enter"`, then `"exit"` while it closes, and stays
-until its exit animation has played; the backdrop behind it,
-`.overlay-backdrop`, fades in and out with it.
+## Styling and Motion
 
-| Overlay | Wrapper class | Enter | Exit |
-|---|---|---|---|
-| dialog | `.cn-dialog-motion` | `cn-rise-in` | `cn-rise-out` |
-| sheet | `.cn-sheet-motion-{left,right,top,bottom}` | `cn-slide-from-{side}` | `cn-slide-to-{side}` |
-| drawer | `.cn-drawer-motion-{left,right}` | `cn-slide-from-{side}` | `cn-slide-to-{side}` |
+The panel classes are `.cn-dialog`, `.cn-sheet` and `.cn-drawer`. Dialog text
+uses `.cn-dialog-title` and `.cn-dialog-description`; sheets use
+`.cn-sheet-title` and `.cn-sheet-description`; drawers use `.cn-drawer-title`.
+Add a panel class with `.class("...")` and override it in application CSS.
 
-A sheet or drawer slides by its own size (`translateX(100%)`). The timing is
-the theme's motion tokens; a rule of your own changes it:
+The overlay wrapper carries `data-motion="enter"` or `"exit"`. It remains
+mounted while its exit animation plays. The backdrop is `.overlay-backdrop`.
+
+| Overlay | Motion wrapper | Default motion |
+| --- | --- | --- |
+| Dialog | `.cn-dialog-motion` | `cn-rise-in`, `cn-rise-out` |
+| Sheet | `.cn-sheet-motion-{left,right,top,bottom}` | `cn-slide-from-{side}`, `cn-slide-to-{side}` |
+| Drawer | `.cn-drawer-motion-{left,right}` | `cn-slide-from-{side}`, `cn-slide-to-{side}` |
+
+Timing comes from theme tokens. Change it through rules:
 
 ```css
 .cn-dialog-motion[data-motion="enter"] {
@@ -186,140 +203,15 @@ the theme's motion tokens; a rule of your own changes it:
 }
 ```
 
-## Text that changes
+## Builder Reference
 
-A dialog's title, description and button text, a sheet's title and
-description and a drawer's title each take a string or a signal. A signal
-replaces the text in place while the overlay is open:
+| Builder | Content | Actions | Presentation |
+| --- | --- | --- | --- |
+| `dialog()` | `title`, `description`, `content` | `confirm_text`, `cancel_text`, `on_confirm`, `on_cancel`, `on_close`, `hide_cancel`, `footer` | `size`, `confirm_destructive`, `class`, `id` |
+| `alert_dialog()` | `title`, `description` | `confirm_text`, `on_confirm` | `size` |
+| `sheet()` | `title`, `description`, `content`, `footer` | `on_close`, `show_close` | `side`, `size` |
+| `drawer()` | `title`, `header`, `child`, `child_builder`, `footer` | `on_close`, `show_close` | `side`, `size`, `class`, `id` |
 
-```rust
-let remaining = signal("3 files".to_string());
-
-cn::dialog()
-    .title("Delete files?")
-    .description(remaining)
-    .confirm_text("Delete")
-    .cancel_text("Keep")
-    .confirm_destructive(true)
-    .show();
-
-remaining.set("2 files".to_string());
-```
-
-## Examples
-
-### Form Dialog
-
-```rust
-let is_open = use_state_keyed("form_dialog_open", || false);
-let name = use_state_keyed("form_dialog_name", || String::new());
-let email = use_state_keyed("form_dialog_email", || String::new());
-
-dialog()
-    .open(is_open.clone())
-    .on_open_change({
-        let is_open = is_open.clone();
-        move |open| is_open.set(open)
-    })
-    .child(dialog_trigger()
-        .child(button("Edit Profile")))
-    .child(dialog_content()
-        .child(dialog_header()
-            .child(dialog_title("Edit Profile"))
-            .child(dialog_description("Update your profile information")))
-        .child(
-            div()
-                .flex_col()
-                .gap(16.0)
-                .child(
-                    div().flex_col().gap(4.0)
-                        .child(label("Name"))
-                        .child(input()
-                            .value(&name)
-                            .on_change({
-                                let name = name.clone();
-                                move |v| name.set(v)
-                            }))
-                )
-                .child(
-                    div().flex_col().gap(4.0)
-                        .child(label("Email"))
-                        .child(input()
-                            .value(&email)
-                            .on_change({
-                                let email = email.clone();
-                                move |v| email.set(v)
-                            }))
-                )
-        )
-        .child(dialog_footer()
-            .child(dialog_close().child(
-                button("Cancel").variant(ButtonVariant::Outline)
-            ))
-            .child(button("Save").on_click({
-                let is_open = is_open.clone();
-                move |_| {
-                    save_profile();
-                    is_open.set(false);
-                }
-            }))))
-```
-
-### Confirmation Dialog
-
-```rust
-let is_open = use_state_keyed("confirm_dialog_open", || false);
-
-alert_dialog()
-    .open(is_open.clone())
-    .on_open_change({
-        let is_open = is_open.clone();
-        move |open| is_open.set(open)
-    })
-    .child(alert_dialog_trigger()
-        .child(button("Delete Account").variant(ButtonVariant::Destructive)))
-    .child(alert_dialog_content()
-        .child(alert_dialog_header()
-            .child(alert_dialog_title("Delete Account"))
-            .child(alert_dialog_description(
-                "Are you sure you want to delete your account? \
-                 All your data will be permanently removed."
-            )))
-        .child(alert_dialog_footer()
-            .child(alert_dialog_cancel().child(
-                button("Cancel").variant(ButtonVariant::Outline)
-            ))
-            .child(alert_dialog_action().child(
-                button("Delete")
-                    .variant(ButtonVariant::Destructive)
-                    .on_click(move |_| delete_account())
-            ))))
-```
-
-## API Reference
-
-### dialog()
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `open` | `bool` | `false` | Whether dialog is open |
-| `on_open_change` | `Fn(bool)` | - | Called when open state changes |
-
-### sheet()
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `open` | `bool` | `false` | Whether sheet is open |
-| `side` | `SheetSide` | `Right` | Which side to slide from |
-| `on_open_change` | `Fn(bool)` | - | Called when open state changes |
-
-### SheetSide
-
-```rust
-enum SheetSide {
-    Left,
-    Right,
-    Top,
-    Bottom,
-}
-```
+All four open with `.show()`. Their builders have no `.open(signal)` or
+`.on_open_change(...)` API. Dialog sizes are `Small` (400px maximum),
+`Medium` (500px), `Large` (600px) and `Full` (800px).
