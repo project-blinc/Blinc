@@ -656,6 +656,10 @@ fn hash_div_props(div: &Div, hasher: &mut impl Hasher) {
     hash_shadow_stack(&div.shadow, hasher);
     hash_option_transform(&div.transform, hasher);
     hash_f32(div.opacity, hasher);
+    div.classes.len().hash(hasher);
+    for class in &div.classes {
+        class.hash(hasher);
+    }
 }
 
 /// Hash a Div including its entire subtree.
@@ -685,6 +689,14 @@ fn hash_element(element: &dyn ElementBuilder, hasher: &mut impl Hasher) {
 
     // Hash render props (visual properties)
     hash_render_props(&element.render_props(), hasher);
+
+    // Classes select the stylesheet rules that apply, so a change of class is a visual change
+    // even when nothing else differs.
+    let classes = element.element_classes();
+    classes.len().hash(hasher);
+    for class in classes {
+        class.hash(hasher);
+    }
 
     // Hash type-specific data
     if let Some(text_info) = element.text_render_info() {

@@ -3602,6 +3602,39 @@ mod tests {
     }
 
     #[test]
+    fn incremental_update_sees_a_class_only_change() {
+        let initial = div().child(div().id("alice").class("row"));
+        let mut tree = RenderTree::from_element(&initial);
+        let alice = tree.layout_tree.children(tree.root().unwrap())[0];
+        assert_eq!(
+            tree.element_registry
+                .class_to_nodes_index()
+                .get("row--active"),
+            None
+        );
+
+        // A class selects rules that may change layout, so the change is not a visual-only one.
+        let updated = div().child(div().id("alice").class("row").class("row--active"));
+        assert_ne!(
+            tree.incremental_update(&updated),
+            UpdateResult::NoChanges,
+            "a class-only change is a change"
+        );
+        let index = tree.element_registry.class_to_nodes_index();
+        assert_eq!(index.get("row--active"), Some(&vec![alice]));
+
+        // Removing it is seen the same way.
+        let removed = div().child(div().id("alice").class("row"));
+        assert_ne!(tree.incremental_update(&removed), UpdateResult::NoChanges);
+        assert_eq!(
+            tree.element_registry
+                .class_to_nodes_index()
+                .get("row--active"),
+            None
+        );
+    }
+
+    #[test]
     fn stale_subtree_rebuilds_are_dropped_after_parent_rebuild() {
         // Serialize against other tests that touch the global
         // PENDING_SUBTREE_REBUILDS queue. Without this, slotmap
