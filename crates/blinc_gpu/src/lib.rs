@@ -24,7 +24,6 @@ pub mod backbuffer;
 pub mod bc_encode;
 pub mod custom_pass;
 pub mod display_list;
-pub mod flow_codegen;
 pub mod flow_pipeline;
 pub mod gradient_texture;
 pub mod image;
@@ -78,7 +77,7 @@ pub use particles::{
 };
 
 // Flow DAG → WGSL codegen + GPU pipeline cache
-pub use flow_codegen::flow_to_wgsl;
+pub use blinc_flow::flow_to_wgsl;
 pub use flow_pipeline::{FlowPipelineCache, FlowUniformData};
 
 // Re-export text types for convenience

@@ -4,6 +4,9 @@ All notable changes to `blinc_gpu` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Breaking:** `FlowPipelineCache::compile` takes a `blinc_core::FlowShader` (WGSL and bindings) and builds the pipeline from its WGSL. The WGSL generator moved to `blinc_flow`, which `blinc_gpu` re-exports as `flow_to_wgsl`; the `flow_codegen` module is gone.
+
 ### Added
 - `SdfBuilder::line(from, to, width)` draws a capsule, a segment with round ends, as one SDF primitive (a rotated rounded rect), so it is antialiased exactly on any target, multisampled or not. It was a stub that drew nothing.
 

@@ -109,7 +109,7 @@ pub struct Canvas {
     /// When frames are wanted; `None` wants one every frame it is visible.
     redraw_while: Option<CanvasRedrawFn>,
     /// A flow shader drawn over the canvas's bounds.
-    flow: Option<std::sync::Arc<blinc_core::FlowGraph>>,
+    flow: Option<std::sync::Arc<blinc_core::FlowShader>>,
     /// Corner radius of the flow shader's rounded rectangle.
     flow_radius: f32,
 }
@@ -170,7 +170,7 @@ impl Canvas {
 
     /// Draws a flow shader over the canvas's bounds, after its render callback.
     ///
-    /// The graph is what `flow!` builds. The shader's `uv` covers the canvas, `time` runs from the
+    /// The shader is what `flow!` builds, at compile time. The shader's `uv` covers the canvas, `time` runs from the
     /// first frame, and `pointer` is the pointer's position in the canvas, 0 to 1.
     ///
     /// ```rust,ignore
@@ -182,8 +182,8 @@ impl Canvas {
     ///     output color = vec4(wave, wave, wave, 1.0);
     /// }))
     /// ```
-    pub fn flow(mut self, graph: impl Into<std::sync::Arc<blinc_core::FlowGraph>>) -> Self {
-        self.flow = Some(graph.into());
+    pub fn flow(mut self, shader: impl Into<std::sync::Arc<blinc_core::FlowShader>>) -> Self {
+        self.flow = Some(shader.into());
         self
     }
 
@@ -293,7 +293,7 @@ impl ElementBuilder for Canvas {
         RenderProps {
             opacity: self.opacity,
             layer: self.layer,
-            flow_graph: self.flow.clone(),
+            flow_shader: self.flow.clone(),
             border_radius: blinc_core::CornerRadius::uniform(self.flow_radius),
             ..Default::default()
         }

@@ -1,6 +1,6 @@
 //! GPU pipeline cache for @flow shaders
 //!
-//! Compiles FlowGraph → WGSL → wgpu pipeline on first use, caches by flow name.
+//! Builds a wgpu pipeline from a `FlowShader`'s WGSL on first use, caches by flow name.
 //! Handles both fragment (render) and compute (simulation) pipelines.
 //! Uniform buffers are updated per-frame with runtime data (time, pointer, etc.).
 //!
@@ -17,9 +17,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use blinc_core::{FlowGraph, FlowInputSource, FlowTarget, FlowType};
-
-use crate::flow_codegen::{flow_needs_scene_texture, flow_to_wgsl};
+use blinc_core::{FlowShader, FlowTarget};
 
 /// Maximum number of compiled flow pipelines kept in cache.
 /// When exceeded, the least-recently-used pipeline is evicted.
@@ -34,7 +32,7 @@ const DEFAULT_BUFFER_ELEMENTS: u64 = 1024;
 
 /// Runtime data written to the flow uniform buffer each frame.
 ///
-/// Layout matches the `FlowUniforms` struct emitted by `flow_codegen.rs`.
+/// Layout matches the `FlowUniforms` struct emitted by `blinc_flow`'s codegen.
 /// Fields are tightly packed as vec4-aligned f32 arrays for GPU upload.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -194,48 +192,37 @@ impl FlowPipelineCache {
         self.scene_generation += 1;
     }
 
-    /// Compile a FlowGraph into a GPU pipeline and cache it.
+    /// Build a flow's GPU pipeline from its WGSL and cache it.
     ///
     /// Returns Ok(()) on success, or an error string on compilation failure.
     /// If the pipeline already exists, this is a no-op.
-    pub fn compile(&mut self, graph: &FlowGraph) -> Result<(), String> {
-        if self.pipelines.contains_key(&graph.name) {
-            self.touch_lru(&graph.name);
+    pub fn compile(&mut self, flow: &FlowShader) -> Result<(), String> {
+        if self.pipelines.contains_key(&*flow.name) {
+            self.touch_lru(&flow.name);
             return Ok(());
         }
 
         // Evict oldest pipeline if at capacity
         self.evict_if_needed();
 
-        // Generate WGSL
-        let wgsl = flow_to_wgsl(graph).map_err(|e| format!("codegen error: {}", e))?;
+        let wgsl = flow.wgsl.to_string();
 
         // Dump generated WGSL for debugging
         if let Ok(path) = std::env::var("BLINC_DUMP_WGSL") {
-            let file = format!("{}/flow_{}.wgsl", path, graph.name);
+            let file = format!("{}/flow_{}.wgsl", path, flow.name);
             let _ = std::fs::write(&file, &wgsl);
-            tracing::info!("Dumped @flow '{}' WGSL to {}", graph.name, file);
+            tracing::info!("Dumped @flow '{}' WGSL to {}", flow.name, file);
         }
 
         // Create shader module
         let shader = self
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some(&format!("Flow Shader: {}", graph.name)),
+                label: Some(&format!("Flow Shader: {}", flow.name)),
                 source: wgpu::ShaderSource::Wgsl(wgsl.clone().into()),
             });
 
-        // Count dynamic uniform fields (CSS properties + env vars)
-        let dynamic_field_count = graph
-            .inputs
-            .iter()
-            .filter(|i| {
-                matches!(
-                    i.source,
-                    FlowInputSource::CssProperty(_) | FlowInputSource::EnvVar(_)
-                )
-            })
-            .count();
+        let dynamic_field_count = flow.dynamic_fields as usize;
 
         // Compute uniform buffer size: base FlowUniformData + dynamic fields (each f32-aligned)
         // Align up to 16-byte boundary for GPU uniform requirements.
@@ -247,62 +234,26 @@ impl FlowPipelineCache {
 
         // Create uniform buffer
         let uniform_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some(&format!("Flow Uniforms: {}", graph.name)),
+            label: Some(&format!("Flow Uniforms: {}", flow.name)),
             size: uniform_size,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        // Collect storage buffer bindings
+        // Storage buffers, bound in order from 1 (binding 0 is the uniforms).
         let mut storage_buffers = HashMap::new();
         let mut storage_entries = Vec::new();
-        let mut binding_index = 1u32; // binding(0) is uniforms
-
-        for input in &graph.inputs {
-            if let FlowInputSource::Buffer { name, ty } = &input.source {
-                if !storage_buffers.contains_key(name) {
-                    let elem_size = match ty {
-                        FlowType::Float => 4,
-                        FlowType::Vec2 => 8,
-                        FlowType::Vec3 => 12,
-                        FlowType::Vec4 => 16,
-                        FlowType::Mat4 => 64,
-                    };
-                    let buf = self.device.create_buffer(&wgpu::BufferDescriptor {
-                        label: Some(&format!("Flow Buffer: {}", name)),
-                        size: elem_size * DEFAULT_BUFFER_ELEMENTS,
-                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                        mapped_at_creation: false,
-                    });
-                    storage_buffers.insert(name.clone(), buf);
-                    storage_entries.push((binding_index, name.clone(), false));
-                    binding_index += 1;
-                }
-            }
-        }
-
-        // Check for buffer outputs that need read_write access
-        for output in &graph.outputs {
-            if let blinc_core::FlowOutputTarget::Buffer { name } = &output.target {
-                if !storage_buffers.contains_key(name) {
-                    let buf = self.device.create_buffer(&wgpu::BufferDescriptor {
-                        label: Some(&format!("Flow Buffer: {}", name)),
-                        size: 16 * DEFAULT_BUFFER_ELEMENTS, // vec4
-                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                        mapped_at_creation: false,
-                    });
-                    storage_buffers.insert(name.clone(), buf);
-                    storage_entries.push((binding_index, name.clone(), true));
-                    binding_index += 1;
-                } else {
-                    // Promote existing buffer to read_write
-                    for entry in &mut storage_entries {
-                        if entry.1 == *name {
-                            entry.2 = true;
-                        }
-                    }
-                }
-            }
+        let mut binding_index = 1u32;
+        for buffer in flow.buffers.iter() {
+            let gpu_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(&format!("Flow Buffer: {}", buffer.name)),
+                size: buffer.element_size as u64 * DEFAULT_BUFFER_ELEMENTS,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            storage_buffers.insert(buffer.name.to_string(), gpu_buffer);
+            storage_entries.push((binding_index, buffer.name.to_string(), buffer.read_write));
+            binding_index += 1;
         }
 
         // Build bind group layout entries
@@ -310,7 +261,7 @@ impl FlowPipelineCache {
             // Binding 0: Uniforms
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: match graph.target {
+                visibility: match flow.target {
                     FlowTarget::Fragment | FlowTarget::Vertex | FlowTarget::Material => {
                         wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT
                     }
@@ -329,7 +280,7 @@ impl FlowPipelineCache {
         for (binding, _name, is_rw) in &storage_entries {
             layout_entries.push(wgpu::BindGroupLayoutEntry {
                 binding: *binding,
-                visibility: match graph.target {
+                visibility: match flow.target {
                     FlowTarget::Fragment | FlowTarget::Material => wgpu::ShaderStages::FRAGMENT,
                     FlowTarget::Vertex => wgpu::ShaderStages::VERTEX,
                     FlowTarget::Compute => wgpu::ShaderStages::COMPUTE,
@@ -344,7 +295,7 @@ impl FlowPipelineCache {
         }
 
         // Check if this flow uses sample_scene() and needs a scene texture
-        let needs_scene = flow_needs_scene_texture(graph);
+        let needs_scene = flow.needs_scene;
         let scene_texture_binding = binding_index;
         if needs_scene {
             // Scene texture
@@ -373,14 +324,14 @@ impl FlowPipelineCache {
         let bind_group_layout =
             self.device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some(&format!("Flow Bind Group Layout: {}", graph.name)),
+                    label: Some(&format!("Flow Bind Group Layout: {}", flow.name)),
                     entries: &layout_entries,
                 });
 
         let pipeline_layout = self
             .device
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some(&format!("Flow Pipeline Layout: {}", graph.name)),
+                label: Some(&format!("Flow Pipeline Layout: {}", flow.name)),
                 bind_group_layouts: &[&bind_group_layout],
                 push_constant_ranges: &[],
             });
@@ -388,7 +339,7 @@ impl FlowPipelineCache {
         let mut render_pipeline = None;
         let mut compute_pipeline = None;
 
-        match graph.target {
+        match flow.target {
             FlowTarget::Fragment => {
                 let blend_state = wgpu::BlendState {
                     color: wgpu::BlendComponent {
@@ -406,7 +357,7 @@ impl FlowPipelineCache {
                 let rp = self
                     .device
                     .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                        label: Some(&format!("Flow Render Pipeline: {}", graph.name)),
+                        label: Some(&format!("Flow Render Pipeline: {}", flow.name)),
                         layout: Some(&pipeline_layout),
                         vertex: wgpu::VertexState {
                             module: &shader,
@@ -445,7 +396,7 @@ impl FlowPipelineCache {
                 let cp = self
                     .device
                     .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                        label: Some(&format!("Flow Compute Pipeline: {}", graph.name)),
+                        label: Some(&format!("Flow Compute Pipeline: {}", flow.name)),
                         layout: Some(&pipeline_layout),
                         module: &shader,
                         entry_point: Some("cs_main"),
@@ -503,7 +454,7 @@ impl FlowPipelineCache {
                 let rp = self
                     .device
                     .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                        label: Some(&format!("Flow 3D Pipeline: {}", graph.name)),
+                        label: Some(&format!("Flow 3D Pipeline: {}", flow.name)),
                         layout: Some(&pipeline_layout),
                         vertex: wgpu::VertexState {
                             module: &shader,
@@ -536,9 +487,9 @@ impl FlowPipelineCache {
             }
         }
 
-        self.touch_lru(&graph.name);
+        self.touch_lru(&flow.name);
         self.pipelines.insert(
-            graph.name.clone(),
+            flow.name.to_string(),
             CachedFlowPipeline {
                 wgsl_source: wgsl,
                 render_pipeline,
@@ -546,7 +497,7 @@ impl FlowPipelineCache {
                 bind_group_layout,
                 uniform_buffer,
                 storage_buffers,
-                target: graph.target,
+                target: flow.target,
                 uniform_size,
                 needs_scene,
                 scene_texture_binding,

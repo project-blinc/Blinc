@@ -9,115 +9,112 @@
 use blinc_app::prelude::*;
 use blinc_app::windowed::WindowedApp;
 use blinc_app::windowed::WindowedContext;
+use blinc_core::FlowShader;
 use blinc_core::{Color, Shadow};
-use blinc_layout::parse_flow_string;
+use blinc_layout::flow;
 
-const FLUID: &str = r#"
-    /* ====== Silk satin — pale steel blue, very subtle S-curve folds ======
-       Reference: nearly white/silver surface with barely perceptible folds.
-       Cursor angle drives fold direction; distance drives fold visibility.
-       Layout:  Still(TL)  Mist(TR)  |  Wave(L)  [card]  Ocean(R)  |  Storm(BL)  Abyss(BR)
-    ====== */
-    @flow fluid {
-        target: fragment;
-        input uv: builtin(uv);
-        input time: builtin(time);
-        input pointer: builtin(pointer);
+// Silk satin: pale steel blue with very subtle S-curve folds. The cursor angle drives the fold
+// direction and its distance their visibility.
+// Layout: Still(TL) Mist(TR) | Wave(L) [card] Ocean(R) | Storm(BL) Abyss(BR)
+const FLUID: FlowShader = flow!(fluid, fragment, {
 
-        /* Pointer position → mode axes */
-        node cursor = clamp(pointer, vec2(0.0, 0.0), vec2(1.0, 1.0));
-        node px = cursor.x - 0.5;
-        node py = cursor.y - 0.5;
-        node xn = cursor.x;
-        node yn = cursor.y;
-        node angle = atan2(py, px);
-        node pdist = clamp(length(vec2(px, py)) * 2.0, 0.0, 1.0);
+    input uv: builtin(uv);
+    input time: builtin(time);
+    input pointer: builtin(pointer);
 
-        /* Mode intensity: yn drives turbulence, xn*yn adds power.
-           yn=0 kills intensity → top row (Still,Mist) always calm.
-           Still=0  Mist=0  Wave=0.3  Ocean=0.5  Storm=0.6  Abyss=1.0 */
-        node mix_factor = 0.6 + xn * 0.4;
-        node intensity = yn * mix_factor;
-        node speed = mix(0.20, 0.65, intensity);
-        node t = time * speed;
-        node amp = mix(0.10, 0.38, intensity);
-        node freq = mix(3.0, 5.5, intensity);
+    /* Pointer position → mode axes */
+    node cursor = clamp(pointer, vec2(0.0, 0.0), vec2(1.0, 1.0));
+    node px = cursor.x - 0.5;
+    node py = cursor.y - 0.5;
+    node xn = cursor.x;
+    node yn = cursor.y;
+    node angle = atan2(py, px);
+    node pdist = clamp(length(vec2(px, py)) * 2.0, 0.0, 1.0);
 
-        /* Fold direction rotates with pointer angle */
-        node ca = cos(angle + t * 0.12);
-        node sa = sin(angle + t * 0.12);
-        node cx = uv.x - 0.5;
-        node cy = uv.y - 0.5;
-        node rx = cx * ca + cy * sa + 0.5;
-        node ry = cx * -sa + cy * ca + 0.5;
+    /* Mode intensity: yn drives turbulence, xn*yn adds power.
+       yn=0 kills intensity → top row (Still,Mist) always calm.
+       Still=0  Mist=0  Wave=0.3  Ocean=0.5  Storm=0.6  Abyss=1.0 */
+    node mix_factor = 0.6 + xn * 0.4;
+    node intensity = yn * mix_factor;
+    node speed = mix(0.20, 0.65, intensity);
+    node t = time * speed;
+    node amp = mix(0.10, 0.38, intensity);
+    node freq = mix(3.0, 5.5, intensity);
 
-        /* Center vignette — folds concentrated in middle */
-        node cdist = length(vec2(cx, cy));
-        node focus = smoothstep(0.5, 0.08, cdist);
-        node wamp = amp * focus;
+    /* Fold direction rotates with pointer angle */
+    node ca = cos(angle + t * 0.12);
+    node sa = sin(angle + t * 0.12);
+    node cx = uv.x - 0.5;
+    node cy = uv.y - 0.5;
+    node rx = cx * ca + cy * sa + 0.5;
+    node ry = cx * -sa + cy * ca + 0.5;
 
-        /* ---- Height at UV ---- */
-        node sx0 = rx + sin(ry * 3.14159 + t) * wamp;
-        node sy0 = ry + cos(rx * 2.6 + t * 0.7) * wamp * 0.8;
-        node h0 = sin(sx0 * freq + sy0 * freq * 0.5 + t * 0.3) * 0.7
-                 + sin(sy0 * freq * 1.4 + sx0 * freq * 0.3 + t * 0.5) * 0.2;
+    /* Center vignette — folds concentrated in middle */
+    node cdist = length(vec2(cx, cy));
+    node focus = smoothstep(0.5, 0.08, cdist);
+    node wamp = amp * focus;
 
-        /* ---- Height at UV + (eps, 0) ---- */
-        node erx = rx + 0.005;
-        node sx1 = erx + sin(ry * 3.14159 + t) * wamp;
-        node sy1 = ry + cos(erx * 2.6 + t * 0.7) * wamp * 0.8;
-        node h1 = sin(sx1 * freq + sy1 * freq * 0.5 + t * 0.3) * 0.7
-                 + sin(sy1 * freq * 1.4 + sx1 * freq * 0.3 + t * 0.5) * 0.2;
+    /* ---- Height at UV ---- */
+    node sx0 = rx + sin(ry * 3.14159 + t) * wamp;
+    node sy0 = ry + cos(rx * 2.6 + t * 0.7) * wamp * 0.8;
+    node h0 = sin(sx0 * freq + sy0 * freq * 0.5 + t * 0.3) * 0.7
+             + sin(sy0 * freq * 1.4 + sx0 * freq * 0.3 + t * 0.5) * 0.2;
 
-        /* ---- Height at UV + (0, eps) ---- */
-        node ery = ry + 0.005;
-        node sx2 = rx + sin(ery * 3.14159 + t) * wamp;
-        node sy2 = ery + cos(rx * 2.6 + t * 0.7) * wamp * 0.8;
-        node h2 = sin(sx2 * freq + sy2 * freq * 0.5 + t * 0.3) * 0.7
-                 + sin(sy2 * freq * 1.4 + sx2 * freq * 0.3 + t * 0.5) * 0.2;
+    /* ---- Height at UV + (eps, 0) ---- */
+    node erx = rx + 0.005;
+    node sx1 = erx + sin(ry * 3.14159 + t) * wamp;
+    node sy1 = ry + cos(erx * 2.6 + t * 0.7) * wamp * 0.8;
+    node h1 = sin(sx1 * freq + sy1 * freq * 0.5 + t * 0.3) * 0.7
+             + sin(sy1 * freq * 1.4 + sx1 * freq * 0.3 + t * 0.5) * 0.2;
 
-        /* Gradient (finite difference) */
-        node gx = (h1 - h0) * 200.0;
-        node gy = (h2 - h0) * 200.0;
+    /* ---- Height at UV + (0, eps) ---- */
+    node ery = ry + 0.005;
+    node sx2 = rx + sin(ery * 3.14159 + t) * wamp;
+    node sy2 = ery + cos(rx * 2.6 + t * 0.7) * wamp * 0.8;
+    node h2 = sin(sx2 * freq + sy2 * freq * 0.5 + t * 0.3) * 0.7
+             + sin(sy2 * freq * 1.4 + sx2 * freq * 0.3 + t * 0.5) * 0.2;
 
-        /* Soft diffuse light from upper-left */
-        node dot_val = 2.0 - gx * 0.5 - gy * 0.6;
-        node len = sqrt(gx * gx + gy * gy + 4.0);
-        node shade = clamp(dot_val / len, 0.0, 1.0);
+    /* Gradient (finite difference) */
+    node gx = (h1 - h0) * 200.0;
+    node gy = (h2 - h0) * 200.0;
 
-        /* Blend to flat mid-tone at edges */
-        node shade_c = shade * focus + 0.5 * (1.0 - focus);
+    /* Soft diffuse light from upper-left */
+    node dot_val = 2.0 - gx * 0.5 - gy * 0.6;
+    node len = sqrt(gx * gx + gy * gy + 4.0);
+    node shade = clamp(dot_val / len, 0.0, 1.0);
 
-        /* Fold visibility: visible early, stronger at edges */
-        node fold_strength = mix(0.08, 0.18, pdist);
+    /* Blend to flat mid-tone at edges */
+    node shade_c = shade * focus + 0.5 * (1.0 - focus);
 
-        /* Darkness: mode intensity × distance from center.
-           Center (pdist=0) always stays pale; modes activate at edges. */
-        node darkness = (yn * 0.6 + xn * yn * 0.4) * pdist;
+    /* Fold visibility: visible early, stronger at edges */
+    node fold_strength = mix(0.08, 0.18, pdist);
 
-        /* Blue shift: xn pulls red DOWN and blue UP → actual blue, not grey.
-           Left side (xn=0) stays warm/neutral; right side (xn=1) goes blue. */
-        node blue_shift = xn * pdist;
+    /* Darkness: mode intensity × distance from center.
+       Center (pdist=0) always stays pale; modes activate at edges. */
+    node darkness = (yn * 0.6 + xn * yn * 0.4) * pdist;
 
-        /* Base color: R drops extra for blue modes, B gains extra.
-           Still =(0.84,0.84,0.88) warm silver
-           Mist =(0.59,0.74,1.0)  bright blue
-           Ocean=(0.19,0.35,0.64) proper dark blue
-           Storm=(0.35,0.37,0.41) dark warm grey
-           Abyss=(0.0, 0.0, 0.25) near black blue */
-        node base_r = mix(0.84, 0.03, darkness) - blue_shift * 0.25;
-        node base_g = mix(0.84, 0.05, darkness) - blue_shift * 0.10;
-        node base_b = mix(0.88, 0.10, darkness) + blue_shift * 0.15;
+    /* Blue shift: xn pulls red DOWN and blue UP → actual blue, not grey.
+       Left side (xn=0) stays warm/neutral; right side (xn=1) goes blue. */
+    node blue_shift = xn * pdist;
 
-        /* Fold shading: ±fold_strength around base */
-        node fold = (shade_c - 0.5) * 2.0 * fold_strength;
-        node r = base_r + fold;
-        node g = base_g + fold;
-        node b = base_b + fold * 0.7;
+    /* Base color: R drops extra for blue modes, B gains extra.
+       Still =(0.84,0.84,0.88) warm silver
+       Mist =(0.59,0.74,1.0)  bright blue
+       Ocean=(0.19,0.35,0.64) proper dark blue
+       Storm=(0.35,0.37,0.41) dark warm grey
+       Abyss=(0.0, 0.0, 0.25) near black blue */
+    node base_r = mix(0.84, 0.03, darkness) - blue_shift * 0.25;
+    node base_g = mix(0.84, 0.05, darkness) - blue_shift * 0.10;
+    node base_b = mix(0.88, 0.10, darkness) + blue_shift * 0.15;
 
-        output color = vec4(clamp(r, 0.0, 1.0), clamp(g, 0.0, 1.0), clamp(b, 0.0, 1.0), 1.0);
-    }
-"#;
+    /* Fold shading: ±fold_strength around base */
+    node fold = (shade_c - 0.5) * 2.0 * fold_strength;
+    node r = base_r + fold;
+    node g = base_g + fold;
+    node b = base_b + fold * 0.7;
+
+    output color = vec4(clamp(r, 0.0, 1.0), clamp(g, 0.0, 1.0), clamp(b, 0.0, 1.0), 1.0);
+});
 
 const STYLESHEET: &str = r#"
     /* ====== Label proximity — wrapping divs carry the pointer query ====== */
@@ -155,7 +152,6 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
         ctx.add_css(STYLESHEET);
     }
 
-    let fluid = parse_flow_string(FLUID).expect("flow parses");
     let bg = Color::rgba(0.93, 0.93, 0.93, 1.0);
     let card_size = 300.0;
     let label_color = Color::rgba(0.25, 0.25, 0.30, 1.0);
@@ -207,7 +203,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                                                 .w(card_size)
                                                 .h(card_size)
                                                 .rounded(card_size / 2.0)
-                                                .flow(fluid),
+                                                .flow(FLUID),
                                         )
                                         .shadow(Shadow::new(
                                             0.0,

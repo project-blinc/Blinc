@@ -52,7 +52,7 @@ fn a_canvas_flow_stops_at_its_ancestors_clip_and_keeps_its_uv() {
     );
     // Red from the canvas's horizontal midpoint on. The canvas is 100 wide and its parent shows
     // the first 60.
-    let graph = blinc_layout::parse_flow_string(
+    let shader = blinc_layout::flow_shader(
         "@flow half { target: fragment; input uv: builtin(uv); \
          output color = vec4(step(0.5, uv.x), 0.0, 0.0, 1.0); }",
     )
@@ -65,7 +65,7 @@ fn a_canvas_flow_stops_at_its_ancestors_clip_and_keeps_its_uv() {
                 .top(0.0)
                 .w(100.0)
                 .h(60.0)
-                .flow(graph),
+                .flow(shader),
         ),
     );
     let page = render(&ui, 160, 120);
@@ -87,7 +87,7 @@ fn a_canvas_flow_covers_the_canvas_and_nothing_else() {
         ..Default::default()
     })
     .expect("offscreen GPU required");
-    let graph = blinc_layout::parse_flow_string(
+    let shader = blinc_layout::flow_shader(
         "@flow solid { target: fragment; output color = vec4(1.0, 0.0, 0.0, 1.0); }",
     )
     .expect("flow parses");
@@ -98,7 +98,7 @@ fn a_canvas_flow_covers_the_canvas_and_nothing_else() {
             .top(20.0)
             .w(60.0)
             .h(60.0)
-            .flow(graph),
+            .flow(shader),
     );
     let mut tree = RenderTree::from_element(&ui);
     tree.compute_layout(160.0, 120.0);

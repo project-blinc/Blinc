@@ -495,7 +495,7 @@ fn overlay_group_unsupported_materials_and_transforms_keep_fallback() {
         tree.update_render_props(owner, |p| match boundary {
             0 => p.material = Some(blinc_layout::Material::Glass(GlassMaterial::new())),
             1 => p.rotate_y = Some(20.0),
-            _ => p.flow_graph = Some(separate_pass_flow()),
+            _ => p.flow_shader = Some(separate_pass_flow()),
         });
         let mut paint = GpuPaintContext::new(160.0, 120.0);
         paint.enable_deferred_text();

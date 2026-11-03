@@ -98,9 +98,9 @@ pub(crate) fn parse_flow_step<'a>(
     // Consume ':'
     let rest = rest.strip_prefix(':')?.trim_start();
 
-    // Parse step type (kebab-case: alphanumeric + hyphen)
+    // Parse step type (kebab-case or snake_case: alphanumeric, hyphen, underscore)
     let type_end = rest
-        .find(|c: char| !c.is_alphanumeric() && c != '-')
+        .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
         .unwrap_or(rest.len());
     if type_end == 0 {
         return None;
@@ -496,7 +496,7 @@ pub(crate) fn parse_flow_use<'a>(
     Some(&rest[semi + 1..])
 }
 
-/// Parse a color stop list: `#RRGGBB 0.0, #RRGGBB 0.5, #RRGGBB 1.0`
+/// Parse a color stop list: `#RRGGBB 0.0, #RRGGBB 0.5, #RRGGBB 1.0`, or `0xRRGGBB` for each color
 pub(crate) fn parse_color_stop_list(input: &str) -> Result<Vec<(FlowExpr, f32)>, String> {
     let mut stops = Vec::new();
     let mut remaining = input.trim();
@@ -509,7 +509,7 @@ pub(crate) fn parse_color_stop_list(input: &str) -> Result<Vec<(FlowExpr, f32)>,
         remaining = remaining_trimmed;
 
         // Parse color (hex literal or expression)
-        let (color_expr, rest) = if remaining.starts_with('#') {
+        let (color_expr, rest) = if super::expr::is_color_literal(remaining) {
             parse_flow_color(remaining)?
         } else {
             // Could be a named reference or expression — parse up to whitespace

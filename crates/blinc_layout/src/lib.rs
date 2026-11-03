@@ -111,10 +111,11 @@ pub use blinc_css::parser as css_parser;
 pub use blinc_css::{calc, element_style, units};
 
 // `css!`, `css_style!` and `style!` are `#[macro_export]`ed by `blinc_css`, which puts them at
-// that crate's root, and `flow!` by `blinc_flow`. Re-export them so they stay callable as
-// `blinc_layout::css!` and through the prelude.
+// that crate's root, and `flow!` is a procedural macro of `blinc_macros`. Re-export them so they
+// stay callable as `blinc_layout::css!` and through the prelude.
 pub use blinc_css::{css, css_impl, css_style, style, style_impl};
-pub use blinc_flow::{flow, parse_flow_string};
+pub use blinc_flow::{flow_shader, parse_flow_string};
+pub use blinc_macros::flow;
 
 pub use key::{InstanceKey, reset_call_counters};
 

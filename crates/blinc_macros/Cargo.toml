@@ -14,6 +14,11 @@ categories = ["gui", "development-tools::procedural-macro-helpers"]
 proc-macro = true
 
 [dependencies]
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
+blinc_flow = { path = "../blinc_flow", version = "0.6.0" }
 proc-macro2 = "1.0"
 quote = "1.0"
 syn = { version = "2.0", features = ["full"] }
+
+[dev-dependencies]
+naga = { version = "26", features = ["wgsl-in"] }

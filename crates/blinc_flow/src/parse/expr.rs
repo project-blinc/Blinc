@@ -145,7 +145,7 @@ pub(crate) fn parse_flow_primary_inner(input: &str) -> Result<(FlowExpr, &str), 
     }
 
     // Color literal: #RRGGBB or #RRGGBBAA
-    if trimmed.starts_with('#') {
+    if is_color_literal(trimmed) {
         return parse_flow_color(trimmed);
     }
 
@@ -369,14 +369,24 @@ pub(crate) fn parse_flow_number(input: &str) -> Result<(FlowExpr, &str), String>
     Ok((FlowExpr::Float(value), &trimmed[end..]))
 }
 
-/// Parse a color literal: #RGB, #RRGGBB, or #RRGGBBAA
+/// Whether the input starts a color literal: `#rrggbb`, or `0xrrggbb`, the spelling Rust tokens
+/// can carry.
+pub(crate) fn is_color_literal(input: &str) -> bool {
+    input.starts_with('#') || input.starts_with("0x") || input.starts_with("0X")
+}
+
+/// Parse a color literal: #RGB, #RRGGBB, or #RRGGBBAA, or the same digits after `0x`
 pub(crate) fn parse_flow_color(input: &str) -> Result<(FlowExpr, &str), String> {
     let trimmed = input.trim_start();
-    if !trimmed.starts_with('#') {
-        return Err("expected '#' for color literal".to_string());
-    }
+    let prefix = if trimmed.starts_with('#') {
+        1
+    } else if trimmed.starts_with("0x") || trimmed.starts_with("0X") {
+        2
+    } else {
+        return Err("expected '#' or '0x' for color literal".to_string());
+    };
 
-    let hex_start = trimmed[1..].trim_start();
+    let hex_start = trimmed[prefix..].trim_start();
     let hex_end = hex_start
         .find(|c: char| !c.is_ascii_hexdigit())
         .unwrap_or(hex_start.len());

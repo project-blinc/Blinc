@@ -532,7 +532,7 @@ fn glass_nested_capture_marks_depth_and_keeps_unsupported_owner_guards() {
         let outer = tree.query_by_id("outer").unwrap();
         let inner = tree.query_by_id("inner").unwrap();
         match boundary {
-            1 => tree.update_render_props(outer, |p| p.flow_graph = Some(separate_pass_flow())),
+            1 => tree.update_render_props(outer, |p| p.flow_shader = Some(separate_pass_flow())),
             2 => tree.update_render_props(inner, |p| p.rotate_y = Some(20.0)),
             3 => tree.update_render_props(outer, |p| p.is_overlay_root = true),
             4 => tree.update_render_props(tree.root().unwrap(), |p| p.is_overlay_root = true),

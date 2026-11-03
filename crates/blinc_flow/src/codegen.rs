@@ -1,6 +1,6 @@
 //! FlowGraph → WGSL code generation
 //!
-//! Compiles `@flow` DAG blocks from CSS into executable WGSL shader modules.
+//! Compiles `@flow` DAG blocks into executable WGSL shader modules.
 //! Supports both fragment (rendering) and compute (simulation) targets.
 //!
 //! The codegen pipeline:
@@ -14,8 +14,8 @@ use std::collections::HashSet;
 use std::fmt::Write;
 
 use blinc_core::{
-    FlowError, FlowExpr, FlowFunc, FlowGraph, FlowInput, FlowInputSource, FlowNode, FlowOutput,
-    FlowOutputTarget, FlowTarget, FlowType,
+    FlowBuffer, FlowError, FlowExpr, FlowFunc, FlowGraph, FlowInputSource, FlowOutputTarget,
+    FlowShader, FlowTarget, FlowType,
 };
 
 // ==========================================================================
@@ -30,6 +30,61 @@ pub fn flow_to_wgsl(graph: &FlowGraph) -> Result<String, FlowError> {
     let mut ctx = CodegenContext::new(graph);
     ctx.collect_used_helpers();
     ctx.generate()
+}
+
+/// Compile a validated flow into a [`FlowShader`]: its WGSL and what a pipeline binds for it.
+pub fn compile_flow(graph: &FlowGraph) -> Result<FlowShader, FlowError> {
+    let wgsl = flow_to_wgsl(graph)?;
+    let dynamic_fields = graph
+        .inputs
+        .iter()
+        .filter(|i| {
+            matches!(
+                i.source,
+                FlowInputSource::CssProperty(_) | FlowInputSource::EnvVar(_)
+            )
+        })
+        .count() as u32;
+
+    let mut buffers: Vec<FlowBuffer> = Vec::new();
+    for input in &graph.inputs {
+        if let FlowInputSource::Buffer { name, ty } = &input.source {
+            if !buffers.iter().any(|b| b.name == *name) {
+                buffers.push(FlowBuffer {
+                    name: name.clone().into(),
+                    element_size: match ty {
+                        FlowType::Float => 4,
+                        FlowType::Vec2 => 8,
+                        FlowType::Vec3 => 12,
+                        FlowType::Vec4 => 16,
+                        FlowType::Mat4 => 64,
+                    },
+                    read_write: false,
+                });
+            }
+        }
+    }
+    for output in &graph.outputs {
+        if let FlowOutputTarget::Buffer { name } = &output.target {
+            match buffers.iter_mut().find(|b| b.name == *name) {
+                Some(buffer) => buffer.read_write = true,
+                None => buffers.push(FlowBuffer {
+                    name: name.clone().into(),
+                    element_size: 16,
+                    read_write: true,
+                }),
+            }
+        }
+    }
+
+    Ok(FlowShader {
+        name: graph.name.clone().into(),
+        target: graph.target,
+        wgsl: wgsl.into(),
+        needs_scene: flow_needs_scene_texture(graph),
+        dynamic_fields,
+        buffers: buffers.into(),
+    })
 }
 
 /// Check if a flow graph uses the `sample_scene()` function,
@@ -100,7 +155,6 @@ struct CodegenContext<'a> {
     need_sdf_ops: bool,
     need_noise: bool,
     need_lighting: bool,
-    need_color: bool,
     need_simulation: bool,
     need_scene: bool,
     /// Individual SDF primitives needed
@@ -121,7 +175,6 @@ impl<'a> CodegenContext<'a> {
             need_sdf_ops: false,
             need_noise: false,
             need_lighting: false,
-            need_color: false,
             need_simulation: false,
             need_scene: false,
             used_sdf_prims: HashSet::new(),

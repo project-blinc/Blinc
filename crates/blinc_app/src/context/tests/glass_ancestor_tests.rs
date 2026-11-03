@@ -431,12 +431,12 @@ fn glass_ancestor_admission_requires_compatible_foreground_content() {
         match boundary {
             1 => tree.update_render_props(owner, |p| p.layer = RenderLayer::Background),
             2 => tree.update_render_props(tree.layout_tree.children(owner)[0], |p| {
-                p.flow_graph = Some(separate_pass_flow())
+                p.flow_shader = Some(separate_pass_flow())
             }),
             3 => tree.update_render_props(tree.query_by_id("image-host").unwrap(), |p| {
                 p.material = Some(blinc_layout::Material::Glass(material(true)))
             }),
-            4 => tree.update_render_props(owner, |p| p.flow_graph = Some(separate_pass_flow())),
+            4 => tree.update_render_props(owner, |p| p.flow_shader = Some(separate_pass_flow())),
             5 => tree.update_render_props(owner, |p| p.rotate_y = Some(20.0)),
             6 => tree.update_render_props(owner, |p| p.is_overlay_root = true),
             10 => tree.update_render_props(panel, |p| {

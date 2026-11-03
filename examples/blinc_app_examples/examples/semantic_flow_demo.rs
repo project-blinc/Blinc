@@ -12,80 +12,74 @@
 use blinc_app::prelude::*;
 use blinc_app::windowed::WindowedApp;
 use blinc_app::windowed::WindowedContext;
-use blinc_core::{Color, Shadow};
-use blinc_layout::{flow, parse_flow_string};
+use blinc_core::{Color, FlowShader, Shadow};
+use blinc_layout::flow;
 
-const TERRAIN: &str = r#"
-    @flow terrain {
-        target: fragment;
-        input uv: builtin(uv);
-        input time: builtin(time);
+const TERRAIN: FlowShader = flow!(terrain, fragment, {
 
-        /* Semantic step — procedural noise */
-        step noise: pattern-noise {
-            scale: 4.0;
-            detail: 6;
-            animation: time * 0.3;
-        }
+    input uv: builtin(uv);
+    input time: builtin(time);
 
-        /* Raw node for contrast adjustment */
-        node contrast = smoothstep(0.2, 0.8, noise);
-
-        /* Semantic step — color mapping from scalar to palette */
-        step palette: color-ramp {
-            source: contrast;
-            stops: #1a3a5a 0.0, #4488aa 0.35, #88cc66 0.55, #ccdd44 0.75, #ffffff 1.0;
-        }
-
-        output color = palette;
+    /* Semantic step — procedural noise */
+    step noise: pattern_noise {
+        scale: 4.0;
+        detail: 6;
+        animation: time * 0.3;
     }
-"#;
 
-const RIPPLE: &str = r#"
-    @flow ripple {
-        target: fragment;
-        input uv: builtin(uv);
-        input time: builtin(time);
+    /* Raw node for contrast adjustment */
+    node contrast = smoothstep(0.2, 0.8, noise);
 
-        chain effect:
-            pattern-ripple(center: vec2(0.5, 0.5), density: 25.0, speed: 3.0)
-            | adjust-falloff(radius: 0.5)
-            ;
-
-        /* Map scalar to blue-white gradient */
-        step tint: color-ramp {
-            source: effect;
-            stops: #002244 0.0, #0066cc 0.4, #88ddff 0.7, #ffffff 1.0;
-        }
-
-        output color = tint;
+    /* Semantic step — color mapping from scalar to palette */
+    step palette: color_ramp {
+        source: contrast;
+        stops: 0x1a3a5a 0.0, 0x4488aa 0.35, 0x88cc66 0.55, 0xccdd44 0.75, 0xffffff 1.0;
     }
-"#;
 
-const WAVES: &str = r#"
-    @flow waves {
-        target: fragment;
-        input uv: builtin(uv);
-        input time: builtin(time);
+    output color = palette;
+});
 
-        /* Raw math for custom wave pattern */
-        node cx = uv.x - 0.5;
-        node cy = uv.y - 0.5;
-        node dist = length(vec2(cx, cy));
-        node wave1 = sin(dist * 30.0 - time * 2.0) * 0.5 + 0.5;
-        node wave2 = sin(uv.x * 15.0 + time * 1.5) * 0.5 + 0.5;
-        node combined = wave1 * 0.6 + wave2 * 0.4;
+const RIPPLE: FlowShader = flow!(ripple, fragment, {
 
-        /* Semantic color ramp with translucency */
-        step colored: color-ramp {
-            source: combined;
-            opacity: 0.50;
-            stops: #0c2b52 0.0, #5787da 0.2, #2c5ac7 0.4, #407dee 0.8, #d9eef2 1.0;
-        }
+    input uv: builtin(uv);
+    input time: builtin(time);
 
-        output color = colored;
+    chain effect:
+        pattern_ripple(center: vec2(0.5, 0.5), density: 25.0, speed: 3.0)
+        | adjust_falloff(radius: 0.5)
+        ;
+
+    /* Map scalar to blue-white gradient */
+    step tint: color_ramp {
+        source: effect;
+        stops: 0x002244 0.0, 0x0066cc 0.4, 0x88ddff 0.7, 0xffffff 1.0;
     }
-"#;
+
+    output color = tint;
+});
+
+const WAVES: FlowShader = flow!(waves, fragment, {
+
+    input uv: builtin(uv);
+    input time: builtin(time);
+
+    /* Raw math for custom wave pattern */
+    node cx = uv.x - 0.5;
+    node cy = uv.y - 0.5;
+    node dist = length(vec2(cx, cy));
+    node wave1 = sin(dist * 30.0 - time * 2.0) * 0.5 + 0.5;
+    node wave2 = sin(uv.x * 15.0 + time * 1.5) * 0.5 + 0.5;
+    node combined = wave1 * 0.6 + wave2 * 0.4;
+
+    /* Semantic color ramp with translucency */
+    step colored: color_ramp {
+        source: combined;
+        opacity: 0.50;
+        stops: 0x0c2b52 0.0, 0x5787da 0.2, 0x2c5ac7 0.4, 0x407dee 0.8, 0xd9eef2 1.0;
+    }
+
+    output color = colored;
+});
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<()> {
@@ -139,12 +133,11 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
         output color = vec4(r, g, b, 1.0);
     });
 
-    let graph = |source: &str| parse_flow_string(source).expect("flow parses");
     let cards = [
-        (graph(TERRAIN), "Terrain", "step + node + step", default_bg),
-        (graph(RIPPLE), "Ripple", "chain + step", default_bg),
+        (TERRAIN, "Terrain", "step + node + step", default_bg),
+        (RIPPLE, "Ripple", "chain + step", default_bg),
         (
-            graph(WAVES),
+            WAVES,
             "Waves",
             "translucent",
             Color::rgba(0.85, 0.55, 0.15, 1.0),
@@ -166,25 +159,29 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                 .gap(16.0)
                 .items_center()
                 .justify_center()
-                .children(cards.into_iter().map(|(graph, title, subtitle, backdrop)| {
-                    card(
-                        graph,
-                        title,
-                        subtitle,
-                        card_w,
-                        card_h,
-                        backdrop,
-                        label_color,
-                        sub_color,
-                    )
-                })),
+                .children(
+                    cards
+                        .into_iter()
+                        .map(|(shader, title, subtitle, backdrop)| {
+                            card(
+                                shader,
+                                title,
+                                subtitle,
+                                card_w,
+                                card_h,
+                                backdrop,
+                                label_color,
+                                sub_color,
+                            )
+                        }),
+                ),
         )
 }
 
 /// A card whose canvas draws a flow shader over a backdrop.
 #[allow(clippy::too_many_arguments)]
 fn card(
-    graph: blinc_core::FlowGraph,
+    shader: FlowShader,
     title: &str,
     subtitle: &str,
     w: f32,
@@ -204,7 +201,7 @@ fn card(
                 .bg(backdrop)
                 .rounded(24.0)
                 .shadow(Shadow::new(0.0, 4.0, 20.0, Color::rgba(0.0, 0.0, 0.0, 0.4)))
-                .child(canvas(|_, _| {}).w(w).h(h).rounded(24.0).flow(graph)),
+                .child(canvas(|_, _| {}).w(w).h(h).rounded(24.0).flow(shader)),
         )
         .child(
             text(title)

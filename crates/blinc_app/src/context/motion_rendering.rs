@@ -454,10 +454,10 @@ impl RenderContext {
 
             for flow_el in &flow_elements {
                 {
-                    let graph = &*flow_el.flow_graph;
+                    let shader = &*flow_el.flow_shader;
                     // Compile on first use (no-op if already cached)
-                    if let Err(e) = self.renderer.flow_pipeline_cache().compile(graph) {
-                        tracing::warn!("flow '{}' compile error: {}", graph.name, e);
+                    if let Err(e) = self.renderer.flow_pipeline_cache().compile(shader) {
+                        tracing::warn!("flow '{}' compile error: {}", shader.name, e);
                         continue;
                     }
 
@@ -477,12 +477,12 @@ impl RenderContext {
                     let viewport = [flow_el.x, flow_el.y, flow_el.width, flow_el.height];
                     if !self.renderer.render_flow(
                         target,
-                        &graph.name,
+                        &shader.name,
                         &uniforms,
                         Some(viewport),
                         flow_el.clip,
                     ) {
-                        tracing::warn!("flow '{}' render failed", graph.name);
+                        tracing::warn!("flow '{}' render failed", shader.name);
                     }
                 }
             }

@@ -896,9 +896,9 @@ impl RenderContext {
             }
 
             // A flow shader renders over the node's bounds through its own GPU pipeline.
-            if let Some(ref flow_graph) = render_node.props.flow_graph {
+            if let Some(ref flow_shader) = render_node.props.flow_shader {
                 flows.push(FlowElement {
-                    flow_graph: flow_graph.clone(),
+                    flow_shader: flow_shader.clone(),
                     x: abs_x * scale,
                     y: abs_y * scale,
                     width: bounds.width * scale,

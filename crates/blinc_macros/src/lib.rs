@@ -42,6 +42,8 @@
 //! let scale2 = MyComponent::use_scale_auto(ctx, 1.0, SpringConfig::snappy()); // Different key!
 //! ```
 
+mod flow;
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields, parse_macro_input};
@@ -439,4 +441,46 @@ pub fn derive_blinc_component(input: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
+}
+
+/// Transpile a flow shader to WGSL at compile time.
+///
+/// Evaluates to a `blinc_core::FlowShader`: the WGSL and what a pipeline binds for it. It is a
+/// constant expression, so a `const` can hold one, and nothing is parsed or generated at run
+/// time. Draw it with `Canvas::flow`.
+///
+/// ```ignore
+/// let ripple = flow!(ripple, fragment, {
+///     input uv: builtin(uv);
+///     input time: builtin(time);
+///     node d = distance(uv, vec2(0.5, 0.5));
+///     node wave = sin(d * 20.0 - time * 4.0);
+///     output color = vec4(wave, wave, wave, 1.0);
+/// });
+/// ```
+///
+/// The body is the flow language written as Rust tokens: `input`, `node`, `step`, `chain`,
+/// `use` and `output` statements. Step types take their underscore names (`pattern_noise`,
+/// `color_ramp`, `adjust_falloff`) and colours are hex integers (`0x1a3a5a`, or
+/// `0xrrggbbaa` with alpha).
+///
+/// ```ignore
+/// let terrain = flow!(terrain, fragment, {
+///     input uv: builtin(uv);
+///     input time: builtin(time);
+///     step noise: pattern_noise { scale: 4.0; detail: 6; animation: time * 0.3; }
+///     step palette: color_ramp {
+///         source: noise;
+///         stops: 0x1a3a5a 0.0, 0x88cc66 0.55, 0xffffff 1.0;
+///     }
+///     output color = palette;
+/// });
+/// ```
+///
+/// A flow that does not parse or generate is a compile error at the macro call. The expansion
+/// names `::blinc_core`, so the calling crate depends on it.
+#[proc_macro]
+pub fn flow(input: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(input as flow::FlowInput);
+    TokenStream::from(flow::expand(input))
 }

@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use blinc_core::{
-    BlurQuality, Brush, ClipPath, Color, CornerRadius, CornerShape, DynFloat, DynValue, FlowGraph,
-    GlassStyle, LayerEffect, OverflowFade, Rect, Shadow, Transform, ValueContext,
+    BlurQuality, Brush, ClipPath, Color, CornerRadius, CornerShape, DynFloat, DynValue, GlassStyle,
+    LayerEffect, OverflowFade, Rect, Shadow, Transform, ValueContext,
 };
 use taffy::Layout;
 
@@ -453,7 +453,7 @@ pub struct RenderProps {
     /// CSS mask-mode
     pub mask_mode: Option<blinc_core::MaskMode>,
     /// A flow shader drawn over the element's bounds: set by `Canvas::flow`.
-    pub flow_graph: Option<Arc<FlowGraph>>,
+    pub flow_shader: Option<Arc<blinc_core::FlowShader>>,
 }
 
 impl Default for RenderProps {
@@ -547,7 +547,7 @@ impl Default for RenderProps {
             white_space: None,
             mask_image: None,
             mask_mode: None,
-            flow_graph: None,
+            flow_shader: None,
         }
     }
 }

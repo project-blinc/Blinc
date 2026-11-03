@@ -554,7 +554,7 @@ struct SvgElement {
 /// A flow shader drawn over an element's bounds by a custom GPU pipeline (`Canvas::flow`).
 #[derive(Clone)]
 struct FlowElement {
-    flow_graph: std::sync::Arc<blinc_core::FlowGraph>,
+    flow_shader: std::sync::Arc<blinc_core::FlowShader>,
     /// Bounds in physical pixels (DPI-scaled)
     x: f32,
     y: f32,

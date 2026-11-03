@@ -641,7 +641,7 @@ fn nested_overlay_capabilities_and_unsupported_owners_remain_guarded() {
             tree.update_render_props(inner, |p| match boundary {
                 4 => p.material = Some(blinc_layout::Material::Glass(GlassMaterial::new())),
                 5 => p.rotate_y = Some(20.0),
-                _ => p.flow_graph = Some(separate_pass_flow()),
+                _ => p.flow_shader = Some(separate_pass_flow()),
             });
         }
         let mut paint = GpuPaintContext::new(160.0, 120.0);

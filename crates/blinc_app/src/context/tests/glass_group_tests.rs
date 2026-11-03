@@ -346,7 +346,7 @@ fn glass_group_capabilities_and_unsupported_owners_keep_admission_guards() {
             }),
             4 => tree.update_render_props(panel, |p| p.is_overlay_root = true),
             5 => tree.update_render_props(tree.root().unwrap(), |p| p.is_overlay_root = true),
-            6 => tree.update_render_props(panel, |p| p.flow_graph = Some(separate_pass_flow())),
+            6 => tree.update_render_props(panel, |p| p.flow_shader = Some(separate_pass_flow())),
             7 => tree.update_render_props(panel, |p| p.rotate_y = Some(20.0)),
             8 => tree.update_render_props(tree.root().unwrap(), |p| {
                 p.layer_effects = vec![blinc_core::LayerEffect::brightness(0.5)]

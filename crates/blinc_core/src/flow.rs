@@ -18,6 +18,7 @@
 //! }
 //! ```
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 
@@ -3488,6 +3489,42 @@ fn check_args_recursive(expr: &FlowExpr, node_name: &str, errors: &mut Vec<FlowE
 // ===========================================================================
 // Tests
 // ===========================================================================
+
+// ==========================================================================
+// FlowShader
+// ==========================================================================
+
+/// A flow compiled to WGSL, with what a pipeline needs to bind it.
+///
+/// `flow!` builds one at compile time, so a `const` holds a shader and nothing is parsed or
+/// generated at run time. The strings and slices are `Cow`s so a shader compiled from source at
+/// run time is the same type.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FlowShader {
+    /// Name of the flow; the pipeline cache keys on it.
+    pub name: Cow<'static, str>,
+    /// Pipeline the WGSL is for.
+    pub target: FlowTarget,
+    /// The complete WGSL module.
+    pub wgsl: Cow<'static, str>,
+    /// Whether the WGSL samples the scene texture.
+    pub needs_scene: bool,
+    /// Per-element values bound from CSS properties or environment variables, 4 bytes each, after
+    /// the base uniforms.
+    pub dynamic_fields: u32,
+    /// Storage buffers the WGSL binds, in binding order from 1.
+    pub buffers: Cow<'static, [FlowBuffer]>,
+}
+
+/// A storage buffer a flow binds.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FlowBuffer {
+    pub name: Cow<'static, str>,
+    /// Bytes per element.
+    pub element_size: u32,
+    /// Whether the flow writes it.
+    pub read_write: bool,
+}
 
 #[cfg(test)]
 mod tests {

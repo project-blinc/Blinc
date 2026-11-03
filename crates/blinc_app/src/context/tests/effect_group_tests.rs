@@ -415,7 +415,7 @@ fn effect_group_capabilities_preserve_owner_and_unsupported_fallback() {
                 p.layer_effects = vec![LayerEffect::brightness(0.5)];
                 p.mix_blend_mode = Some(BlendMode::Screen);
                 match boundary {
-                    1 => p.flow_graph = Some(separate_pass_flow()),
+                    1 => p.flow_shader = Some(separate_pass_flow()),
                     2 => p.is_overlay_root = true,
                     3 => p.shape_3d = Some(1.0),
                     4 => p.layer = RenderLayer::Glass,

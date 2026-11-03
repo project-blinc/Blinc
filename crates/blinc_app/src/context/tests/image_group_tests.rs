@@ -333,7 +333,7 @@ fn image_group_capability_and_unsupported_owners_keep_fallback() {
                 tree.update_render_props(tree.query_by_id("group").unwrap(), |p| {
                     p.opacity = 0.5;
                     if unsupported {
-                        p.flow_graph = Some(separate_pass_flow());
+                        p.flow_shader = Some(separate_pass_flow());
                     }
                 });
                 let state = RenderState::new(Arc::new(Mutex::new(AnimationScheduler::new())));

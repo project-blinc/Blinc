@@ -94,9 +94,9 @@ pub use context_state::BlincContextState as Context;
 
 // Re-export flow DAG types
 pub use flow::{
-    BuiltinVar, ChainLink, FlowChain, FlowError, FlowExpr, FlowFunc, FlowGraph, FlowInput,
-    FlowInputSource, FlowNode, FlowOutput, FlowOutputTarget, FlowStep, FlowTarget, FlowType,
-    FlowUse, StepParam, StepType,
+    BuiltinVar, ChainLink, FlowBuffer, FlowChain, FlowError, FlowExpr, FlowFunc, FlowGraph,
+    FlowInput, FlowInputSource, FlowNode, FlowOutput, FlowOutputTarget, FlowShader, FlowStep,
+    FlowTarget, FlowType, FlowUse, StepParam, StepType,
 };
 
 // Re-export store types

@@ -1,6 +1,6 @@
 # Flow Shaders
 
-Flow shaders are a DAG-based (directed acyclic graph) real-time shader compute system that compiles to WGSL. They support fragment, compute, vertex, and material targets — powering 2D effects, GPU simulation, and 3D mesh rendering from a single declarative language. A flow is drawn by a canvas element, and is written inline with the `flow!` macro or parsed from `@flow` source text. Flows are not part of CSS.
+Flow shaders are a DAG-based (directed acyclic graph) real-time shader compute system that compiles to WGSL. They support fragment, compute, vertex, and material targets — powering 2D effects, GPU simulation, and 3D mesh rendering from a single declarative language. A flow is drawn by a canvas element. The `flow!` macro transpiles it to WGSL at compile time, so nothing is parsed or generated when the app runs. Flows are not part of CSS.
 
 ## Quick Start
 
@@ -20,7 +20,7 @@ let ripple = flow!(ripple, fragment, {
 canvas(|_, _| {}).flow(ripple).w(400.0).h(400.0)
 ```
 
-The `flow!` macro produces a `FlowGraph` using Rust identifiers and primitives. Pass it to a canvas with `Canvas::flow`; the shader covers the canvas's bounds and `.rounded(r)` rounds its corners.
+The `flow!` macro produces a `FlowShader`, the WGSL and what a pipeline binds for it, using Rust identifiers and primitives. It is a constant expression, so a `const` can hold one. Pass it to a canvas with `Canvas::flow`; the shader covers the canvas's bounds and `.rounded(r)` rounds its corners.
 
 ## Anatomy of a Flow Shader
 
@@ -347,27 +347,30 @@ let shader = flow!(my_effect, fragment, {
 canvas(|_, _| {}).flow(shader).w(300.0).h(300.0)
 ```
 
-The `FlowGraph` carries its own name and is persisted by the GPU pipeline cache.
+The shader carries its own name, and the GPU pipeline cache keys on it. A flow that does not parse or generate is a compile error at the `flow!` call. The expansion names `::blinc_core`, so the calling crate depends on it.
 
-### Source text
+### Steps and colours
 
-Semantic steps with hyphenated names and `#rrggbb` colour stops are not Rust tokens, so the macro cannot carry them. Write them as `@flow` source and parse it:
+The body is the flow language written as Rust tokens. Step types take their underscore names (`pattern_noise`, `color_ramp`) and colours are hex integers, `0xrrggbb` or `0xrrggbbaa`:
 
 ```rust
-use blinc_layout::parse_flow_string;
+use blinc_layout::flow;
 
-let terrain = parse_flow_string(r#"
-    @flow terrain {
-        target: fragment;
-        input uv: builtin(uv);
-        step noise: pattern-noise { scale: 4.0; detail: 6; };
-        output color = vec4(noise, noise, noise, 1.0);
+const TERRAIN: FlowShader = flow!(terrain, fragment, {
+    input uv: builtin(uv);
+    input time: builtin(time);
+    step noise: pattern_noise { scale: 4.0; detail: 6; animation: time * 0.3; }
+    step palette: color_ramp {
+        source: noise;
+        stops: 0x1a3a5a 0.0, 0x88cc66 0.55, 0xffffff 1.0;
     }
-"#)
-.expect("flow parses");
+    output color = palette;
+});
 
-canvas(|_, _| {}).flow(terrain).w(300.0).h(300.0).rounded(16.0)
+canvas(|_, _| {}).flow(TERRAIN).w(300.0).h(300.0).rounded(16.0)
 ```
+
+`blinc_layout::flow_shader(source)` compiles `@flow` source text at run time, with `#rrggbb` colours and hyphenated step names, for source that is not known when the app is built.
 
 ## Complete Example
 

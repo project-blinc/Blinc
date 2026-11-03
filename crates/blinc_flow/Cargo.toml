@@ -14,3 +14,6 @@ crate-type = ["lib"]
 [dependencies]
 blinc_core = { path = "../blinc_core", version = "0.6.0" }
 nom = "7"
+
+[dev-dependencies]
+naga = { version = "26", features = ["wgsl-in"] }

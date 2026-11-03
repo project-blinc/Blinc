@@ -165,3 +165,21 @@ fn test_flow_expr_parenthesized() {
         _ => panic!("expected Mul, got {:?}", expr),
     }
 }
+
+#[test]
+fn test_step_types_take_underscores_and_hex_integers() {
+    let source = |step: &str, stops: &str| {
+        format!(
+            "@flow t {{ target: fragment; input uv: builtin(uv); input time: builtin(time); \
+             step noise: {step} {{ scale: 4.0; detail: 6; animation: time * 0.3; }} \
+             step palette: color_ramp {{ source: noise; stops: {stops}; }} \
+             output color = palette; }}"
+        )
+    };
+    let hash = parse_flow_string(&source("pattern-noise", "#112233 0.0, #ffffff 1.0")).unwrap();
+    let hex = parse_flow_string(&source("pattern_noise", "0x112233 0.0, 0xffffff 1.0")).unwrap();
+    assert_eq!(
+        crate::flow_to_wgsl(&hash).unwrap(),
+        crate::flow_to_wgsl(&hex).unwrap()
+    );
+}

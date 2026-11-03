@@ -242,7 +242,7 @@ fn glass_brush_unsupported_owners_keep_fallback() {
         let outer = tree.query_by_id("outer").unwrap();
         let inner = tree.query_by_id("inner").unwrap();
         match boundary {
-            0 => tree.update_render_props(outer, |p| p.flow_graph = Some(separate_pass_flow())),
+            0 => tree.update_render_props(outer, |p| p.flow_shader = Some(separate_pass_flow())),
             1 => tree.update_render_props(inner, |p| p.rotate_y = Some(20.0)),
             2 => tree.update_render_props(outer, |p| p.is_overlay_root = true),
             3 => tree.update_render_props(tree.root().unwrap(), |p| p.is_overlay_root = true),

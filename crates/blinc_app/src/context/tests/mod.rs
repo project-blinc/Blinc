@@ -1,9 +1,14 @@
 //! Rendering regression tests and shared test helpers.
 use super::*;
 
-/// A graph whose only use is to make its node draw through a separate flow pass.
-fn separate_pass_flow() -> std::sync::Arc<blinc_core::FlowGraph> {
-    std::sync::Arc::new(blinc_core::FlowGraph::new("separate-pass"))
+/// A shader whose only use is to make its node draw through a separate flow pass.
+fn separate_pass_flow() -> std::sync::Arc<blinc_core::FlowShader> {
+    std::sync::Arc::new(
+        blinc_layout::flow_shader(
+            "@flow separate-pass { target: fragment; output color = vec4(0.0, 0.0, 0.0, 0.0); }",
+        )
+        .expect("flow compiles"),
+    )
 }
 
 mod cached_text_clip_tests;

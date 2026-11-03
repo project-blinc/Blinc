@@ -1305,7 +1305,7 @@ pub struct GpuRenderer {
     /// Set via `set_blend_target()` before rendering, cleared after.
     /// Safety: Only valid during an active render frame.
     blend_target_ptr: Option<*const wgpu::Texture>,
-    /// Cached @flow GPU pipelines (compiled lazily from FlowGraph → WGSL)
+    /// Cached @flow GPU pipelines (built lazily from a flow's WGSL)
     flow_pipeline_cache: crate::flow_pipeline::FlowPipelineCache,
     /// Staging texture for scene capture (used by flow shaders with sample_scene()).
     /// Lazily created/resized to match the render target.
