@@ -378,6 +378,8 @@ impl Button {
         .justify_center()
         // CSS classes for user overrides
         .class("cn-button")
+        // A tab stop: Tab reaches it, Enter and Space click it.
+        .class("tabindex=0")
         .class(variant.css_class())
         .class(config.btn_size.css_class());
 

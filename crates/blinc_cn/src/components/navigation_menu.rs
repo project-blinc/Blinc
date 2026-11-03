@@ -107,6 +107,7 @@ impl NavigationMenu {
 
             let mut entry = div()
                 .class("cn-nav-link")
+                .class("tabindex=0")
                 .class_when("cn-nav-link--active", &open)
                 .flex_row()
                 .items_center()
@@ -480,6 +481,7 @@ impl NavigationLink {
 
         let mut link = div()
             .class("cn-nav-link")
+            .class("tabindex=0")
             .flex_col()
             .w_full()
             .gap(1.0)

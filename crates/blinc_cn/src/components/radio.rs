@@ -213,6 +213,7 @@ fn build_radio_button(
     let circle = div()
         .class("blinc-radio")
         .class("cn-radio")
+        .class("tabindex=0")
         // Added and taken away with the selection, so the stylesheet's
         // `.cn-radio--selected` rules follow it in place.
         .class_when("cn-radio--selected", &is_selected)

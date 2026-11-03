@@ -120,7 +120,10 @@ impl Link {
             inner,
             url,
             css_element_id: None,
-            css_classes: vec![blinc_core::intern::intern("blinc-link")],
+            css_classes: vec![
+                blinc_core::intern::intern("blinc-link"),
+                blinc_core::intern::intern("tabindex=0"),
+            ],
         }
     }
 

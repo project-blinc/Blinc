@@ -108,6 +108,18 @@ pub const CN_STYLES: &str = concat!(
         transform var(--duration-faster) var(--ease-state);
 }
 .cn-button:disabled { cursor: not-allowed; }
+/* Keyboard focus: Tab puts focus on a control and a press or a text input
+   takes it away, so `:focus` on these is the keyboard focus ring. */
+.cn-button:focus, .cn-checkbox:focus, .cn-switch:focus, .cn-toggle:focus,
+.cn-radio:focus, .cn-tabs-trigger:focus, .cn-select-trigger:focus,
+.cn-combobox-trigger:focus, .cn-dropdown-trigger:focus, .cn-accordion-trigger:focus,
+.cn-collapsible-trigger:focus, .cn-menubar-trigger:focus, .cn-nav-link:focus,
+.cn-sidebar-item:focus, .cn-pagination-btn:focus, .cn-breadcrumb-item:focus,
+.cn-sheet-close:focus, .cn-drawer-close:focus, .cn-slider:focus,
+.cn-number-gauge:focus, .blinc-link:focus {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
 /* Press feedback: a pressed button shrinks a little and eases back. A link
    button is flat, so it dims instead. */
 .cn-button:active:not(:disabled) {

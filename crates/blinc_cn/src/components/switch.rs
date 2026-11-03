@@ -124,6 +124,7 @@ impl Switch {
 
         let switch = div()
             .class("cn-switch")
+            .class("tabindex=0")
             .class(config.size.css_class())
             .w(track_width)
             .h(track_height)

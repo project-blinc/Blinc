@@ -4775,12 +4775,20 @@ impl WindowedApp {
                                                 let _ = legacy_handled || stack_handled;
                                             }
 
+                                            // Tab traversal and Enter/Space activation
+                                            // take their keys from the widgets.
+                                            let navigated = ws.render_tree.as_mut().is_some_and(|t| {
+                                                t.handle_navigation_key(router, key_code, mods.shift)
+                                            });
+
                                             // Dispatch KEY_DOWN for all keys
-                                            router.on_key_down(key_code);
+                                            if !navigated {
+                                                router.on_key_down(key_code);
+                                            }
 
                                             // For character-producing keys, dispatch TEXT_INPUT
                                             // We use broadcast dispatch so any focused text input can receive it
-                                            if let Some(c) = key_char {
+                                            if let Some(c) = key_char.filter(|_| !navigated) {
                                                 // Don't send text input if ctrl/cmd is held (shortcuts)
                                                 if !mods.ctrl && !mods.meta {
                                                     keyboard_events.push(PendingEvent {
@@ -4797,7 +4805,7 @@ impl WindowedApp {
                                             }
 
                                             // For KEY_DOWN events with special keys (backspace, arrows)
-                                            if key_code != 0 {
+                                            if key_code != 0 && !navigated {
                                                 keyboard_events.push(PendingEvent {
                                                     event_type: blinc_core::events::event_types::KEY_DOWN,
                                                     key_char: None,
@@ -5992,10 +6000,7 @@ impl WindowedApp {
                                     let text_focus =
                                         blinc_layout::widgets::text_input::focused_text_input_node_id()
                                             .or_else(blinc_layout::widgets::text_input::focused_text_area_node_id);
-                                    let current_focus = windowed_ctx.event_router.focused();
-                                    if text_focus != current_focus {
-                                        windowed_ctx.event_router.set_focus(text_focus);
-                                    }
+                                    windowed_ctx.event_router.sync_text_focus(text_focus);
                                     if let Some(ref mut tree) = ws.render_tree {
                                         if tree.process_pending_subtree_rebuilds_routed(
                                             Some(&windowed_ctx.event_router),
@@ -6737,10 +6742,7 @@ impl WindowedApp {
                             {
                                 let text_focus = blinc_layout::widgets::text_input::focused_text_input_node_id()
                                     .or_else(blinc_layout::widgets::text_input::focused_text_area_node_id);
-                                let current_focus = windowed_ctx.event_router.focused();
-                                if text_focus != current_focus {
-                                    windowed_ctx.event_router.set_focus(text_focus);
-                                }
+                                windowed_ctx.event_router.sync_text_focus(text_focus);
                             }
 
                             // Apply CSS state styles (:hover, :active, :focus) from stylesheet

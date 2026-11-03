@@ -290,6 +290,7 @@ pub(crate) fn shell(
 ) -> Div {
     let shell = div()
         .class("cn-number-gauge")
+        .class("tabindex=0")
         .class(size.css_class())
         .relative()
         .flex_row()

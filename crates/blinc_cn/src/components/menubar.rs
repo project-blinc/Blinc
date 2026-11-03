@@ -444,6 +444,7 @@ impl MenubarBuilder {
 
             let mut trigger = trigger_content
                 .class("cn-menubar-trigger")
+                .class("tabindex=0")
                 .h_fit()
                 .px(style_px / 4.0)
                 .py(style_py / 4.0)

@@ -47,6 +47,7 @@ pub use animation::css::css_animation_playing;
 mod build;
 mod cursor;
 mod events;
+mod keyboard_nav;
 mod paint;
 mod queries;
 mod registries;

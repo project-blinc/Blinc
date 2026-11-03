@@ -159,6 +159,7 @@ fn build_item(
     let mut body = div()
         .class("blinc-toggle")
         .class("cn-toggle")
+        .class("tabindex=0")
         .attr_when("data-state", "on", &is_on)
         .attr_when("data-state", "off", &is_off)
         .attr_when("checked", "", &is_on)

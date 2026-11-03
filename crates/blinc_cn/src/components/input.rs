@@ -114,7 +114,10 @@ impl Input {
         };
 
         // Add CSS classes directly to the TextInput (it supports .class())
-        let mut text_input = text_input.class("cn-input").class(size_class);
+        let mut text_input = text_input
+            .class("cn-input")
+            .class("tabindex=text")
+            .class(size_class);
         // An error marks the box `data-invalid` while it is non-empty.
         if let Some(ref error) = config.error {
             text_input = text_input.invalid(crate::reactive_props::non_empty(error));

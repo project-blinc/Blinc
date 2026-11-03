@@ -237,6 +237,11 @@ impl Headless {
         &mut self.ctx
     }
 
+    /// The node holding focus.
+    pub fn focused(&self) -> Option<LayoutNodeId> {
+        self.ctx.event_router.focused()
+    }
+
     /// The tree as last built, for assertions on render props and layout.
     pub fn tree(&self) -> &RenderTree {
         self.tree.as_ref().expect("nothing is mounted")
@@ -311,9 +316,7 @@ impl Headless {
         blinc_layout::widgets::process_pending_area_focus();
         let text_focus = blinc_layout::widgets::text_input::focused_text_input_node_id()
             .or_else(blinc_layout::widgets::text_input::focused_text_area_node_id);
-        if text_focus != self.ctx.event_router.focused() {
-            self.ctx.event_router.set_focus(text_focus);
-        }
+        self.ctx.event_router.sync_text_focus(text_focus);
 
         let (w, h) = (self.ctx.width, self.ctx.height);
         if let Some(tree) = self.tree.as_mut() {
@@ -654,11 +657,24 @@ impl Headless {
     /// It reaches every key handler, as in a window; each decides whether it
     /// has focus.
     pub fn key(&mut self, key_code: u32) -> &mut Self {
+        self.key_with_shift(key_code, false)
+    }
+
+    /// [`Self::key`] with Shift held.
+    pub fn key_with_shift(&mut self, key_code: u32, shift: bool) -> &mut Self {
+        let navigated = self
+            .tree
+            .as_mut()
+            .is_some_and(|t| t.handle_navigation_key(&mut self.ctx.event_router, key_code, shift));
+        if navigated {
+            self.frame(0);
+            return self;
+        }
         if let Some(tree) = self.tree.as_mut() {
             tree.broadcast_key_event(
                 blinc_core::events::event_types::KEY_DOWN,
                 key_code,
-                false,
+                shift,
                 false,
                 false,
                 false,

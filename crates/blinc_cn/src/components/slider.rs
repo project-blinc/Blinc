@@ -210,6 +210,7 @@ impl Slider {
         let part = |class: &str| div().class(class).pointer_events_none();
         let row = div()
             .class("cn-slider")
+            .class("tabindex=0")
             .attr("data-size", size.attr())
             .attr_when("disabled", "", disabled.clone())
             .flex_row()

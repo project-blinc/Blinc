@@ -193,6 +193,7 @@ impl Breadcrumb {
                 let on_click = item.on_click.clone();
                 item_div = item_div
                     .attr("data-link", "")
+                    .class("tabindex=0")
                     .cursor(CursorStyle::Pointer)
                     .on_click(move |_| {
                         if let Some(ref handler) = on_click {

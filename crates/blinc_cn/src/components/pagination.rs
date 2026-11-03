@@ -168,6 +168,7 @@ impl Pagination {
                             let current = computed(move |g: &ReactiveGraph| page.read(g) == n);
                             div()
                                 .class("cn-pagination-btn")
+                                .class("tabindex=0")
                                 .attr_when("aria-current", "page", &current)
                                 .w(button_size)
                                 .h(button_size)
@@ -187,6 +188,7 @@ impl Pagination {
                                 computed(move |g: &ReactiveGraph| target(page.read(g)).is_none());
                             div()
                                 .class("cn-pagination-btn")
+                                .class("tabindex=0")
                                 .attr_when("disabled", "", &disabled)
                                 .w(button_size)
                                 .h(button_size)

@@ -224,6 +224,7 @@ impl Select {
         let open_state_trigger = open_state;
         let trigger = div()
             .class("cn-select-trigger")
+            .class("tabindex=0")
             .flex_row()
             .w(dropdown_width)
             .items_center()

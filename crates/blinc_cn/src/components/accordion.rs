@@ -278,6 +278,7 @@ impl AccordionBuilder {
 
             let trigger = div()
                 .class("cn-accordion-trigger")
+                .class("tabindex=0")
                 .attr_when("data-state", "open", &open)
                 .attr_when("data-state", "closed", &closed)
                 .flex_row()

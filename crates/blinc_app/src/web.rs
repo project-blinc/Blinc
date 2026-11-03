@@ -2920,10 +2920,7 @@ impl WebApp {
         {
             let text_focus = blinc_layout::widgets::text_input::focused_text_input_node_id()
                 .or_else(blinc_layout::widgets::text_input::focused_text_area_node_id);
-            let current_focus = self.ctx.event_router.focused();
-            if text_focus != current_focus {
-                self.ctx.event_router.set_focus(text_focus);
-            }
+            self.ctx.event_router.sync_text_focus(text_focus);
         }
 
         // CSS state styles (:hover, :active, :focus)

@@ -386,6 +386,7 @@ fn build_drawer_content(
             header_div = header_div.child(
                 div()
                     .class("cn-drawer-close")
+                    .class("tabindex=0")
                     .w(32.0)
                     .h(32.0)
                     .items_center()

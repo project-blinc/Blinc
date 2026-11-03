@@ -242,6 +242,40 @@ fn hover_card() -> impl ElementBuilder {
 
 ---
 
+## Keyboard Navigation
+
+Tab and Shift+Tab move focus through the controls that mark themselves as tab
+stops, in tree order, wrapping at the ends. The page scrolls to show the
+control that takes focus. Enter and Space click the focused control. A press
+anywhere clears focus set by Tab.
+
+Mark any element as a tab stop with the `tabindex` attribute:
+
+```rust
+use blinc_layout::prelude::div;
+
+div()
+    .attr("tabindex", "0")
+    .on_click(|_| println!("activated"))
+```
+
+An element with a `disabled` attribute, or with no size, is skipped. The
+`:focus` selector matches the element that holds focus, so a rule draws the
+ring:
+
+```css
+.card:focus {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+```
+
+A text input marks itself `tabindex=text`: Tab focuses it as a press does and
+leaves it on the next Tab. A code or rich-text editor keeps Tab for its own
+use. The `cn` buttons, checkboxes, switches, toggles, radios, tabs, selects,
+menu triggers, accordion and collapsible triggers, links, sliders and text
+fields are tab stops already.
+
 ## Capturing State in Closures
 
 Event handlers are `Fn` closures. `State<T>` is cheap to `clone()`

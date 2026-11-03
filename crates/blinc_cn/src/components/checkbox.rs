@@ -108,6 +108,7 @@ impl Checkbox {
         // ladder.
         let mut inner = layout_checkbox::checkbox(config.checked)
             .class("cn-checkbox")
+            .class("tabindex=0")
             // Added and taken away with the state, so the stylesheet's
             // `.cn-checkbox--checked` rules follow it in place.
             .checked_class("cn-checkbox--checked")

@@ -205,6 +205,7 @@ impl CollapsibleTrigger {
         let (open, closed) = open_and_closed(is_open);
         let inner = div()
             .class("cn-collapsible-trigger")
+            .class("tabindex=0")
             .attr_when("data-state", "open", &open)
             .attr_when("data-state", "closed", &closed)
             .flex_row()

@@ -167,6 +167,7 @@ impl Toggle {
         // among them as attributes.
         let mut inner = layout_toggle::toggle(config.on)
             .class("cn-toggle")
+            .class("tabindex=0")
             .class(config.variant.css_class())
             .class(config.size.css_class())
             .variant(config.variant.data_value())

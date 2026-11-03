@@ -336,6 +336,7 @@ fn number_field(
         .border_width(0.0)
         .idle_bg_color(blinc_core::Color::TRANSPARENT)
         .class("cn-number-input-field")
+        .class("tabindex=text")
         .disabled(config.disabled.clone());
 
     // Keyboard stepping (↑ / ↓ / `+` / `−`): `+1` increments and `-1`

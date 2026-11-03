@@ -228,6 +228,7 @@ fn item_row(item: &SidebarItem, active_menu: Signal<Option<SidebarItem>>, font_s
     let chosen = item.clone();
     div()
         .class("cn-sidebar-item")
+        .class("tabindex=0")
         .attr_when("data-active", "", &active)
         .flex_row()
         .items_center()

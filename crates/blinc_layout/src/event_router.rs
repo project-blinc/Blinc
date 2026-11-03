@@ -148,6 +148,8 @@ pub struct EventRouter {
 
     /// Ancestors of the focused element (for BLUR bubbling)
     focused_ancestors: Vec<LayoutNodeId>,
+    /// Focus came from Tab traversal, not from a text input or a press.
+    keyboard_focus: bool,
 
     /// Callback for routing events to elements
     event_callback: Option<EventCallback>,
@@ -214,6 +216,7 @@ impl EventRouter {
             pressed_ancestors: Vec::new(),
             focused: None,
             focused_ancestors: Vec::new(),
+            keyboard_focus: false,
             event_callback: None,
             scroll_delta_x: 0.0,
             scroll_delta_y: 0.0,
@@ -491,6 +494,31 @@ impl EventRouter {
     /// in this list).
     pub fn focused_ancestors(&self) -> &[LayoutNodeId] {
         &self.focused_ancestors
+    }
+
+    /// Whether the focused element got focus from Tab traversal.
+    pub fn keyboard_focus(&self) -> bool {
+        self.keyboard_focus
+    }
+
+    /// Move focus to `node` as Tab traversal does.
+    pub fn focus_via_keyboard(&mut self, node: LayoutNodeId) {
+        self.set_focus(Some(node));
+        self.keyboard_focus = true;
+    }
+
+    /// Follow the focused text input (`None` when none is). Focus held by
+    /// Tab traversal stays while no text input has focus.
+    pub fn sync_text_focus(&mut self, text_focus: Option<LayoutNodeId>) {
+        if text_focus.is_none() && self.keyboard_focus && self.focused.is_some() {
+            return;
+        }
+        if text_focus.is_some() {
+            self.keyboard_focus = false;
+        }
+        if text_focus != self.focused {
+            self.set_focus(text_focus);
+        }
     }
 
     /// Set focus to an element (or None to clear focus)
@@ -989,6 +1017,11 @@ impl EventRouter {
             MouseButton::Other(_) => 5,
         };
         crate::event_handler::set_current_mouse_button(button_code);
+
+        if self.keyboard_focus {
+            self.keyboard_focus = false;
+            self.set_focus(None);
+        }
 
         // Initialize drag tracking
         self.drag_start_x = x;

@@ -414,6 +414,7 @@ fn build_sheet_content(
         header = header.child(
             div()
                 .class("cn-sheet-close")
+                .class("tabindex=0")
                 .w(32.0)
                 .h(32.0)
                 .items_center()

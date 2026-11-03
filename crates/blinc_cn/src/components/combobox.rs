@@ -248,6 +248,7 @@ impl Combobox {
         let disabled_for_click = disabled.clone();
         let trigger = div()
             .class("cn-combobox-trigger")
+            .class("tabindex=0")
             .attr_when("data-state", "open", open_state)
             .attr_when("disabled", "", disabled.clone())
             .attr_when("data-placeholder", "", &placeholder_shown)

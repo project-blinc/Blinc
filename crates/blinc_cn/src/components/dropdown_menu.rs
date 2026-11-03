@@ -330,6 +330,7 @@ impl DropdownMenuBuilder {
         } else if let Some(label) = trigger_label {
             div()
                 .class("cn-dropdown-trigger")
+                .class("tabindex=0")
                 .attr_when("data-state", "open", open_state)
                 .gap(8.0)
                 .flex_row()

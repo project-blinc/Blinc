@@ -191,7 +191,7 @@ impl Textarea {
         }
 
         // Add CSS class directly to the TextArea widget (it supports .class())
-        let mut ta = ta.class("cn-textarea");
+        let mut ta = ta.class("cn-textarea").class("tabindex=text");
         // An error marks the box `data-invalid` while it is non-empty.
         if let Some(ref error) = config.error {
             ta = ta.invalid(crate::reactive_props::non_empty(error));

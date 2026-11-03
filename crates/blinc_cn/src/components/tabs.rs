@@ -753,6 +753,7 @@ fn build_tab_trigger(
     let indicator_key = format!("cn-tabs-indicator-{trigger_key}");
     let mut trigger = div()
         .class("cn-tabs-trigger")
+        .class("tabindex=0")
         .class(trigger_size_class)
         .class_when("cn-tabs-trigger--active", &is_active)
         .relative()
