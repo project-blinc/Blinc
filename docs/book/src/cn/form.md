@@ -388,9 +388,11 @@ turn the month. Dragging or a two-finger swipe across the days moves the
 month with it; let go far enough and it turns (leftward for the next), or it
 springs back. Moving the pointer off the days cancels it. Scrolling up and down still moves the page;
 choosing a day of the month before or after turns to it.
-Once a day has been clicked, the arrows move by a day or a week, Page Up and
+Tab to the day grid, or click a day: the arrows move by a day or a week, Page Up and
 Page Down by a month, Home and End to the ends of the week, and Enter or Space
 choose.
+For a compact trigger that opens this calendar in a popover, use
+[Date Picker](pickers.md#date-picker).
 
 ### Events
 

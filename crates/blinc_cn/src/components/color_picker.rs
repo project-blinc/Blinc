@@ -15,8 +15,6 @@ use blinc_layout::div::{Div, ElementBuilder, ElementTypeId, div};
 use blinc_layout::element::RenderProps;
 use blinc_layout::text::Text;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
-use blinc_layout::widgets::overlay::AnchorDirection;
-use blinc_layout::widgets::overlay_stack::{OverlayBuilder, OverlayHandle};
 use blinc_layout::widgets::text_input::{refresh_text_input, text_input, text_input_data};
 
 use super::color_picker_controls::{Part, surface};
@@ -224,33 +222,12 @@ fn trigger(c: &Controller, instance: &str, user_id: Option<&str>) -> Div {
     let id = user_id
         .map(str::to_owned)
         .unwrap_or_else(|| format!("cn-color-picker-{instance}"));
-    let active = signal(None::<u64>);
-    let disabled = c.disabled.clone();
-    effect(move |g| {
-        if disabled.read(g).unwrap_or(false) {
-            if let Some(raw) = g.get(active).flatten() {
-                OverlayHandle::from_raw(raw).close();
-            }
-        }
-    });
-    let controller = c.clone();
-    let trigger_id = id.clone();
-    let key = instance.to_owned();
     let value = c.value;
     let alpha = c.alpha;
-    div()
+    let trigger = div()
         .class("cn-color-picker")
         .class("cn-color-picker-trigger")
-        .id(&id)
-        .attr("tabindex", "0")
-        .attr("role", "button")
         .attr("aria-label", "Choose colour")
-        .attr_when("disabled", "", c.disabled.clone())
-        .attr_when(
-            "data-state",
-            "open",
-            computed(move |g| g.get(active).flatten().is_some()),
-        )
         .flex_row()
         .items_center()
         .w_fit()
@@ -261,49 +238,16 @@ fn trigger(c: &Controller, instance: &str, user_id: Option<&str>) -> Div {
                     .into_reactive(),
             )
             .class("cn-color-picker-value"),
-        )
-        .on_click(move |event| {
-            if controller.disabled.now().unwrap_or(false) {
-                return;
-            }
-            if let Some(raw) = active.get() {
-                OverlayHandle::from_raw(raw).close();
-                return;
-            }
-            let panel_id = format!("{trigger_id}-panel");
-            let outside_key = format!("{trigger_id}-outside");
-            let cleanup = outside_key.clone();
-            let content_id = panel_id.clone();
-            let content_key = key.clone();
-            let content = controller.clone();
-            let handle = OverlayBuilder::popover()
-                .at(event.bounds_x, event.bounds_y + event.bounds_height + 4.0)
-                .size(256.0, if content.alpha { 320.0 } else { 272.0 })
-                .anchor_direction(AnchorDirection::Bottom)
-                .on_close(move |_| {
-                    active.set(None);
-                    blinc_layout::click_outside::unregister_click_outside(&cleanup);
-                })
-                .content(move || {
-                    panel(&content, &content_key)
-                        .class("cn-popover-content")
-                        .id(&content_id)
-                })
-                .show();
-            active.set(Some(handle.raw()));
-            blinc_layout::click_outside::register_click_outside_multi(
-                &outside_key,
-                &[trigger_id.clone(), panel_id],
-                move || {
-                    handle.close();
-                },
-            );
-        })
-        .on_unmount(move |_| {
-            if let Some(raw) = active.get() {
-                OverlayHandle::from_raw(raw).close();
-            }
-        })
+        );
+    let controller = c.clone();
+    let key = instance.to_owned();
+    super::picker_popover::picker_popover(
+        trigger,
+        id,
+        c.disabled.clone(),
+        (256.0, if c.alpha { 320.0 } else { 272.0 }),
+        move |_| panel(&controller, &key),
+    )
 }
 
 fn panel(c: &Controller, instance: &str) -> Div {
@@ -421,6 +365,7 @@ fn hex_field(c: &Controller) -> Div {
     let submit = data.clone();
     let input = text_input(&data)
         .class("cn-color-picker-hex")
+        .class("tabindex=text")
         .placeholder("#rrggbb")
         .disabled(c.disabled.clone())
         .max_length(9)

@@ -197,11 +197,26 @@ pub(super) fn surface(c: &Controller, instance: &str, part: Part) -> Div {
         .on_key_down({
             let c = c.clone();
             move |e| {
-                if focus.focused.get()
-                    && !c.disabled.now().unwrap_or(false)
-                    && part.key(&c, e.key_code, e.shift)
-                {
-                    focus.key();
+                let tabbed = blinc_layout::event_router::keyboard_focused_node();
+                let focused = match tabbed {
+                    Some(node) => node == e.node_id,
+                    None => {
+                        focus.focused.get()
+                            && !blinc_layout::widgets::text_input::has_focused_text_input()
+                            && blinc_layout::widgets::text_input::focused_editable_node_id()
+                                .is_none()
+                    }
+                };
+                if !focused {
+                    if tabbed.is_some() && focus.focused.get() {
+                        focus.focused.set(false);
+                    }
+                    return;
+                }
+                if !c.disabled.now().unwrap_or(false) && part.key(&c, e.key_code, e.shift) {
+                    if tabbed.is_none() {
+                        focus.key();
+                    }
                 }
             }
         })

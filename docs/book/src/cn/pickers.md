@@ -1,8 +1,61 @@
-# Time and Colour Pickers
+# Date, Time and Colour Pickers
 
-Both pickers read and write a supplied `Signal`. External writes update the
+The pickers read and write a supplied `Signal`. External writes update the
 existing fields; `on_change` runs only for changed user edits. Install
 `CN_STYLES` through `cn_bundle()` or your theme bundle before using them.
+
+## Date Picker
+
+`cn::calendar` is the inline date-selection component. `cn::date_picker` wraps
+that calendar in a popover and shows its selected date in a compact trigger.
+It uses the same `CalendarDay` and `Signal<Option<CalendarDay>>` model.
+
+```rust
+use blinc_cn::prelude::*;
+use blinc_core::reactive::signal;
+
+let selected = signal(None::<CalendarDay>);
+let disabled = signal(false);
+let placeholder = signal("Choose a date".to_owned());
+
+let picker = cn::date_picker(selected)
+    .placeholder(placeholder)
+    .disabled(disabled)
+    .week_start(1)
+    .format(|day| format!("{:02}/{:02}/{}", day.day, day.month, day.year))
+    .on_change(|date| tracing::info!(?date, "Date selected"));
+```
+
+The default format is `YYYY-MM-DD`. Picking a day writes `Some(day)` and closes
+the popup. The clear action writes `None`; `.clearable(false)` omits it, and
+`.clear_text(...)` accepts a string, Signal or Computed. External writes update
+the trigger and an open calendar without invoking `on_change`. Choosing the
+same date closes the popup without emitting another change. Disabling an open
+picker closes it and rejects edits.
+
+Tab reaches the trigger; Enter/Space opens it. The calendar retains its own
+month controls and keyboard navigation. Clicking outside dismisses the popup.
+`size(InputSize)`, `week_start`, `min_year`, `max_year`, `today` and `events`
+configure its presentation through the existing calendar API.
+
+| Class | Part |
+|---|---|
+| `.cn-date-picker-trigger` | Trigger; `data-size="sm|md|lg"`, `data-empty`, `data-state="open"`, `disabled`, `:focus` |
+| `.cn-date-picker-icon`, `.cn-date-picker-value` | Calendar icon and formatted date/placeholder |
+| `.cn-date-picker-content` | Detached popup; also has `.cn-popover-content` |
+| `.cn-date-picker-footer` | Clear-action row |
+| `.cn-date-picker-clear` | Clear button; `disabled`, `:hover`, `:focus` |
+
+The calendar keeps its documented `.cn-calendar-*` part classes. Override
+`--cn-date-picker-bg`, `--cn-date-picker-border` and `--cn-date-picker-radius`
+or target the part classes. `.class(...)` and `.id(...)` apply to the trigger;
+the popup lives in the overlay layer, outside the trigger's descendants.
+
+```css
+.booking-date { min-width: 220px; }
+.cn-date-picker-content { padding: 16px; }
+.cn-date-picker-clear { color: var(--primary); }
+```
 
 ## Time Picker
 
@@ -30,7 +83,8 @@ let caption = computed(move |g| {
 `second()` accessors, implements `Display` as `HH:MM:SS`, and carries no
 date or time zone. The default picker shows hours and minutes in 24-hour form.
 Hiding seconds preserves their stored value. Midnight is `12 AM`; noon is
-`12 PM`. Clicking the period toggles AM/PM.
+`12 PM`. Clicking the period toggles AM/PM. Tab moves between the fields and
+the period; Shift+Tab moves back. Enter/Space activates the focused period.
 
 Type up to two digits per field, or use Up/Down and the mouse wheel to step.
 Stepping wraps within that field without carrying into neighbouring fields.
@@ -50,7 +104,7 @@ exposes `data-size="sm|md|lg"`, `data-format="12|24"` and `disabled`.
 | `.cn-time-picker-segment--sm`, `--md`, `--lg` | Field size classes |
 | `.cn-time-picker-hour`, `.cn-time-picker-minute`, `.cn-time-picker-second` | Individual fields |
 | `.cn-time-picker-separator` | Colon |
-| `.cn-time-picker-period` | AM/PM button; `:focus-visible`, `:disabled` |
+| `.cn-time-picker-period` | AM/PM button; `:focus`, `:disabled` |
 
 Override `--cn-time-picker-bg`, `--cn-time-picker-border`,
 `--cn-time-picker-radius` and `--cn-time-picker-field-hover`, or write rules:
@@ -90,6 +144,10 @@ Arrow keys adjust saturation/brightness by 1%, hue by 1 degree, or opacity
 by 1%; Shift increases the step to 10. Home/End select the endpoints of a
 strip, or the saturation endpoints in the two-dimensional field.
 The hue and saturation selection survives moving through grey or black.
+Tab moves between the coordinate fields, hex editor and presets. Arrow keys
+act only on the current field; navigating inside the hex editor leaves the
+selected colour unchanged. Enter/Space opens the focused swatch trigger or
+selects a focused preset.
 
 Hex entry is a draft until **Enter**. It accepts `#RGB`, `#RGBA`, `#RRGGBB`
 and `#RRGGBBAA`, with an optional `#`. Invalid input keeps the selected colour
@@ -109,7 +167,7 @@ chrome, focus, disabled appearance and motion follow CSS rules and theme tokens.
 
 | Class | Part |
 |---|---|
-| `.cn-color-picker-trigger` | Swatch trigger; `data-state="open"`, `:focus-visible`, `:disabled` |
+| `.cn-color-picker-trigger` | Swatch trigger; `data-state="open"`, `:focus`, `:disabled` |
 | `.cn-color-picker-panel` | Inline or detached popup panel; `disabled` |
 | `.cn-color-picker-swatch`, `.cn-color-picker-value` | Preview swatch and trigger hex label |
 | `.cn-color-picker-sv` | Saturation/brightness field |
@@ -150,10 +208,6 @@ Run the native example with
 `cargo run -p blinc_app_examples --features cn --example cn_pickers_demo`.
 The **Colour Picker** section in `cn_demo` also shows linked inline and popover
 editors, a bound disabled switch and a reactive palette with a save button.
-
-## Calendar and Date Picker composition
-
-`cn::calendar(selected)` already reads and writes a
-`Signal<Option<CalendarDay>>` and accepts `on_change`. A date picker can reuse
-this selection model inside a popover with a formatted trigger, rather than
-introducing another calendar implementation. See [Data Display](data-display.md#calendar).
+Its **Time Picker** section shows linked 12/24-hour editors and sizes, and its
+**Date Picker** section shows default and custom-formatted calendar popovers.
+The inline calendar is documented in [Form Components](form.md#calendar).

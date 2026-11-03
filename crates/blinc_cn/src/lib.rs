@@ -71,6 +71,7 @@ pub mod cn {
     pub use crate::components::color_picker::color_picker;
     pub use crate::components::combobox::combobox;
     pub use crate::components::context_menu::context_menu;
+    pub use crate::components::date_picker::date_picker;
     pub use crate::components::dialog::{alert_dialog, dialog};
     pub use crate::components::drawer::{drawer, drawer_left, drawer_right};
     pub use crate::components::dropdown_menu::{dropdown_menu, dropdown_menu_custom};
@@ -134,6 +135,7 @@ pub mod cn {
 pub mod prelude {
     pub use crate::cn;
     pub use crate::components::color_picker::{ColorPickerBuilder, color_picker};
+    pub use crate::components::date_picker::{DatePickerBuilder, date_picker};
     pub use crate::components::time_picker::{
         TimeFormat, TimeOfDay, TimePickerBuilder, time_picker,
     };

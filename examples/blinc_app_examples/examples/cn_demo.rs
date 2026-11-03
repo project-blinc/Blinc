@@ -116,10 +116,12 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                         .child(toggles_section(ctx))
                         .child(slider_section(ctx))
                         .child(picker_examples::color_picker_section(ctx))
+                        .child(picker_examples::time_picker_section(ctx))
                         .child(gauges_section(ctx))
                         .child(radio_section(ctx))
                         .child(select_section(ctx))
                         .child(calendar_section(ctx))
+                        .child(picker_examples::date_picker_section(ctx))
                         .child(combobox_section(ctx))
                         .child(context_menu_section())
                         .child(dropdown_menu_section())
@@ -252,9 +254,91 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
 mod picker_examples {
     use super::{section_container, section_title};
     use blinc_app::windowed::WindowedContext;
-    use blinc_cn::{LabelSize, cn};
+    use blinc_cn::{CalendarDay, InputSize, LabelSize, TimeFormat, TimeOfDay, cn};
     use blinc_core::{Color, reactive::computed};
     use blinc_layout::div::{ElementBuilder, div};
+
+    pub(super) fn time_picker_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
+        let time = ctx.use_signal(TimeOfDay::new(14, 30, 15).unwrap());
+        let disabled = ctx.use_signal(false);
+        let shown = computed(move |g| format!("Selected: {}", g.get(time).unwrap_or_default()));
+        section_container()
+            .id("time-picker-examples")
+            .child(section_title("Time Picker"))
+            .child(
+                div()
+                    .flex_row()
+                    .flex_wrap()
+                    .items_start()
+                    .gap_px(24.0)
+                    .child(
+                        div()
+                            .flex_col()
+                            .gap_px(8.0)
+                            .child(cn::label("24-hour with seconds"))
+                            .child(cn::time_picker(time).seconds(true).disabled(disabled)),
+                    )
+                    .child(
+                        div()
+                            .flex_col()
+                            .gap_px(8.0)
+                            .child(cn::label("12-hour, five-minute steps"))
+                            .child(
+                                cn::time_picker(time)
+                                    .format(TimeFormat::TwelveHour)
+                                    .minute_step(5)
+                                    .disabled(disabled),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex_col()
+                            .gap_px(8.0)
+                            .child(cn::label("Small"))
+                            .child(
+                                cn::time_picker(time)
+                                    .size(InputSize::Small)
+                                    .disabled(disabled),
+                            ),
+                    ),
+            )
+            .child(cn::label(shown).size(LabelSize::Small))
+            .child(cn::switch(disabled).label("Disable time fields"))
+    }
+
+    pub(super) fn date_picker_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
+        let date = ctx.use_signal(None::<CalendarDay>);
+        let disabled = ctx.use_signal(false);
+        let shown = computed(move |g| match g.get(date).flatten() {
+            Some(day) => format!("Selected: {:04}-{:02}-{:02}", day.year, day.month, day.day),
+            None => "No date selected".to_owned(),
+        });
+        section_container()
+            .id("date-picker-examples")
+            .child(section_title("Date Picker"))
+            .child(cn::label("Calendar selection in a popover.").size(LabelSize::Small))
+            .child(
+                div()
+                    .flex_row()
+                    .flex_wrap()
+                    .items_start()
+                    .gap_px(24.0)
+                    .child(
+                        cn::date_picker(date)
+                            .placeholder("Choose a date")
+                            .disabled(disabled),
+                    )
+                    .child(
+                        cn::date_picker(date)
+                            .week_start(1)
+                            .size(InputSize::Small)
+                            .format(|day| format!("{:02}/{:02}/{}", day.day, day.month, day.year))
+                            .disabled(disabled),
+                    ),
+            )
+            .child(cn::label(shown).size(LabelSize::Small))
+            .child(cn::switch(disabled).label("Disable date pickers"))
+    }
 
     pub(super) fn color_picker_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
         let color = ctx.use_signal(Color::from_hex(0x6366f1));

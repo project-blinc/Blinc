@@ -335,6 +335,7 @@ fn segment(c: &Config, part: Segment) -> Div {
         .max_length(2)
         .text_align(blinc_core::TextAlign::Center)
         .class("cn-time-picker-segment")
+        .class("tabindex=text")
         .class(match c.size {
             InputSize::Small => "cn-time-picker-segment--sm",
             InputSize::Medium => "cn-time-picker-segment--md",

@@ -349,14 +349,35 @@ impl CalendarBuilder {
         let months = swipeable(months, parts.glide, Arc::clone(&parts.swiped));
 
         let keys = parts.clone();
+        let choose = parts.clone();
         let body = div()
             .class("cn-calendar-body")
+            .attr("tabindex", "0")
+            .attr("role", "grid")
             .flex_col()
             .child(weekdays)
             .child(months)
             .on_key_down(move |ctx| {
-                if keys.focus.focused.get() && keys.key(ctx.key_code) {
+                let tabbed = blinc_layout::event_router::keyboard_focused_node();
+                let focused = match tabbed {
+                    Some(node) => node == ctx.node_id,
+                    None => {
+                        keys.focus.focused.get()
+                            && !blinc_layout::widgets::text_input::has_focused_text_input()
+                    }
+                };
+                if focused && keys.key(ctx.key_code) {
+                    if tabbed.is_some() && !keys.focus.focused.get() {
+                        keys.focus.press();
+                    }
                     keys.focus.key();
+                }
+            })
+            .on_click(move |ctx| {
+                if blinc_layout::event_router::keyboard_focused_node() == Some(ctx.node_id) {
+                    if let Some(day) = choose.cursor.try_get() {
+                        choose.choose(day);
+                    }
                 }
             });
 

@@ -125,7 +125,7 @@ Components include keyboard navigation and proper semantics:
 | **Buttons** | Button |
 | **Cards** | Card, CardHeader, CardContent, CardFooter |
 | **Dialogs** | Dialog, AlertDialog, Sheet, Drawer |
-| **Forms** | Input, Textarea, Checkbox, Switch, Radio, Select, Slider, [Time Picker, Colour Picker](pickers.md) |
+| **Forms** | Input, Textarea, Checkbox, Switch, Radio, Select, Slider, [Date Picker, Time Picker, Colour Picker](pickers.md) |
 | **Navigation** | Tabs, DropdownMenu, ContextMenu, Breadcrumb, Sidebar |
 | **Feedback** | Alert, Badge, Progress, Spinner, Skeleton, Toast |
 | **Layout** | Avatar, Separator, AspectRatio, ScrollArea, Accordion |
