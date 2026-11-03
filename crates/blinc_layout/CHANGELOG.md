@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- `Div::on_unmount` and `Stateful::on_unmount` handlers run. They were registered but nothing sent them the event in a running app. A node a rebuild, a region or an incremental update removes now runs its unmount handlers once, with its stable id and no live node, after the registry has dropped it; a node built again under the same stable id is a survivor and does not.
 - An incremental update sees a change of class. Classes were in no diff hash, so an element whose only change was a class was reported unchanged: its classes stayed registered as they were and the stylesheet kept applying the old rules. A change of class now counts as a change, and is treated as one that may change layout, since the rules it selects can.
 - `AmbientPaintState::in_overlay_subtree` records whether a dynamic region sits inside an overlay subtree, so the compositor can order promoted layers around overlay content.
 - CSS colours follow CSS. `rgb()` and `rgba()` components are 0 to 255: any component at or under 1 was read as a fraction, so `rgb(1, 1, 1)` came out white. Named colours take their CSS values (`orange` is `#ffa500`, `purple` `#800080`, `gray` `#808080`; they were the `Color` constants), and all 148 are known, with `rebeccapurple`. `blinc_css` also reads `hsl()` and `hsla()`, the space form of `rgb()` and `hsl()` with `/ alpha`, percentage components, and 4-digit hex (`#f00a`). Fractional components such as `rgb(0.2, 0.4, 0.9)` are 0 to 255 now, like any other.

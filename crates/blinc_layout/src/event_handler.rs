@@ -475,6 +475,10 @@ pub struct HandlerRegistry {
     /// rebuilds as long as the element's source location +
     /// tree position (and any `.id(...)` widget key) stay the same.
     nodes: HashMap<crate::tree::StableNodeId, EventHandlers>,
+    /// Handlers with an unmount handler, taken out by [`Self::remove`] while a subtree is torn
+    /// down. A node of the same stable id may be built again by the same pass, which makes it a
+    /// survivor; [`Self::take_unmounted`] settles which, once the pass has re-minted its ids.
+    removed: HashMap<crate::tree::StableNodeId, EventHandlers>,
     /// Cached `has_any_pointer_move_subscriber()` result. Invalidated
     /// (set to `None`) on every mutation; recomputed on first read.
     /// Mouse-move events fire at hundreds of Hz; without the cache
@@ -530,13 +534,18 @@ impl HandlerRegistry {
     /// when a node is genuinely removed from the tree (not on
     /// rebuild — rebuilt nodes preserve their stable id).
     pub fn remove(&mut self, stable: crate::tree::StableNodeId) {
-        self.nodes.remove(&stable);
+        if let Some(handlers) = self.nodes.remove(&stable)
+            && handlers.get(event_types::UNMOUNT).is_some()
+        {
+            self.removed.insert(stable, handlers);
+        }
         self.cached_has_move_subscriber.set(None);
     }
 
     /// Clear all handlers
     pub fn clear(&mut self) {
         self.nodes.clear();
+        self.removed.clear();
         self.cached_has_move_subscriber.set(None);
     }
 
@@ -547,6 +556,36 @@ impl HandlerRegistry {
     pub fn retain<F: Fn(crate::tree::StableNodeId) -> bool>(&mut self, keep: F) {
         self.nodes.retain(|stable, _| keep(*stable));
         self.cached_has_move_subscriber.set(None);
+    }
+
+    /// Drop the entries `keep` rejects, like [`Self::retain`], and hand back those that had an
+    /// unmount handler, so the caller can tell them they were removed. Handlers taken out by
+    /// [`Self::remove`] count too, unless `keep` accepts their id: that node was built again.
+    pub fn take_unmounted<F: Fn(crate::tree::StableNodeId) -> bool>(
+        &mut self,
+        keep: F,
+    ) -> Vec<(crate::tree::StableNodeId, EventHandlers)> {
+        let stale: Vec<crate::tree::StableNodeId> = self
+            .nodes
+            .keys()
+            .copied()
+            .filter(|stable| !keep(*stable))
+            .collect();
+        let mut unmounted = Vec::new();
+        for stable in stale {
+            if let Some(handlers) = self.nodes.remove(&stable)
+                && handlers.get(event_types::UNMOUNT).is_some()
+            {
+                unmounted.push((stable, handlers));
+            }
+        }
+        for (stable, handlers) in std::mem::take(&mut self.removed) {
+            if !keep(stable) {
+                unmounted.push((stable, handlers));
+            }
+        }
+        self.cached_has_move_subscriber.set(None);
+        unmounted
     }
 
     /// Check whether any node has a pointer-related handler registered.

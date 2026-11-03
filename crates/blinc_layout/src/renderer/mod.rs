@@ -1485,8 +1485,19 @@ impl RenderTree {
     pub(crate) fn sweep_stale_handlers(&mut self) {
         let valid: std::collections::HashSet<crate::tree::StableNodeId> =
             self.stable_to_layout.keys().copied().collect();
-        self.handler_registry
-            .retain(|stable| valid.contains(&stable));
+        // A node that did not survive the build is unmounted: its `on_unmount` handlers run,
+        // after the registry no longer holds it. They get its stable id and no live node.
+        let unmounted = self
+            .handler_registry
+            .take_unmounted(|stable| valid.contains(&stable));
+        for (stable, handlers) in unmounted {
+            let mut ctx = crate::event_handler::EventContext::new(
+                blinc_core::events::event_types::UNMOUNT,
+                crate::tree::LayoutNodeId::default(),
+            );
+            ctx.stable_id = stable;
+            handlers.dispatch(&ctx);
+        }
     }
 
     /// Drop CSS animation and transition entries whose stable id no
@@ -3632,6 +3643,49 @@ mod tests {
                 .get("row--active"),
             None
         );
+    }
+
+    #[test]
+    fn a_removed_node_runs_its_unmount_handler_and_a_survivor_does_not() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let alice_gone = Arc::new(AtomicUsize::new(0));
+        let bob_gone = Arc::new(AtomicUsize::new(0));
+        let nested_gone = Arc::new(AtomicUsize::new(0));
+        let counter = |n: &Arc<AtomicUsize>| {
+            let n = Arc::clone(n);
+            move |_: &crate::event_handler::EventContext| {
+                n.fetch_add(1, Ordering::SeqCst);
+            }
+        };
+        let build = |with_alice: bool| {
+            let mut host = div();
+            if with_alice {
+                host = host.child(
+                    div()
+                        .id("alice")
+                        .on_unmount(counter(&alice_gone))
+                        .child(div().id("nested").on_unmount(counter(&nested_gone))),
+                );
+            }
+            host.child(div().id("bob").on_unmount(counter(&bob_gone)))
+        };
+
+        let mut tree = RenderTree::from_element(&build(true));
+        tree.incremental_update(&build(true));
+        assert_eq!(alice_gone.load(Ordering::SeqCst), 0, "nothing was removed");
+
+        tree.incremental_update(&build(false));
+        assert_eq!(alice_gone.load(Ordering::SeqCst), 1, "the removed node");
+        assert_eq!(nested_gone.load(Ordering::SeqCst), 1, "and its descendant");
+        assert_eq!(
+            bob_gone.load(Ordering::SeqCst),
+            0,
+            "the survivor stays mounted"
+        );
+
+        // Once, not on every later update.
+        tree.incremental_update(&build(false));
+        assert_eq!(alice_gone.load(Ordering::SeqCst), 1);
     }
 
     #[test]

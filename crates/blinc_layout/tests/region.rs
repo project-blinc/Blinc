@@ -376,3 +376,40 @@ fn a_list_can_come_from_a_state_a_computed_or_a_plain_vec() {
     ));
     assert_eq!(heights(&tree, root), vec![50.0, 60.0]);
 }
+
+#[test]
+fn a_row_that_goes_runs_its_unmount_handler_and_the_ones_that_stay_do_not() {
+    let _g = serial();
+    let unmounted = Arc::new(Mutex::new(Vec::<u32>::new()));
+    let log = Arc::clone(&unmounted);
+    let items = signal(vec![1_u32, 2, 3]);
+    let ui = div().w(200.0).flex_col().for_each(
+        items,
+        |item| *item,
+        move |item| {
+            let log = Arc::clone(&log);
+            let id = item;
+            row(&item).on_unmount(move |_| log.lock().unwrap().push(id))
+        },
+    );
+    let (mut tree, _root) = mount(&ui);
+    assert!(unmounted.lock().unwrap().is_empty());
+
+    items.set(vec![1, 3]);
+    frame(&mut tree);
+    assert_eq!(*unmounted.lock().unwrap(), vec![2], "row 2 went");
+
+    items.set(vec![3, 1, 4]);
+    frame(&mut tree);
+    assert_eq!(
+        *unmounted.lock().unwrap(),
+        vec![2],
+        "reordering and adding unmount nothing"
+    );
+
+    items.set(vec![]);
+    frame(&mut tree);
+    let mut gone = unmounted.lock().unwrap().clone();
+    gone.sort();
+    assert_eq!(gone, vec![1, 2, 3, 4]);
+}
