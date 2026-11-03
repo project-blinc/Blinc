@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1790966815,"nonce":"K9+/G4jUO6cEnuFOL1uTj/GVbzw=","added":["debt","area:gpu"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1793715476,"nonce":"j/Iy2e4V6PfAtrHGzco5RlANz/k=","message":"Moved to the Ruffle editor repository (ruffle-space/ruffle-app, apps/editor, issue 0500691), owner decision 2026-11-03. Blinc engine gaps it turns up are filed here separately.","files":null}]}
