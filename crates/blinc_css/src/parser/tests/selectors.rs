@@ -316,3 +316,26 @@ fn test_comma_separated_three_selectors() {
 // =========================================================================
 // Conversion Method Tests
 // =========================================================================
+
+#[test]
+fn focus_visible_has_id_lookup_and_cascade_specificity() {
+    let sheet = Stylesheet::parse("#button:focus-visible { opacity: 0.5; }").unwrap();
+    assert_eq!(
+        sheet
+            .get_with_state("button", ElementState::FocusVisible)
+            .unwrap()
+            .opacity,
+        Some(0.5)
+    );
+    assert!(sheet.complex_rules().iter().any(|(selector, _)| {
+        selector.segments[0]
+            .0
+            .parts
+            .contains(&SelectorPart::State(ElementState::FocusVisible))
+    }));
+    assert_eq!(
+        ElementState::parse_state("focus-visible"),
+        Some(ElementState::FocusVisible)
+    );
+    assert_eq!(ElementState::FocusVisible.to_string(), "focus-visible");
+}

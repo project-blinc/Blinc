@@ -488,6 +488,12 @@ where
             let rule = if selector.is_simple() {
                 let compound = &selector.segments[0].0;
                 if let Some(simple_key) = try_as_simple_selector(compound) {
+                    if compound
+                        .parts
+                        .contains(&SelectorPart::State(ElementState::FocusVisible))
+                    {
+                        rules.push(ParsedRule::Complex(selector.clone(), style.clone()));
+                    }
                     ParsedRule::Simple(simple_key, style.clone())
                 } else {
                     ParsedRule::Complex(selector, style.clone())

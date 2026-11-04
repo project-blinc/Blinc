@@ -3,9 +3,12 @@
 //! An element is a tab stop when it carries the `tabindex=0` attribute (or
 //! `tabindex=text`, for a text input, which Tab focuses by clicking it) and
 //! is neither `disabled` nor empty. Tab and Shift+Tab move focus through
-//! the stops in tree order, wrapping at the ends; Enter and Space on a stop
-//! focused that way click it. Tab leaves a text input or area; a code or
+//! the stops in tree order, wrapping at the ends; Enter and Space click the
+//! focused control. Tab leaves a text input or area; a code or
 //! rich-text editor keeps it.
+
+mod focus_scope;
+mod roving;
 
 use blinc_core::events::event_types;
 
@@ -20,14 +23,12 @@ pub const KEY_SPACE: u32 = 32;
 
 impl RenderTree {
     fn is_tab_stop(&self, node: LayoutNodeId) -> bool {
-        let registry = self.element_registry();
         matches!(
-            registry.attribute(node, "tabindex").as_deref(),
+            self.element_registry()
+                .attribute(node, "tabindex")
+                .as_deref(),
             Some("0" | "text")
-        ) && registry.attribute(node, "disabled").is_none()
-            && self
-                .get_absolute_bounds(node)
-                .is_some_and(|b| b.width > 0.0 && b.height > 0.0)
+        ) && self.is_focusable(node)
     }
 
     /// The tab stops in tree order.
@@ -77,26 +78,11 @@ impl RenderTree {
             }
             stack.extend(self.layout_tree.children(node).into_iter().rev());
         }
-        // While an overlay holds tab stops (a dialog, a sheet), Tab stays in it.
-        let layers: Vec<LayoutNodeId> = [
-            crate::widgets::overlay::OVERLAY_LAYER_ID,
-            crate::widgets::overlay_stack::OVERLAY_STACK_LAYER_ID,
-        ]
-        .into_iter()
-        .filter_map(|id| self.query_by_id(id))
-        .collect();
-        if !layers.is_empty() {
-            let inside = |n: LayoutNodeId| {
-                self.layout_tree
-                    .ancestors(n)
-                    .iter()
-                    .any(|a| layers.contains(a))
-            };
-            let kept: Vec<LayoutNodeId> = stops.iter().copied().filter(|n| inside(*n)).collect();
-            if !kept.is_empty() {
-                before = stops[..before].iter().filter(|n| inside(**n)).count();
-                stops = kept;
-            }
+        if let Some((_, scope)) = self.active_focus_scopes().last() {
+            let inside =
+                |n: LayoutNodeId| n == *scope || self.layout_tree.ancestors(n).contains(scope);
+            before = stops[..before].iter().filter(|n| inside(**n)).count();
+            stops.retain(|n| inside(*n));
         }
         (stops, before)
     }
@@ -203,6 +189,12 @@ impl RenderTree {
             blur_all_text_inputs, focused_editable_node_id, focused_text_area_node_id,
             focused_text_input_node_id,
         };
+        self.sync_keyboard_focus(router);
+        router.note_keyboard(key_code);
+        if key_code == 27 && self.dismiss_focus_scope(router) {
+            return true;
+        }
+        router.focus_stable = router.focused().and_then(|n| self.stable_id(n));
         let editable = focused_editable_node_id();
         let typed = focused_text_input_node_id().or_else(focused_text_area_node_id);
         let in_text = editable.is_some() || typed.is_some();
@@ -211,12 +203,17 @@ impl RenderTree {
         if in_text && !(key_code == KEY_TAB && leavable) {
             return false;
         }
+        if self.handle_roving_key(router, key_code, shift) {
+            return true;
+        }
         match key_code {
             KEY_TAB => {
-                let focused = typed.or(router.focused());
+                let focused = typed
+                    .or(router.focused())
+                    .map(|n| self.roving_group(n).unwrap_or(n));
                 let (stops, before) = self.tab_walk(focused);
                 if stops.is_empty() {
-                    return false;
+                    return !self.active_focus_scopes().is_empty();
                 }
                 let len = stops.len();
                 let on_stop = focused.is_some_and(|f| stops.contains(&f));
@@ -241,26 +238,17 @@ impl RenderTree {
                     before % len
                 };
                 let target = stops[next];
-                if in_text {
-                    blur_all_text_inputs();
-                }
-                self.scroll_into_view(target);
-                router.focus_via_keyboard(target);
-                if self
-                    .element_registry()
-                    .attribute(target, "tabindex")
-                    .as_deref()
-                    == Some("text")
-                {
-                    // A text input takes focus the way a press gives it.
-                    self.click_node(target);
-                }
+                let target = self.roving_items(target).first().copied().unwrap_or(target);
+                self.move_focus(router, target);
                 true
             }
             KEY_ENTER | KEY_SPACE if router.keyboard_focus() => {
                 let Some(node) = router.focused() else {
                     return false;
                 };
+                if !self.is_focusable(node) {
+                    return false;
+                }
                 self.click_node(node);
                 true
             }

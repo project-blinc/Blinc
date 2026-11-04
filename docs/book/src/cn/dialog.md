@@ -176,6 +176,12 @@ button("Open navigation").on_click(|_| {
 `Wide`. Use a bottom sheet for a panel entering from below. `.header(|| ...)`
 replaces the title header. Each `.child(|| ...)` adds a body section.
 
+When opened with the keyboard, a dialog focuses its first enabled control.
+Tab and Shift+Tab stay inside the topmost dialog or nested popup. Closing
+restores focus to the opening control if it still exists and is enabled.
+Pointer focus uses the same target without a keyboard outline; keyboard
+navigation uses the shared `:focus-visible` rules.
+
 ## Styling and Motion
 
 The panel classes are `.cn-dialog`, `.cn-sheet` and `.cn-drawer`. Dialog text

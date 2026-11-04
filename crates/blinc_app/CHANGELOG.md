@@ -4,6 +4,9 @@ All notable changes to `blinc_app` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Desktop and web runners reconcile overlay focus before styling and share navigation handling. Web consumes navigation keys without browser defaults or duplicate text input; desktop maps Shift+F10 for context menus.
+
 ## [0.6.0] - 2026-11-03
 
 ### Changed

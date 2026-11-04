@@ -107,7 +107,7 @@ impl StateStyleTable {
     /// elements (id → stable node id).
     ///
     /// Walks each registered element, looks up the cascade for base +
-    /// all five `ElementState` variants, stores hits.
+    /// all `ElementState` variants, stores hits.
     ///
     /// This is the foundation pass — id-based rules only. Class-based
     /// rules (`.cn-button:hover { ... }`) flow through the separate
@@ -123,6 +123,7 @@ impl StateStyleTable {
             ElementState::Hover,
             ElementState::Active,
             ElementState::Focus,
+            ElementState::FocusVisible,
             ElementState::Disabled,
             ElementState::Checked,
         ];

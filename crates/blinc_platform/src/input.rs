@@ -239,6 +239,7 @@ pub enum Key {
     Space,
     Enter,
     Escape,
+    ContextMenu,
     Backspace,
     Tab,
     Delete,

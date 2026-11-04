@@ -40,11 +40,11 @@ configure its presentation through the existing calendar API.
 
 | Class | Part |
 |---|---|
-| `.cn-date-picker-trigger` | Trigger; `data-size="sm|md|lg"`, `data-empty`, `data-state="open"`, `disabled`, `:focus` |
+| `.cn-date-picker-trigger` | Trigger; `data-size="sm|md|lg"`, `data-empty`, `data-state="open"`, `disabled`, `:focus-visible` |
 | `.cn-date-picker-icon`, `.cn-date-picker-value` | Calendar icon and formatted date/placeholder |
 | `.cn-date-picker-content` | Detached popup; also has `.cn-popover-content` |
 | `.cn-date-picker-footer` | Clear-action row |
-| `.cn-date-picker-clear` | Clear button; `disabled`, `:hover`, `:focus` |
+| `.cn-date-picker-clear` | Clear button; `disabled`, `:hover`, `:focus-visible` |
 
 The calendar keeps its documented `.cn-calendar-*` part classes. Override
 `--cn-date-picker-bg`, `--cn-date-picker-border` and `--cn-date-picker-radius`
@@ -129,17 +129,17 @@ being edited. Selection highlighting clears when a field loses focus.
 | `.cn-time-picker-segment--sm`, `--md`, `--lg` | Field size classes |
 | `.cn-time-picker-hour`, `.cn-time-picker-minute`, `.cn-time-picker-second` | Individual fields |
 | `.cn-time-picker-separator` | Colon |
-| `.cn-time-picker-period` | AM/PM button; `:focus`, `:disabled` |
-| `.cn-time-picker-clock` | Wheel popup trigger; `data-state="open"`, `:focus`, `:disabled` |
+| `.cn-time-picker-period` | AM/PM button; `:focus-visible`, `:disabled` |
+| `.cn-time-picker-clock` | Wheel popup trigger; `data-state="open"`, `:focus-visible`, `:disabled` |
 | `.cn-time-picker-wheel` | Detached popup; `data-format="12|24"`, `data-seconds` |
 | `.cn-time-picker-wheel-header`, `.cn-time-picker-wheel-title` | Heading |
 | `.cn-time-picker-wheels` | Five-row numeric viewport |
 | `.cn-time-picker-wheel-selection` | Shared selected-row border and fill |
-| `.cn-time-picker-wheel-column` | Native scroll, drag and keyboard target; `:focus`, `overflow-fade`, `scrollbar-width: none` |
+| `.cn-time-picker-wheel-column` | Native scroll, drag and keyboard target; `:focus-visible`, `overflow-fade`, `scrollbar-width: none` |
 | `.cn-time-picker-wheel-hour`, `.cn-time-picker-wheel-minute`, `.cn-time-picker-wheel-second` | Individual columns |
 | `.cn-time-picker-wheel-list`, `.cn-time-picker-wheel-option` | Scrollable number list and static value rows |
 | `.cn-time-picker-wheel-separator` | Colon between columns |
-| `.cn-time-picker-wheel-period`, `.cn-time-picker-wheel-period-option` | Separate period control; options expose `data-selected`, `:focus` |
+| `.cn-time-picker-wheel-period`, `.cn-time-picker-wheel-period-option` | Separate period control; options expose `data-selected`, `:focus-visible` |
 | `.cn-time-picker-wheel-am`, `.cn-time-picker-wheel-pm` | Individual period choices |
 | `.cn-time-picker-wheel-footer`, `.cn-time-picker-wheel-cancel`, `.cn-time-picker-wheel-save` | Footer and actions |
 
@@ -222,7 +222,7 @@ chrome, focus, disabled appearance and motion follow CSS rules and theme tokens.
 
 | Class | Part |
 |---|---|
-| `.cn-color-picker-trigger` | Swatch trigger; `data-state="open"`, `:focus`, `:disabled` |
+| `.cn-color-picker-trigger` | Swatch trigger; `data-state="open"`, `:focus-visible`, `:disabled` |
 | `.cn-color-picker-panel` | Inline or detached popup panel; `disabled` |
 | `.cn-color-picker-swatch`, `.cn-color-picker-value` | Preview swatch and trigger hex label |
 | `.cn-color-picker-sv` | Saturation/brightness field |

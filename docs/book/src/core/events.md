@@ -247,7 +247,8 @@ fn hover_card() -> impl ElementBuilder {
 Tab and Shift+Tab move focus through the controls that mark themselves as tab
 stops, in tree order, wrapping at the ends. The page scrolls to show the
 control that takes focus. Enter and Space click the focused control. A press
-anywhere clears focus set by Tab.
+focuses the nearest enabled focusable control and hides its keyboard ring;
+pressing a navigation key reveals the ring again.
 
 When nothing is focused, Tab starts at the first visible control and
 Shift+Tab at the last. Scrolling the focused control offscreen makes the
@@ -264,12 +265,12 @@ div()
     .on_click(|_| println!("activated"))
 ```
 
-An element with a `disabled` attribute, or with no size, is skipped. The
-`:focus` selector matches the element that holds focus, so a rule draws the
-ring:
+An element with a `disabled` ancestor, or with no size, is skipped.
+`:focus` matches either pointer or keyboard focus. Use `:focus-visible` for
+a ring that follows keyboard input:
 
 ```css
-.card:focus {
+.card:focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
 }
@@ -280,6 +281,18 @@ leaves it on the next Tab. A code or rich-text editor keeps Tab for its own
 use. The `cn` buttons, checkboxes, switches, toggles, radios, tabs, selects,
 menu triggers, accordion and collapsible triggers, links, sliders and text
 fields are tab stops already.
+
+Overlay focus scopes nest: Tab stays inside the topmost active popup or
+modal. Closing it restores focus to its trigger by stable identity, including
+when a subtree was rebuilt. An outside click on another control keeps focus
+on that control. Disabled or removed triggers are not focused. Exiting
+popups release focus before their exit animation finishes.
+
+Menus use one Tab stop per panel or menubar. Their rows carry
+`role=menuitem` and `tabindex=-1`; arrows move actual focus between enabled
+rows. Menu Tab closes the menu and continues from its trigger. A custom
+roving group can use `role=menu` (vertical) or `role=menubar` (horizontal),
+with `tabindex=0` on its container and `tabindex=-1` on its menu items.
 
 ## Capturing State in Closures
 

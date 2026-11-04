@@ -4582,7 +4582,9 @@ impl Div {
     where
         F: Fn(&crate::event_handler::EventContext) + 'static,
     {
-        self.on_right_click(handler)
+        self.attr("data-context-menu", "true")
+            .class("tabindex=0")
+            .on_right_click(handler)
     }
 
     /// Register a hover enter handler

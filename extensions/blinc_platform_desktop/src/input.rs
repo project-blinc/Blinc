@@ -45,6 +45,7 @@ pub fn convert_key(key: &WinitKey) -> Key {
             NamedKey::Space => Key::Space,
             NamedKey::Enter => Key::Enter,
             NamedKey::Escape => Key::Escape,
+            NamedKey::ContextMenu => Key::ContextMenu,
             NamedKey::Backspace => Key::Backspace,
             NamedKey::Tab => Key::Tab,
             NamedKey::Delete => Key::Delete,

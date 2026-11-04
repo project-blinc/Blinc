@@ -384,6 +384,7 @@ impl Stylesheet {
             ElementState::Hover,
             ElementState::Active,
             ElementState::Focus,
+            ElementState::FocusVisible,
             ElementState::Disabled,
             ElementState::Checked,
         ] {

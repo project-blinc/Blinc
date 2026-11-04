@@ -63,17 +63,23 @@ bindings. `dropdown_menu_custom(|open| div()...)` supplies a custom trigger.
 `.min_width(..)`, `.position(..)`, `.align(..)` and `.offset(..)` place the menu.
 
 While the menu is open, Up and Down wrap through enabled rows, Home and End
-jump to the first and last, and Enter or Space activates the active row.
-Submenus receive the keys while open. The active row carries
-`cn-dropdown-item--active`.
+jump to the first and last, and Enter or Space activates the focused row.
+Right opens a submenu; Left returns to its parent row. Escape closes the
+current menu and restores focus. Tab closes the menu and continues past its
+trigger; Shift+Tab moves back. Disabled rows and separators are skipped.
+Down or Up on a closed trigger opens at its first or last enabled row.
+A pointer opens with focus on the panel, ready for the first arrow key.
 
-The trigger is `.cn-dropdown-trigger`. The panel and its rows share the
+`.cn-dropdown-trigger` styles the visual trigger. Its surrounding
+`[aria-haspopup="menu"]` element holds keyboard focus, including for custom
+triggers; restyle `[aria-haspopup="menu"]:focus-visible` for its outline.
+The panel and its rows share the
 `.cn-menu`, `.cn-menu-item`, `.cn-menu-item-label`, `.cn-menu-shortcut` and
 `.cn-menu-separator` rules with other menus:
 
 ```css
 .cn-dropdown-trigger:hover { background: #1e1e2a; }
-.cn-menu-item:hover { background: var(--accent-subtle); }
+.cn-menu-item:hover, .cn-menu-item:focus-visible { background: var(--accent-subtle); }
 ```
 
 ## Context Menu
@@ -85,7 +91,7 @@ let action = ctx.use_signal(String::new());
 
 div().w(240.0).h(160.0)
     .child(text("Right-click here"))
-    .on_right_click(move |event| {
+    .on_context_menu(move |event| {
         context_menu()
             .at(event.mouse_x, event.mouse_y)
             .item("Cut", move || action.set("cut".to_string()))
@@ -96,8 +102,10 @@ div().w(240.0).h(160.0)
     })
 ```
 
-The returned overlay handle can close the menu programmatically. There are
-no separate context-menu trigger, item or content element functions.
+`on_context_menu` makes the target a Tab stop. Shift+F10 or the Context Menu
+key opens at the focused target; right-click opens at the pointer. The menu shares
+the dropdown's arrow, activation and dismissal keys. The returned overlay
+handle can close the menu programmatically.
 
 ## Menubar
 
@@ -119,6 +127,15 @@ menubar()
             .item("Redo", move || action.set("redo".to_string()))
     })
 ```
+
+A menubar is one Tab stop. Left/Right, Home/End move between its triggers;
+Down/Up opens the selected menu. Left/Right in an open root menu switches
+to the adjacent menu. Submenus use Right to enter and Left to return.
+
+Restyle the shared `.cn-menu-item:focus-visible` highlight and
+`.cn-menubar-trigger:focus-visible` outline. Menus also expose
+`.cn-context-menu`, `.cn-context-menu-item`, `.cn-dropdown-menu`,
+`.cn-dropdown-item`, `.cn-menubar-content` and `.cn-menubar-item`.
 
 ## Breadcrumb
 

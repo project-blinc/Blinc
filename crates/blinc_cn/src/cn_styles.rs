@@ -108,15 +108,14 @@ pub const CN_STYLES: &str = concat!(
         transform var(--duration-faster) var(--ease-state);
 }
 .cn-button:disabled { cursor: not-allowed; }
-/* Keyboard focus: Tab puts focus on a control and a press or a text input
-   takes it away, so `:focus` on these is the keyboard focus ring. */
-.cn-button:focus, .cn-checkbox:focus, .cn-switch:focus, .cn-toggle:focus,
-.cn-radio:focus, .cn-tabs-trigger:focus, .cn-select-trigger:focus,
-.cn-combobox-trigger:focus, .cn-dropdown-trigger:focus, .cn-accordion-trigger:focus,
-.cn-collapsible-trigger:focus, .cn-menubar-trigger:focus, .cn-nav-link:focus,
-.cn-sidebar-item:focus, .cn-pagination-btn:focus, .cn-breadcrumb-item:focus,
-.cn-sheet-close:focus, .cn-drawer-close:focus, .cn-slider:focus,
-.cn-number-gauge:focus, .blinc-link:focus {
+/* Keyboard focus rings for pressable controls. */
+.cn-button:focus-visible, .cn-checkbox:focus-visible, .cn-switch:focus-visible, .cn-toggle:focus-visible,
+.cn-radio:focus-visible, .cn-tabs-trigger:focus-visible, .cn-select-trigger:focus-visible,
+.cn-combobox-trigger:focus-visible, [aria-haspopup=menu]:focus-visible, .cn-accordion-trigger:focus-visible,
+.cn-collapsible-trigger:focus-visible, .cn-menubar-trigger:focus-visible, .cn-nav-link:focus-visible,
+.cn-sidebar-item:focus-visible, .cn-pagination-btn:focus-visible, .cn-breadcrumb-item:focus-visible,
+.cn-sheet-close:focus-visible, .cn-drawer-close:focus-visible, .cn-slider:focus-visible,
+.cn-number-gauge:focus-visible, .blinc-link:focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
 }
@@ -1462,7 +1461,7 @@ pub const CN_STYLES: &str = concat!(
 }
 /* `--accent-subtle`, since the panel already sits at `--surface-elevated`. */
 .cn-menu-item:hover:not(:disabled),
-.cn-dropdown-item--active {
+.cn-menu-item:focus-visible:not(:disabled) {
     background: var(--accent-subtle);
 }
 .cn-menu-item:disabled {
@@ -1776,7 +1775,7 @@ pub const CN_STYLES: &str = concat!(
 }
 .cn-calendar-nav:disabled { opacity: 0.4; cursor: default; }
 .cn-calendar-body { flex-direction: column; gap: 2px; }
-.cn-calendar-body:focus { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.cn-calendar-body:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .cn-calendar-weekdays { display: grid; grid-template-columns: repeat(7, 36px); }
 /* The days, clipped a little outside them so focus rings show: a month
    turning slides the new one in from its side, pushing the old out the
@@ -2068,7 +2067,7 @@ pub const CN_STYLES: &str = concat!(
 .cn-time-picker[data-size="sm"] .cn-time-picker-period { width: 32px; height: 24px; font-size: 11px; }
 .cn-time-picker[data-size="lg"] .cn-time-picker-period { width: 40px; height: 32px; font-size: 14px; }
 .cn-time-picker-period:hover { color: var(--text-primary); background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
-.cn-time-picker-period:focus { outline: 1px solid var(--focus-ring); outline-offset: -1px; }
+.cn-time-picker-period:focus-visible { outline: 1px solid var(--focus-ring); outline-offset: -1px; }
 .cn-time-picker:disabled { opacity: 0.65; }
 .cn-time-picker-segment:disabled,
 .cn-time-picker-period:disabled { cursor: not-allowed; background: transparent; opacity: 1; }
@@ -2080,7 +2079,7 @@ pub const CN_STYLES: &str = concat!(
 .cn-time-picker-clock:hover, .cn-time-picker-clock[data-state="open"] {
     color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent);
 }
-.cn-time-picker-clock:focus { outline: 1px solid var(--focus-ring); outline-offset: -1px; }
+.cn-time-picker-clock:focus-visible { outline: 1px solid var(--focus-ring); outline-offset: -1px; }
 .cn-time-picker-clock:disabled { color: var(--text-tertiary); cursor: not-allowed; background: transparent; }
 .cn-time-picker[data-size="sm"] .cn-time-picker-clock { width: 24px; height: 24px; }
 .cn-time-picker[data-size="lg"] .cn-time-picker-clock { width: 32px; height: 32px; }
@@ -2102,7 +2101,7 @@ pub const CN_STYLES: &str = concat!(
     flex-grow: 1; flex-basis: 0; height: 100%; border-radius: var(--radius-sm);
     cursor: ns-resize;
 }
-.cn-time-picker-wheel-column:focus { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.cn-time-picker-wheel-column:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .cn-time-picker-wheel-list { padding-top: calc(var(--cn-time-picker-wheel-row-height, 32px) * 2); padding-bottom: calc(var(--cn-time-picker-wheel-row-height, 32px) * 2); }
 .cn-time-picker-wheel-column { overflow-fade: var(--cn-time-picker-wheel-fade, 64px) 0; scrollbar-width: none; }
 .cn-time-picker-wheel-option {
@@ -2114,7 +2113,7 @@ pub const CN_STYLES: &str = concat!(
 .cn-time-picker-wheel-period-option { width: 36px; height: 24px; border-radius: var(--radius-sm); font-size: 12px; color: var(--text-secondary); cursor: pointer; }
 .cn-time-picker-wheel-period-option:hover { color: var(--text-primary); }
 .cn-time-picker-wheel-period-option[data-selected] { color: var(--text-primary); background: var(--surface-elevated); box-shadow: var(--shadow-sm); }
-.cn-time-picker-wheel-period-option:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.cn-time-picker-wheel-period-option:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .cn-time-picker-wheel-footer { gap: 8px; }
 
 .cn-color-picker-trigger {
@@ -2125,7 +2124,7 @@ pub const CN_STYLES: &str = concat!(
     transition: background var(--duration-fast) var(--ease-state), border-color var(--duration-fast) var(--ease-state);
 }
 .cn-color-picker-trigger:hover { background: var(--surface-overlay); }
-.cn-color-picker-trigger:focus { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.cn-color-picker-trigger:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .cn-color-picker-trigger:disabled { opacity: 0.5; cursor: not-allowed; background: var(--input-bg); }
 .cn-color-picker-value { font-family: var(--font-mono); font-size: 13px; }
 .cn-color-picker-swatch {
@@ -2154,7 +2153,7 @@ pub const CN_STYLES: &str = concat!(
 .cn-color-picker-hue-segment[data-sector="5"] { background: linear-gradient(to right, #ff00ff, #ff0000); border-radius: 0 999px 999px 0; }
 .cn-color-picker-alpha { height: 16px; cursor: pointer; background: var(--surface-overlay); border-radius: 999px; }
 .cn-color-picker-alpha > div { border-radius: 999px; }
-.cn-color-picker-sv:focus, .cn-color-picker-hue:focus, .cn-color-picker-alpha:focus,
+.cn-color-picker-sv:focus-visible, .cn-color-picker-hue:focus-visible, .cn-color-picker-alpha:focus-visible,
 .cn-color-picker-sv[data-focus-visible], .cn-color-picker-hue[data-focus-visible], .cn-color-picker-alpha[data-focus-visible] {
     outline: 2px solid var(--focus-ring); outline-offset: 3px;
 }
@@ -2179,7 +2178,7 @@ pub const CN_STYLES: &str = concat!(
     border: 1px solid var(--border);
 }
 .cn-color-picker-preset[data-state="selected"] { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.cn-color-picker-preset:focus { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.cn-color-picker-preset:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .cn-color-picker-preset:disabled { cursor: not-allowed; }
 
 .cn-date-picker-trigger {
@@ -2194,7 +2193,7 @@ pub const CN_STYLES: &str = concat!(
 .cn-date-picker-trigger[data-size="lg"] { height: 48px; font-size: 16px; }
 .cn-date-picker-trigger[data-empty], .cn-date-picker-icon { color: var(--text-secondary); }
 .cn-date-picker-trigger:hover { background: var(--surface-overlay); }
-.cn-date-picker-trigger:focus { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.cn-date-picker-trigger:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .cn-date-picker-trigger:disabled { opacity: 0.5; cursor: not-allowed; background: var(--input-bg); }
 .cn-date-picker-content { padding: 12px; gap: 8px; }
 .cn-date-picker-content .cn-calendar { padding: 0; border: 0; background: transparent; }
@@ -2204,7 +2203,7 @@ pub const CN_STYLES: &str = concat!(
     transition: background var(--duration-fast) var(--ease-state);
 }
 .cn-date-picker-clear:hover { background: var(--surface-overlay); color: var(--text-primary); }
-.cn-date-picker-clear:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.cn-date-picker-clear:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .cn-date-picker-clear:disabled { opacity: 0.5; cursor: not-allowed; background: transparent; }
 "#,
     "\n}\n"

@@ -188,6 +188,18 @@ impl RenderTree {
             None
         };
 
+        let focus_visible_lookup =
+            if focused && crate::event_router::focus_visible_node() == Some(node_id) {
+                self.resolve_state_style(
+                    node_id,
+                    &element_id,
+                    ElementState::FocusVisible,
+                    &stylesheet,
+                )
+            } else {
+                None
+            };
+
         // Snapshot before-props for transition detection (visual + layout).
         // Uses snapshot_before_keyframe_properties to avoid QR decomposition
         // drift on transform fields when an active transition exists.
@@ -266,7 +278,10 @@ impl RenderTree {
         }
 
         // Apply focus style
-        if let Some(focus_style) = focus_lookup.as_deref() {
+        for focus_style in [focus_lookup.as_deref(), focus_visible_lookup.as_deref()]
+            .into_iter()
+            .flatten()
+        {
             layers.push(focus_style.clone());
             Self::apply_element_style_to_props(&mut render_node.props, focus_style);
             if focus_style.has_layout_props() {
@@ -515,6 +530,16 @@ impl RenderTree {
             // Focus state
             if router.is_focused(node_id) {
                 if let Some(focus) = stylesheet.get_with_state(element_id, ElementState::Focus) {
+                    if let Some(ref dps) = focus.dynamic_properties {
+                        dynamic_props.extend(dps.iter());
+                    }
+                }
+            }
+
+            if router.focus_visible(node_id) {
+                if let Some(focus) =
+                    stylesheet.get_with_state(element_id, ElementState::FocusVisible)
+                {
                     if let Some(ref dps) = focus.dynamic_properties {
                         dynamic_props.extend(dps.iter());
                     }

@@ -686,6 +686,8 @@ fn build_menu_content(
             let mut row_content = div()
                 .class("cn-menu-item")
                 .class("cn-context-menu-item")
+                .attr("role", "menuitem")
+                .attr("tabindex", "-1")
                 .w_full()
                 .h_fit()
                 // Fallback MUST equal the `.cn-context-menu-item` CSS
@@ -758,29 +760,35 @@ fn build_menu_content(
                 let id_chain_for_hover = id_chain_for_open;
                 let root_key_for_hover = root_click_outside_key_for_open.clone();
 
-                row = row.on_hover_enter(move |ctx| {
-                    // Close any existing child submenu at this level.
-                    if let Some(handle_id) = child_submenu_for_hover_open.get() {
-                        OverlayHandle::from_raw(handle_id).close();
-                    }
+                let open_submenu =
+                    std::rc::Rc::new(move |ctx: &blinc_layout::event_handler::EventContext| {
+                        // Close any existing child submenu at this level.
+                        if let Some(handle_id) = child_submenu_for_hover_open.get() {
+                            OverlayHandle::from_raw(handle_id).close();
+                        }
 
-                    if let Some(ref items) = submenu_items_for_hover {
-                        let x = ctx.bounds_x + ctx.bounds_width + 4.0;
-                        let y = ctx.bounds_y;
+                        if let Some(ref items) = submenu_items_for_hover {
+                            let x = ctx.bounds_x + ctx.bounds_width + 4.0;
+                            let y = ctx.bounds_y;
 
-                        let handle = spawn_submenu(
-                            x,
-                            y,
-                            items,
-                            160.0,
-                            root_handle,
-                            root_key_for_hover.clone(),
-                            id_chain_for_hover,
-                            child_submenu_for_hover_open,
-                        );
-                        child_submenu_for_hover_open.set(Some(handle.raw()));
-                    }
-                });
+                            let handle = spawn_submenu(
+                                x,
+                                y,
+                                items,
+                                160.0,
+                                root_handle,
+                                root_key_for_hover.clone(),
+                                id_chain_for_hover,
+                                child_submenu_for_hover_open,
+                            );
+                            child_submenu_for_hover_open.set(Some(handle.raw()));
+                        }
+                    });
+                let click_submenu = open_submenu.clone();
+                row = row
+                    .attr("aria-haspopup", "menu")
+                    .on_click(move |ctx| click_submenu(ctx))
+                    .on_hover_enter(move |ctx| open_submenu(ctx));
             } else {
                 // Hovering a leaf item closes any open child submenu at this level.
                 row = row.on_hover_enter(move |_| {

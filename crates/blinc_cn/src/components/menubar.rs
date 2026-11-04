@@ -387,6 +387,8 @@ impl MenubarBuilder {
 
         let mut menubar = div()
             .class("cn-menubar")
+            .attr("role", "menubar")
+            .attr("tabindex", "0")
             .flex_row()
             .items_center()
             .h_fit()
@@ -444,7 +446,9 @@ impl MenubarBuilder {
 
             let mut trigger = trigger_content
                 .class("cn-menubar-trigger")
-                .class("tabindex=0")
+                .attr("role", "menuitem")
+                .attr("tabindex", "-1")
+                .attr("aria-haspopup", "menu")
                 .h_fit()
                 .px(style_px / 4.0)
                 .py(style_py / 4.0)
@@ -835,6 +839,8 @@ fn build_menubar_menu_div(
             let mut row = row_content
                 .class("cn-menu-item")
                 .class("cn-menubar-item")
+                .attr("role", "menuitem")
+                .attr("tabindex", "-1")
                 .attr_when("disabled", "", item_disabled)
                 .w_full()
                 .h_fit()
@@ -871,28 +877,34 @@ fn build_menubar_menu_div(
                 let submenu_items_for_hover = submenu_items.clone();
                 let submenu_key_for_hover = submenu_key.clone();
 
-                row = row.on_hover_enter(move |ctx| {
-                    // Close any existing child submenu at this level.
-                    if let Some(handle_id) = child_submenu_for_hover_open.get() {
-                        OverlayHandle::from_raw(handle_id).close();
-                    }
+                let open_submenu =
+                    std::rc::Rc::new(move |ctx: &blinc_layout::event_handler::EventContext| {
+                        // Close any existing child submenu at this level.
+                        if let Some(handle_id) = child_submenu_for_hover_open.get() {
+                            OverlayHandle::from_raw(handle_id).close();
+                        }
 
-                    if let Some(ref items) = submenu_items_for_hover {
-                        let x = ctx.bounds_x + ctx.bounds_width + 4.0;
-                        let y = ctx.bounds_y;
+                        if let Some(ref items) = submenu_items_for_hover {
+                            let x = ctx.bounds_x + ctx.bounds_width + 4.0;
+                            let y = ctx.bounds_y;
 
-                        let handle = spawn_menubar_submenu(
-                            x,
-                            y,
-                            items,
-                            160.0,
-                            root_handle,
-                            child_submenu_for_hover_open,
-                            submenu_key_for_hover.clone(),
-                        );
-                        child_submenu_for_hover_open.set(Some(handle.raw()));
-                    }
-                });
+                            let handle = spawn_menubar_submenu(
+                                x,
+                                y,
+                                items,
+                                160.0,
+                                root_handle,
+                                child_submenu_for_hover_open,
+                                submenu_key_for_hover.clone(),
+                            );
+                            child_submenu_for_hover_open.set(Some(handle.raw()));
+                        }
+                    });
+                let click_submenu = open_submenu.clone();
+                row = row
+                    .attr("aria-haspopup", "menu")
+                    .on_click(move |ctx| click_submenu(ctx))
+                    .on_hover_enter(move |ctx| open_submenu(ctx));
             } else {
                 row = row.on_hover_enter(move |_| {
                     if let Some(handle_id) = child_submenu_for_hover_close.get() {

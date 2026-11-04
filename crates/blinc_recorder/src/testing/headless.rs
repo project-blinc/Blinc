@@ -101,7 +101,9 @@ fn compose_with_overlays<E: ElementBuilder + 'static>(
 ) -> Div {
     use blinc_layout::overlay_state::{overlay_stack, toast_tray};
 
-    let overlay_layer = ctx.overlay_manager().build_overlay_layer();
+    let manager = ctx.overlay_manager();
+    manager.set_viewport_with_scale(ctx.width, ctx.height, ctx.scale_factor as f32);
+    let overlay_layer = manager.build_overlay_layer();
     let stack_layer = match overlay_stack().lock() {
         Ok(mut s) => {
             s.set_viewport_with_scale(ctx.width, ctx.height, ctx.scale_factor as f32);
@@ -299,6 +301,7 @@ impl Headless {
         if blinc_layout::has_animating_statefuls() {
             blinc_layout::check_stateful_animations();
         }
+        self.ctx.overlay_manager().update(self.now_ms);
         // The overlay stack and toast tray run their timers and reap what has
         // finished leaving, as the window ticks them each frame.
         {
@@ -321,6 +324,7 @@ impl Headless {
 
         let (w, h) = (self.ctx.width, self.ctx.height);
         if let Some(tree) = self.tree.as_mut() {
+            tree.sync_keyboard_focus(&mut self.ctx.event_router);
             if tree.stylesheet().is_some()
                 && tree.apply_stylesheet_state_styles(&self.ctx.event_router)
             {
@@ -496,6 +500,13 @@ impl Headless {
         // window does, so what it shows is in the tree.
         {
             use blinc_layout::overlay_state::{overlay_stack, rebuild_overlay_subtree_if_dirty};
+            let manager = self.ctx.overlay_manager();
+            rebuild_overlay_subtree_if_dirty(
+                tree.element_registry(),
+                blinc_layout::widgets::overlay::OVERLAY_LAYER_ID,
+                manager.take_dirty(),
+                || manager.build_overlay_layer(),
+            );
             rebuild_overlay_subtree_if_dirty(
                 tree.element_registry(),
                 blinc_layout::widgets::overlay_stack::OVERLAY_STACK_LAYER_ID,

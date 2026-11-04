@@ -17,6 +17,8 @@ const CHEVRON_RIGHT: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="16
 pub(crate) fn panel(radius: f32) -> Div {
     div()
         .class("cn-menu")
+        .attr("role", "menu")
+        .attr("tabindex", "0")
         .flex_col()
         .rounded(radius)
         .overflow_clip()

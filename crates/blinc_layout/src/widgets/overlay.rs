@@ -1723,7 +1723,11 @@ impl OverlayManagerInner {
 
             // Render non-toast overlays
             for overlay in non_toasts {
-                layer = layer.child(self.build_single_overlay(overlay, width, height));
+                layer = layer.child(super::overlay_focus::scope(
+                    self.build_single_overlay(overlay, width, height),
+                    format!("legacy-{}", overlay.handle.0),
+                    overlay.config.kind,
+                ));
             }
 
             // Render toast stacks for each corner

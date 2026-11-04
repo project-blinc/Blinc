@@ -48,6 +48,7 @@ impl RenderTree {
         if stylesheet.contains_with_state(&element_id, ElementState::Hover)
             || stylesheet.contains_with_state(&element_id, ElementState::Active)
             || stylesheet.contains_with_state(&element_id, ElementState::Focus)
+            || stylesheet.contains_with_state(&element_id, ElementState::FocusVisible)
             || stylesheet.contains_with_state(&element_id, ElementState::Disabled)
         {
             return true;
@@ -101,6 +102,9 @@ impl RenderTree {
                         ElementState::Hover => hovered,
                         ElementState::Active => pressed,
                         ElementState::Focus => focused,
+                        ElementState::FocusVisible => {
+                            focused && crate::event_router::focus_visible_node() == Some(node_id)
+                        }
                         // Properties of the element, set as the `disabled` and
                         // `checked` attributes.
                         ElementState::Disabled => self

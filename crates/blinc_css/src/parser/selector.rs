@@ -16,6 +16,8 @@ pub enum ElementState {
     Active,
     /// :focus pseudo-class
     Focus,
+    /// :focus-visible pseudo-class (keyboard input)
+    FocusVisible,
     /// :disabled pseudo-class
     Disabled,
     /// :checked pseudo-class (checkboxes, radios)
@@ -38,6 +40,7 @@ impl ElementState {
             "hover" => Some(ElementState::Hover),
             "active" => Some(ElementState::Active),
             "focus" => Some(ElementState::Focus),
+            "focus-visible" => Some(ElementState::FocusVisible),
             "disabled" => Some(ElementState::Disabled),
             "checked" => Some(ElementState::Checked),
             _ => None,
@@ -51,6 +54,7 @@ impl std::fmt::Display for ElementState {
             ElementState::Hover => write!(f, "hover"),
             ElementState::Active => write!(f, "active"),
             ElementState::Focus => write!(f, "focus"),
+            ElementState::FocusVisible => write!(f, "focus-visible"),
             ElementState::Disabled => write!(f, "disabled"),
             ElementState::Checked => write!(f, "checked"),
         }

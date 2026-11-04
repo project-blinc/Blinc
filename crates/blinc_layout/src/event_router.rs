@@ -33,6 +33,13 @@
 //! router.on_mouse_up(&tree, 100.0, 200.0, MouseButton::Left);
 //! ```
 
+pub(crate) mod focus;
+
+/// The focused node whose keyboard focus ring is visible.
+pub fn focus_visible_node() -> Option<crate::tree::LayoutNodeId> {
+    focus::visible_node()
+}
+
 use std::collections::HashSet;
 
 use blinc_core::events::event_types;
@@ -96,9 +103,7 @@ thread_local! {
         const { std::cell::Cell::new(None) };
 }
 
-/// The node Tab traversal has focused, for a key handler to test itself
-/// against: key events reach every handler, and each decides if it is the
-/// target.
+/// The keyboard target, for handlers receiving broadcast key events.
 pub fn keyboard_focused_node() -> Option<LayoutNodeId> {
     KEYBOARD_FOCUSED.with(std::cell::Cell::get)
 }
@@ -160,8 +165,13 @@ pub struct EventRouter {
 
     /// Ancestors of the focused element (for BLUR bubbling)
     focused_ancestors: Vec<LayoutNodeId>,
-    /// Focus came from Tab traversal, not from a text input or a press.
+    /// Keyboard input owns the focus ring until the next pointer press.
     keyboard_focus: bool,
+    text_focus: bool,
+    pub(crate) focus_scopes: Vec<focus::FocusScope>,
+    pub(crate) menu_last: bool,
+    pub(crate) pending_tab: Option<bool>,
+    pub(crate) focus_stable: Option<crate::tree::StableNodeId>,
 
     /// Callback for routing events to elements
     event_callback: Option<EventCallback>,
@@ -229,6 +239,11 @@ impl EventRouter {
             focused: None,
             focused_ancestors: Vec::new(),
             keyboard_focus: false,
+            text_focus: false,
+            focus_scopes: Vec::new(),
+            focus_stable: None,
+            menu_last: false,
+            pending_tab: None,
             event_callback: None,
             scroll_delta_x: 0.0,
             scroll_delta_y: 0.0,
@@ -493,6 +508,7 @@ impl EventRouter {
             }
             None => 0u8.hash(&mut h),
         }
+        self.keyboard_focus.hash(&mut h);
         h.finish()
     }
 
@@ -508,31 +524,33 @@ impl EventRouter {
         &self.focused_ancestors
     }
 
-    /// Whether the focused element got focus from Tab traversal.
+    /// Whether keyboard input currently owns the focus ring.
     pub fn keyboard_focus(&self) -> bool {
         self.keyboard_focus
     }
 
     /// Move focus to `node` as Tab traversal does.
     pub fn focus_via_keyboard(&mut self, node: LayoutNodeId) {
-        self.set_focus(Some(node));
+        if self.focused != Some(node) {
+            self.set_focus(Some(node));
+        }
         self.keyboard_focus = true;
-        KEYBOARD_FOCUSED.with(|k| k.set(Some(node)));
+        self.publish_focus();
     }
 
-    /// Follow the focused text input (`None` when none is). Focus held by
-    /// Tab traversal stays while no text input has focus.
+    /// Follow text input focus while preserving focus on other controls.
     pub fn sync_text_focus(&mut self, text_focus: Option<LayoutNodeId>) {
-        if text_focus.is_none() && self.keyboard_focus && self.focused.is_some() {
-            return;
+        if let Some(node) = text_focus {
+            let keyboard = self.keyboard_focus;
+            if self.focused != Some(node) {
+                self.set_focus(Some(node));
+            }
+            self.text_focus = true;
+            self.keyboard_focus = keyboard;
+        } else if self.text_focus {
+            self.set_focus(None);
         }
-        if text_focus.is_some() {
-            self.keyboard_focus = false;
-            KEYBOARD_FOCUSED.with(|k| k.set(None));
-        }
-        if text_focus != self.focused {
-            self.set_focus(text_focus);
-        }
+        self.publish_focus();
     }
 
     /// Set focus to an element (or None to clear focus)
@@ -596,8 +614,9 @@ impl EventRouter {
 
         self.focused = node;
         self.focused_ancestors = ancestors;
-        self.keyboard_focus = false;
-        KEYBOARD_FOCUSED.with(|k| k.set(None));
+        self.text_focus = false;
+        self.focus_stable = None;
+        self.publish_focus();
     }
 
     /// Get current mouse position
@@ -1034,10 +1053,8 @@ impl EventRouter {
         };
         crate::event_handler::set_current_mouse_button(button_code);
 
-        if self.keyboard_focus {
-            self.keyboard_focus = false;
-            self.set_focus(None);
-        }
+        self.keyboard_focus = false;
+        self.publish_focus();
 
         // Initialize drag tracking
         self.drag_start_x = x;
@@ -1091,7 +1108,14 @@ impl EventRouter {
             }
 
             // Set focus to the clicked element WITH its ancestors (for BLUR bubbling later)
-            self.set_focus_with_ancestors(Some(hit.node), hit.ancestors.clone());
+            let target = hit
+                .ancestors
+                .iter()
+                .rev()
+                .copied()
+                .find(|&node| tree.is_focusable(node));
+            self.set_focus_with_ancestors(target, hit.ancestors.clone());
+            self.focus_stable = target.and_then(|node| tree.stable_id(node));
 
             // Emit to the hit node first
             self.emit_event(hit.node, event_types::POINTER_DOWN);
@@ -1295,6 +1319,7 @@ impl EventRouter {
     ///
     /// Emits KEY_DOWN to the focused element.
     pub fn on_key_down(&mut self, key_code: u32) -> Option<(LayoutNodeId, u32)> {
+        self.note_keyboard(key_code);
         if let Some(focused) = self.focused {
             // Record key down event (only if recording is enabled)
             #[cfg(feature = "recorder")]

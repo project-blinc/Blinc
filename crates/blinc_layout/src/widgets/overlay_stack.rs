@@ -1013,7 +1013,11 @@ impl OverlayStack {
                 entry.size,
                 self.viewport,
             );
-            layer = layer.child(positioned);
+            layer = layer.child(super::overlay_focus::scope(
+                positioned,
+                format!("stack-{}", entry.handle.raw()),
+                entry.kind,
+            ));
         }
 
         layer
@@ -1035,7 +1039,11 @@ fn continue_content(layer: &mut Div, entry: &OverlayEntry, viewport: (f32, f32))
     };
     let motion = motion.child((entry.content_fn)());
     let positioned = position_wrapper(motion, &entry.position, entry.size, viewport);
-    *layer = std::mem::take(layer).child(positioned);
+    *layer = std::mem::take(layer).child(super::overlay_focus::scope(
+        positioned,
+        format!("stack-{}", entry.handle.raw()),
+        entry.kind,
+    ));
 }
 
 /// Wrap a child element in a positioned outer Div according to the entry's

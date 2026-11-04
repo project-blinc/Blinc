@@ -4,6 +4,9 @@ All notable changes to `blinc_cn` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Dropdown, context and menubar menus move actual keyboard focus, skip disabled rows, support submenu keys and restore trigger focus. Menus dismiss on Tab; pressable controls use `:focus-visible` rings.
+
 ## [0.6.0] - 2026-11-03
 
 ### Fixed

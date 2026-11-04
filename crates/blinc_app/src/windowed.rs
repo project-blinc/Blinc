@@ -4704,6 +4704,8 @@ impl WindowedApp {
                                         Key::Delete => 127,
                                         Key::Enter => 13,
                                         Key::Tab => 9,
+                                        Key::F10 => 121,
+                                        Key::ContextMenu => 93,
                                         Key::Escape => 27,
                                         Key::Space => 32,
                                         Key::Left => 37,
@@ -4761,20 +4763,6 @@ impl WindowedApp {
 
                                     match kb_event.state {
                                         KeyState::Pressed => {
-                                            // Handle Escape key for overlays first
-                                            // If an overlay handles it, don't propagate further
-                                            if kb_event.key == Key::Escape {
-                                                // Legacy manager first (covers widgets not yet
-                                                // migrated). Then the new OverlayStack.
-                                                let legacy_handled =
-                                                    windowed_ctx.overlay_manager.handle_escape();
-                                                let stack_handled = blinc_layout::overlay_state::overlay_stack()
-                                                    .lock()
-                                                    .map(|mut s| s.handle_escape())
-                                                    .unwrap_or(false);
-                                                let _ = legacy_handled || stack_handled;
-                                            }
-
                                             // Tab traversal and Enter/Space activation
                                             // take their keys from the widgets.
                                             let navigated = ws.render_tree.as_mut().is_some_and(|t| {
@@ -6743,6 +6731,9 @@ impl WindowedApp {
                                 let text_focus = blinc_layout::widgets::text_input::focused_text_input_node_id()
                                     .or_else(blinc_layout::widgets::text_input::focused_text_area_node_id);
                                 windowed_ctx.event_router.sync_text_focus(text_focus);
+                                if let Some(tree) = ws.render_tree.as_mut() {
+                                    tree.sync_keyboard_focus(&mut windowed_ctx.event_router);
+                                }
                             }
 
                             // Apply CSS state styles (:hover, :active, :focus) from stylesheet

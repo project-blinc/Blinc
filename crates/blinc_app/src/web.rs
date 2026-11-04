@@ -1592,7 +1592,11 @@ impl WebApp {
                     if (meta || ctrl) && is_letter {
                         evt.prevent_default();
                     }
-                    Self::dispatch_key_down(&mut app, key_code, shift, ctrl, alt, meta);
+                    let navigated =
+                        Self::dispatch_key_down(&mut app, key_code, shift, ctrl, alt, meta);
+                    if navigated {
+                        evt.prevent_default();
+                    }
 
                     // For printable single-character keys, also
                     // dispatch TEXT_INPUT so editor widgets can
@@ -1604,7 +1608,7 @@ impl WebApp {
                     let key_str = evt.key();
                     let mut chars = key_str.chars();
                     if let (Some(ch), None) = (chars.next(), chars.next()) {
-                        if !ch.is_control() && !ctrl && !meta {
+                        if !navigated && !ch.is_control() && !ctrl && !meta {
                             // Prevent the browser from also acting on
                             // the key (e.g. quick-find triggering on
                             // `/`, space scrolling the page) when a
@@ -1935,7 +1939,7 @@ impl WebApp {
         ctrl: bool,
         alt: bool,
         meta: bool,
-    ) {
+    ) -> bool {
         // Update the router so it can fire any blur / focus-change
         // logic that depends on key state. The return value is
         // (node, event_type) for a hit-tested target — we ignore it
@@ -1943,6 +1947,11 @@ impl WebApp {
         // runner. The router still tracks focus internally, which
         // is what `dispatch_text_input` relies on later for
         // "focused element" semantics.
+        if let Some(tree) = app.current_tree.as_mut() {
+            if tree.handle_navigation_key(&mut app.ctx.event_router, key_code, shift) {
+                return true;
+            }
+        }
         let _ = app.ctx.event_router.on_key_down(key_code);
 
         // Broadcast KEY_DOWN to every key handler in the tree.
@@ -1963,6 +1972,7 @@ impl WebApp {
                 meta,
             );
         }
+        false
     }
 
     fn dispatch_key_up(
@@ -2921,6 +2931,9 @@ impl WebApp {
             let text_focus = blinc_layout::widgets::text_input::focused_text_input_node_id()
                 .or_else(blinc_layout::widgets::text_input::focused_text_area_node_id);
             self.ctx.event_router.sync_text_focus(text_focus);
+            if let Some(tree) = self.current_tree.as_mut() {
+                tree.sync_keyboard_focus(&mut self.ctx.event_router);
+            }
         }
 
         // CSS state styles (:hover, :active, :focus)

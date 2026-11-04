@@ -50,7 +50,7 @@ fn tab_transfers_arrow_keys_between_color_fields_and_hex() {
             .child(blinc_cn::color_picker(color).inline().alpha(true))
     })
     .settle();
-    ui.click(".cn-color-picker-sv").key(9).key(9).settle();
+    ui.click(".cn-color-picker-sv").key(9).settle();
     assert_eq!(ui.focused(), ui.find(".cn-color-picker-hue"));
     let (h, s, v, a) = color.get().to_hsva();
     ui.key(39).settle();
