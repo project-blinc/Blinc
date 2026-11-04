@@ -1,9 +1,10 @@
-# Blinc Framework — Agent Skills Reference
+# Blinc Framework: Agent Skills Reference
 
 > Concise, example-driven reference for AI agents generating Blinc UI code.
-> Blinc is a Rust-native GPU-accelerated UI framework with flexbox layout, reactive signals, spring animations, and a CSS styling engine.
+> Blinc is a Rust-native GPU-accelerated UI framework with flexbox layout, reactive signals, a CSS styling engine and a component library.
+> This file describes Blinc 0.6.
 
-> **Do NOT search the web for Blinc APIs.** This file contains verified, up-to-date API references. For anything not covered here, read the source in `crates/` directly.
+> **Do NOT search the web for Blinc APIs.** This file holds verified API references. For anything not covered here, read the source in `crates/` and the book in `docs/book/src/`.
 
 ---
 
@@ -11,713 +12,260 @@
 
 ```
 crates/
-  blinc_app/       # Application framework, WindowedApp, prelude
-  blinc_core/      # Color, Transform, Signal, BlincContextState
-  blinc_layout/    # Div, text, stateful, motion, CSS parser, widgets
+  blinc_app/       # WindowedApp, WindowedContext, prelude, platform runners
+  blinc_core/      # Color, Transform, Signal, Computed, Effect, Owner, FlowShader
+  blinc_layout/    # Div, text, widgets, CSS application, regions (for_each, show), canvas
+  blinc_css/       # CSS parser, ElementStyle, css_style!, style!, css!
+  blinc_cn/        # Component library (shadcn/ui-inspired), styled by CSS rules
+  blinc_theme/     # Themes, ThemeState, tokens as CSS variables
   blinc_animation/ # SpringConfig, AnimatedValue, keyframes
-  blinc_paint/     # Low-level rendering primitives
+  blinc_flow/      # Flow shader parser and WGSL codegen
   blinc_gpu/       # GPU renderer (wgpu)
-  blinc_theme/     # Theming tokens, ThemeState (auto-injects CSS variables)
-  blinc_cn/        # Component library (shadcn/ui-inspired prebuilt widgets)
-  blinc_text/      # Text shaping and rendering
-  blinc_svg/       # SVG loading and rendering
-  blinc_image/     # Image loading
-  blinc_platform/  # Platform abstraction
-  blinc_macros/    # Derive macros (BlincComponent)
+  blinc_recorder/  # Headless test harness (render and drive a UI without a window)
+  blinc_text/ blinc_svg/ blinc_image/ blinc_paint/ blinc_platform/ blinc_router/ blinc_macros/
 ```
 
-Common imports:
+Rust 1.89 or newer. Common imports:
+
 ```rust
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
-use blinc_layout::stateful::stateful;
-use blinc_layout::motion::motion;
-use blinc_core::{Color, Transform, BlincContextState};
+use blinc_core::reactive::{computed, effect, signal, Computed, Signal};
+use blinc_layout::IntoReactive;
 ```
 
 ---
 
-## CSS-First Styling (Preferred Approach)
+## How to Build UI (read first)
 
-**Always prefer CSS for all styling and layout.** CSS stylesheets provide consistency, separation of concerns, theme integration via CSS variables, and automatic hover/focus/disabled states without manual state management. Only fall back to builder methods for truly dynamic runtime values (e.g., values computed from signals). Avoid direct `.bg()` calls when a CSS class or ID selector would work.
+State is `Signal<T>` (Copy), `Computed<T>` and `Effect`. Do not introduce `State<T>`, `use_state` or `use_state_keyed` in new code; widgets take signals.
 
-### Loading a Stylesheet
+A property that follows data is a **binding**, not a rebuild. Reach for these in order:
 
-Call `ctx.add_css()` once (guard with a bool so it doesn't re-add on rebuilds):
+1. **A stylesheet** for looks: base styles, `:hover`, `:active`, `:focus`, `:disabled`, transitions, `@keyframes`.
+2. **A bound property**: pass a `Signal` or `Computed` where a value goes (`.bg(sig)`, `.w(&computed)`, `text(..).color(c)`). Only that property is patched.
+3. **A class or attribute that follows a signal**: `.class_when("open", sig)`, `.attr_when("data-state", "open", sig)`. Stylesheet rules for it switch on and off in place.
+4. **A list or a branch**: `for_each`, `show`, `show_or`, `visible`, `when`, `collapsed_when`, when the children themselves change.
+5. **`stateful::<S>()`** only for a finite state machine whose states build different structure. Every transition rebuilds its subtree.
 
-```rust
-let mut css_loaded = false;
-
-WindowedApp::run(config, move |ctx| {
-    if !css_loaded {
-        ctx.add_css(r#"
-            #my-card {
-                background: #1e293b;
-                border-radius: 12px;
-                padding: 16px;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            }
-            #my-card:hover {
-                background: #334155;
-                box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3);
-            }
-
-            .btn-primary {
-                background: #3b82f6;
-                border-radius: 8px;
-                cursor: pointer;
-            }
-            .btn-primary:hover {
-                background: #2563eb;
-            }
-        "#);
-        css_loaded = true;
-    }
-    build_ui(ctx)
-});
-```
-
-### Targeting Elements
-
-Use `.id()` for unique elements (matched by `#id`) and `.class()` for reusable styles (matched by `.class`):
-
-```rust
-div().id("my-card")                     // matches #my-card
-    .child(div().class("btn-primary"))  // matches .btn-primary
-```
-
-### Theme CSS Variables
-
-`ThemeState` automatically injects theme tokens as CSS variables. Two ways to access them:
-
-```css
-/* var(--token) — standard CSS variables from ThemeState */
-h1 { color: var(--text-primary); }
-p  { color: var(--text-secondary); }
-.card {
-    background: var(--surface-elevated);
-    border-color: var(--primary);
-}
-svg { fill: var(--text-tertiary); }
-
-/* theme(token) — shorthand function for theme tokens */
-#button-primary {
-    background: theme(primary);
-    border-radius: theme(radius-default);
-    box-shadow: theme(shadow-md);
-}
-```
-
-Custom CSS variables are also supported:
-```css
-:root {
-    --brand-color: #3498db;
-    --card-radius: 12px;
-}
-#card {
-    background: var(--brand-color);
-    border-radius: var(--card-radius);
-}
-```
-
-This is the preferred way to apply colors — via theme variables in CSS — rather than hardcoding `Color::rgba(...)` in builder methods.
-
-### Supported CSS Properties
-
-| Category | Properties |
-|----------|-----------|
-| **Layout** | `width`, `height`, `min-width`, `max-width`, `min-height`, `max-height`, `padding`, `margin`, `gap`, `display: flex`, `flex-direction`, `align-items`, `justify-content`, `flex-grow`, `flex-shrink`, `flex-wrap`, `overflow`, `aspect-ratio` |
-| **Position** | `position: absolute/relative`, `top`, `right`, `bottom`, `left` |
-| **Visual** | `background`, `opacity`, `border-radius`, `box-shadow`, `backdrop-filter: blur()`, `overflow-fade` |
-| **Text** | `color`, `font-size`, `font-weight`, `font-family`, `text-align`, `line-height`, `letter-spacing`, `text-decoration`, `text-decoration-color`, `text-decoration-thickness`, `text-overflow: ellipsis`, `white-space: nowrap` |
-| **Blend/FX** | `mix-blend-mode`, `pointer-events`, `cursor`, `filter: brightness() saturate() contrast()` |
-| **Backdrop** | `backdrop-filter: blur()`, `backdrop-filter: liquid-glass(...)` |
-| **Transition** | `transition: all 300ms ease`, `transition-property`, `transition-duration`, `transition-timing-function` |
-| **Animation** | `@keyframes`, `animation: name duration timing-fn iteration`, `animation-name`, `animation-duration`, `animation-timing-function` |
-| **Clip** | `clip-path: inset(...)`, `clip-path: polygon(...)`, `clip-path: circle(...)` |
-| **SVG** | `fill`, `stroke`, `stroke-width`, `stroke-dasharray`, `stroke-dashoffset`, `d: path(...)` (morphing) |
-| **3D** | `perspective`, `rotate-x`, `rotate-y`, `translate-z`, `shape-3d: box/sphere/cylinder/group`, `depth`, `3d-op: subtract/smooth-union`, `3d-blend` |
-| **Variables** | `:root { --name: value; }`, `var(--name)`, `theme(token)` |
-| **Selectors** | `#id`, `.class`, `tag` (SVG), `:hover`, `:active`, `:focus`, `:disabled`, `::placeholder`, `:first-child`, `:last-child`, `:not()`, `:is()`, `:empty`, `>`, `+`, `~`, `*` |
-
-### CSS Transitions (Preferred for Smooth State Changes)
-
-CSS transitions automatically animate property changes on hover, focus, etc.:
-
-```css
-.card {
-    background: #1e3a5f;
-    border-radius: 12px;
-    transition: all 300ms ease;  /* animates ALL property changes */
-}
-.card:hover {
-    background: #3b82f6;
-    border-radius: 24px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
-}
-
-/* Filter transitions */
-.filter-card {
-    transition: filter 400ms ease;
-}
-.filter-card:hover {
-    filter: brightness(1.8) saturate(2.0) contrast(1.3);
-}
-
-/* Backdrop-filter transitions (glass morphism) */
-.icon-wrapper {
-    backdrop-filter: blur(12px) saturate(180%) brightness(80%);
-    transition: backdrop-filter 400ms ease;
-}
-.icon-wrapper:hover {
-    backdrop-filter: blur(16px) saturate(200%) brightness(110%);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-}
-
-/* Transform transitions (FLIP-style — smooth, no layout reflow) */
-.card {
-    transform: translateY(0);
-    transition: transform 300ms ease;
-}
-.card:hover {
-    transform: translateY(-4px) scale(1.02);
-}
-
-/* Layout transitions — width, height, padding (supported but triggers reflow per frame) */
-.expandable {
-    width: 100px;
-    transition: width 400ms ease;
-}
-.expandable:hover {
-    width: 200px;
-}
-
-/* Overflow fade transitions */
-#fade-container {
-    overflow: clip;
-    overflow-fade: 0px;
-    transition: overflow-fade 500ms ease;
-}
-#fade-container:hover {
-    overflow-fade: 32px;
-}
-
-/* Button states (all in CSS, no Rust code needed!) */
-#btn {
-    background: theme(primary);
-    transition: all 200ms ease;
-}
-#btn:hover { opacity: 0.9; transform: scale(1.02); }
-#btn:active { transform: scale(0.98); }
-#btn:disabled { opacity: 0.5; }
-```
-
-### CSS Keyframe Animations
-
-Define reusable `@keyframes` for complex, multi-step animations:
-
-```css
-/* Looping pulse */
-@keyframes pulse {
-    0% { opacity: 0.5; }
-    50% { opacity: 1.0; }
-    100% { opacity: 0.5; }
-}
-#pulse-element {
-    animation: pulse 2000ms ease-in-out infinite;
-}
-
-/* Multi-stop gradient animation */
-@keyframes track-glow {
-    0%   { background: linear-gradient(90deg, #d0d0d0, #e0e0e0, #ffffff); }
-    33%  { background: linear-gradient(90deg, #d0d0d0, #ffffff, #d0d0d0); }
-    66%  { background: linear-gradient(90deg, #ffffff, #e0e0e0, #d0d0d0); }
-    100% { background: linear-gradient(90deg, #d0d0d0, #e0e0e0, #ffffff); }
-}
-
-/* Clip-path reveal on hover */
-@keyframes clip-reveal {
-    from { clip-path: inset(50% 50% 50% 50%); }
-    to { clip-path: inset(0% 0% 0% 0%); }
-}
-#reveal:hover {
-    animation: clip-reveal 400ms ease-out forwards;
-}
-
-/* SVG stroke-dash line drawing */
-@keyframes draw-circle {
-    0%   { stroke-dashoffset: 251; }
-    100% { stroke-dashoffset: 0; }
-}
-#draw-svg {
-    stroke-dasharray: 251;
-    animation: draw-circle 3s ease-in-out infinite alternate;
-}
-
-/* SVG fill/stroke color cycling */
-@keyframes color-cycle {
-    0%   { fill: #ef4444; stroke: #dc2626; }
-    33%  { fill: #3b82f6; stroke: #2563eb; }
-    66%  { fill: #10b981; stroke: #059669; }
-    100% { fill: #ef4444; stroke: #dc2626; }
-}
-
-/* SVG path morphing */
-@keyframes morph-shape {
-    0%   { d: path("M20,20 L80,20 L80,80 L50,80 L20,80 Z"); }
-    50%  { d: path("M50,10 L90,40 L75,85 L25,85 L10,40 Z"); }
-    100% { d: path("M20,20 L80,20 L80,80 L50,80 L20,80 Z"); }
-}
-
-/* 3D rotation */
-@keyframes spin-y {
-    0% { rotate-y: 0deg; }
-    100% { rotate-y: 360deg; }
-}
-#spinning {
-    perspective: 800px;
-    animation: spin-y 4000ms linear infinite;
-}
-```
-
-### Common CSS Patterns
-
-```css
-/* Text truncation with ellipsis */
-.truncated {
-    width: 250px;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-}
-
-/* Non-interactive overlay */
-.overlay {
-    pointer-events: none;
-    opacity: 0.5;
-}
-
-/* SVG sub-element styling (tag-name selectors) */
-#my-svg path { stroke: #8b5cf6; stroke-width: 5; }
-#my-svg circle { fill: #f3e8ff; stroke: #a78bfa; }
-#my-svg rect { fill: #fef3c7; stroke: #f59e0b; }
-
-/* Liquid glass (advanced glass morphism) */
-#glass-card {
-    backdrop-filter: liquid-glass(blur(18px) saturate(180%) brightness(120%)
-                                  border(4.0) tint(rgba(255, 255, 255, 1.0)));
-    border-radius: 24px;
-    box-shadow: 0 8px 80px rgba(0, 0, 0, 0.60);
-}
-```
-
-### Advanced CSS Selectors
-
-```css
-/* Child combinator */
-#parent > .child { background: #374151; }
-#parent:hover > .child { background: #6366f1; }
-
-/* Adjacent sibling: hover one, style the next */
-.trigger:hover + .target { background: #f59e0b; }
-
-/* General sibling: hover one, style all following siblings */
-.trigger:hover ~ .item { background: #a78bfa; }
-
-/* :not() */
-.item:not(:first-child) { background: #0891b2; }
-
-/* Universal inside parent */
-#container > * { background: #059669; }
-```
-
-### Specificity (Low to High)
-
-1. **CSS stylesheet** (`ctx.add_css()`) — lowest priority
-2. **`css_style!` / `style!` macros** — inline element styles
-3. **Builder methods** (`.bg()`, `.w()`, etc.) — highest priority, overrides CSS
-
-### Inline Style Macros
-
-Both macros return `ElementStyle`. Apply to elements with `.style()`:
-
-```rust
-use blinc_layout::css_style;
-use blinc_layout::style;
-
-// css_style! macro — CSS-like syntax, semicolons, hyphenated properties, Rust values
-let card_style = css_style! {
-    background: Color::rgba(0.2, 0.3, 0.9, 1.0);
-    border-radius: 12.0;
-    box-shadow: Shadow::new(0.0, 4.0, 8.0, Color::BLACK.with_alpha(0.2));
-    opacity: 0.9;
-};
-div().style(&card_style)
-
-// style! macro — Rust-friendly syntax, commas, underscored properties
-let btn_style = style! {
-    bg: Color::BLUE,
-    rounded: 8.0,
-    shadow_md
-};
-div().style(&btn_style)
-```
-
-### Why CSS First?
-
-- **Hover/focus/disabled states for free** — no `stateful::<ButtonState>()` needed for pure visual changes
-- **Transitions and animations built-in** — `transition: all 300ms ease` and `@keyframes` handle most animation needs without Rust code
-- **Consistent theming** — one stylesheet + `var(--token)` styles the whole app
-- **Rich selector system** — child `>`, sibling `+`/`~`, `:not()`, `:is()`, `:first-child`, etc.
-- **Less code** — no per-element builder chains for every style property
-- **CSS variables** — theme tokens auto-inject as CSS variables from `ThemeState`
-- **Spacing consistency** — CSS uses standard `px` units, while builder spacing methods (`.p()`, `.gap()`, `.m()`) use a 4px unit system (see below)
-- **Clip-path & 3D** — `clip-path`, `perspective`, `rotate-x/y`, `shape-3d` are all CSS-driven
-
----
-
-## Element Builders
-
-All elements use a fluent builder API. Core elements:
-
-```rust
-// Container
-div().w(200.0).h(100.0).rounded(8.0).id("my-card")  // prefer CSS for bg/colors
-
-// Text
-text("Hello").size(24.0).weight(FontWeight::Bold).color(Color::WHITE)
-
-// Typography helpers
-h1("Title")  h2("Subtitle")  h3("Section")  p("Body")  caption("Small")
-b("Bold")  small("Small")  muted("Muted")  label("Label")
-
-// Stack (overlapping layers)
-stack().child(background).child(foreground)
-
-// Image & SVG
-image("photo.png").w(200.0).cover()
-svg("icon.svg").w(24.0).h(24.0).tint(Color::WHITE)
-
-// Canvas (custom GPU drawing)
-canvas(|ctx, bounds| { /* draw commands */ }).w(200.0).h(100.0)
-```
-
-### Layout (Flexbox)
-
-**IMPORTANT — Builder spacing units:**
-- `.w()`, `.h()`, `.left()`, `.top()`, `.rounded()`, `.size()` use **raw pixels**
-- `.p()`, `.px()`, `.py()`, `.m()`, `.mx()`, `.my()`, `.gap()` use **4px units** (e.g., `.p(4.0)` = 16px, `.gap(2.0)` = 8px)
-
-**To avoid confusion, prefer CSS for layout sizing** where values are always in standard `px`:
-```css
-.card { padding: 16px; margin: 8px; gap: 12px; }
-```
-
-Builder methods (when CSS is not practical):
-```rust
-div()
-    .flex_col()          // Vertical layout
-    .flex_row()          // Horizontal layout
-    .gap(4.0)            // 4.0 * 4 = 16px gap between children
-    .justify_center()    // Main axis center
-    .items_center()      // Cross axis center
-    .flex_center()       // Both axes centered
-    .flex_wrap()         // Wrap children
-    .p(4.0)              // 4.0 * 4 = 16px padding all sides
-    .px(4.0).py(2.0)     // Horizontal 16px / vertical 8px padding
-    .m(2.0)              // 2.0 * 4 = 8px margin all sides
-    .flex_1()            // flex: 1 1 0%
-    .flex_grow()         // flex-grow: 1
-    .w(200.0)            // 200px width (raw pixels)
-    .h(100.0)            // 100px height (raw pixels)
-    .w_full().h_full()   // 100% width/height
-    .absolute()          // position: absolute
-    .left(10.0)          // 10px left (raw pixels)
-    .top(10.0)           // 10px top (raw pixels)
-```
+Do not read a signal with `.get()` while building and branch on it: the build runs once and the UI will not update. Bind it instead.
 
 ---
 
 ## App Entry Point
 
 ```rust
+use blinc_app::prelude::*;
+use blinc_app::windowed::WindowedApp;
+
 fn main() -> Result<()> {
-    let config = WindowConfig {
-        title: "My App".to_string(),
-        width: 800,
-        height: 600,
-        resizable: true,
-        ..Default::default()
-    };
-
-    WindowedApp::run(config, |ctx| build_ui(ctx))
+    WindowedApp::run(WindowConfig::default(), |ctx| {
+        div()
+            .w(ctx.width)
+            .h(ctx.height)
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .child(text("Hello Blinc").size(32.0).color(Color::WHITE))
+    })
 }
+```
 
-fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
+The build closure is `FnMut(&mut WindowedContext) -> impl ElementBuilder`. It runs again when the window is resized or a rebuild is requested, so create state with `ctx.use_signal(..)`, which keeps one signal per call site across rebuilds.
+
+With a theme bundle (and the cn stylesheet):
+
+```rust
+use blinc_app::prelude::*;
+use blinc_app::windowed::WindowedApp;
+use blinc_cn::cn_bundle;
+
+fn main() -> Result<()> {
+    let bundle = cn_bundle().with_css(".my-card { border-radius: 16px; }");
+    WindowedApp::run_with_theme(WindowConfig::default(), bundle, ColorScheme::Dark, |_ctx| {
+        div().class("my-card").p(4.0).child(text("Themed"))
+    })
+}
+```
+
+`HybridTheme::bundle()` (also `RestrainedTheme`, `ExpressiveTheme`) is the theme without cn. Application rules take precedence over the component layer.
+
+---
+
+## Reactive State
+
+```rust
+use blinc_app::prelude::*;
+use blinc_core::reactive::{computed, signal};
+use blinc_layout::IntoReactive;
+
+fn counter(ctx: &mut WindowedContext) -> impl ElementBuilder {
+    let count = ctx.use_signal(0_i32);
+    let label = computed(move |g| format!("Count: {}", g.get(count).unwrap_or(0)));
+    let color = computed(move |g| {
+        if g.get(count).unwrap_or(0) > 10 { Color::RED } else { Color::WHITE }
+    });
+
     div()
-        .w(ctx.width)
-        .h(ctx.height)
-        .id("root")  // prefer CSS for styling
         .flex_col()
-        .items_center()
-        .justify_center()
-        .child(text("Hello Blinc").size(32.0).color(Color::WHITE))
-}
-```
-
----
-
-## Reactive State (Signals)
-
-### Creating State
-
-```rust
-// Keyed state — persists across UI rebuilds
-let count = ctx.use_state_keyed("counter", || 0i32);
-
-// Read
-let value = count.get();
-
-// Write
-count.set(5);
-count.update(|v| v + 1);
-
-// Get signal ID for dependency tracking
-let id = count.signal_id();
-```
-
-`State<T>` is `Copy` — capture directly in closures, no need to clone.
-
-### Using State in Closures
-
-```rust
-use blinc_core::BlincContextState;
-
-div().on_click(move |_| {
-    // BlincContextState provides thread-safe access from event handlers
-    BlincContextState::get().update(count, |v| v + 1);
-})
-```
-
-### Dependency Tracking with `stateful`
-
-Elements that need to re-render when signals change use `stateful::<S>()` with `.deps()`:
-
-```rust
-fn count_display(count: State<i32>) -> impl ElementBuilder {
-    stateful::<NoState>()
-        .deps([count.signal_id()])
-        .on_state(move |_ctx| {
-            let current = count.get();
-            div().child(text(&format!("{}", current)).size(64.0).color(Color::WHITE))
-        })
-}
-```
-
----
-
-## Stateful Containers
-
-`stateful::<S>()` creates elements with automatic state transitions. `S` must implement `StateTransitions`.
-
-### Built-in States
-
-| State | Variants | Auto-transitions |
-|-------|----------|------------------|
-| `ButtonState` | `Idle`, `Hovered`, `Pressed`, `Disabled` | Hover enter/leave, press/release |
-| `ToggleState` | `Off`, `On` | Click toggles |
-| `NoState` | (unit struct) | None — used only for `.deps()` reactive tracking |
-
-### Counter Example
-
-A practical example combining signals, stateful dependency tracking, and events:
-
-```rust
-fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-    let count = ctx.use_state_keyed("counter", || 0i32);
-
-    div()
-        .w(ctx.width).h(ctx.height).id("root")
-        .flex_col().items_center().justify_center()
-        // Display updates reactively via .deps()
-        .child(count_display(count))
-        // Buttons use CSS for hover styling (no manual ButtonState needed)
+        .gap(2.0)
+        .child(Text::bound(label.into_reactive()).size(32.0).color(color))
         .child(
-            div().flex_row().gap(4.0)
-                .child(counter_btn(count, "-", -1))
-                .child(counter_btn(count, "+", 1))
+            div()
+                .flex_row()
+                .gap(2.0)
+                .child(button("-").on_click(move |_| count.update(|n| n - 1)))
+                .child(button("+").on_click(move |_| count.update(|n| n + 1))),
         )
 }
-
-fn count_display(count: State<i32>) -> impl ElementBuilder {
-    stateful::<NoState>()
-        .deps([count.signal_id()])  // re-run on_state when count changes
-        .on_state(move |_ctx| {
-            let current = count.get();
-            div().child(
-                text(&format!("{}", current))
-                    .size(64.0).weight(FontWeight::Bold).color(Color::WHITE)
-            )
-        })
-}
-
-fn counter_btn(count: State<i32>, label: &'static str, delta: i32) -> impl ElementBuilder {
-    // Prefer CSS for hover/press styling:
-    // #counter-btn { background: #333; } #counter-btn:hover { background: #555; }
-    div()
-        .class("counter-btn")
-        .on_click(move |_| { count.update(|v| v + delta); })
-        .child(text(label).size(28.0).weight(FontWeight::Bold).color(Color::WHITE))
-}
 ```
 
-**Key principle:** Use CSS for hover/press visual effects. Use `stateful::<NoState>()` with `.deps()` for signal-driven reactive updates. Only reach for `stateful::<ButtonState>()` with `on_state` when you need runtime logic that CSS can't express.
+- `signal(v)` makes a free signal; `ctx.use_signal(v)` keeps one per call site across rebuilds; `ctx.use_signal_keyed("key", || v)` is for loops and factories called from one line.
+- `sig.get()`, `sig.set(v)`, `sig.update(|v| ..)`. Signals are `Copy`: capture them by value.
+- `computed(|g| ..)` tracks every signal read through `g.get(sig)`. `effect(|g| ..)` runs a side effect when its reads change; keep the returned handle alive.
+- Anything created while a list row, branch or full tree build runs belongs to that scope and is disposed with it. `Owner::run` scopes your own.
+- Reactive setters take `impl IntoReactive<T>`: a value, a `Signal`, a `Computed`. The call site is the same for all three.
 
-**Rules for `on_state` callback:**
-- Callback signature: `Fn(&StateContext<S>) -> Div`
-- Read state via `ctx.state()` (returns `S` by copy)
-- **Return** a `Div` (builder pattern) — do NOT mutate
-- Outer builder methods (`.id()`, `.class()`) apply to the container
-- Inner `div()` returned from `on_state` is the visual content
+Bound setters on `Div`: `.bg`, `.opacity`, `.rounded`, `.border_color`, `.border_width`, `.shadow`, `.transform`, `.scale`, `.rotate`, `.w`, `.h`, `.p`, `.gap`, `.visible`. On text: `Text::bound(src)`, `.size`, `.color`, `.weight`. Visual-only updates skip layout.
 
-### Conditional Rendering with `.when()`
+---
 
-`.when(condition, |div| ...)` conditionally modifies a builder. This only works **inside `on_state` callbacks** where the structure rebuilds on state change — outside of `on_state`, conditions are evaluated once at build time and won't react to changes.
+## CSS-First Styling
+
+Style with a stylesheet. Use builder methods for values computed at run time.
 
 ```rust
-fn expandable_section(expanded: State<bool>) -> impl ElementBuilder {
-    stateful::<NoState>()
-        .deps([expanded.signal_id()])
-        .on_state(move |_ctx| {
-            let is_open = expanded.get();
-            div()
-                .child(text("Section Title"))
-                .when(is_open, |d| {
-                    d.child(div().child(text("Expanded content here...")))
-                })
-        })
+fn styled(ctx: &mut WindowedContext) -> impl ElementBuilder {
+    ctx.add_css(
+        r#"
+        .card { background: var(--surface-elevated); border-radius: 12px; padding: 16px;
+                transition: background 200ms ease; }
+        .card:hover { background: var(--surface-overlay); }
+        #title { color: var(--text-primary); }
+        "#,
+    );
+    div().class("card").child(text("Title").id("title"))
 }
 ```
+
+`ctx.add_css` appends on every call, so call it once: in a closure that runs on rebuilds, guard it with a flag. A theme bundle's `.with_css(..)` is the cleaner place.
+
+Target with `.id("x")` (`#x`) and `.class("x")` (`.x`). `text(..)` has `.id` but not `.class`: wrap it in a classed `div` for class rules.
+
+### Theme tokens
+
+A theme's tokens are `:root` variables. Use `var(--primary)`, `var(--text-primary)`, `var(--surface-elevated)`, `var(--radius-lg)`, `var(--shadow-md)` (a real `box-shadow` list). `theme(token)` no longer exists. Your own variables work too:
+
+```css
+:root { --brand: #3498db; }
+.card { background: var(--brand); }
+```
+
+Colours follow CSS: `rgb()` and `rgba()` components are 0 to 255, and named colours take CSS values.
+
+### Supported CSS
+
+| Category | Properties |
+|----------|-----------|
+| **Layout** | `width`, `height`, `min-*`, `max-*`, `padding`, `margin`, `gap`, `display: flex`, `flex-direction`, `align-items`, `justify-content`, `flex-grow`, `flex-shrink`, `flex-wrap`, `overflow`, `aspect-ratio` |
+| **Position** | `position: absolute/relative`, `top`, `right`, `bottom`, `left` |
+| **Visual** | `background` (colours, gradients), `opacity`, `border`, `border-radius`, `box-shadow`, `outline`, `outline-offset`, `backdrop-filter: blur()`, `overflow-fade` |
+| **Text** | `color`, `font-size`, `font-weight`, `font-family`, `text-align`, `line-height`, `letter-spacing`, `text-decoration`, `text-overflow: ellipsis`, `white-space: nowrap` |
+| **Effects** | `mix-blend-mode`, `pointer-events`, `cursor`, `filter: brightness() saturate() contrast()`, `clip-path: inset/polygon/circle` |
+| **Transition** | `transition: all 300ms ease`, `transition-property`, `transition-duration`, `transition-timing-function` |
+| **Animation** | `@keyframes`, `animation: name duration timing iteration` |
+| **SVG** | `fill`, `stroke`, `stroke-width`, `stroke-dasharray`, `stroke-dashoffset`, `d: path(...)` |
+| **3D** | `perspective`, `rotate-x`, `rotate-y`, `translate-z`, `shape-3d`, `depth` |
+| **Variables** | `:root { --name: value; }`, `var(--name)`, `color-mix()` |
+| **Selectors** | `#id`, `.class`, tag (SVG), `:hover`, `:active`, `:focus`, `:disabled`, `:checked`, `::placeholder`, `:first-child`, `:last-child`, `:not()`, `:is()`, `:empty`, `[attr]`, `[attr="v"]`, `>`, `+`, `~`, `*` |
+
+An attribute is a `name=value` class: `.attr("data-state", "open")` matches `[data-state="open"]`. A `disabled` or `checked` attribute matches `:disabled` and `:checked`.
+
+### Cascade
+
+Rules inside `@layer name { .. }` are a component's own. An unlayered application rule beats a layered one whatever the specificity, as in browsers. cn's stylesheet is layered, so your rules override it.
+
+### Transitions and keyframes
+
+```css
+.card { transition: all 300ms ease; }
+.card:hover { transform: translateY(-4px) scale(1.02); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3); }
+
+@keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+.pulsing { animation: pulse 2000ms ease-in-out infinite; }
+```
+
+A `transform` transition does not reflow layout; width, height and padding transitions do, every frame.
+
+### Inline styles
+
+`css_style!` (CSS-like, semicolons) and `style!` (Rust-like, commas) build an `ElementStyle`; apply it with `.style(&s)`. `css!` builds a whole `Stylesheet`.
+
+```rust
+use blinc_layout::css_style;
+
+let s = css_style! { background: Color::BLUE; border-radius: 12.0; opacity: 0.9; };
+div().style(&s)
 ```
 
 ---
 
-## Spring Animations
-
-### Spring Presets
+## Elements and Layout
 
 ```rust
-use blinc_animation::SpringConfig;
-
-SpringConfig::stiff()   // Fast, no overshoot (buttons, toggles)
-SpringConfig::snappy()  // Quick with slight bounce
-SpringConfig::gentle()  // Soft, slow settle (modals, overlays)
-SpringConfig::wobbly()  // Bouncy, playful
-SpringConfig::new(stiffness, damping, mass)  // Custom (f32, f32, f32)
+let card = div().w(200.0).h(100.0).rounded(8.0).id("card");
+let title = text("Hello").size(24.0).weight(FontWeight::Bold).color(Color::WHITE);
+let headings = (h1("Title"), h2("Subtitle"), p("Body"), caption("Small"), label("Label"));
+let layers = stack().child(div()).child(div());
+let photo = image("photo.png").w(200.0).cover();
+let icon = svg("icon.svg").size(24.0, 24.0);
+let drawing = canvas(|ctx, bounds| { /* draw commands */ }).w(200.0).h(100.0);
 ```
 
-### Using Springs in StateContext
-
-`ctx.use_spring()` is a convenience method that sets the target and returns the current animated value as `f32`:
+**Spacing units.** `.p()`, `.px()`, `.py()`, `.m()`, `.mx()`, `.my()` and `.gap()` take 4px units (`.p(4.0)` is 16px). `.w()`, `.h()`, `.left()`, `.top()`, `.rounded()` and `.size()` take pixels. CSS `padding: 16px` is always pixels, so prefer CSS for spacing.
 
 ```rust
-fn animated_button() -> impl ElementBuilder {
-    stateful::<ButtonState>()
-        .on_state(|ctx| {
-            // use_spring(name, target, config) -> f32
-            // Set target based on current state; returns current interpolated value
-            let target = match ctx.state() {
-                ButtonState::Hovered => 1.05,
-                ButtonState::Pressed => 0.95,
-                _ => 1.0,
-            };
-            let s = ctx.use_spring("scale", target, SpringConfig::snappy());
-            div().bg(Color::rgba(0.3, 0.5, 0.9, 1.0)).scale(s)
-        })
+div()
+    .flex_col().flex_row()   // direction
+    .gap(2.0)                // 8px
+    .p(4.0)                  // 16px
+    .justify_center().items_center()
+    .flex_wrap().flex_1().flex_grow().flex_shrink_0()
+    .w_full().h_full().w_fit().h_fit()
+    .absolute().left(10.0).top(10.0)
+```
+
+`w_fit()` and `h_fit()` override the parent's `align-items`; use `flex_shrink_0()` when you only want the child not to shrink.
+
+---
+
+## Lists and Branches
+
+```rust
+use blinc_core::reactive::signal;
+
+#[derive(Clone)]
+struct Todo { id: u32, title: String }
+
+fn todo_list() -> impl ElementBuilder {
+    let todos = signal(vec![Todo { id: 1, title: "Write docs".into() }]);
+    let signed_in = signal(false);
+
+    div()
+        .flex_col()
+        .gap(2.0)
+        .for_each(todos, |t: &Todo| t.id, |t: Todo| text(t.title).size(14.0))
+        .show_or(
+            signed_in,
+            || text("Welcome back"),
+            move || button("Sign in").on_click(move |_| signed_in.set(true)),
+        )
 }
 ```
 
-For more control, use `ctx.use_animated_value_with_config()` which returns `SharedAnimatedValue` (`Arc<Mutex<AnimatedValue>>`):
-
-```rust
-let scale = ctx.use_animated_value_with_config("scale", 1.0, SpringConfig::snappy());
-scale.lock().unwrap().set_target(1.05);
-let current = scale.lock().unwrap().get();
-```
-
-### Motion Containers
-
-`motion()` wraps content with enter/exit/stagger animations:
-
-```rust
-use blinc_layout::motion::motion;
-
-// Fade in on enter
-motion().fade_in(300).child(content)
-
-// Slide in from direction
-motion().slide_in(SlideDirection::Right, 200).child(content)
-
-// Stagger children (delay_ms between each, animation preset)
-motion()
-    .stagger(StaggerConfig::new(50, AnimationPreset::fade_in(300)))
-    .child(list_items)
-
-// Combined enter animations
-motion()
-    .fade_in(300)
-    .slide_in(SlideDirection::Up, 200)
-    .child(modal_content)
-```
-
-### FLIP-Style Layout Animations (`animate_bounds`)
-
-CSS handles most FLIP-style animations via `transform` transitions (translate, scale, rotate — no layout reflow). For **layout-driven** changes that CSS can't express — such as element reordering, accordion content expanding, or container sizes changing programmatically — use `animate_bounds()` with `VisualAnimationConfig`:
-
-```rust
-use blinc_layout::visual_animation::VisualAnimationConfig;
-
-// Accordion: animate height changes
-div()
-    .animate_bounds(VisualAnimationConfig::height().with_key("accordion-1"))
-    .overflow_clip()
-    .child(expandable_content)
-
-// Reorder list: animate position changes
-div()
-    .animate_bounds(VisualAnimationConfig::position())
-    .child(sortable_item)
-
-// Animate all bounds with custom spring
-div()
-    .animate_bounds(
-        VisualAnimationConfig::all()
-            .with_spring(SpringConfig::wobbly())
-            .with_key("card")
-    )
-    .child(content)
-```
-
-**VisualAnimationConfig presets:**
-- `::height()` — accordion/collapsible (most common)
-- `::width()` — sidebars
-- `::size()` — both width and height
-- `::position()` — reordering (no clipping)
-- `::all()` — position + size
-- Chain `.gentle()`, `.wobbly()`, `.stiff()`, `.snappy()` for spring presets
-- Use `.with_key("stable-id")` inside `stateful` components for persistence across rebuilds
-
-**When to use what:**
-| Need | Use |
-|------|-----|
-| Hover/focus color change | CSS `transition: all 300ms ease` + `:hover` |
-| FLIP-style lift/scale/slide | CSS `transition: transform 300ms ease` + `:hover` |
-| Continuous looping animation | CSS `@keyframes` + `animation:` |
-| Reveal/clip animation | CSS `@keyframes` with `clip-path` |
-| Accordion expand/collapse | `animate_bounds(VisualAnimationConfig::height())` |
-| Sortable list reorder | `animate_bounds(VisualAnimationConfig::position())` |
-| Enter/exit/stagger | `motion().fade_in(300)` |
-| Spring-physics per state | `ctx.use_spring()` inside `on_state` |
+- `for_each(each, key, item)`: `each` is a `Signal<Vec<T>>`, `Computed<Vec<T>>` or plain `Vec<T>`. A row is built once per key, so bind the parts of a row that change to signals inside it.
+- `show(cond, || ..)` builds the branch while the condition holds and tears it down, with what it created, when it stops. `show_or(cond, then, otherwise)` adds the other case. An element holds one list or branch.
+- Keeping content but hiding it: `.visible(cond)` (`display: none`), `.when(cond, |d| d.child(..))`, `.collapsed_when(cond)` (no height, content stays laid out).
 
 ---
 
@@ -726,142 +274,244 @@ div()
 ```rust
 div()
     .on_click(|ctx| { /* ctx.local_x, ctx.local_y */ })
-    .on_hover_enter(|ctx| { /* mouse entered */ })
-    .on_hover_leave(|ctx| { /* mouse left */ })
-    .on_key_down(|ctx| {
-        if (ctx.ctrl || ctx.meta) && ctx.key_code == 83 { /* Ctrl/Cmd+S */ }
-    })
+    .on_hover_enter(|_| {})
+    .on_hover_leave(|_| {})
+    .on_key_down(|ctx| { if (ctx.ctrl || ctx.meta) && ctx.key_code == 83 { /* save */ } })
     .on_drag(|ctx| { /* ctx.drag_delta_x, ctx.drag_delta_y */ })
     .on_scroll(|ctx| { /* ctx.scroll_delta_x, ctx.scroll_delta_y */ })
-    .on_focus(|ctx| { /* element focused */ })
-    .on_blur(|ctx| { /* element blurred */ })
-    .on_mount(|ctx| { /* added to tree */ })
-    .on_unmount(|ctx| { /* removed from tree */ })
+    .on_focus(|_| {})
+    .on_blur(|_| {})
+    .on_mount(|_| {})
+    .on_unmount(|_| {})
 ```
 
-All handlers receive `EventContext` with fields: `mouse_x`, `mouse_y`, `local_x`, `local_y`, `key_code`, `key_char`, `shift`, `ctrl`, `alt`, `meta`, `drag_delta_x`, `drag_delta_y`, `scroll_delta_x`, `scroll_delta_y`.
+Handlers get an `EventContext`: `mouse_x`, `mouse_y`, `local_x`, `local_y`, `key_code`, `key_char`, `shift`, `ctrl`, `alt`, `meta`, `drag_delta_x`, `drag_delta_y`, `scroll_delta_x`, `scroll_delta_y`, `node_id`. Capture signals by value in `move` closures and call `.set`/`.update` on them. Key events reach every handler that has one; each decides whether it is the target.
+
+For hover, press and focus as signals when a stylesheet cannot say it, use `Interaction`: `let p = Interaction::keyed("k"); div().track(&p)`, then `p.hovered().signal()`.
+
+### Keyboard navigation
+
+An element with the `tabindex=0` attribute is a tab stop; `tabindex=text` marks a text input. Tab and Shift+Tab walk the stops in tree order, wrap, and scroll the stop into view. Enter and Space click the focused stop. Tab stays inside an open dialog or sheet. `:focus` matches the focused stop, so a rule draws the ring. A `disabled` attribute removes a stop.
+
+```rust
+div().attr("tabindex", "0").on_click(|_| {})
+```
+
+```css
+.card:focus { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+```
+
+A handler that wants arrow keys on a Tab-focused element tests `blinc_layout::event_router::keyboard_focused_node() == Some(ctx.node_id)`. The cn buttons, checkboxes, switches, toggles, radios, tabs, selects, menu triggers, accordion and collapsible triggers, links, sliders and text fields are stops already.
 
 ---
 
 ## Widgets
 
-Built-in widgets in `blinc_layout::widgets`. Note: `text_input` and `text_area` take shared state handles, not raw strings.
+Widgets in `blinc_layout::widgets` bind to signals and shared data handles, not raw values.
 
 ```rust
 use blinc_layout::widgets::*;
 
-// Text input — create shared state first, then pass reference
-let input_data = text_input_data_with_placeholder("Enter name...");
-text_input(&input_data).id("my-input").on_change(|val| { /* val: &str */ })
+fn form(ctx: &mut WindowedContext) -> impl ElementBuilder {
+    let agreed = ctx.use_signal(false);
+    let plan = ctx.use_signal("free".to_string());
+    let name = text_input_state_with_placeholder("Your name");
+    let bio = text_area_state_with_placeholder("About you");
 
-// Text area — same pattern
-let area_state = text_area_state_with_placeholder("Enter description...");
-text_area(&area_state).id("my-area").rows(5)
-
-// Scroll container
-scroll().w(400.0).h(300.0).child(long_content)
-
-// Radio group — takes &State<String>
-let selected = ctx.use_state_keyed("radio", || "opt1".to_string());
-radio_group(&selected)
-    .option("opt1", "Option 1")
-    .option("opt2", "Option 2")
-
-// Checkbox — takes &State<bool>
-let checked = ctx.use_state_keyed("check", || false);
-checkbox(&checked).label("Enable feature")
+    div()
+        .flex_col()
+        .gap(2.0)
+        .child(text_input(&name).id("name").on_change(|v| println!("{v}")))
+        .child(text_area(&bio).id("bio").rows(5))
+        .child(checkbox(agreed).label("I agree"))
+        .child(radio_group(plan).option("free", "Free").option("pro", "Pro"))
+        .child(scroll().h(120.0).child(div().h(400.0)))
+}
 ```
+
+`checkbox` and `toggle` take a `Signal<bool>`; `radio_group` and `input_otp` a `Signal<String>`; `number_input` a `Signal<f64>`. `.disabled(..)`, `.label(..)` and placeholders take a value, a `Signal` or a `Computed` and follow it. `text_input` and `text_area` take the data handles from `text_input_state*()` and `text_area_state*()`.
 
 ---
 
-## Component Patterns
+## Component Library (blinc_cn)
 
-### Function Components
+`blinc_cn` is a prebuilt, themeable component set, not a class-name utility. Its look is CSS: components carry `.cn-*` classes and `data-state` attributes, and `CN_STYLES` (inside `cn_bundle()`) holds the rules. To change a look, write a rule for the class; there are no colour or animation builder methods.
 
 ```rust
-fn card(title: &str) -> Div {
+use blinc_app::windowed::WindowedContext;
+use blinc_cn::prelude::*;
+use blinc_layout::prelude::{div, text, ElementBuilder};
+
+fn settings(ctx: &mut WindowedContext) -> impl ElementBuilder {
+    let notify = ctx.use_signal(true);
+    let volume = ctx.use_signal(40.0_f32);
+    let choice = ctx.use_signal("a".to_string());
+
+    card()
+        .child(card_header().title("Settings").description("Preferences"))
+        .child(
+            card_content()
+                .child(switch(notify))
+                .child(slider(volume).min(0.0).max(100.0).step(5.0))
+                .child(select(choice).option("a", "Option A").option("b", "Option B")),
+        )
+        .child(card_footer().child(button("Save").variant(ButtonVariant::Primary)))
+}
+```
+
+- State: `checkbox`, `switch`, `toggle` take `Signal<bool>`; `radio_group`, `toggle_group`, `select`, `combobox`, `input_otp` take `Signal<String>`; `number_input` a `Signal<f64>`; `slider` a `Signal<f32>` or `Signal<f64>`.
+- Overlays are shown from a handler and return an `OverlayHandle`: `dialog().title(..).description(..).confirm_text(..).on_confirm(|| ..).show()`, `alert_dialog()`, `sheet()`, `drawer()`. There is no open signal.
+- `popover(trigger_fn).content(|| ..)`, `collapsible(Signal<bool>)`, `sidebar(Signal<bool>)`, `tabs`, `accordion`, `tree_view`, `calendar`, `date_picker`, `time_picker`, `color_picker`, `table`, charts. Read the component's source in `crates/blinc_cn/src/components/` for its builder.
+- Disabled, labels, descriptions and errors follow a signal in place.
+
+---
+
+## Stateful Elements
+
+`stateful::<S>()` runs a state machine and rebuilds its subtree from `on_state` on each transition. Use it when states change what is built; use a stylesheet or a binding for colours and sizes.
+
+```rust
+fn card_button(label: &'static str) -> impl ElementBuilder {
+    stateful::<ButtonState>().on_state(move |ctx| {
+        let bg = match ctx.state() {
+            ButtonState::Idle => Color::BLUE,
+            ButtonState::Hovered => Color::CYAN,
+            ButtonState::Pressed => Color::GRAY,
+            ButtonState::Disabled => Color::GRAY,
+        };
+        div().bg(bg).child(text(label))
+    })
+}
+```
+
+- Built-in states: `ButtonState` (`Idle`, `Hovered`, `Pressed`, `Disabled`), `ToggleState`, and `NoState` for `.deps(..)` only. A custom machine implements `StateTransitions` (plural).
+- `on_state` returns a `Div`; it does not mutate. `ctx.state()` returns the state by copy.
+- Reactive rebuild: `stateful::<NoState>().deps([sig.signal_id()]).on_state(..)`. Prefer a binding.
+- `ctx.use_fsm(initial)` and `use_fsm_keyed(key, initial)` return shared state for a machine.
+
+---
+
+## Animation
+
+Order of preference: CSS `transition` and `@keyframes`; then `animate_bounds` for layout-driven changes; then springs.
+
+```rust
+use blinc_layout::visual_animation::VisualAnimationConfig;
+
+fn faq(open: Signal<bool>) -> impl ElementBuilder {
+    let closed = computed(move |g| !g.get(open).unwrap_or(false));
+    // the body animates its height as the section opens
     div()
-        .id("card")  // style via CSS: #card { padding: 16px; border-radius: 12px; ... }
-        .child(text(title).size(18.0).weight(FontWeight::SemiBold).color(Color::WHITE))
+        .overflow_clip()
+        .animate_bounds(VisualAnimationConfig::height().with_key("faq-1").clip_to_animated())
+        .collapsed_when(&closed)
+        .child(text("Answer"))
 }
 ```
 
-### Components with Children
+`VisualAnimationConfig::{height, width, size, position, all}`; add `.with_key("stable-id")` for persistence across rebuilds.
+
+Springs: `SpringConfig::{stiff, snappy, gentle, wobbly}` or `SpringConfig::new(stiffness, damping, mass)`. `AnimatedValue::new(get_scheduler(), initial, config)` with `.set_target(v)` and `.get()`; share one as `SharedAnimatedValue` (`Arc<Mutex<AnimatedValue>>`) and hand it to `motion().opacity(value)`. Inside `stateful::on_state`, `ctx.use_spring("name", target, config)` returns the current `f32`.
+
+`motion()` wraps content in enter and exit animations (`fade_in(ms)`, `slide_in(dir, ms)`, `stagger(..)`). A list row can animate out with `Row::new(el).on_leave(start, done)` from `blinc_layout::region`.
+
+| Need | Use |
+|------|-----|
+| Hover or focus colour change | CSS `transition` with `:hover` |
+| Lift, scale, slide | CSS `transition: transform` |
+| Looping animation | CSS `@keyframes` |
+| Accordion or collapse | `animate_bounds` with `collapsed_when` |
+| Enter, exit, stagger | `motion()` |
+| Row leaving a list | `Row::on_leave` |
+
+---
+
+## Canvas and Flow Shaders
+
+`canvas(|ctx, bounds| ..)` draws with GPU commands. A flow shader is drawn by a canvas, not by CSS:
 
 ```rust
-fn card_with_content<E: ElementBuilder>(title: &str, content: E) -> Div {
-    div()
-        .class("card")  // style via CSS: .card { padding: 16px; ... }
-        .flex_col()
-        .child(text(title).size(18.0).weight(FontWeight::SemiBold).color(Color::WHITE))
-        .child(content)
+use blinc_layout::flow;
+
+fn ripple_view() -> impl ElementBuilder {
+    let ripple = flow!(ripple, fragment, {
+        input uv: builtin(uv);
+        input time: builtin(time);
+        node d = distance(uv, vec2(0.5, 0.5));
+        node wave = sin(d * 20.0 - time * 4.0) * 0.5 + 0.5;
+        output color = vec4(wave, wave, wave, 1.0);
+    });
+    canvas(|_, _| {}).flow(ripple).w(400.0).h(400.0)
 }
 ```
 
-### BlincComponent Derive
-
-For type-safe hooks (state + animation) that prevent key collisions:
-
-```rust
-use blinc_macros::BlincComponent;
-
-#[derive(BlincComponent)]
-struct Counter {
-    count: i32,        // unmarked fields → State<T> (generates Counter::use_count)
-    #[animation]
-    scale: f32,        // #[animation] fields → SharedAnimatedValue (generates Counter::use_scale)
-}
-
-fn counter_demo(ctx: &WindowedContext) -> impl ElementBuilder {
-    let count = Counter::use_count(ctx, 0);
-    let scale = Counter::use_scale(ctx, 1.0, SpringConfig::snappy());
-    // ...
-}
-```
-
-Note: There is no `#[state]` attribute. Fields without any attribute are automatically state fields.
+`flow!` compiles to WGSL at build time and yields a `FlowShader` constant. In its body, step types use underscore names and colours are hex integers (`0x1a3a5a`). A shader that reads `time` animates every frame; `Canvas::flow_loop` and `FlowClock` control that. The `@flow` stylesheet block and `div().flow(..)` are removed.
 
 ---
 
 ## Glass Material
 
 ```rust
-div().glass()  // Default frosted glass effect
+use blinc_layout::element::{GlassMaterial, Material};
 
-// Presets
-use blinc_layout::element::GlassMaterial;
-
-div().material(Material::Glass(GlassMaterial::ultra_thin()))
-div().material(Material::Glass(GlassMaterial::thin()))
-div().material(Material::Glass(GlassMaterial::regular()))
-div().material(Material::Glass(GlassMaterial::thick()))
-div().material(Material::Glass(GlassMaterial::frosted()))
-div().material(Material::Glass(GlassMaterial::card()))
-
-// Custom
-div().material(Material::Glass(
-    GlassMaterial::new()
-        .blur(20.0)
-        .tint(Color::rgba(1.0, 1.0, 1.0, 0.1))
-        .saturation(1.2)
-        .noise(0.03)
-))
+let frosted = div().glass();
+let thick = div().material(Material::Glass(GlassMaterial::thick()));
 ```
+
+Presets: `ultra_thin`, `thin`, `regular`, `thick`, `frosted`, `card`. In CSS: `backdrop-filter: blur(12px) saturate(180%)`.
+
+---
+
+## Component Patterns
+
+```rust
+fn card_with(title: &str, content: impl ElementBuilder + 'static) -> Div {
+    div()
+        .class("card")
+        .flex_col()
+        .child(text(title).size(18.0).weight(FontWeight::SemiBold))
+        .child(content)
+}
+```
+
+A function component takes signals as parameters and binds them inside; it never reads a signal at build time to decide structure. Style it with a class and a stylesheet rule.
+
+---
+
+## Testing
+
+`blinc_recorder::Headless` renders a UI offscreen and drives it like a window (needs a GPU adapter; tests skip without one):
+
+```rust,ignore
+let mut ui = Headless::new(400, 200)?;
+ui.theme(HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES), ColorScheme::Dark);
+ui.mount(|_| div().child(button("Save")));
+ui.settle();
+ui.hover(".cn-button");     // also move_to, mouse_down, click, key(code), key_with_shift
+ui.key(9);                  // Tab
+ui.cursor_over(".cn-button");
+```
+
+Run tests with `cargo nextest run`: each test gets its own process, which UI code with process-wide state needs. Plain `cargo test` shares one process among threads. Golden tests compare against checked-in files; regenerate with `BLESS_GOLDEN=1`.
 
 ---
 
 ## Common Pitfalls
 
-1. **Don't use `stateful(handle)`** — this is the deprecated API. Use `stateful::<S>()`.
-2. **`on_state` returns `Div`** — it's a builder, not mutation. Return `div().bg(bg)`, don't call `div.set_bg()`.
-3. **Signal is `Copy`** — capture directly in closures, no need to clone.
-4. **`BlincContextState::get()`** — use this for signal updates inside event closures, not `ctx`.
-5. **CSS loaded once** — guard `ctx.add_css()` with a boolean flag to avoid re-adding on each rebuild.
-6. **`blinc_cn` is a component library** — NOT a className utility. It provides prebuilt shadcn/ui-style widgets.
-7. **Prefer CSS for all styling** — use `#id:hover { ... }` and `var(--token)` in a stylesheet instead of hardcoding colors in builder methods. Use `stateful::<ButtonState>()` only when you need runtime logic (not just visual changes).
-8. **Spacing units differ from pixels** — `.p()`, `.px()`, `.py()`, `.m()`, `.mx()`, `.my()`, `.gap()` use **4px units** (`.p(4.0)` = 16px). `.w()`, `.h()`, `.left()`, `.top()` use raw pixels. **Prefer CSS for spacing** (`padding: 16px; gap: 12px;`) to avoid this confusion.
-9. **Widget constructors take shared state** — `text_input(&data)` and `text_area(&state)` take `&SharedTextInputData` / `&SharedTextAreaState`, not strings. Create state first with `text_input_data_with_placeholder("...")`.
-10. **`use_spring` returns `f32`** — it's a convenience that sets target and returns current value. Don't try to `.lock()` on it. For `SharedAnimatedValue`, use `use_animated_value_with_config()` instead.
-11. **`#[state]` attribute doesn't exist** — in `#[derive(BlincComponent)]`, unmarked fields are state. Only `#[animation]` is an explicit attribute.
-12. **The trait is `StateTransitions`** (plural) — not `StateTransition`.
-13. **`text()` has no `.class()` method** — use `.id("name")` with `#name { ... }` CSS selectors to style text. If you need class-based styling, wrap in `div().class("name").child(text("..."))`.
+1. **No `State<T>` in new code.** Use `Signal`, `Computed`, `Effect`. Widgets take signals.
+2. **Do not branch on `signal.get()` while building.** Bind the property, class or list instead.
+3. **Signals are `Copy`.** Capture by value in `move` closures; no `.clone()`.
+4. **`on_state` returns a `Div`**; it is a builder, not a mutation.
+5. **A `stateful` element rebuilds on every transition.** Use it for structure, not for colours.
+6. **`ctx.add_css` appends each call.** Add a stylesheet once, or use a bundle's `.with_css`.
+7. **`theme(token)` is gone.** Write `var(--token)`.
+8. **`rgb()` components are 0 to 255**, as in CSS.
+9. **Spacing units differ.** `.p()`, `.m()`, `.gap()` are 4px units; `.w()`, `.h()` are pixels.
+10. **`text()` has no `.class()`.** Use `.id("x")`, or wrap in a classed `div`.
+11. **A `for_each` row is built once per key.** Bind what changes inside the row.
+12. **Widget constructors take handles.** `text_input(&data)`, `text_area(&state)`; create them first with `text_input_state()` and `text_area_state()`.
+13. **`blinc_app::prelude::*` and `blinc_cn::prelude::*` both export `button` (and more).** In a cn app import `blinc_cn::prelude::*` and name the layout items you need: `use blinc_layout::prelude::{div, text};`.
+14. **cn components are restyled with CSS rules**, not builder colours. There are no `track_color`, `enter_animation` or similar methods.
+15. **Dialogs are shown from a handler** with `.show()`; there is no open signal.
+16. **Use `tracing::`** for logging, not `log::` or `eprintln!`.
+17. **Web builds use `web_time::Instant`**, not `std::time::Instant`.
