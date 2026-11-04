@@ -56,6 +56,9 @@ mod context_reactive;
 mod desktop_loop;
 mod fps;
 mod helpers;
+mod loop_frame;
+mod loop_input;
+mod loop_lifecycle;
 mod pending;
 mod window;
 
