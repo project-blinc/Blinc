@@ -19,10 +19,16 @@ pub(super) fn scope(div: Div, key: String, kind: OverlayKind) -> Div {
 }
 
 pub(crate) fn is_active(key: &str) -> bool {
-    if let Some(id) = key.strip_prefix("stack-").and_then(|id| id.parse().ok()) {
+    if let Some(id) = key
+        .strip_prefix("stack-")
+        .and_then(|id| id.parse::<u64>().ok())
+    {
         return super::overlay_stack::OverlayHandle::from_raw(id).is_live();
     }
-    if let Some(id) = key.strip_prefix("legacy-").and_then(|id| id.parse().ok()) {
+    if let Some(id) = key
+        .strip_prefix("legacy-")
+        .and_then(|id| id.parse::<u64>().ok())
+    {
         return crate::overlay_state::OverlayContext::try_get().is_some_and(|ctx| {
             let manager = ctx.overlay_manager();
             let inner = manager.lock().unwrap();
