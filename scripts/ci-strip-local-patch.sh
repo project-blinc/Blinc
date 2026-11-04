@@ -16,6 +16,9 @@
 # `crates/*`, present on every clone) is untouched.
 #
 # Idempotent: safe to run even if the block is already absent.
+#
+# Every CI job runs this first, so it also installs the tracked lockfile
+# (`scripts/ci-use-lock.sh`).
 
 set -euo pipefail
 
@@ -27,7 +30,8 @@ if [[ ! -f "$CARGO_TOML" ]]; then
 fi
 
 if ! grep -q '^# Local-dev redirects for the /packages' "$CARGO_TOML"; then
-    echo "ci-strip-local-patch: no local-dev patch block found in $CARGO_TOML — nothing to do"
+    echo "ci-strip-local-patch: no local-dev patch block found in $CARGO_TOML, nothing to do"
+    bash "$(dirname "$0")/ci-use-lock.sh"
     exit 0
 fi
 
@@ -44,3 +48,4 @@ awk '
 mv "$tmp" "$CARGO_TOML"
 
 echo "ci-strip-local-patch: stripped local-dev patch block from $CARGO_TOML"
+bash "$(dirname "$0")/ci-use-lock.sh"

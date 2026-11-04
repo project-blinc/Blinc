@@ -1,0 +1,38 @@
+name: Fresh resolve
+
+# CI builds from the tracked ci/workspace.lock. This job resolves the
+# workspace afresh, as a user's build does, and checks the tracked lock for
+# yanked releases, so an upstream change shows up here and not in every
+# push's workflows.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  fresh-resolve:
+    name: Fresh resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Strip local-dev [patch] block (CI-only)
+        env:
+          BLINC_FRESH_LOCK: '1'
+        run: bash scripts/ci-strip-local-patch.sh
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Resolve the workspace afresh
+        run: cargo generate-lockfile
+
+      - name: Check the tracked lock for yanked releases
+        run: |
+          cp ci/workspace.lock Cargo.lock
+          cargo fetch --locked 2>&1 | tee fetch.log
+          if grep -i "yanked" fetch.log; then
+            echo "::error::ci/workspace.lock pins a yanked release; run scripts/ci-refresh-lock.sh"
+            exit 1
+          fi
