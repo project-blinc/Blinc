@@ -18,6 +18,7 @@ pub fn theme_bundle() -> ThemeBundle {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<()> {
     WindowedApp::run_with_theme(
         WindowConfig {
