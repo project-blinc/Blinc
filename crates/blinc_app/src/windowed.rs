@@ -50,20 +50,14 @@ pub type SharedAnimationScheduler = Arc<Mutex<AnimationScheduler>>;
 
 mod app_init;
 mod context;
-mod context_display;
-mod context_query;
-mod context_reactive;
-mod desktop_loop;
+mod event_loop;
 mod fps;
 mod helpers;
-mod loop_frame;
-mod loop_input;
-mod loop_lifecycle;
 mod pending;
 mod window;
 
 pub use self::context::WindowedContext;
-use self::desktop_loop::DesktopLoop;
+use self::event_loop::DesktopLoop;
 #[allow(unused_imports)]
 use self::fps::*;
 #[allow(unused_imports)]

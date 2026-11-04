@@ -2,6 +2,10 @@
 
 use super::*;
 
+mod display;
+mod query;
+mod reactive;
+
 /// Context passed to the UI builder function
 pub struct WindowedContext {
     /// Current window width in logical pixels (for UI layout)

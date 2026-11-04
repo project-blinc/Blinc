@@ -4,6 +4,10 @@ use std::marker::PhantomData;
 
 use super::*;
 
+mod frame;
+mod input;
+mod lifecycle;
+
 /// Everything the event handler keeps between events.
 pub(super) struct DesktopLoop<F, E> {
     pub(super) platform: DesktopPlatform,

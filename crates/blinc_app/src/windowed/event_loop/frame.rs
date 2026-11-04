@@ -2,7 +2,7 @@
 
 #![allow(unused_variables)]
 
-use super::desktop_loop::DesktopLoop;
+use super::DesktopLoop;
 use super::*;
 
 impl<F, E> DesktopLoop<F, E>
