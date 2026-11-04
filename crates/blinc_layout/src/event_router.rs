@@ -2450,8 +2450,8 @@ mod tests {
             .w(400.0)
             .h(300.0)
             .flex_col()
-            .child(div().w(100.0).h(100.0)) // First child
-            .child(div().w(100.0).h(100.0)); // Second child
+            .child(div().w(100.0).h(100.0).attr("tabindex", "0")) // First child
+            .child(div().w(100.0).h(100.0).attr("tabindex", "0")); // Second child
 
         let mut tree = RenderTree::from_element(&ui);
         tree.compute_layout(400.0, 300.0);
@@ -2550,7 +2550,10 @@ mod tests {
 
     #[test]
     fn test_unmount_clears_state() {
-        let ui = div().w(400.0).h(300.0).child(div().w(100.0).h(100.0));
+        let ui = div()
+            .w(400.0)
+            .h(300.0)
+            .child(div().w(100.0).h(100.0).attr("tabindex", "0"));
 
         let mut tree = RenderTree::from_element(&ui);
         tree.compute_layout(400.0, 300.0);
@@ -2574,7 +2577,10 @@ mod tests {
 
     #[test]
     fn test_window_focus_blur() {
-        let ui = div().w(400.0).h(300.0).child(div().w(100.0).h(100.0));
+        let ui = div()
+            .w(400.0)
+            .h(300.0)
+            .child(div().w(100.0).h(100.0).attr("tabindex", "0"));
 
         let mut tree = RenderTree::from_element(&ui);
         tree.compute_layout(400.0, 300.0);
