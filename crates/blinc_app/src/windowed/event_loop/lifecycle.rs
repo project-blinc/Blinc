@@ -3,7 +3,17 @@
 #![allow(unused_variables)]
 
 use super::DesktopLoop;
-use super::*;
+use crate::app::BlincApp;
+use crate::windowed::{
+    OPEN_WINDOW_FN, WindowState, WindowedApp, WindowedContext, pending_builders,
+    preferred_present_mode,
+};
+use crate::{ElementBuilder, EventRouter};
+use blinc_core::context_state::BlincContextState;
+use blinc_layout::prelude::*;
+use blinc_platform::{ControlFlow, Event, LifecycleEvent, Window, WindowConfig, WindowEvent};
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 impl<F, E> DesktopLoop<F, E>
 where

@@ -1,9 +1,23 @@
 //! Frame phases 1 and 2: decide whether the tree needs a rebuild, then rebuild it.
 
-#![allow(unused_variables, unused_mut, unused_assignments, clippy::too_many_arguments)]
+#![allow(
+    unused_variables,
+    unused_mut,
+    unused_assignments,
+    clippy::too_many_arguments
+)]
 
 use super::super::frame::FrameVars;
-use super::super::*;
+use crate::windowed::{
+    RefDirtyFlag, SharedAnimationScheduler, SharedElementRegistry, SharedReactiveGraph,
+    SharedReadyCallbacks, WindowState, WindowedContext, invoke_ui_builder,
+};
+use crate::{ElementBuilder, RenderTree, div, reset_call_counters};
+use blinc_core::reactive::State;
+use blinc_layout::prelude::*;
+use blinc_platform::{ControlFlow, Window};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 /// Phase 1: check whether the tree structure needs a rebuild.
 pub(super) fn check_rebuild(

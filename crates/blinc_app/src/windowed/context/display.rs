@@ -1,6 +1,8 @@
 //! `WindowedContext` display helpers (DPI) and the stylesheet API.
 
-use super::*;
+use crate::windowed::WindowedContext;
+use blinc_platform::WindowConfig;
+use std::sync::Arc;
 
 impl WindowedContext {
     // =========================================================================

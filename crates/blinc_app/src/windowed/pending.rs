@@ -1,6 +1,10 @@
 //! Requests to open additional windows, queued until the event loop drains them.
 
-use super::*;
+use crate::windowed::{WindowBuilder, WindowedContext};
+use blinc_layout::Div;
+use blinc_layout::prelude::*;
+use blinc_platform::WindowConfig;
+use std::sync::{Arc, Mutex};
 
 /// Pending window request: config + optional UI builder
 pub(super) struct PendingWindowRequest {

@@ -1,6 +1,10 @@
 //! Per-window state and present-mode selection.
 
-use super::*;
+use crate::RenderTree;
+use crate::app::BlincApp;
+use crate::windowed::{WindowBuilder, WindowedContext};
+use blinc_layout::prelude::*;
+use std::sync::{Arc, Mutex};
 
 /// Per-window state bundle.
 ///

@@ -1,6 +1,15 @@
 //! `WindowedContext` element queries and its trait implementations.
 
-use super::*;
+use crate::windowed::{SharedElementRegistry, WindowedContext};
+use blinc_animation::{
+    AnimatedTimeline, AnimatedValue, AnimationContext, SchedulerHandle, SharedAnimatedTimeline,
+    SharedAnimatedValue, SpringConfig,
+};
+use blinc_core::context_state::StateKey;
+use blinc_core::reactive::{Derived, ReactiveGraph, Signal, SignalId, State};
+use std::hash::Hash;
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 
 impl WindowedContext {
     // =========================================================================

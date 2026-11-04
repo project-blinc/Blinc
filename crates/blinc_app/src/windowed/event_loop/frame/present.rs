@@ -1,9 +1,20 @@
 //! Frame phases 4 and 5: render, present and schedule the next frame.
 
-#![allow(unused_variables, unused_mut, unused_assignments, clippy::too_many_arguments)]
+#![allow(
+    unused_variables,
+    unused_mut,
+    unused_assignments,
+    clippy::too_many_arguments
+)]
 
 use super::super::frame::FrameVars;
-use super::super::*;
+use crate::windowed::{FpsAdapter, SharedAnimationScheduler, SharedElementRegistry, WindowState};
+use blinc_layout::widgets::OverlayManagerExt;
+use blinc_layout::widgets::overlay::OverlayManager;
+use blinc_platform::{ControlFlow, Window};
+use blinc_platform_desktop::DesktopPlatform;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 /// Phases 4 and 5: render the frame, manage overlays, request the next frame.
 pub(super) fn render_and_schedule(

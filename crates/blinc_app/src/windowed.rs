@@ -22,49 +22,44 @@
 //! }
 //! ```
 
-use std::hash::Hash;
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
-};
-
-use blinc_animation::{
-    AnimatedTimeline, AnimatedValue, AnimationContext, AnimationScheduler, SchedulerHandle,
-    SharedAnimatedTimeline, SharedAnimatedValue, SpringConfig,
-};
-use blinc_core::context_state::{BlincContextState, HookState, SharedHookState, StateKey};
-use blinc_core::reactive::{Derived, ReactiveGraph, Signal, SignalId, State, StatefulDepsCallback};
-use blinc_layout::overlay_state::{OverlayContext, get_overlay_manager};
-use blinc_layout::prelude::*;
-use blinc_layout::widgets::overlay::{OverlayManager, OverlayManagerExt, overlay_manager};
-use blinc_platform::{
-    ControlFlow, Event, EventLoop, InputEvent, Key, KeyState, LifecycleEvent, MouseEvent, Platform,
-    TouchEvent, Window, WindowConfig, WindowEvent,
-};
-
-use crate::app::BlincApp;
 use crate::error::{BlincError, Result};
+use blinc_animation::AnimationScheduler;
+use blinc_core::context_state::{BlincContextState, HookState, SharedHookState};
+use blinc_core::reactive::{ReactiveGraph, SignalId};
+use blinc_layout::overlay_state::OverlayContext;
+use blinc_layout::prelude::*;
+use blinc_layout::widgets::overlay::{OverlayManager, overlay_manager};
+use blinc_platform::{EventLoop, Platform, WindowConfig};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 /// Shared animation scheduler for the application (thread-safe)
 pub type SharedAnimationScheduler = Arc<Mutex<AnimationScheduler>>;
 
+#[cfg(all(feature = "windowed", not(target_os = "android")))]
 mod app_init;
 mod context;
+#[cfg(all(feature = "windowed", not(target_os = "android")))]
 mod event_loop;
 mod fps;
+#[cfg(all(feature = "windowed", not(target_os = "android")))]
 mod helpers;
 mod pending;
+#[cfg(all(feature = "windowed", not(target_os = "android")))]
 mod window;
 
 pub use self::context::WindowedContext;
+#[cfg(all(feature = "windowed", not(target_os = "android")))]
 use self::event_loop::DesktopLoop;
 #[allow(unused_imports)]
 use self::fps::*;
 #[allow(unused_imports)]
+#[cfg(all(feature = "windowed", not(target_os = "android")))]
 pub use self::helpers::*;
 #[allow(unused_imports)]
 pub use self::pending::*;
 #[allow(unused_imports)]
+#[cfg(all(feature = "windowed", not(target_os = "android")))]
 pub use self::window::*;
 
 // SharedAnimatedValue and SharedAnimatedTimeline are re-exported from blinc_animation

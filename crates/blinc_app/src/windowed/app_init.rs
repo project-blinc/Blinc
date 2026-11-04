@@ -1,6 +1,8 @@
 //! Setup helpers for the desktop runner: assets, theme, window actions, alpha mode.
 
-use super::*;
+use crate::windowed::WindowedApp;
+use std::hash::Hash;
+use std::sync::Arc;
 
 impl WindowedApp {
     /// Initialize the platform asset loader

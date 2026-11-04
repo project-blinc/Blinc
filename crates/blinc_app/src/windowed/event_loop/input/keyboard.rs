@@ -3,7 +3,11 @@
 #![allow(unused_variables, clippy::too_many_arguments)]
 
 use super::collect::{Collect, PendingEvent};
-use super::*;
+use crate::windowed::WindowState;
+use blinc_platform::{ControlFlow, InputEvent, Key, KeyState};
+use blinc_platform_desktop::DesktopPlatform;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 /// A keyboard event: shortcuts, key codes and text input.
 pub(super) fn collect_keyboard(

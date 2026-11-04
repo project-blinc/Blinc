@@ -3,7 +3,13 @@
 #![allow(unused_variables, clippy::too_many_arguments)]
 
 use super::collect::{Collect, PendingEvent};
-use super::*;
+use crate::CursorStyle;
+use crate::windowed::{WindowState, convert_cursor_style, convert_mouse_button};
+use blinc_layout::prelude::*;
+use blinc_platform::{ControlFlow, InputEvent, MouseEvent, Window};
+use blinc_platform_desktop::DesktopPlatform;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// A mouse event: move, press, release, enter, leave.
 pub(super) fn collect_mouse(

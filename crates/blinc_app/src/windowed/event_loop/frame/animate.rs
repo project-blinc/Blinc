@@ -1,9 +1,18 @@
 //! Frame phase 3: advance animations and decide whether another frame is needed.
 
-#![allow(unused_variables, unused_mut, unused_assignments, clippy::too_many_arguments)]
+#![allow(
+    unused_variables,
+    unused_mut,
+    unused_assignments,
+    clippy::too_many_arguments
+)]
 
 use super::super::frame::FrameVars;
-use super::super::*;
+use crate::windowed::{SharedAnimationScheduler, WindowState};
+use blinc_platform::ControlFlow;
+use blinc_platform_desktop::DesktopPlatform;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Phase 3: tick animations and dynamic render state.
 pub(super) fn tick_animations(

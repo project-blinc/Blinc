@@ -1,6 +1,7 @@
 //! The collectors shared by the input collectors.
 
-use super::*;
+use blinc_layout::LayoutNodeId;
+use blinc_layout::prelude::*;
 
 /// The collectors an input handler fills while the event router is borrowed.
 pub(super) struct Collect<'a> {

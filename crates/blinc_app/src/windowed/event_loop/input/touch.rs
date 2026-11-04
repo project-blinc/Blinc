@@ -3,7 +3,13 @@
 #![allow(unused_variables, clippy::too_many_arguments)]
 
 use super::collect::{Collect, PendingEvent};
-use super::*;
+use crate::MouseButton;
+use crate::windowed::WindowState;
+use blinc_layout::prelude::*;
+use blinc_platform::{ControlFlow, InputEvent, TouchEvent};
+use blinc_platform_desktop::DesktopPlatform;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 /// A touch, scroll, pinch, rotation or modifier event.
 pub(super) fn collect_touch_scroll(

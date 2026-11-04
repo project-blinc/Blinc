@@ -3,7 +3,11 @@
 #![allow(unused_variables)]
 
 use super::DesktopLoop;
-use super::*;
+use crate::windowed::WindowedContext;
+use crate::{ElementBuilder, elapsed_ms};
+use blinc_layout::prelude::*;
+use blinc_platform::{ControlFlow, Event, Window};
+use std::sync::atomic::Ordering;
 
 mod animate;
 mod present;

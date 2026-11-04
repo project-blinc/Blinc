@@ -1,7 +1,5 @@
 //! Adaptive animation frame-rate cap: the ladder and the adapter that steps it.
 
-use super::*;
-
 /// Pick an initial animation-FPS cap for `AnimationFps::Adaptive`
 /// based on coarse system characteristics.
 ///

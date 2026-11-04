@@ -7,7 +7,13 @@ use self::keyboard::collect_keyboard;
 use self::mouse::collect_mouse;
 use self::touch::collect_touch_scroll;
 use super::DesktopLoop;
-use super::*;
+use crate::ElementBuilder;
+use crate::windowed::WindowedContext;
+use blinc_layout::LayoutNodeId;
+use blinc_layout::overlay_state::{OverlayContext, get_overlay_manager};
+use blinc_layout::prelude::*;
+use blinc_platform::{ControlFlow, Event, InputEvent, MouseEvent, Window};
+use std::sync::atomic::Ordering;
 
 mod collect;
 mod keyboard;
