@@ -162,3 +162,4 @@
 # Contributing
 
 - [Writing Examples](./contributing/examples.md)
+- [Testing](./contributing/testing.md)
