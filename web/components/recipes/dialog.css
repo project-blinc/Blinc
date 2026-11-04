@@ -1,0 +1,17 @@
+.cn-dialog {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  box-shadow: var(--shadow-xl);
+}
+
+.cn-dialog-title {
+  color: var(--primary);
+  font-size: 22px;
+}
+
+.cn-dialog-description {
+  color: var(--text-secondary);
+  line-height: 1.6;
+}

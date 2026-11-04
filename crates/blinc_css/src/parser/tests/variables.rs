@@ -5,6 +5,27 @@ use blinc_theme::ThemeState;
 use crate::parser::*;
 
 #[test]
+fn root_variables_apply_to_earlier_component_rules() {
+    let css = "@layer components { :root { --amount: 0.2; } .panel { opacity: var(--amount); } }\n:root { --amount: 0.8; }";
+    let sheet = Stylesheet::parse(css).unwrap();
+    assert_eq!(sheet.get_class("panel").unwrap().opacity, Some(0.8));
+    assert_eq!(sheet.get_variable("amount"), Some("0.8"));
+}
+
+#[test]
+fn root_aliases_use_the_final_theme_override() {
+    let css = ":root { --muted: var(--amount); color: #ffffff; }\n#panel { opacity: var(--muted); }\n:root { --amount: 0.7; }";
+    let sheet = Stylesheet::parse(css).unwrap();
+    assert_eq!(sheet.get("panel").unwrap().opacity, Some(0.7));
+}
+
+#[test]
+fn root_collection_keeps_line_comments_out_of_the_grammar() {
+    let sheet = Stylesheet::parse("// } an editor note\n#panel { opacity: var(--amount); }\n// palette\n:root { --amount: 0.6; }").unwrap();
+    assert_eq!(sheet.get("panel").unwrap().opacity, Some(0.6));
+}
+
+#[test]
 fn test_css_variables_root_parsing() {
     let css = r#"
         :root {

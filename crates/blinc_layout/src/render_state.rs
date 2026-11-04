@@ -479,10 +479,7 @@ impl CssAnimationStore {
             }
         }
 
-        // Tick CSS transitions
-        // NOTE: Completed transitions are NOT removed here — they stay in the store
-        // so apply_all_css_transition_props can apply their final values. Call
-        // remove_completed_transitions() after applying transition props.
+        // Keep settled targets so repeated state evaluation cannot restart them.
         let mut trans_playing = false;
         for trans in self.transitions.values_mut() {
             if trans.tick(dt_ms) {
@@ -493,33 +490,16 @@ impl CssAnimationStore {
         (anim_playing, trans_playing)
     }
 
-    /// Remove completed transitions from the store.
-    ///
-    /// Must be called AFTER `apply_all_css_transition_props()` so that the final
-    /// transition values are applied to render props before removal. If transitions
-    /// are removed during tick(), the final values never get applied, causing the
-    /// before-snapshot to use stale intermediate values and restarting the transition.
-    pub fn remove_completed_transitions(&mut self) {
-        self.transitions.retain(|_, trans| trans.is_playing);
-    }
+    /// Preserve settled targets for the transition restart guard.
+    /// Entries for retired nodes are pruned by the render tree.
+    pub fn remove_completed_transitions(&mut self) {}
 
     /// Check if there are any active CSS animations
     pub fn has_active_animations(&self) -> bool {
         self.animations.values().any(|a| a.is_playing)
     }
 
-    /// Check if there are any *playing* CSS transitions.
-    ///
-    /// Completed transitions intentionally stay in `self.transitions`
-    /// so the same-target guard in `detect_and_start_transitions`
-    /// can match against them (avoids endless restart loops on
-    /// repeat hover styles). Checking `!is_empty()` here would mean
-    /// the redraw / cache-invalidation chain fires forever after
-    /// the first transition completes — observed in
-    /// `image_css_demo`: hovering a `mask-image` transition pinned
-    /// CPU at ~100 % indefinitely after the cursor moved away.
-    /// Match `has_active_animations` and gate on the `is_playing`
-    /// flag instead.
+    /// Check playing transitions, excluding retained settled targets.
     pub fn has_active_transitions(&self) -> bool {
         self.transitions.values().any(|t| t.is_playing)
     }

@@ -85,10 +85,10 @@ pub struct TextInputData {
     /// Layout bounds storage - updated after each layout computation
     /// Used to get the actual computed width for proper scroll behavior
     pub layout_bounds_storage: crate::renderer::LayoutBoundsStorage,
-    /// Bumped whenever something the field shows changes; its content is
-    /// bound to it. `None` until a `TextInput` is made over the data.
+    /// Owned with the data so fresh widget builds keep their revision source.
     pub(crate) revision: Option<blinc_core::reactive::Signal<u64>>,
     pub(crate) focus_signal: Option<blinc_core::reactive::Signal<bool>>,
+    pub(crate) mounted: bool,
     /// The field's node, once built.
     pub(crate) node_id: Option<LayoutNodeId>,
     /// Callback invoked when text value changes

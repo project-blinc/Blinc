@@ -4,6 +4,9 @@ All notable changes to `blinc_gpu` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `GpuRenderer::with_offscreen_canvas` shares web surface/device setup with the DOM canvas constructor.
+
 ## [0.6.0] - 2026-11-04
 
 ### Added

@@ -202,6 +202,111 @@ pub(crate) fn parse_stylesheet_with_errors<'a>(
     errors: &mut Vec<ParseError>,
     variables: &HashMap<String, String>,
 ) -> ParseResult<'a, ParsedStylesheet> {
+    if let Some(message) = block_boundary_error(css) {
+        let (line, column, _) = calculate_position(css, &css[css.len()..]);
+        errors.push(ParseError::new(Severity::Error, message, line, column));
+    }
+    let mut globals = variables.clone();
+    collect_root_variables(css, &mut globals);
+    parse_stylesheet_resolved(css, errors, &globals)
+}
+
+fn block_boundary_error(css: &str) -> Option<&'static str> {
+    let bytes = css.as_bytes();
+    let (mut i, mut depth, mut parens, mut quote, mut comment) = (0, 0_usize, 0_usize, None, false);
+    while i < bytes.len() {
+        let byte = bytes[i];
+        if comment {
+            if byte == b'*' && bytes.get(i + 1) == Some(&b'/') {
+                comment = false;
+                i += 1;
+            }
+        } else if let Some(mark) = quote {
+            if byte == b'\\' {
+                i += 1;
+            } else if byte == mark {
+                quote = None;
+            }
+        } else if byte == b'/' && bytes.get(i + 1) == Some(&b'*') {
+            comment = true;
+            i += 1;
+        } else if byte == b'/' && bytes.get(i + 1) == Some(&b'/') && parens == 0 {
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+        } else if byte == b'\'' || byte == b'"' {
+            quote = Some(byte);
+        } else if byte == b'\\' {
+            i += 1;
+        } else if byte == b'(' {
+            parens += 1;
+        } else if byte == b')' {
+            parens = parens.saturating_sub(1);
+        } else if byte == b'{' {
+            depth += 1;
+        } else if byte == b'}' {
+            if depth == 0 {
+                return Some("Unexpected closing brace");
+            }
+            depth -= 1;
+        }
+        i += 1;
+    }
+    if comment {
+        Some("Unterminated comment")
+    } else if quote.is_some() {
+        Some("Unterminated string")
+    } else if depth > 0 {
+        Some("Expected closing brace")
+    } else {
+        None
+    }
+}
+
+// Root variables apply to earlier rules and to rules inside component layers.
+fn collect_root_variables(mut css: &str, variables: &mut HashMap<String, String>) {
+    loop {
+        css = css.trim_start();
+        if let Some(comment) = css.strip_prefix("//") {
+            let Some(end) = comment.find('\n') else {
+                return;
+            };
+            css = &comment[end + 1..];
+            continue;
+        }
+        if let Some(comment) = css.strip_prefix("/*") {
+            let Some(end) = comment.find("*/") else {
+                return;
+            };
+            css = &comment[end + 2..];
+            continue;
+        }
+        if css.starts_with("@layer") {
+            if let Some((inner, rest)) = layer_block(css) {
+                collect_root_variables(inner, variables);
+                css = rest;
+                continue;
+            }
+        }
+        if css.starts_with(":root") {
+            variables.extend(
+                root_block(css)
+                    .map(|(_, values)| values)
+                    .unwrap_or_else(|_| root_custom_properties(css)),
+            );
+        }
+        let Some(next) = skip_failed_rule(css) else {
+            return;
+        };
+        css = &css[next..];
+    }
+}
+
+fn parse_stylesheet_resolved<'a>(
+    css: &'a str,
+    errors: &mut Vec<ParseError>,
+    variables: &HashMap<String, String>,
+) -> ParseResult<'a, ParsedStylesheet> {
     let (input, _) = ws(css)?;
 
     // Parse blocks one at a time to collect errors
@@ -251,9 +356,7 @@ pub(crate) fn parse_stylesheet_with_errors<'a>(
         // sit below every unlayered rule, whatever their specificity.
         if trimmed.starts_with("@layer") {
             if let Some((inner, rest)) = layer_block(trimmed) {
-                if let Ok((_, mut layered)) =
-                    parse_stylesheet_with_errors(inner, errors, &parsed_variables)
-                {
+                if let Ok((_, mut layered)) = parse_stylesheet_resolved(inner, errors, variables) {
                     for (_, style) in layered.complex_rules.iter_mut() {
                         style.component = true;
                     }
@@ -269,7 +372,7 @@ pub(crate) fn parse_stylesheet_with_errors<'a>(
 
         // Try to parse @keyframes block
         if trimmed.starts_with("@keyframes") {
-            match keyframes_block(trimmed, errors, &parsed_variables) {
+            match keyframes_block(trimmed, errors, variables) {
                 Ok((rest, keyframes)) => {
                     parsed_keyframes.push(keyframes);
                     remaining = rest;
@@ -283,7 +386,7 @@ pub(crate) fn parse_stylesheet_with_errors<'a>(
 
         // Try to parse a rule (complex selector or simple #id selector)
         // Supports comma-separated selector lists: #a, #b { ... }
-        let parsed = css_rule_complex_or_simple(css, errors, &parsed_variables)(trimmed);
+        let parsed = css_rule_complex_or_simple(css, errors, variables)(trimmed);
         match parsed {
             Ok((rest, parsed_rules)) => {
                 for rule in parsed_rules {

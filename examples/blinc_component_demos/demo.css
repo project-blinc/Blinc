@@ -1,0 +1,14 @@
+.catalog-demo {
+    width: 100%; height: 100%; display: flex;
+    align-items: center; justify-content: center; padding: 24px;
+    background: var(--background); color: var(--text-primary);
+}
+.demo-stack { display: flex; flex-direction: column; gap: 16px; width: 256px; max-width: 100%; }
+.demo-caption { color: var(--text-secondary); font-size: 14px; }
+.demo-label { font-size: 14px; font-weight: 600; }
+.demo-chart { width: 100%; max-width: 420px; }
+
+.demo-stack--center { align-items: center; }
+.demo-stack--center .demo-caption, .demo-stack--center .demo-label { width: 100%; text-align: center; }
+
+.demo-pie { display: flex; align-items: center; justify-content: center; width: 100%; max-width: 420px; }

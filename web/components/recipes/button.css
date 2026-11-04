@@ -1,0 +1,20 @@
+/* Theme colours, shape and motion stay in sync. */
+.cn-button--primary {
+  background: var(--primary);
+  color: var(--text-inverse);
+  border-radius: var(--radius-lg);
+  padding: 12px 24px;
+  box-shadow: var(--shadow-md);
+  transition: background var(--duration-fast) var(--ease-state),
+              transform var(--duration-fast) var(--ease-state);
+}
+
+.cn-button--primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+  transform: translateY(-2px);
+}
+
+.cn-button--primary:active:not(:disabled) {
+  background: var(--primary-active);
+  transform: scale(0.97);
+}

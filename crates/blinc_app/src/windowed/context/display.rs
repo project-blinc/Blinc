@@ -249,6 +249,53 @@ impl WindowedContext {
         }
     }
 
+    /// Set a named CSS override, replacing that source on subsequent calls.
+    ///
+    /// Other CSS sources remain in place. Theme and `:root` variables are shared
+    /// across sources. Invalid CSS leaves the current styles unchanged. Pass an
+    /// empty string to remove this source's rules without resetting UI state.
+    #[allow(clippy::result_large_err)]
+    pub fn set_css(
+        &mut self,
+        name: &str,
+        css: &str,
+    ) -> Result<(), blinc_layout::css_parser::ParseError> {
+        let mut overrides = self.css_overrides.clone();
+        if let Some((_, source)) = overrides.iter_mut().find(|(key, _)| key == name) {
+            *source = css.to_string();
+        } else {
+            overrides.push((name.to_string(), css.to_string()));
+        }
+        let sheet = self.parse_css_sources(&overrides)?;
+        self.css_overrides = overrides;
+        self.stylesheet = Some(Arc::new(sheet));
+        blinc_layout::css_parser::set_active_stylesheet(Arc::clone(
+            self.stylesheet.as_ref().unwrap(),
+        ));
+        self.ref_dirty_flag
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        blinc_layout::widgets::request_full_rebuild();
+        Ok(())
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn parse_css_sources(
+        &self,
+        overrides: &[(String, String)],
+    ) -> Result<blinc_layout::css_parser::Stylesheet, blinc_layout::css_parser::ParseError> {
+        let variables = blinc_theme::ThemeState::try_get()
+            .map(|theme| theme.to_css_variable_map())
+            .unwrap_or_default();
+        let css = self
+            .css_sources
+            .iter()
+            .map(String::as_str)
+            .chain(overrides.iter().map(|(_, source)| source.as_str()))
+            .collect::<Vec<_>>()
+            .join("\n");
+        blinc_layout::css_parser::Stylesheet::parse_with_variables(&css, &variables)
+    }
+
     /// Load and add a `.css` file to the application stylesheet.
     ///
     /// Multiple calls cascade — later rules override earlier ones.
@@ -311,6 +358,7 @@ impl WindowedContext {
     pub fn reset_for_hot_reload(&mut self) {
         self.stylesheet = None;
         self.css_sources.clear();
+        self.css_overrides.clear();
         self.rebuild_count = 0;
         blinc_layout::css_parser::clear_active_stylesheet();
     }
@@ -320,7 +368,7 @@ impl WindowedContext {
     /// Called automatically when the theme color scheme changes to ensure
     /// CSS `var()` and `theme()` references resolve to the new colors.
     pub fn reparse_css(&mut self) {
-        if self.css_sources.is_empty() {
+        if self.css_sources.is_empty() && self.css_overrides.is_empty() {
             return;
         }
 
@@ -329,25 +377,14 @@ impl WindowedContext {
             self.css_sources.len()
         );
 
-        // Clear existing stylesheet
-        self.stylesheet = None;
-
-        // Reparse each CSS source with fresh theme variables
-        for css in self.css_sources.clone() {
-            let mut external_vars = blinc_theme::ThemeState::try_get()
-                .map(|t| t.to_css_variable_map())
-                .unwrap_or_default();
-            if let Some(existing) = &self.stylesheet {
-                for (k, v) in existing.variables() {
-                    external_vars.insert(k.clone(), v.clone());
-                }
+        match self.parse_css_sources(&self.css_overrides) {
+            Ok(sheet) => {
+                self.stylesheet = Some(Arc::new(sheet));
+                blinc_layout::css_parser::set_active_stylesheet(Arc::clone(
+                    self.stylesheet.as_ref().unwrap(),
+                ));
             }
-            match blinc_layout::css_parser::Stylesheet::parse_with_variables(&css, &external_vars) {
-                Ok(sheet) => self.add_stylesheet(sheet),
-                Err(e) => {
-                    tracing::warn!("Failed to reparse CSS on theme change: {}", e);
-                }
-            }
+            Err(error) => tracing::warn!("Failed to reparse CSS on theme change: {}", error),
         }
     }
 

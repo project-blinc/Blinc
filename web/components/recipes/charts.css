@@ -1,0 +1,18 @@
+/* Palette and canvas details are root variables too. */
+:root {
+  --chart-1: var(--primary);
+  --chart-2: var(--warning);
+  --cn-chart-grid: color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+.cn-chart-tooltip {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.cn-chart-axis {
+  color: var(--text-secondary);
+  font-size: 11px;
+}

@@ -4,10 +4,16 @@ All notable changes to `blinc_app` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Named CSS overrides through `WindowedContext::set_css` replace rules without resetting component state. Theme and root variables are shared across sources; invalid edits preserve the previous styles.
+- `WebApp::new_offscreen`, normalized `WebInput` dispatch and host-driven resize/frame APIs share the DOM runner’s rendering pipeline for dedicated workers.
+- `WindowedContext::headless_with_scale` separates logical layout from capture pixel density.
+
 ### Changed
 - `BlincComponent` generates companion reactive props with `IntoReactive` setters, and ordinary field hooks return `Signal`. Props preserve Signal and Computed bindings.
 
 ### Fixed
+- Direct rendering paints foreground popup surfaces after ordinary text and SVGs, keeping background captions behind open controls.
 - Desktop and web runners reconcile overlay focus before styling and share navigation handling. Web consumes navigation keys without browser defaults or duplicate text input; desktop maps Shift+F10 for context menus.
 
 ## [0.6.0] - 2026-11-04

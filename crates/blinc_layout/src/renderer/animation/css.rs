@@ -885,7 +885,7 @@ impl RenderTree {
             // Variant with an identity default — used for filter properties where
             // None means "use default" (e.g. brightness=1.0) rather than "not set"
             ($field:ident, $prop_name:expr, default $def:expr) => {
-                if before.$field != after.$field {
+                if before.$field.unwrap_or($def) != after.$field.unwrap_or($def) {
                     if let Some(t) = transition_set.get($prop_name) {
                         let from_val = if let Some(active) = store.transitions.get(&stable_id) {
                             if active.current_properties.$field.is_some() {
@@ -980,13 +980,13 @@ impl RenderTree {
         // easing only the scale of a translated element would drop the
         // translation.
         if let Some(t) = transition_set.get("transform") {
-            let changed = before.translate_x != after.translate_x
-                || before.translate_y != after.translate_y
-                || before.scale_x != after.scale_x
-                || before.scale_y != after.scale_y
-                || before.rotate != after.rotate
-                || before.skew_x != after.skew_x
-                || before.skew_y != after.skew_y;
+            let changed = before.translate_x.unwrap_or(0.0) != after.translate_x.unwrap_or(0.0)
+                || before.translate_y.unwrap_or(0.0) != after.translate_y.unwrap_or(0.0)
+                || before.scale_x.unwrap_or(1.0) != after.scale_x.unwrap_or(1.0)
+                || before.scale_y.unwrap_or(1.0) != after.scale_y.unwrap_or(1.0)
+                || before.rotate.unwrap_or(0.0) != after.rotate.unwrap_or(0.0)
+                || before.skew_x.unwrap_or(0.0) != after.skew_x.unwrap_or(0.0)
+                || before.skew_y.unwrap_or(0.0) != after.skew_y.unwrap_or(0.0);
             if changed {
                 macro_rules! carry_component {
                     ($field:ident, $def:expr) => {
@@ -1073,11 +1073,10 @@ impl RenderTree {
 
     /// Check if there are no active CSS transitions
     pub fn css_transitions_empty(&self) -> bool {
-        self.css_anim_store.lock().unwrap().transitions.is_empty()
+        !self.css_anim_store.lock().unwrap().has_active_transitions()
     }
 
-    /// Remove completed transitions from the store.
-    /// Must be called AFTER `apply_all_css_transition_props()`.
+    /// Retain settled targets until their nodes retire.
     pub fn remove_completed_transitions(&mut self) {
         self.css_anim_store
             .lock()

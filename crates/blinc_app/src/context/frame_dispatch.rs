@@ -348,10 +348,8 @@ impl RenderContext {
                     self.render_rasterized_svgs(target, svgs, scale_factor);
                 }
 
-                // Render foreground primitives (e.g. borders on top)
-                if batch.has_foreground_content() {
-                    self.renderer.render_foreground(target, batch);
-                }
+                // Foreground surfaces occlude ordinary text and SVGs.
+                self.renderer.render_foreground(target, batch);
 
                 // Render foreground text (inside foreground-layer elements, after foreground primitives)
                 if !fg_glyphs.is_empty() {
@@ -382,11 +380,6 @@ impl RenderContext {
                 }
 
                 self.render_images(target, images, width as f32, height as f32, scale_factor);
-
-                // Render foreground primitives (e.g. borders on top)
-                if batch.has_foreground_content() {
-                    self.renderer.render_foreground(target, batch);
-                }
 
                 // Render SVGs as rasterized images for high-quality anti-aliasing
                 if !svgs.is_empty() {
@@ -430,6 +423,9 @@ impl RenderContext {
                         self.render_text_decorations_for_layer(target, &decorations_by_layer, z);
                     }
                 }
+
+                // Foreground surfaces occlude ordinary text and SVGs.
+                self.renderer.render_foreground(target, batch);
 
                 // Render foreground text (inside foreground-layer elements, after all z-layers)
                 if !fg_glyphs.is_empty() {

@@ -41,10 +41,8 @@ impl TextInput {
     /// Create a text input with externally-managed data state
     pub fn new(data: SharedTextInputData) -> Self {
         let config = Arc::new(Mutex::new(TextInputConfig::default()));
-        // A field with a revision is one a deferred focus can land on.
         if let Ok(mut d) = data.lock() {
-            d.revision
-                .get_or_insert_with(|| blinc_core::reactive::signal(0u64));
+            d.mounted = true;
         }
         let mut inner = Self::create_inner_with_handlers(Arc::clone(&data), Arc::clone(&config))
             .class(DEFAULT_CLASS);

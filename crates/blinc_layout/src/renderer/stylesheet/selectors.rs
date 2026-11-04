@@ -526,7 +526,12 @@ impl RenderTree {
         // If any prev_affected nodes were reset, styles changed
         let mut any_applied = !prev_affected.is_empty();
 
-        for (selector, style) in complex_rules {
+        let mut state_rules: Vec<_> = complex_rules
+            .iter()
+            .filter(|(selector, _)| selector.has_state())
+            .collect();
+        state_rules.sort_by_key(|(selector, style)| Self::rule_order(selector, style));
+        for (selector, style) in state_rules {
             // Base (non-state) rules are already applied:
             //   - At tree build time by apply_stylesheet_base_styles()
             //   - For prev_affected (leaving-state) nodes in the reset section above

@@ -103,6 +103,12 @@ Apps that explicitly want bounce on web can opt in via `Scroll::with_config(Scro
 | Multi-canvas / multi-view | Pending | Architecture supports it; no public API yet |
 | A11y (ARIA roles, screen reader) | Pending | Larger architecture discussion — needs DOM mirror or `accesskit-html` |
 
+## Worker component previews
+
+The unreleased [component catalog integration](./component-catalog.md) adds
+`WebApp::new_offscreen` for dedicated-worker rendering. Its host forwards input
+and owns DOM services; the existing DOM runner remains available.
+
 ## Next steps
 
 - [Setup & Build](./setup.md) — Cargo.toml, `wasm-pack`, the `index.html` HTML+JS scaffold

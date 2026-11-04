@@ -1,0 +1,13 @@
+<div class="breadcrumb"><a href="/components/">Components</a><span>/</span><span>Installation</span></div>
+<div class="eyebrow">Get started</div><h1>Your first Blinc app.</h1>
+<p class="description">Install Blinc’s component library, add the default Hybrid theme, and build an interactive Rust interface.</p>
+<section class="content-section prose"><h2>1. Create a Rust project</h2><p>Use a Rust toolchain compatible with Blinc 0.6.0 (Rust 1.89 or newer). Create a binary crate:</p><pre><code class="language-bash">cargo new my-blinc-app
+cd my-blinc-app</code></pre><p>Add these dependencies to <code>Cargo.toml</code>:</p><div class="code-header"><span>Cargo.toml</span><button class="quiet" data-copy="install-deps">Copy</button></div><pre><code id="install-deps" class="language-toml">[dependencies]
+blinc_app = "0.6"
+blinc_cn = "0.6"
+blinc_core = "0.6"
+blinc_layout = "0.6"
+blinc_theme = "0.6"</code></pre></section>
+<section class="content-section prose"><h2>2. Build a component</h2><p>Replace <code>src/main.rs</code> with this example. The label is a Computed derived from a Signal; clicking updates the existing button. Styles come from CSS.</p><div class="code-header"><span>src/main.rs</span><button class="quiet" data-copy="install-source">Copy Rust</button></div><pre><code id="install-source" class="language-rust">{{INSTALL_SOURCE}}</code></pre><p><code>HybridTheme::bundle().with_css(CN_STYLES)</code> installs the shared component theme. Application CSS follows that layer and can override its documented selectors and variables.</p></section>
+<section class="content-section prose"><h2>3. Run it</h2><pre><code class="language-bash">cargo run</code></pre><p>Blinc opens a native window. These catalog examples start in Hybrid dark mode. Choose <code>ColorScheme::Light</code> for a light interface.</p></section>
+<section class="content-section prose"><h2>Choose your next component</h2><p>Each component page includes its own usage guidance, reactive props, CSS hooks and a live demo.</p><p><a href="/components/cn/button/">Button</a> · <a href="/components/cn/input/">Input</a> · <a href="/components/cn/select/">Select</a> · <a href="/components/cn/dialog/">Dialog</a> · <a href="/components/">All components</a></p><p>For browser applications, Blinc also provides a WASM runner. The catalog's Live views use a dedicated worker and OffscreenCanvas; they share Rust fixtures with the native recordings.</p></section>

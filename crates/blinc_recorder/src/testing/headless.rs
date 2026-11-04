@@ -37,6 +37,9 @@ use blinc_app::{BlincApp, Result};
 
 use super::framebuffer::CapturedFrame;
 use super::golden::Golden;
+#[cfg(test)]
+#[path = "headless/tests/mod.rs"]
+mod tests;
 use crate::{
     EventSimulator, RecordingConfig, RecordingExport, SharedRecordingSession, SimulatedInput,
     install_hooks, install_recorder, uninstall_hooks,
@@ -154,6 +157,14 @@ impl Headless {
     /// An offscreen surface of `width` x `height` logical pixels. Fails when
     /// there is no GPU adapter.
     pub fn new(width: u32, height: u32) -> Result<Self> {
+        Self::with_scale(width, height, 1.0)
+    }
+
+    /// Render a logical viewport at a higher pixel density without changing layout.
+    pub fn with_scale(logical_width: u32, logical_height: u32, scale: f64) -> Result<Self> {
+        assert!(logical_width > 0 && logical_height > 0 && scale.is_finite() && scale > 0.0);
+        let width = (logical_width as f64 * scale).round().max(1.0) as u32;
+        let height = (logical_height as f64 * scale).round().max(1.0) as u32;
         let app = BlincApp::new()?;
         blinc_layout::init_text_measurer();
         // A caret blinks on the wall clock; frames compared across runs need it held.
@@ -163,7 +174,11 @@ impl Headless {
         // install would leave every later session in the process without it.
         blinc_core::context_state::queue_pending_stylesheet(blinc_layout::ua_styles::UA_STYLES);
 
-        let mut ctx = WindowedContext::headless(width as f32, height as f32);
+        let mut ctx = WindowedContext::headless_with_scale(
+            logical_width as f32,
+            logical_height as f32,
+            scale,
+        );
         ctx.animations = shared_scheduler();
         if !blinc_core::BlincContextState::is_initialized() {
             blinc_core::BlincContextState::init(
@@ -172,7 +187,8 @@ impl Headless {
                 ctx.dirty_flag().clone(),
             );
         }
-        blinc_core::BlincContextState::get().set_viewport_size(width as f32, height as f32);
+        blinc_core::BlincContextState::get()
+            .set_viewport_size(logical_width as f32, logical_height as f32);
         if !blinc_layout::overlay_state::OverlayContext::is_initialized() {
             blinc_layout::overlay_state::OverlayContext::init(ctx.overlay_manager().clone());
         }
@@ -196,7 +212,7 @@ impl Headless {
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut render_state = RenderState::new(Arc::clone(&ctx.animations));
-        render_state.set_viewport(0.0, 0.0, width as f32, height as f32);
+        render_state.set_viewport(0.0, 0.0, logical_width as f32, logical_height as f32);
 
         Ok(Self {
             app,
@@ -235,6 +251,14 @@ impl Headless {
         self.ctx.add_css(css);
         self.needs_rebuild = true;
         self
+    }
+
+    /// Register font bytes shared with a web fixture before mounting it.
+    pub fn load_font_data(&mut self, bytes: Vec<u8>) -> usize {
+        let faces = self.app.load_font_data_to_registry(bytes);
+        self.app.refresh_generic_font_styles();
+        blinc_layout::init_text_measurer_with_registry(self.app.font_registry());
+        faces
     }
 
     /// The window context the UI is built with.
@@ -416,6 +440,10 @@ impl Headless {
         }
         if blinc_layout::widgets::take_needs_css_reparse() {
             self.ctx.reparse_css();
+        }
+        if blinc_layout::widgets::take_needs_relayout() {
+            self.tree = None;
+            self.needs_rebuild = true;
         }
         if !self.needs_rebuild {
             return;
@@ -838,6 +866,13 @@ impl Headless {
         None
     }
 
+    /// Whether the router currently considers this element hovered.
+    pub fn is_hovered(&self, selector: &str) -> bool {
+        self.find(selector)
+            .and_then(|node| self.tree().stable_id(node))
+            .is_some_and(|stable| self.ctx.event_router.is_hovered(stable))
+    }
+
     /// The centre of the first node matching `selector`.
     ///
     /// Panics when nothing matches: a test that names a missing element is
@@ -881,6 +916,32 @@ impl Headless {
     }
 
     fn snapshot_with(&mut self, try_fast_paint: bool) -> Result<CapturedFrame> {
+        self.paint(try_fast_paint)?;
+        self.read_frame()
+    }
+
+    /// Paint a recording annotation after the UI and its overlays.
+    /// The annotation does not participate in hit testing or change mounted state.
+    pub fn snapshot_with_overlay<E: ElementBuilder>(
+        &mut self,
+        annotation: &E,
+    ) -> Result<CapturedFrame> {
+        self.paint(false)?;
+        let mut tree = RenderTree::from_element(annotation);
+        tree.set_scale_factor(self.ctx.scale_factor as f32);
+        tree.compute_layout(self.ctx.width, self.ctx.height);
+        let state = RenderState::new(Arc::clone(&self.ctx.animations));
+        self.app.render_overlay_tree_with_motion(
+            &tree,
+            &state,
+            &self.view,
+            self.width,
+            self.height,
+        )?;
+        self.read_frame()
+    }
+
+    fn paint(&mut self, try_fast_paint: bool) -> Result<()> {
         self.frame(0);
         let tree = self.tree.as_ref().expect("nothing is mounted");
         self.app.render_tree_with_motion_opt(
@@ -892,6 +953,10 @@ impl Headless {
             self.height,
             try_fast_paint,
         )?;
+        Ok(())
+    }
+
+    fn read_frame(&self) -> Result<CapturedFrame> {
         let rgba = self
             .app
             .read_texture_to_rgba8(&self.texture, self.width, self.height)?;

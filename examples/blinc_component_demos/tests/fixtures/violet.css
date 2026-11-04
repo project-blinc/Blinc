@@ -1,0 +1,9 @@
+/* Overlay content is rendered outside .catalog-demo. Target CN parts directly. */
+.cn-button--primary { background: #7c3aed; border-radius: 18px; }
+.cn-button--primary:hover:not(:disabled) { background: #6d28d9; }
+.cn-button--primary:active:not(:disabled) { background: #5b21b6; }
+.cn-progress-bar { background: #7c3aed; }
+.cn-select-trigger { border-color: #7c3aed; }
+.cn-input { border-color: #7c3aed; }
+.cn-dialog { border-radius: 20px; }
+.cn-chart { --chart-1: #7c3aed; --chart-2: #06b6d4; }

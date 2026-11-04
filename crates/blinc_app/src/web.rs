@@ -32,6 +32,9 @@
 //! see no extra configuration — enabling the `web` feature is all
 //! that's required.
 
+mod worker;
+pub use worker::WebInput;
+
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
@@ -384,10 +387,8 @@ fn now_ms() -> u64 {
 /// is single-threaded, and its sub-fields (`wgpu::Surface` on wasm32,
 /// `web_sys::HtmlCanvasElement`) are `!Send` themselves.
 pub struct WebApp {
-    /// The HtmlCanvasElement we're rendering into. Held so we can
-    /// re-read its size after a browser resize.
-    #[allow(dead_code)]
-    canvas: web_sys::HtmlCanvasElement,
+    /// Canvas sized by DOM events or by the worker host.
+    canvas: worker::WebCanvas,
     /// Wgpu surface + its configured properties.
     surface: wgpu::Surface<'static>,
     surface_config: wgpu::SurfaceConfiguration,
@@ -646,28 +647,29 @@ impl WebApp {
         };
         let (blinc_app, surface) = BlincApp::with_canvas(canvas.clone(), Some(config)).await?;
 
-        // 3a. Wire the global text measurer to the BlincApp's font
-        // registry. Without this, the layout system falls back to
-        // the heuristic measurer in `text_measurer.rs::estimate_size`
-        // which assumes every glyph is exactly `0.55 * font_size`
-        // wide — fine for rough flexbox sizing of one-shot text
-        // labels, completely wrong for any widget that hit-tests
-        // against per-glyph positions. The visible bug is text
-        // selection / cursor placement landing several pixels off
-        // from where you clicked, because the text widget computes
-        // character offsets from estimated widths while the
-        // renderer draws glyphs at their actual font metrics.
-        // Same call the desktop runner makes at
-        // [`windowed.rs:2535`](crate::windowed) and the iOS runner
-        // does inside `init_text_measurer()` at `ios.rs:203`.
+        Self::from_surface(
+            worker::WebCanvas::Html(canvas),
+            blinc_app,
+            surface,
+            logical_width,
+            logical_height,
+            scale_factor,
+        )
+    }
+
+    fn from_surface(
+        canvas: worker::WebCanvas,
+        blinc_app: BlincApp,
+        surface: wgpu::Surface<'static>,
+        logical_width: f32,
+        logical_height: f32,
+        scale_factor: f64,
+    ) -> Result<Self> {
+        let physical_width = (logical_width * scale_factor as f32).round().max(1.0);
+        let physical_height = (logical_height * scale_factor as f32).round().max(1.0);
         blinc_layout::init_text_measurer_with_registry(blinc_app.font_registry());
 
-        // 4. Configure the surface for the canvas's physical dimensions.
         let texture_format = blinc_app.texture_format();
-        // COPY_SRC is needed for blend mode two-pass compositing, but
-        // the GL (WebGL2) adapter doesn't support it on the surface.
-        // Detect via renderer's has_storage_buffers — GL adapters lack
-        // both storage buffers and surface COPY_SRC.
         let mut surface_usage = wgpu::TextureUsages::RENDER_ATTACHMENT;
         if blinc_app.has_storage_buffers() {
             surface_usage |= wgpu::TextureUsages::COPY_SRC;
@@ -684,47 +686,19 @@ impl WebApp {
         };
         surface.configure(blinc_app.device(), &surface_config);
 
-        // 5. Build the shared collaborator graph that every platform
-        //    needs. These mirror what the desktop runner constructs in
-        //    `WindowedApp::run` (windowed.rs ~line 2105). The scheduler
-        //    is built fresh — its `start_raf()` driver gets kicked off
-        //    in [`Self::start_frame_loop`] once the user has wired their
-        //    rebuild + render callback.
         let scheduler = AnimationScheduler::new();
         let animations: SharedAnimationScheduler = Arc::new(Mutex::new(scheduler));
 
-        // Register the global animation scheduler handle so
-        // `blinc_animation::get_scheduler()` works for components
-        // that create `AnimatedValue`, `AnimatedKeyframe`, etc.
-        // Desktop runner does the same at windowed.rs:2166. Use
-        // `try_set` (OnceLock) indirectly — `set_global_scheduler`
-        // panics on double-init, but `WebApp::new` can only be
-        // called once per page load anyway.
         {
             let handle = animations.lock().unwrap().handle();
             blinc_animation::set_global_scheduler(handle);
-            // Default look of the layout widgets, ahead of the theme's own CSS.
             blinc_layout::ua_styles::install();
         }
 
         let ref_dirty_flag: RefDirtyFlag = Arc::new(AtomicBool::new(false));
-        // Shared process-global reactive graph — see windowed.rs.
         let reactive: SharedReactiveGraph = blinc_core::reactive::global_graph();
         let hooks = Arc::new(Mutex::new(HookState::new()));
 
-        // Initialize the global `BlincContextState` singleton with
-        // this runner's reactive graph, hook state, and dirty flag —
-        // exactly the same call the desktop runner makes at
-        // [`windowed.rs:2114`](crate::windowed). Without this,
-        // every component that reaches for `BlincContextState::get()`
-        // (which is every `ctx.use_state*`, every `Stateful::on_state`
-        // body, every `State::set`, every signal-driven rebuild
-        // path, …) panics or no-ops because the singleton is
-        // uninitialized. The previous web runner created the four
-        // shared collaborators and stuffed them into `WindowedContext`
-        // but never wired them into the global, so reactive state
-        // worked through `ctx.*` directly but `Stateful` widgets
-        // and the implicit-context APIs all silently failed.
         if !BlincContextState::is_initialized() {
             #[allow(clippy::type_complexity)]
             let stateful_callback: Arc<dyn Fn(&[SignalId]) + Send + Sync> =
@@ -740,31 +714,14 @@ impl WebApp {
             blinc_core::reactive::set_stateful_deps_notifier(move |ids| stateful_callback(ids));
         }
 
-        // Initialize the global ThemeState the same way the desktop /
-        // Android / iOS runners do (windowed.rs:1979, android.rs:110,
-        // ios.rs:152). Without this, any widget that reads a theme
-        // token — buttons, text inputs, scroll bars, the entire `cn`
-        // component library — panics on the first frame with
-        // "ThemeState not initialized". The web target uses the
-        // default Catppuccin-derived bundle (re-exported as
-        // `WebTheme::bundle()`) and reads the user's preferred color
-        // scheme from `window.matchMedia('(prefers-color-scheme: dark)')`.
         Self::init_theme();
+        BlincContextState::get().set_viewport_size(logical_width, logical_height);
 
-        // Register the web asset loader so `ImageData::load` →
-        // `global_asset_loader()` finds it. The `Arc` clone kept on
-        // `WebApp` lets the user add assets at runtime via
-        // `insert_asset` / async `preload_assets`. Mirrors the
-        // desktop's `init_asset_loader()` at windowed.rs:1962.
         let asset_loader = std::sync::Arc::new(blinc_platform_web::WebAssetLoader::new());
         let shared = blinc_platform_web::assets::SharedWebAssetLoader(asset_loader.clone());
         let _ = blinc_platform::assets::set_global_asset_loader(Box::new(shared));
 
         let overlay_mgr = overlay_manager();
-        // Initialize the global OverlayContext singleton so components
-        // that call `get_overlay_manager()` (blinc_cn dropdowns,
-        // dialogs, tooltips, etc.) find it. Desktop does this at
-        // windowed.rs:2258, Android at android.rs:238, iOS at ios.rs:296.
         if !blinc_layout::overlay_state::OverlayContext::is_initialized() {
             blinc_layout::overlay_state::OverlayContext::init(Arc::clone(&overlay_mgr));
         }
@@ -787,15 +744,8 @@ impl WebApp {
             ready_callbacks,
         );
 
-        // Build the RenderState that the full render path
-        // (`render_tree_with_motion`) needs. Mirrors
-        // windowed.rs:2590 where the desktop runner creates one.
         let render_state = blinc_layout::RenderState::new(Arc::clone(&ctx.animations));
 
-        // CSS animation / transition store — shared between the
-        // runner (which ticks it each frame) and the tree (which
-        // reads animated property values back during
-        // apply_all_css_animation_props / apply_all_css_transition_props).
         let css_anim_store = Arc::new(Mutex::new(blinc_layout::CssAnimationStore::new()));
 
         Ok(Self {
@@ -1173,7 +1123,7 @@ impl WebApp {
         // canvas itself lives inside the WebApp, but `add_event_listener`
         // only needs the EventTarget for the lifetime of the call —
         // the closures we attach own the routing back into the WebApp.
-        let canvas = app_rc.borrow().canvas.clone();
+        let canvas = app_rc.borrow().canvas().clone();
 
         // ----- mousemove -----
         {
@@ -1830,7 +1780,7 @@ impl WebApp {
             // this guard, every mousemove (60+/sec on a fast
             // pointer sweep) churns through the browser's style
             // recalc path for no visible benefit.
-            if let Some(html_canvas) = app.canvas.dyn_ref::<web_sys::HtmlElement>() {
+            if let Some(html_canvas) = app.canvas.html() {
                 let _ = html_canvas.style().set_property("cursor", css_cursor);
             }
             app.last_cursor = css_cursor;
@@ -2338,27 +2288,35 @@ impl WebApp {
             None => return,
         };
 
-        // Respect data-width/data-height/data-dpr overrides — when
-        // these are set, the canvas viewport is locked and resize
-        // events are ignored (the fixed dimensions take precedence
-        // over the browser's CSS layout).
-        if app.canvas.get_attribute("data-width").is_some()
-            || app.canvas.get_attribute("data-height").is_some()
+        let Some(canvas) = app.canvas.html() else {
+            return;
+        };
+        if canvas.get_attribute("data-width").is_some()
+            || canvas.get_attribute("data-height").is_some()
         {
             return;
         }
-
-        let logical_width = app.canvas.client_width() as f32;
-        let logical_height = app.canvas.client_height() as f32;
-        if logical_width <= 0.0 || logical_height <= 0.0 {
-            return;
-        }
-        let scale_factor = app
-            .canvas
+        let logical_width = canvas.client_width() as f32;
+        let logical_height = canvas.client_height() as f32;
+        let scale_factor = canvas
             .get_attribute("data-dpr")
             .and_then(|v| v.parse::<f64>().ok())
             .unwrap_or_else(|| window.device_pixel_ratio());
+        app.resize(logical_width, logical_height, scale_factor);
+    }
 
+    /// Resize a web surface using logical pixels and the host display scale.
+    pub fn resize(&mut self, logical_width: f32, logical_height: f32, scale_factor: f64) {
+        if !logical_width.is_finite()
+            || !logical_height.is_finite()
+            || !scale_factor.is_finite()
+            || logical_width <= 0.0
+            || logical_height <= 0.0
+            || scale_factor <= 0.0
+        {
+            return;
+        }
+        let app = self;
         // Skip if nothing actually changed. `window.resize` fires for
         // many non-resize events (devtools toggle, focus changes…).
         let (last_w, last_h) = app.last_logical_size;
@@ -2400,6 +2358,7 @@ impl WebApp {
         app.ctx.physical_width = physical_width;
         app.ctx.physical_height = physical_height;
         app.last_logical_size = (logical_width, logical_height);
+        BlincContextState::get().set_viewport_size(logical_width, logical_height);
 
         // Force a rebuild so the layout pass uses the new viewport
         // dimensions on the next rAF tick. `needs_full_rebuild`
@@ -2455,6 +2414,9 @@ impl WebApp {
     /// also call this directly to force a render after a click /
     /// keypress.
     pub fn run_one_frame(&mut self) -> Result<()> {
+        if matches!(&self.canvas, worker::WebCanvas::Offscreen(_)) {
+            self.ctx.animations.lock().unwrap().tick();
+        }
         let now = now_ms();
 
         // ─── Phase 0: clear per-frame state ──────────────────────
@@ -3040,9 +3002,14 @@ impl WebApp {
         Ok(())
     }
 
-    /// Borrow the canvas the runner is rendering into.
+    /// Borrow the DOM canvas.
+    ///
+    /// # Panics
+    /// Panics for a runner created with [`Self::new_offscreen`].
     pub fn canvas(&self) -> &web_sys::HtmlCanvasElement {
-        &self.canvas
+        self.canvas
+            .html()
+            .expect("worker runners use an OffscreenCanvas")
     }
 
     /// Borrow the underlying [`BlincApp`].

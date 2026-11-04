@@ -1,0 +1,13 @@
+<section class="chart-section" id="{{SLUG}}" data-chart-section>
+<div class="chart-heading"><h2>{{TITLE}}</h2><p>{{DESCRIPTION}}</p></div>
+<div class="example">
+<div class="example-toolbar"><div class="tabs" role="tablist" aria-label="{{TITLE}} views">
+<button id="{{SLUG}}-preview-tab" role="tab" data-chart-tab="preview" aria-controls="{{SLUG}}-preview" aria-selected="true">Preview</button>
+<button id="{{SLUG}}-live-tab" role="tab" data-chart-tab="live" aria-controls="{{SLUG}}-live" aria-selected="false" tabindex="-1">Live</button>
+<button id="{{SLUG}}-code-tab" role="tab" data-chart-tab="code" aria-controls="{{SLUG}}-code" aria-selected="false" tabindex="-1">Code</button>
+</div><a class="quiet" href="{{OPEN_URL}}" target="_blank" rel="noopener">Open ↗</a></div>
+<div id="{{SLUG}}-preview" role="tabpanel" data-chart-panel="preview" aria-labelledby="{{SLUG}}-preview-tab"><div class="recorded"><img data-chart-image src="/components/previews/{{SLUG}}/poster.png?v={{BUILD}}" data-poster="/components/previews/{{SLUG}}/poster.png?v={{BUILD}}" data-animation="/components/previews/{{SLUG}}/{{ANIMATION}}?v={{BUILD}}" width="560" height="320" loading="lazy" alt="{{TITLE}} interaction recorded with Blinc"></div><div class="recording-note"><span>Hybrid · dark · native recording · 2×</span><button class="quiet" data-chart-animation {{ANIMATION_HIDDEN}} aria-pressed="true">Pause preview</button></div></div>
+<div id="{{SLUG}}-live" role="tabpanel" data-chart-panel="live" aria-labelledby="{{SLUG}}-live-tab" hidden><div class="chart-live" data-chart-live data-demo-url="{{URL}}"></div></div>
+<div id="{{SLUG}}-code" role="tabpanel" data-chart-panel="code" aria-labelledby="{{SLUG}}-code-tab" hidden><div class="code-header"><span>Rust · {{TITLE}}</span><button class="quiet" data-copy="{{SLUG}}-source">Copy Rust</button></div><pre><code id="{{SLUG}}-source" class="language-rust">{{RUST}}</code></pre></div>
+</div>
+</section>

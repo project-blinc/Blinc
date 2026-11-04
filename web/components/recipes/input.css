@@ -1,0 +1,19 @@
+.cn-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+  transition: border-color var(--duration-fast) var(--ease-state);
+}
+
+/* Focus styling follows the selected theme. */
+.cn-input:focus {
+  border-color: var(--border-focus);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.cn-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+}

@@ -1,0 +1,526 @@
+{
+  "schema_version": 1,
+  "api_version": "0.6.0",
+  "components": [
+    {
+      "slug": "button",
+      "title": "Button",
+      "library": "cn",
+      "category": "Actions",
+      "tags": [
+        "actions",
+        "css",
+        "reactive"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "A clear call to action, with bound labels, variants and keyboard focus.",
+      "doc": "docs/book/src/cn/button.md",
+      "doc_section": null,
+      "entry": "button_demo",
+      "source": "examples/blinc_component_demos/src/demos.rs",
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "props": [
+        {
+          "name": "label",
+          "type": "String",
+          "kind": "Bound",
+          "example": "Click me"
+        },
+        {
+          "name": "disabled",
+          "type": "bool",
+          "kind": "Bound",
+          "example": "false"
+        },
+        {
+          "name": "variant",
+          "type": "ButtonVariant",
+          "kind": "Structural",
+          "example": "Primary"
+        },
+        {
+          "name": "size",
+          "type": "ButtonSize",
+          "kind": "Structural",
+          "example": "Medium"
+        },
+        {
+          "name": "on_click",
+          "type": "Fn(&EventContext)",
+          "kind": "Callback",
+          "example": "Increment the click count"
+        }
+      ],
+      "classes": [
+        ".cn-button",
+        ".cn-button--primary",
+        ".cn-button--secondary",
+        ".cn-button--outline",
+        ".cn-button--ghost",
+        ".cn-button--link",
+        ".cn-button--destructive",
+        ".cn-button--sm",
+        ".cn-button--md",
+        ".cn-button--lg",
+        ".cn-button--icon"
+      ],
+      "keyboard": ":hover, :active, :disabled and :focus-visible. Tab reaches the button; Enter or Space activates it.",
+      "tokens": "--primary, --primary-hover, --primary-active, --text-inverse, --focus-ring, --radius-default",
+      "notes": "The label can be a value, Signal or Computed. A disabled button ignores activation. Choose variants and sizes when building the component."
+    },
+    {
+      "slug": "input",
+      "title": "Input",
+      "library": "cn",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "reactive"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "A text field with a label, placeholder, validation and reactive feedback.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Input",
+      "entry": "input_demo",
+      "source": "examples/blinc_component_demos/src/demos.rs",
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "props": [
+        {
+          "name": "data",
+          "type": "SharedTextInputData",
+          "kind": "Persistent editor state",
+          "example": "Empty text"
+        },
+        {
+          "name": "label / placeholder",
+          "type": "String",
+          "kind": "Bound",
+          "example": "Your name / Ada Lovelace"
+        },
+        {
+          "name": "disabled",
+          "type": "bool",
+          "kind": "Bound",
+          "example": "false"
+        },
+        {
+          "name": "size",
+          "type": "InputSize",
+          "kind": "Structural",
+          "example": "Medium"
+        },
+        {
+          "name": "on_change",
+          "type": "Fn(&str)",
+          "kind": "Callback",
+          "example": "Update the greeting Signal"
+        }
+      ],
+      "classes": [
+        ".cn-input-group",
+        ".cn-input",
+        ".cn-input--sm",
+        ".cn-input--md",
+        ".cn-input--lg",
+        ".cn-label",
+        ".cn-label-text"
+      ],
+      "keyboard": ":hover, :focus, :disabled, :focus-visible and [data-invalid]. Tab focuses the editor; ordinary editing keys, selection and clipboard shortcuts apply.",
+      "tokens": "--input-bg, --input-bg-hover, --input-bg-focus, --input-bg-disabled, --border, --focus-ring, --text-primary",
+      "notes": "Keep SharedTextInputData across rebuilds. The browser host forwards committed text, composition and clipboard events into the Blinc editor. Its hidden textarea is an input bridge; the visible field is rendered by Blinc."
+    },
+    {
+      "slug": "select",
+      "title": "Select",
+      "library": "cn",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "reactive"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Choose one option from a keyboard-accessible popover.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Select",
+      "entry": "select_demo",
+      "source": "examples/blinc_component_demos/src/demos.rs",
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "props": [
+        {
+          "name": "value",
+          "type": "Signal<String>",
+          "kind": "Read/write binding",
+          "example": "rust"
+        },
+        {
+          "name": "label",
+          "type": "String",
+          "kind": "Bound",
+          "example": "Language"
+        },
+        {
+          "name": "disabled",
+          "type": "bool",
+          "kind": "Bound",
+          "example": "false"
+        },
+        {
+          "name": "options",
+          "type": "SelectOption",
+          "kind": "Structural",
+          "example": "Rust, TypeScript, Python"
+        },
+        {
+          "name": "on_change",
+          "type": "Fn(&str)",
+          "kind": "Callback",
+          "example": "Optional user selection feedback"
+        }
+      ],
+      "classes": [
+        ".cn-select-trigger",
+        ".cn-select-content",
+        ".cn-select-item",
+        ".cn-select-item--selected",
+        ".cn-chevron"
+      ],
+      "keyboard": "[data-state=\"open\"], [data-placeholder], :hover, :disabled and :focus-visible. Enter/Space opens; arrows move; Enter selects; Escape dismisses.",
+      "tokens": "--surface-elevated, --surface-overlay, --border, --primary, --focus-ring, --text-primary, --text-secondary",
+      "notes": "The value Signal owns the selection. Popover content lives in the overlay root, outside .catalog-demo; target .cn-select-content and .cn-select-item directly when restyling."
+    },
+    {
+      "slug": "dialog",
+      "title": "Dialog",
+      "library": "cn",
+      "category": "Overlays",
+      "tags": [
+        "overlays",
+        "css",
+        "reactive"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "A focused confirmation step, with dismissal and trigger focus restoration.",
+      "doc": "docs/book/src/cn/dialog.md",
+      "doc_section": null,
+      "entry": "dialog_demo",
+      "source": "examples/blinc_component_demos/src/demos.rs",
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "props": [
+        {
+          "name": "title / description",
+          "type": "String",
+          "kind": "Bound",
+          "example": "Publish this draft?"
+        },
+        {
+          "name": "confirm_text / cancel_text",
+          "type": "String",
+          "kind": "Bound",
+          "example": "Publish / Keep editing"
+        },
+        {
+          "name": "on_confirm",
+          "type": "Fn()",
+          "kind": "Callback",
+          "example": "Set the published Signal"
+        },
+        {
+          "name": "on_cancel / on_close",
+          "type": "Fn()",
+          "kind": "Callback",
+          "example": "Optional dismissal feedback"
+        },
+        {
+          "name": "show()",
+          "type": "OverlayHandle",
+          "kind": "Lifecycle",
+          "example": "Called from the trigger"
+        }
+      ],
+      "classes": [
+        ".cn-dialog",
+        ".cn-dialog-title",
+        ".cn-dialog-description",
+        ".cn-dialog-motion"
+      ],
+      "keyboard": "Tab stays within the active dialog. Escape and backdrop click dismiss it. Closing restores focus to the trigger. Confirmation and cancellation callbacks take no arguments.",
+      "tokens": "--surface-elevated, --text-primary, --text-secondary, --border, --radius-lg, --focus-ring",
+      "notes": "Build and show the dialog from the trigger handler. The returned OverlayHandle supports explicit close. Dialog parts live in the overlay root, so selectors beneath .catalog-demo do not reach them."
+    },
+    {
+      "slug": "progress",
+      "title": "Progress",
+      "library": "cn",
+      "category": "Feedback",
+      "tags": [
+        "feedback",
+        "css",
+        "reactive"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Show a changing value with an eased, CSS-styled progress bar.",
+      "doc": "docs/book/src/cn/feedback.md",
+      "doc_section": "Progress",
+      "entry": "progress_demo",
+      "source": "examples/blinc_component_demos/src/demos.rs",
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "props": [
+        {
+          "name": "value",
+          "type": "f32",
+          "kind": "Bound",
+          "example": "42 (0–100)"
+        },
+        {
+          "name": "size",
+          "type": "ProgressSize",
+          "kind": "Structural",
+          "example": "Medium"
+        },
+        {
+          "name": "w",
+          "type": "f32",
+          "kind": "Structural",
+          "example": "Container width, up to 256 logical pixels"
+        },
+        {
+          "name": "progress_indeterminate()",
+          "type": "Builder",
+          "kind": "Structural alternative",
+          "example": "Not used in this example"
+        }
+      ],
+      "classes": [
+        ".cn-progress",
+        ".cn-progress-bar"
+      ],
+      "keyboard": "[data-indeterminate] on the track enables the indeterminate animation. A progress bar is informational and is not a keyboard stop; the example button advances it.",
+      "tokens": "--cn-progress-track, --cn-progress-bar, --border, --primary, --radius-full, --duration-slow, --ease-nav",
+      "notes": "Bind a value, Signal or Computed. Progress does not own a task or timer; application state supplies the percentage. Use progress_indeterminate() when no percentage is available."
+    },
+    {
+      "slug": "charts",
+      "title": "Charts",
+      "library": "cn",
+      "category": "Data display",
+      "tags": [
+        "data display",
+        "css",
+        "reactive"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Line, area, bar, pie, donut and specialised charts, each with its own interactive example.",
+      "doc": "docs/book/src/cn/data-display.md",
+      "doc_section": "Chart",
+      "entry": "chart_demo",
+      "source": "examples/blinc_component_demos/src/demos.rs",
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer"
+      ],
+      "props": [
+        {
+          "name": "series",
+          "type": "name + &[f64]",
+          "kind": "Structural data",
+          "example": "Visitors and Returning"
+        },
+        {
+          "name": "data",
+          "type": "Vec<ChartSeries> / Vec<PieSlice> / Vec<ComparisonItem>",
+          "kind": "Bound alternative",
+          "example": "Signal or Computed data for the selected chart type"
+        },
+        {
+          "name": "labels",
+          "type": "Vec<String>",
+          "kind": "Bound",
+          "example": "Mon–Sat"
+        },
+        {
+          "name": "width / height",
+          "type": "f32",
+          "kind": "Structural",
+          "example": "Container size, up to 420 × 200 logical pixels"
+        },
+        {
+          "name": "dots()",
+          "type": "Builder option",
+          "kind": "Structural",
+          "example": "Used by the line example"
+        },
+        {
+          "name": "slice / donut / total",
+          "type": "PieBuilder options",
+          "kind": "Structural",
+          "example": "Slice values, hole radius and total caption"
+        },
+        {
+          "name": "values",
+          "type": "Vec<f64>",
+          "kind": "Bound",
+          "example": "Sparkline, threshold and histogram measurements"
+        },
+        {
+          "name": "band / marker / baseline",
+          "type": "ChartBand / ChartMarker / f64",
+          "kind": "Structural",
+          "example": "Performance budgets and reference values"
+        },
+        {
+          "name": "horizontal / stacked",
+          "type": "ChartBuilder options",
+          "kind": "Structural",
+          "example": "Bar and area arrangements"
+        }
+      ],
+      "classes": [
+        ".cn-chart",
+        ".cn-chart-axis",
+        ".cn-chart-legend",
+        ".cn-chart-legend-item",
+        ".cn-chart-swatch",
+        ".cn-chart-tooltip",
+        ".cn-chart-tooltip-title",
+        ".cn-chart-tooltip-row",
+        ".cn-chart-tooltip-name",
+        ".cn-chart-tooltip-value",
+        ".cn-chart-plot",
+        ".cn-chart-band-label",
+        ".cn-chart-note",
+        ".cn-chart-pie-total",
+        ".cn-chart-pie-caption"
+      ],
+      "keyboard": "Line, area and bar plots reveal nearby values on hover; pie and donut slices show their share. Sparklines are informational. Charts are not keyboard-selectable; provide a table or text equivalent when values are essential.",
+      "tokens": "--chart-1 through --chart-5, --cn-chart-grid, --cn-chart-cursor, --cn-chart-surface, --text-primary, --text-secondary",
+      "notes": "Each section demonstrates one chart type. Plots follow their available container; the legend, axes, tooltips and notes are ordinary elements styled by the theme. Data accepts values, Signal or Computed sources.",
+      "examples": [
+        {
+          "slug": "area-chart",
+          "title": "Area",
+          "description": "Fill the area beneath each series to show volume over time.",
+          "entry": "area_demo"
+        },
+        {
+          "slug": "stacked-area-chart",
+          "title": "Stacked area",
+          "description": "Compare each series and its contribution to the total.",
+          "entry": "stacked_area_demo"
+        },
+        {
+          "slug": "bar-chart",
+          "title": "Grouped bars",
+          "description": "Compare categories with a separate bar for each series.",
+          "entry": "bar_demo"
+        },
+        {
+          "slug": "stacked-bar-chart",
+          "title": "Stacked bars",
+          "description": "Show the total and the series that make it up.",
+          "entry": "stacked_bar_demo"
+        },
+        {
+          "slug": "horizontal-bar-chart",
+          "title": "Horizontal bars",
+          "description": "Compare categories along a horizontal value axis.",
+          "entry": "horizontal_bar_demo"
+        },
+        {
+          "slug": "pie-chart",
+          "title": "Pie",
+          "description": "Compare proportions with interactive slices and a legend.",
+          "entry": "pie_demo"
+        },
+        {
+          "slug": "donut-chart",
+          "title": "Donut",
+          "description": "Show proportions around a total and its caption.",
+          "entry": "donut_demo"
+        },
+        {
+          "slug": "sparkline",
+          "title": "Sparkline",
+          "description": "A compact trend without axes, grid or a legend.",
+          "entry": "sparkline_demo",
+          "capabilities": ["worker-canvas"]
+        },
+        {
+          "slug": "threshold-chart",
+          "title": "Thresholds",
+          "description": "Compare measurements against labelled performance budgets.",
+          "entry": "threshold_demo"
+        },
+        {
+          "slug": "histogram",
+          "title": "Histogram",
+          "description": "Group measurements into bins and mark a reference value.",
+          "entry": "histogram_demo"
+        },
+        {
+          "slug": "comparison-chart",
+          "title": "Comparison",
+          "description": "Compare current measurements with a baseline and show the change.",
+          "entry": "comparison_demo"
+        }
+      ]
+    }
+  ]
+}

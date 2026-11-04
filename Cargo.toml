@@ -47,6 +47,7 @@ members = [
     # Separate crate so its 35MB of assets (videos, 3D models, HDRIs)
     # don't bloat the published blinc_app package.
     "examples/blinc_app_examples",
+    "examples/blinc_component_demos",
     # Auto-generated wasm wrappers from `tools/build-web-examples`.
     # Gitignored; the glob tolerates an empty match on fresh checkouts.
     "examples/_generated/*",

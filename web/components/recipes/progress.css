@@ -1,0 +1,17 @@
+.cn-progress {
+  height: 12px;
+  background: var(--surface-overlay);
+  border-radius: var(--radius-full);
+}
+
+/* Gradients can use the same theme variables as solid fills. */
+.cn-progress-bar {
+  background: linear-gradient(90deg, var(--primary), var(--success));
+  border-radius: var(--radius-full);
+  transition: width var(--duration-slow) var(--ease-nav);
+}
+
+.demo-caption {
+  color: var(--primary);
+  font-weight: 600;
+}

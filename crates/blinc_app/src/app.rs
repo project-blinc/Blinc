@@ -853,6 +853,24 @@ impl BlincApp {
         canvas: web_sys::HtmlCanvasElement,
         config: Option<BlincConfig>,
     ) -> Result<(Self, wgpu::Surface<'static>)> {
+        Self::with_web_canvas(Some(canvas), None, config).await
+    }
+
+    /// Create the web renderer inside a dedicated worker.
+    #[cfg(all(feature = "web", target_arch = "wasm32"))]
+    pub async fn with_offscreen_canvas(
+        canvas: web_sys::OffscreenCanvas,
+        config: Option<BlincConfig>,
+    ) -> Result<(Self, wgpu::Surface<'static>)> {
+        Self::with_web_canvas(None, Some(canvas), config).await
+    }
+
+    #[cfg(all(feature = "web", target_arch = "wasm32"))]
+    async fn with_web_canvas(
+        canvas: Option<web_sys::HtmlCanvasElement>,
+        offscreen: Option<web_sys::OffscreenCanvas>,
+        config: Option<BlincConfig>,
+    ) -> Result<(Self, wgpu::Surface<'static>)> {
         let config = config.unwrap_or_default();
 
         let renderer_config = RendererConfig {
@@ -865,9 +883,17 @@ impl BlincApp {
             ..RendererConfig::default()
         };
 
-        let (renderer, surface) = GpuRenderer::with_canvas(canvas, renderer_config)
-            .await
-            .map_err(|e| BlincError::GpuInit(e.to_string()))?;
+        let result = match canvas {
+            Some(canvas) => GpuRenderer::with_canvas(canvas, renderer_config).await,
+            None => {
+                GpuRenderer::with_offscreen_canvas(
+                    offscreen.expect("web canvas supplied"),
+                    renderer_config,
+                )
+                .await
+            }
+        };
+        let (renderer, surface) = result.map_err(|e| BlincError::GpuInit(e.to_string()))?;
 
         let device = renderer.device_arc();
         let queue = renderer.queue_arc();

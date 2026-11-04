@@ -431,3 +431,16 @@ fn test_error_collection_with_valid_css_no_errors() {
 // ========================================================================
 // CSS Variables Tests
 // ========================================================================
+#[test]
+fn incomplete_live_edits_report_a_syntax_error() {
+    for css in [
+        ".panel { background:",
+        ":root { --primary: red;",
+        "@layer components { .panel { opacity: 1; }",
+    ] {
+        assert!(crate::parser::Stylesheet::parse(css).is_err(), "{css}");
+    }
+    assert!(
+        crate::parser::Stylesheet::parse(".panel { /* } */ content: \"}\"; opacity: 1; }").is_ok()
+    );
+}

@@ -2,3 +2,5 @@ User-agent: *
 Allow: /
 
 Sitemap: https://blinc.rs/sitemap.xml
+
+Sitemap: https://blinc.rs/components/sitemap.xml

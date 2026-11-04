@@ -9,6 +9,7 @@ on:
       - '.github/workflows/docs.yml'
       - 'crates/*/src/**'
       - 'examples/blinc_app_examples/examples/**'
+      - 'examples/blinc_component_demos/**'
       - 'extensions/*/src/**'
       - 'tools/build-web-examples/**'
       - 'assets/**'
@@ -21,6 +22,7 @@ on:
       - '.github/workflows/docs.yml'
       - 'crates/*/src/**'
       - 'examples/blinc_app_examples/examples/**'
+      - 'examples/blinc_component_demos/**'
       - 'extensions/*/src/**'
       - 'tools/build-web-examples/**'
       - 'assets/**'
@@ -204,16 +206,25 @@ jobs:
             --no-gallery \
             --stage-to target/site/docs/examples
 
-      # Copy the landing page + SEO files on top of the site tree.
-      # `cp -a` preserves the `.nojekyll` and the dot-files; the
-      # landing's index.html sits alongside `docs/` from the mdBook
-      # step. No mdBook output gets overwritten because `web/` only
-      # carries root-level files (index.html, 404.html, robots.txt,
-      # sitemap.xml, assets/, .nojekyll).
+      # Keep the landing page and book together. The following catalog step
+      # replaces the copied component sources with generated pages and assets.
       - name: Copy landing page (web/) into site root
         run: |
           mkdir -p target/site
           cp -a web/. target/site/
+
+      - name: Build component pages and worker runtime
+        env:
+          CARGO_BUILD_JOBS: 2
+        run: cargo run -p blinc-build-web-examples -- --catalog-to target/site --build
+
+      - name: Validate component catalog
+        env:
+          CARGO_BUILD_JOBS: 2
+        run: |
+          cargo test -p blinc-build-web-examples catalog::pages::tests
+          node --experimental-vm-modules --test web/components/tests/*.test.mjs
+          node web/components/tests/artifacts.mjs target/site
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

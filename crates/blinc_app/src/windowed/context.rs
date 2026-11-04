@@ -88,6 +88,7 @@ pub struct WindowedContext {
     /// Raw CSS source strings, preserved for reparsing on theme changes.
     /// Each entry corresponds to one `add_css()` call, in order.
     pub(super) css_sources: Vec<String>,
+    pub(super) css_overrides: Vec<(String, String)>,
     /// Continuous pointer query state (per-element pointer tracking)
     pub pointer_query: blinc_layout::pointer_query::PointerQueryState,
     /// Callback to request opening a new window (set by desktop runner)
@@ -155,6 +156,7 @@ impl WindowedContext {
             ready_callbacks,
             stylesheet: None,
             css_sources: Vec::new(),
+            css_overrides: Vec::new(),
             pointer_query: blinc_layout::pointer_query::PointerQueryState::new(),
             open_window_fn: None,
             close_fn: None,
@@ -206,6 +208,7 @@ impl WindowedContext {
             ready_callbacks,
             stylesheet: None,
             css_sources: Vec::new(),
+            css_overrides: Vec::new(),
             pointer_query: blinc_layout::pointer_query::PointerQueryState::new(),
             open_window_fn: None,
             close_fn: None,
@@ -257,6 +260,7 @@ impl WindowedContext {
             ready_callbacks,
             stylesheet: None,
             css_sources: Vec::new(),
+            css_overrides: Vec::new(),
             pointer_query: blinc_layout::pointer_query::PointerQueryState::new(),
             open_window_fn: None,
             close_fn: None,
@@ -317,6 +321,7 @@ impl WindowedContext {
             ready_callbacks,
             stylesheet: None,
             css_sources: Vec::new(),
+            css_overrides: Vec::new(),
             pointer_query: blinc_layout::pointer_query::PointerQueryState::new(),
             open_window_fn: None,
             close_fn: None,
@@ -331,14 +336,27 @@ impl WindowedContext {
     /// overlay manager and element registry; the reactive graph is the
     /// process-wide one, as in a window.
     pub fn headless(width: f32, height: f32) -> Self {
+        Self::headless_with_scale(width, height, 1.0)
+    }
+
+    /// A headless context whose layout uses logical pixels at the given density.
+    pub fn headless_with_scale(width: f32, height: f32, scale_factor: f64) -> Self {
+        assert!(
+            width.is_finite()
+                && height.is_finite()
+                && width > 0.0
+                && height > 0.0
+                && scale_factor.is_finite()
+                && scale_factor > 0.0
+        );
         Self {
             width,
             height,
-            scale_factor: 1.0,
+            scale_factor,
             safe_area: (0.0, 0.0, 0.0, 0.0),
             keyboard_inset: 0.0,
-            physical_width: width,
-            physical_height: height,
+            physical_width: (width * scale_factor as f32).round().max(1.0),
+            physical_height: (height * scale_factor as f32).round().max(1.0),
             focused: true,
             rebuild_count: 0,
             event_router: EventRouter::new(),
@@ -352,6 +370,7 @@ impl WindowedContext {
             ready_callbacks: Arc::new(Mutex::new(Vec::new())),
             stylesheet: None,
             css_sources: Vec::new(),
+            css_overrides: Vec::new(),
             pointer_query: blinc_layout::pointer_query::PointerQueryState::new(),
             open_window_fn: None,
             close_fn: None,
@@ -401,6 +420,7 @@ impl WindowedContext {
             ready_callbacks,
             stylesheet: None,
             css_sources: Vec::new(),
+            css_overrides: Vec::new(),
             pointer_query: blinc_layout::pointer_query::PointerQueryState::new(),
             open_window_fn: None,
             close_fn: None,

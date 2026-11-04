@@ -404,10 +404,15 @@ async fn fetch_as_bytes(url: &str) -> Result<Vec<u8>> {
         PlatformError::AssetLoad(format!("Failed to build request for {url}: {e:?}"))
     })?;
 
-    let window = web_sys::window()
-        .ok_or_else(|| PlatformError::AssetLoad("No global window object".to_string()))?;
-
-    let resp_val = JsFuture::from(window.fetch_with_request(&request))
+    let global = js_sys::global();
+    let fetch = if let Some(window) = global.dyn_ref::<web_sys::Window>() {
+        window.fetch_with_request(&request)
+    } else if let Some(worker) = global.dyn_ref::<web_sys::WorkerGlobalScope>() {
+        worker.fetch_with_request(&request)
+    } else {
+        return Err(PlatformError::AssetLoad("No browser fetch service".into()));
+    };
+    let resp_val = JsFuture::from(fetch)
         .await
         .map_err(|e| PlatformError::AssetLoad(format!("fetch({url}) failed: {e:?}")))?;
     let response: Response = resp_val

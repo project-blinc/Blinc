@@ -66,6 +66,8 @@
 //! The tool is intentionally not in `default-members`, so regular
 //! `cargo build` / `cargo check --workspace` does not pull it.
 
+mod catalog;
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -2267,6 +2269,13 @@ fn parse_args() -> Args {
 }
 
 fn main() {
+    if std::env::args().any(|arg| arg == "--catalog-to") {
+        if let Err(error) = catalog::run() {
+            eprintln!("catalog: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     let args = parse_args();
 
     // Resolve the workspace root from CARGO_MANIFEST_DIR. The tool's

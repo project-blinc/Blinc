@@ -1999,13 +1999,30 @@ impl GpuRenderer {
         canvas: web_sys::HtmlCanvasElement,
         config: RendererConfig,
     ) -> Result<(Self, wgpu::Surface<'static>), RendererError> {
+        Self::with_web_target(wgpu::SurfaceTarget::Canvas(canvas), config).await
+    }
+
+    /// Create a renderer for a canvas transferred to a dedicated worker.
+    #[cfg(target_arch = "wasm32")]
+    pub async fn with_offscreen_canvas(
+        canvas: web_sys::OffscreenCanvas,
+        config: RendererConfig,
+    ) -> Result<(Self, wgpu::Surface<'static>), RendererError> {
+        Self::with_web_target(wgpu::SurfaceTarget::OffscreenCanvas(canvas), config).await
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    async fn with_web_target(
+        target: wgpu::SurfaceTarget<'static>,
+        config: RendererConfig,
+    ) -> Result<(Self, wgpu::Surface<'static>), RendererError> {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: Self::preferred_backends(),
             ..Default::default()
         });
 
         let surface = instance
-            .create_surface(wgpu::SurfaceTarget::Canvas(canvas))
+            .create_surface(target)
             .map_err(RendererError::SurfaceError)?;
 
         let adapter = instance

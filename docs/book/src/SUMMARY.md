@@ -78,6 +78,7 @@
 - [Setup & Build](./web/setup.md)
 - [Examples](./web/examples.md)
 - [Fonts & Assets](./web/fonts-assets.md)
+- [Component Catalog](./web/component-catalog.md)
 
 # Core Concepts
 

@@ -134,11 +134,7 @@ pub fn process_pending_input_focus() {
         let Some(strong) = weak.upgrade() else {
             continue;
         };
-        let mounted = strong
-            .lock()
-            .ok()
-            .map(|d| d.revision.is_some())
-            .unwrap_or(false);
+        let mounted = strong.lock().ok().map(|d| d.mounted).unwrap_or(false);
         if mounted {
             focus_text_input(&strong);
         } else {
