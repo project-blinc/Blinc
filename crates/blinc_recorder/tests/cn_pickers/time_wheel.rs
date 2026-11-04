@@ -74,6 +74,9 @@ fn choose_row(ui: &mut Headless, selector: &str, row: f32) {
 
 #[test]
 fn wheel_picker_light_and_separate_period() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = open(TimeFormat::TwelveHour, false, ColorScheme::Light);
     s.ui.leave()
         .settle()
@@ -97,6 +100,9 @@ fn wheel_picker_light_and_separate_period() {
 
 #[test]
 fn scrolling_columns_keeps_edits_provisional_until_save() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = open(TimeFormat::TwentyFourHour, true, ColorScheme::Dark);
     s.ui.leave()
         .settle()
@@ -138,6 +144,9 @@ fn scrolling_columns_keeps_edits_provisional_until_save() {
 
 #[test]
 fn cancel_escape_and_outside_dismissal_discard_the_draft() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = open(TimeFormat::TwentyFourHour, false, ColorScheme::Dark);
     for action in ["cancel", "escape", "outside"] {
         wheel(&mut s.ui, ".cn-time-picker-wheel-minute", 40.0);
@@ -172,6 +181,9 @@ fn cancel_escape_and_outside_dismissal_discard_the_draft() {
 
 #[test]
 fn native_scroll_tracks_small_deltas_without_changing_other_columns() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = open(TimeFormat::TwentyFourHour, false, ColorScheme::Dark);
     wheel(&mut s.ui, ".cn-time-picker-wheel-minute", 15.0);
     wheel(&mut s.ui, ".cn-time-picker-wheel-minute", 15.0);
@@ -187,6 +199,9 @@ fn native_scroll_tracks_small_deltas_without_changing_other_columns() {
 
 #[test]
 fn clicking_and_dragging_select_visible_rows() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = open(TimeFormat::TwentyFourHour, false, ColorScheme::Dark);
     choose_row(&mut s.ui, ".cn-time-picker-wheel-hour", 1.0);
     assert_eq!(text(&s.ui, ".cn-time-picker-wheel-hour-current"), "04");
@@ -206,6 +221,9 @@ fn clicking_and_dragging_select_visible_rows() {
 
 #[test]
 fn external_writes_follow_and_keyboard_edits_save_once() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = open(TimeFormat::TwentyFourHour, false, ColorScheme::Dark);
     wheel(&mut s.ui, ".cn-time-picker-wheel-minute", 40.0);
     s.time.set(TimeOfDay::new(23, 59, 45).unwrap());
@@ -225,6 +243,9 @@ fn external_writes_follow_and_keyboard_edits_save_once() {
 
 #[test]
 fn disabled_editor_closes_the_draft_and_popup_can_be_omitted() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = open(TimeFormat::TwentyFourHour, true, ColorScheme::Dark);
     wheel(&mut s.ui, ".cn-time-picker-wheel-minute", 40.0);
     s.disabled.set(true);
@@ -241,6 +262,9 @@ fn disabled_editor_closes_the_draft_and_popup_can_be_omitted() {
 
 #[test]
 fn keyboard_steps_and_twelve_hour_wrap_preserve_the_period() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = open_with_steps(TimeFormat::TwelveHour, true, ColorScheme::Dark, (5, 10));
     s.time.set(TimeOfDay::new(23, 58, 55).unwrap());
     s.ui.settle();
@@ -268,6 +292,9 @@ fn keyboard_steps_and_twelve_hour_wrap_preserve_the_period() {
 
 #[test]
 fn tab_reaches_separate_period_controls_columns_and_footer() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = open(TimeFormat::TwelveHour, false, ColorScheme::Dark);
     let stops = s.ui.tree().tab_stops();
     assert_eq!(stops.len(), 6);
@@ -284,6 +311,9 @@ fn tab_reaches_separate_period_controls_columns_and_footer() {
 
 #[test]
 fn row_height_can_be_restyled_through_css() {
+    if !Headless::available() {
+        return;
+    }
     use blinc_theme::HybridTheme;
     let mut ui = session(ColorScheme::Light);
     ui.theme(
@@ -349,6 +379,9 @@ fn assert_edge_fade(ui: &mut Headless, selector: &str) {
 
 #[test]
 fn overflow_fade_reaches_main_tree_text() {
+    if !Headless::available() {
+        return;
+    }
     use blinc_core::Color;
     use blinc_layout::text::Text;
     let mut ui = session(ColorScheme::Light);
@@ -382,6 +415,9 @@ fn overflow_fade_reaches_main_tree_text() {
 
 #[test]
 fn popup_overlaps_its_control_and_stays_inside_the_window() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session(ColorScheme::Dark);
     let time = signal(TimeOfDay::new(3, 12, 0).unwrap());
     ui.mount(move |_| {
