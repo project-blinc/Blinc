@@ -100,6 +100,9 @@ fn mount_time(
 
 #[test]
 fn time_fields_wrap_and_preserve_unedited_parts() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session(ColorScheme::Dark);
     let (value, _, changes) = mount_time(&mut ui, TimeFormat::TwentyFourHour, true);
     ui.click(".cn-time-picker-hour").key(38).settle();
@@ -125,6 +128,9 @@ fn time_fields_wrap_and_preserve_unedited_parts() {
 
 #[test]
 fn twelve_hour_noon_midnight_and_hidden_seconds() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session(ColorScheme::Light);
     let (value, _, _) = mount_time(&mut ui, TimeFormat::TwelveHour, false);
     value.set(TimeOfDay::new(0, 30, 45).unwrap());
@@ -142,6 +148,9 @@ fn twelve_hour_noon_midnight_and_hidden_seconds() {
 
 #[test]
 fn disabled_time_rejects_keys_and_period_clicks() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session(ColorScheme::Dark);
     let (value, disabled, changes) = mount_time(&mut ui, TimeFormat::TwelveHour, true);
     ui.click(".cn-time-picker-hour");
@@ -188,6 +197,9 @@ fn mount_color(ui: &mut Headless, inline: bool, alpha: bool) -> ColorScene {
 
 #[test]
 fn color_panel_light_snapshot() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session(ColorScheme::Light);
     let s = mount_color(&mut ui, true, true);
     s.value.set(s.value.get().with_alpha(0.55));
@@ -210,6 +222,9 @@ fn color_panel_light_snapshot() {
 
 #[test]
 fn color_plane_drag_clamps_and_external_writes_follow_in_place() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session(ColorScheme::Dark);
     let s = mount_color(&mut ui, true, true);
     let node = ui.find(".cn-color-picker-sv").unwrap();
@@ -232,6 +247,9 @@ fn color_plane_drag_clamps_and_external_writes_follow_in_place() {
 
 #[test]
 fn hue_survives_black_and_alpha_responds_to_keys() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session(ColorScheme::Dark);
     let s = mount_color(&mut ui, true, true);
     ui.click(".cn-color-picker-hue").key(35).settle();
@@ -258,6 +276,9 @@ fn hue_survives_black_and_alpha_responds_to_keys() {
 
 #[test]
 fn hex_entry_commits_on_enter_and_reports_invalid_input() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session(ColorScheme::Dark);
     let s = mount_color(&mut ui, true, true);
     replace_text(&mut ui, ".cn-color-picker-hex", "#f008");
@@ -281,6 +302,9 @@ fn hex_entry_commits_on_enter_and_reports_invalid_input() {
 
 #[test]
 fn palette_updates_and_disabled_controls_preserve_the_value() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session(ColorScheme::Dark);
     let s = mount_color(&mut ui, true, false);
     s.value.set(s.value.get().with_alpha(0.4));
@@ -313,6 +337,9 @@ fn palette_updates_and_disabled_controls_preserve_the_value() {
 
 #[test]
 fn popover_opens_follows_value_and_dismisses_outside() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session(ColorScheme::Dark);
     let s = mount_color(&mut ui, false, true);
     ui.click(".cn-color-picker-trigger").settle();
@@ -332,6 +359,9 @@ fn popover_opens_follows_value_and_dismisses_outside() {
 
 #[test]
 fn disabling_open_popover_closes_it() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session(ColorScheme::Light);
     let s = mount_color(&mut ui, false, false);
     ui.click(".cn-color-picker-trigger").settle();
@@ -343,6 +373,9 @@ fn disabling_open_popover_closes_it() {
 
 #[test]
 fn time_value_rejects_invalid_times_and_formats_boundaries() {
+    if !Headless::available() {
+        return;
+    }
     assert!(TimeOfDay::new(24, 0, 0).is_none());
     assert!(TimeOfDay::new(23, 60, 0).is_none());
     assert!(TimeOfDay::new(23, 59, 60).is_none());
@@ -401,16 +434,25 @@ fn time_gallery(scheme: ColorScheme, name: &str) {
 
 #[test]
 fn time_picker_sizes_dark() {
+    if !Headless::available() {
+        return;
+    }
     time_gallery(ColorScheme::Dark, "cn_time_picker_sizes_dark");
 }
 
 #[test]
 fn time_picker_sizes_light() {
+    if !Headless::available() {
+        return;
+    }
     time_gallery(ColorScheme::Light, "cn_time_picker_sizes_light");
 }
 
 #[test]
 fn time_selection_stops_highlighting_after_blur() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session(ColorScheme::Dark);
     mount_time(&mut ui, TimeFormat::TwentyFourHour, true);
     let highlighted = |ui: &Headless, selector: &str| {
@@ -455,6 +497,9 @@ fn time_selection_stops_highlighting_after_blur() {
 
 #[test]
 fn hue_strip_renders_green_and_blue() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session(ColorScheme::Light);
     mount_color(&mut ui, true, false);
     let b = ui

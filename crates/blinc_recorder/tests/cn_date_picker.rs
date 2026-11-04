@@ -94,6 +94,9 @@ fn day_center(ui: &Headless, day: u32) -> (f32, f32) {
 
 #[test]
 fn selecting_a_day_reports_the_value_and_closes_the_popover() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = scene(ColorScheme::Light, None);
     assert_eq!(shown(&s.ui), "Choose a date");
     s.ui.click(".cn-date-picker-trigger").settle();
@@ -116,6 +119,9 @@ fn selecting_a_day_reports_the_value_and_closes_the_popover() {
 
 #[test]
 fn external_selection_and_placeholder_updates_are_silent() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = scene(ColorScheme::Dark, None);
     let label = s.ui.find(".cn-date-picker-value");
     s.placeholder.set("Departure".into());
@@ -133,6 +139,9 @@ fn external_selection_and_placeholder_updates_are_silent() {
 
 #[test]
 fn clearing_returns_none_once_and_closes_the_popover() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = scene(ColorScheme::Dark, Some(TODAY));
     s.ui.click(".cn-date-picker-trigger")
         .settle()
@@ -146,6 +155,9 @@ fn clearing_returns_none_once_and_closes_the_popover() {
 
 #[test]
 fn reselecting_the_same_day_is_silent_and_dismisses() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = scene(ColorScheme::Dark, Some(TODAY));
     s.ui.click(".cn-date-picker-trigger").settle();
     let (x, y) = day_center(&s.ui, 3);
@@ -156,6 +168,9 @@ fn reselecting_the_same_day_is_silent_and_dismisses() {
 
 #[test]
 fn outside_click_and_disabling_dismiss_without_changing_the_date() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = scene(ColorScheme::Light, Some(TODAY));
     s.ui.click(".cn-date-picker-trigger").settle();
     s.ui.move_to(600.0, 550.0).mouse_down().mouse_up().settle();
@@ -173,6 +188,9 @@ fn outside_click_and_disabling_dismiss_without_changing_the_date() {
 
 #[test]
 fn calendar_grid_can_be_reached_and_selected_by_keyboard() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = scene(ColorScheme::Dark, None);
     s.ui.key(9).key(13).settle();
     assert!(s.ui.find(".cn-date-picker-content").is_some());
@@ -193,6 +211,9 @@ fn calendar_grid_can_be_reached_and_selected_by_keyboard() {
 
 #[test]
 fn custom_format_and_optional_clear_reuse_calendar_selection() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = scene(ColorScheme::Light, Some(TODAY));
     let date = s.date;
     s.ui.mount(move |_| {
@@ -214,6 +235,9 @@ fn custom_format_and_optional_clear_reuse_calendar_selection() {
 
 #[test]
 fn month_dropdown_keeps_the_date_popover_open() {
+    if !Headless::available() {
+        return;
+    }
     let mut s = scene(ColorScheme::Light, None);
     s.ui.click(".cn-date-picker-trigger")
         .settle()

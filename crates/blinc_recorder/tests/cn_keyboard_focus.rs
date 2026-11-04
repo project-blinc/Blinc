@@ -49,6 +49,9 @@ fn control(label: &str) -> blinc_layout::div::Div {
 
 #[test]
 fn pointer_focus_hides_ring_then_keyboard_reveals_it_and_activates() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     let count = Arc::new(AtomicUsize::new(0));
     let fired = count.clone();
@@ -78,6 +81,9 @@ fn pointer_focus_hides_ring_then_keyboard_reveals_it_and_activates() {
 
 #[test]
 fn dropdown_roves_skips_disabled_activates_once_and_restores_trigger() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     let count = Arc::new(AtomicUsize::new(0));
     let fired = count.clone();
@@ -113,6 +119,9 @@ fn dropdown_roves_skips_disabled_activates_once_and_restores_trigger() {
 
 #[test]
 fn submenu_right_opens_left_returns_then_escape_returns_to_trigger() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     ui.mount(|_| {
         div().p(8.0).child(
@@ -146,6 +155,9 @@ fn submenu_right_opens_left_returns_then_escape_returns_to_trigger() {
 
 #[test]
 fn pointer_menu_starts_on_panel_up_starts_on_last_row() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     ui.mount(|_| {
         div().p(8.0).child(
@@ -163,6 +175,9 @@ fn pointer_menu_starts_on_panel_up_starts_on_last_row() {
 
 #[test]
 fn context_menu_opens_from_shift_f10_and_receives_roving_focus() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     ui.mount(|_| {
         div().p(8.0).child(
@@ -197,6 +212,9 @@ fn context_menu_opens_from_shift_f10_and_receives_roving_focus() {
 
 #[test]
 fn menubar_is_one_tab_stop_and_switches_open_menus_with_arrows() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     ui.mount(|_| {
         div()
@@ -231,6 +249,9 @@ fn menubar_is_one_tab_stop_and_switches_open_menus_with_arrows() {
 
 #[test]
 fn tab_dismisses_menu_and_continues_after_its_trigger() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     ui.mount(|_| {
         div()
@@ -251,6 +272,9 @@ fn tab_dismisses_menu_and_continues_after_its_trigger() {
 
 #[test]
 fn modal_restores_trigger_before_exit_finishes_and_next_tab_continues() {
+    if !Headless::available() {
+        return;
+    }
     use blinc_layout::widgets::overlay_stack::OverlayBuilder;
     let mut ui = session();
     ui.mount(|_| {
@@ -284,6 +308,9 @@ fn modal_restores_trigger_before_exit_finishes_and_next_tab_continues() {
 
 #[test]
 fn outside_click_keeps_the_new_control_focused() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     ui.mount(|_| {
         div()
@@ -307,6 +334,9 @@ fn outside_click_keeps_the_new_control_focused() {
 
 #[test]
 fn menu_action_can_open_dialog_and_return_to_original_trigger() {
+    if !Headless::available() {
+        return;
+    }
     use blinc_layout::widgets::overlay_stack::OverlayBuilder;
     let mut ui = session();
     ui.mount(|_| {
@@ -334,6 +364,9 @@ fn menu_action_can_open_dialog_and_return_to_original_trigger() {
 
 #[test]
 fn disabled_trigger_is_not_refocused_on_close() {
+    if !Headless::available() {
+        return;
+    }
     use blinc_core::reactive::signal;
     use blinc_layout::widgets::overlay_stack::OverlayBuilder;
     let mut ui = session();
@@ -364,6 +397,9 @@ fn disabled_trigger_is_not_refocused_on_close() {
 
 #[test]
 fn nested_dialog_traps_tab_then_returns_to_parent_control() {
+    if !Headless::available() {
+        return;
+    }
     use blinc_layout::widgets::overlay_stack::OverlayBuilder;
     let mut ui = session();
     ui.mount(|_| {
@@ -396,6 +432,9 @@ fn nested_dialog_traps_tab_then_returns_to_parent_control() {
 
 #[test]
 fn id_focus_visible_rules_preserve_pointer_focus_styles() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     ui.theme(HybridTheme::bundle().with_css("#focus-target:focus { opacity: 0.8; } #focus-target:focus-visible { outline: 3px solid red; }"), ColorScheme::Light);
     ui.mount(|_| div().p(8.0).child(control("Action").id("focus-target")))
@@ -414,6 +453,9 @@ fn id_focus_visible_rules_preserve_pointer_focus_styles() {
 
 #[test]
 fn custom_dropdown_trigger_has_one_tab_stop() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     ui.mount(|_| {
         div().p(8.0).child(
@@ -429,6 +471,9 @@ fn custom_dropdown_trigger_has_one_tab_stop() {
 
 #[test]
 fn legacy_modal_restores_keyboard_focus() {
+    if !Headless::available() {
+        return;
+    }
     use blinc_layout::widgets::overlay::{OverlayAnimation, OverlayManagerExt};
     let mut ui = session();
     ui.mount(|ctx| {

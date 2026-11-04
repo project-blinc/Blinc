@@ -9,6 +9,9 @@ use blinc_theme::{ColorScheme, HybridTheme};
 
 #[test]
 fn color_surface_is_reachable_and_editable_by_tab() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = Headless::new(640, 520).expect("offscreen GPU adapter");
     ui.theme(
         HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
@@ -38,6 +41,9 @@ fn color_surface_is_reachable_and_editable_by_tab() {
 
 #[test]
 fn tab_transfers_arrow_keys_between_color_fields_and_hex() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = Headless::new(640, 520).expect("offscreen GPU adapter");
     ui.theme(
         HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
@@ -72,6 +78,9 @@ fn tab_transfers_arrow_keys_between_color_fields_and_hex() {
 
 #[test]
 fn disabled_color_fields_ignore_keys_and_tab_skips_them() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = Headless::new(640, 520).expect("offscreen GPU adapter");
     ui.theme(
         HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
@@ -102,6 +111,9 @@ fn disabled_color_fields_ignore_keys_and_tab_skips_them() {
 
 #[test]
 fn time_fields_and_period_are_editable_by_tab() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = Headless::new(640, 240).expect("offscreen GPU adapter");
     ui.theme(
         HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
