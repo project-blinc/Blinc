@@ -156,6 +156,8 @@ impl Headless {
     pub fn new(width: u32, height: u32) -> Result<Self> {
         let app = BlincApp::new()?;
         blinc_layout::init_text_measurer();
+        // A caret blinks on the wall clock; frames compared across runs need it held.
+        blinc_layout::widgets::cursor::hold_blink(true);
         // The layout widgets' default look, as the runners register it. Queued
         // per session: each session's context drains the queue, so a run-once
         // install would leave every later session in the process without it.

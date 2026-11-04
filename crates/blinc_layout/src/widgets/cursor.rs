@@ -4,8 +4,18 @@
 //! causing tree rebuilds. The cursor opacity is computed at render time using
 //! either a smooth sine wave or spring-based animation.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use web_time::Instant;
+
+static BLINK_HELD: AtomicBool = AtomicBool::new(false);
+
+/// Hold every caret at the opacity it has the moment its blink resets, so
+/// frames compare the same however long a run takes. For tests that
+/// compare rendered frames.
+pub fn hold_blink(hold: bool) {
+    BLINK_HELD.store(hold, Ordering::Relaxed);
+}
 
 use blinc_core::{Brush, Color, CornerRadius, DrawContext, Rect};
 
@@ -119,7 +129,11 @@ impl CursorState {
     /// The opacity at this point in the blink, whatever `visible` says: for a
     /// caret whose owner decides when it shows.
     pub fn blink_opacity(&self) -> f32 {
-        let elapsed = self.reset_time.elapsed().as_millis() as f64;
+        let elapsed = if BLINK_HELD.load(Ordering::Relaxed) {
+            0.0
+        } else {
+            self.reset_time.elapsed().as_millis() as f64
+        };
         let period = self.blink_period_ms as f64;
 
         match self.animation {
