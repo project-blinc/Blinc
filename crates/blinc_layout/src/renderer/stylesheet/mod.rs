@@ -33,6 +33,7 @@ pub mod apply;
 pub mod base;
 pub mod classes;
 pub mod layout;
+mod scrollbar;
 pub mod selectors;
 pub mod state;
 

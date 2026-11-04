@@ -3,6 +3,7 @@
 use std::{cell::OnceCell, fmt, sync::Arc};
 
 use blinc_core::reactive::{Signal, computed, effect};
+use blinc_layout::InstanceKey;
 use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId, div};
 use blinc_layout::element::RenderProps;
@@ -10,6 +11,7 @@ use blinc_layout::text::Text;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::text_input::{
     InputType, SharedTextInputData, refresh_text_input, text_input, text_input_data,
+    text_input_focused,
 };
 
 use super::input::InputSize;
@@ -82,19 +84,27 @@ pub enum TimeFormat {
 }
 
 #[derive(Clone)]
-struct Config {
-    value: Signal<TimeOfDay>,
-    format: TimeFormat,
-    seconds: bool,
+pub(super) struct Config {
+    pub(super) value: Signal<TimeOfDay>,
+    pub(super) format: TimeFormat,
+    pub(super) seconds: bool,
+    popup: bool,
     minute_step: u8,
     second_step: u8,
     size: InputSize,
-    disabled: Reactive<bool>,
+    pub(super) disabled: Reactive<bool>,
     on_change: Option<Arc<dyn Fn(TimeOfDay) + Send + Sync>>,
 }
 
 impl Config {
-    fn edit(&self, next: TimeOfDay) {
+    pub(super) fn draft(&self) -> Self {
+        let mut draft = self.clone();
+        draft.value = blinc_core::reactive::signal(self.value.get());
+        draft.on_change = None;
+        draft
+    }
+
+    pub(super) fn edit(&self, next: TimeOfDay) {
         if self.disabled.now().unwrap_or(false) || self.value.get() == next {
             return;
         }
@@ -105,21 +115,24 @@ impl Config {
     }
 }
 
-/// Builds a CSS-styled segmented time editor. Arrow keys and wheel input step a field.
+/// A segmented time editor with a wheel popup. Fields commit immediately; the popup commits on Save.
 pub struct TimePickerBuilder {
     config: Config,
     classes: Vec<String>,
     id: Option<String>,
     built: OnceCell<Div>,
+    key: InstanceKey,
 }
 
 impl TimePickerBuilder {
+    #[track_caller]
     pub fn new(value: Signal<TimeOfDay>) -> Self {
         Self {
             config: Config {
                 value,
                 format: TimeFormat::default(),
                 seconds: false,
+                popup: true,
                 minute_step: 1,
                 second_step: 1,
                 size: InputSize::Medium,
@@ -129,6 +142,7 @@ impl TimePickerBuilder {
             classes: Vec::new(),
             id: None,
             built: OnceCell::new(),
+            key: InstanceKey::new("time_picker"),
         }
     }
 
@@ -140,7 +154,12 @@ impl TimePickerBuilder {
         self.config.seconds = show;
         self
     }
-    /// Step used by arrows and wheel input; typing can still select any minute.
+    /// Show the clock button and wheel popup (default: true).
+    pub fn popup(mut self, show: bool) -> Self {
+        self.config.popup = show;
+        self
+    }
+    /// Step for compact-field arrows/wheel and popup keys. Popup scrolling selects any minute.
     pub fn minute_step(mut self, step: u8) -> Self {
         self.config.minute_step = step.clamp(1, 59);
         self
@@ -157,7 +176,7 @@ impl TimePickerBuilder {
         self.config.disabled = disabled.into_reactive();
         self
     }
-    /// Called once per changed user edit, after the bound signal is written.
+    /// Called after a changed field edit or wheel Save. External writes are silent.
     pub fn on_change(mut self, callback: impl Fn(TimeOfDay) + Send + Sync + 'static) -> Self {
         self.config.on_change = Some(Arc::new(callback));
         self
@@ -179,6 +198,9 @@ impl TimePickerBuilder {
                 InputSize::Medium => "md",
                 InputSize::Large => "lg",
             };
+            let (hour, hour_data) = segment(c, Segment::Hour);
+            let (minute, minute_data) = segment(c, Segment::Minute);
+            let mut focus_sources = vec![hour_data, minute_data];
             let mut row = div()
                 .class("cn-time-picker")
                 .attr("data-size", size)
@@ -194,13 +216,25 @@ impl TimePickerBuilder {
                 .flex_row()
                 .items_center()
                 .w_fit()
-                .child(segment(c, Segment::Hour))
-                .child(Text::new(":").class("cn-time-picker-separator"))
-                .child(segment(c, Segment::Minute));
+                .child(hour)
+                .child(
+                    Text::new(":")
+                        .class("cn-time-picker-separator")
+                        .v_center()
+                        .no_cursor(),
+                )
+                .child(minute);
             if c.seconds {
+                let (second, second_data) = segment(c, Segment::Second);
+                focus_sources.push(second_data);
                 row = row
-                    .child(Text::new(":").class("cn-time-picker-separator"))
-                    .child(segment(c, Segment::Second));
+                    .child(
+                        Text::new(":")
+                            .class("cn-time-picker-separator")
+                            .v_center()
+                            .no_cursor(),
+                    )
+                    .child(second);
             }
             if c.format == TimeFormat::TwelveHour {
                 let value = c.value;
@@ -217,7 +251,10 @@ impl TimePickerBuilder {
                         .class("cn-time-picker-period")
                         .attr("tabindex", "0")
                         .attr_when("disabled", "", c.disabled.clone())
-                        .child(Text::bound(label.into_reactive()))
+                        .flex_row()
+                        .items_center()
+                        .justify_center()
+                        .child(Text::bound(label.into_reactive()).no_cursor().v_center())
                         .on_click(move |_| {
                             let mut next = edit.value.get();
                             next.hour = (next.hour + 12) % 24;
@@ -225,6 +262,45 @@ impl TimePickerBuilder {
                         }),
                 );
             }
+            if c.popup {
+                let config = c.clone();
+                let trigger = div()
+                    .class("cn-time-picker-clock")
+                    .flex_row()
+                    .items_center()
+                    .justify_center()
+                    .attr("aria-label", "Choose time")
+                    .child(super::icon::icon(blinc_icons::icons::CLOCK).size_px(14.0))
+                    .on_mouse_down(move |_| {
+                        blinc_layout::widgets::text_input::blur_all_text_inputs()
+                    });
+                row = row.child(super::picker_popover::picker_popup(
+                    trigger,
+                    format!("cn-time-picker-clock-{}", self.key.get()),
+                    c.disabled.clone(),
+                    (
+                        if c.seconds { 288.0 } else { 232.0 },
+                        if c.format == TimeFormat::TwelveHour {
+                            286.0
+                        } else {
+                            250.0
+                        },
+                    ),
+                    true,
+                    move |active| super::time_picker_wheel::picker(&config, active),
+                ));
+            }
+            row = row.attr_when(
+                "data-focus-within",
+                "",
+                computed(move |g| {
+                    let mut focused = false;
+                    for source in &focus_sources {
+                        focused |= source.read(g).unwrap_or(false);
+                    }
+                    focused
+                }),
+            );
             for class in &self.classes {
                 row = row.class(class);
             }
@@ -236,8 +312,9 @@ impl TimePickerBuilder {
     }
 }
 
-#[derive(Clone, Copy)]
-enum Segment {
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub(super) enum Segment {
+    #[default]
     Hour,
     Minute,
     Second,
@@ -251,7 +328,7 @@ impl Segment {
             Self::Second => "second",
         }
     }
-    fn get(self, c: &Config, time: TimeOfDay) -> u8 {
+    pub(super) fn get(self, c: &Config, time: TimeOfDay) -> u8 {
         match self {
             Self::Hour if c.format == TimeFormat::TwelveHour => time.hour12(),
             Self::Hour => time.hour,
@@ -259,15 +336,14 @@ impl Segment {
             Self::Second => time.second,
         }
     }
-    fn bounds(self, c: &Config) -> (u8, u8) {
+    pub(super) fn bounds(self, c: &Config) -> (u8, u8) {
         match self {
             Self::Hour if c.format == TimeFormat::TwelveHour => (1, 12),
             Self::Hour => (0, 23),
             _ => (0, 59),
         }
     }
-    fn set(self, c: &Config, part: u8) {
-        let mut next = c.value.get();
+    pub(super) fn replace(self, c: &Config, mut next: TimeOfDay, part: u8) -> TimeOfDay {
         match self {
             Self::Hour if c.format == TimeFormat::TwelveHour => {
                 next.hour = part % 12 + (next.hour / 12) * 12
@@ -276,9 +352,12 @@ impl Segment {
             Self::Minute => next.minute = part,
             Self::Second => next.second = part,
         }
-        c.edit(next);
+        next
     }
-    fn step(self, c: &Config, delta: i32) {
+    pub(super) fn set(self, c: &Config, part: u8) {
+        c.edit(self.replace(c, c.value.get(), part));
+    }
+    pub(super) fn step(self, c: &Config, delta: i32) {
         let step = match self {
             Self::Hour => 1,
             Self::Minute => c.minute_step,
@@ -301,11 +380,11 @@ fn show(data: &SharedTextInputData, value: u8) {
     refresh_text_input(data);
 }
 
-fn segment(c: &Config, part: Segment) -> Div {
+fn segment(c: &Config, part: Segment) -> (Div, Reactive<bool>) {
     let (width, height, font) = match c.size {
-        InputSize::Small => (36.0, 28.0, 12.0),
-        InputSize::Medium => (40.0, 36.0, 14.0),
-        InputSize::Large => (48.0, 44.0, 16.0),
+        InputSize::Small => (24.0, 24.0, 12.0),
+        InputSize::Medium => (28.0, 28.0, 14.0),
+        InputSize::Large => (32.0, 32.0, 16.0),
     };
     let data = text_input_data();
     show(&data, part.get(c, c.value.get()));
@@ -329,7 +408,7 @@ fn segment(c: &Config, part: Segment) -> Div {
     let input = text_input(&data)
         .w(width)
         .h(height)
-        .padding_x(4.0)
+        .padding_x(2.0)
         .text_size(font)
         .input_type(InputType::Number)
         .max_length(2)
@@ -359,15 +438,26 @@ fn segment(c: &Config, part: Segment) -> Div {
             show(&stepped, part.get(&step, step.value.get()));
         })
         .on_submit(move |_| show(&submit, part.get(&canonical, canonical.value.get())));
-    let wheel = c.clone();
+    let blur_sync = data.clone();
+    let config = c.clone();
+    let focus = text_input_focused(&data).into_reactive();
+    let observe_focus = focus.clone();
+    effect(move |g| {
+        let focused = observe_focus.read(g).unwrap_or(false);
+        let value = part.get(&config, g.get_untracked(config.value).unwrap_or_default());
+        let d = blur_sync.lock().unwrap();
+        if !focused && (d.selection_start.is_some() || d.value != format!("{value:02}")) {
+            drop(d);
+            show(&blur_sync, value);
+        }
+    });
     let field = data.clone();
     let remainder = std::sync::Mutex::new(0.0f32);
-    div()
+    let element = div()
         .class("cn-time-picker-part")
         .w_fit()
         .h_fit()
         .child(input)
-        .on_blur(move |_| show(&data, part.get(&wheel, wheel.value.get())))
         .on_scroll({
             let c = c.clone();
             move |event| {
@@ -385,7 +475,8 @@ fn segment(c: &Config, part: Segment) -> Div {
                     }
                 }
             }
-        })
+        });
+    (element, focus)
 }
 
 impl ElementBuilder for TimePickerBuilder {
@@ -419,6 +510,7 @@ impl ElementBuilder for TimePickerBuilder {
 }
 
 /// Edit a bound time. Defaults to 24-hour format with hidden seconds.
+#[track_caller]
 pub fn time_picker(value: Signal<TimeOfDay>) -> TimePickerBuilder {
     TimePickerBuilder::new(value)
 }

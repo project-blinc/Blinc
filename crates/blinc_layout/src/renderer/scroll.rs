@@ -131,6 +131,7 @@ impl RenderTree {
             match pending_scroll {
                 PendingScroll::ToOffset { x, y, smooth: _ } => {
                     // For now, instant scroll (smooth animation TBD)
+                    physics.cancel_active_animation();
                     physics.offset_x = -x;
                     physics.offset_y = -y;
                 }
@@ -841,6 +842,9 @@ impl RenderTree {
         info: &crate::scroll::ScrollbarRenderInfo,
     ) {
         let config = &info.config;
+        if config.visibility == crate::scroll::ScrollbarVisibility::Never {
+            return;
+        }
         let scrollbar_width = config.width();
         let edge_padding = config.edge_padding;
 

@@ -88,6 +88,7 @@ pub struct TextInputData {
     /// Bumped whenever something the field shows changes; its content is
     /// bound to it. `None` until a `TextInput` is made over the data.
     pub(crate) revision: Option<blinc_core::reactive::Signal<u64>>,
+    pub(crate) focus_signal: Option<blinc_core::reactive::Signal<bool>>,
     /// The field's node, once built.
     pub(crate) node_id: Option<LayoutNodeId>,
     /// Callback invoked when text value changes

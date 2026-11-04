@@ -1,6 +1,9 @@
 #![cfg(feature = "headless")]
 //! Picker interaction and appearance through the offscreen renderer.
 
+#[path = "cn_pickers/time_wheel.rs"]
+mod time_wheel;
+
 use blinc_cn::{TimeFormat, TimeOfDay, color_picker, time_picker};
 use blinc_core::{
     Color,
@@ -47,6 +50,19 @@ fn text(ui: &Headless, selector: &str) -> String {
 }
 
 fn replace_text(ui: &mut Headless, selector: &str, value: &str) {
+    select_all(ui, selector);
+    let node = ui.find(selector).expect(selector);
+    let stable = ui.tree().stable_id(node).expect("field stable id");
+    for ch in value.chars() {
+        let mut e = EventContext::new(event_types::TEXT_INPUT, node).with_key_char(ch);
+        e.stable_id = stable;
+        ui.tree().handler_registry().dispatch(&e);
+        ui.frame(0);
+    }
+    ui.settle();
+}
+
+fn select_all(ui: &mut Headless, selector: &str) {
     ui.click(selector);
     let node = ui.find(selector).expect(selector);
     let stable = ui.tree().stable_id(node).expect("field stable id");
@@ -55,12 +71,6 @@ fn replace_text(ui: &mut Headless, selector: &str, value: &str) {
         .with_modifiers(false, true, false, false);
     select.stable_id = stable;
     ui.tree().handler_registry().dispatch(&select);
-    for ch in value.chars() {
-        let mut e = EventContext::new(event_types::TEXT_INPUT, node).with_key_char(ch);
-        e.stable_id = stable;
-        ui.tree().handler_registry().dispatch(&e);
-        ui.frame(0);
-    }
     ui.settle();
 }
 
@@ -348,6 +358,99 @@ fn time_value_rejects_invalid_times_and_formats_boundaries() {
             .format(TimeFormat::TwelveHour, false),
         "12:00 PM"
     );
+}
+
+fn time_gallery(scheme: ColorScheme, name: &str) {
+    use blinc_cn::{InputSize, LabelSize};
+    let mut ui = Headless::new(640, 320).expect("offscreen GPU adapter");
+    ui.theme(
+        HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
+        scheme,
+    );
+    let time = signal(TimeOfDay::new(2, 30, 15).unwrap());
+    ui.mount(move |_| {
+        div().p(6.0).flex_col().gap(5.0).children(
+            [InputSize::Small, InputSize::Medium, InputSize::Large]
+                .into_iter()
+                .map(|size| {
+                    let caption = match size {
+                        InputSize::Small => "Small",
+                        InputSize::Medium => "Medium",
+                        InputSize::Large => "Large",
+                    };
+                    div()
+                        .flex_col()
+                        .gap(2.0)
+                        .child(blinc_cn::label(caption).size(LabelSize::Small))
+                        .child(
+                            div()
+                                .flex_row()
+                                .items_center()
+                                .gap(6.0)
+                                .child(time_picker(time).size(size).seconds(true))
+                                .child(time_picker(time).size(size).format(TimeFormat::TwelveHour))
+                                .child(time_picker(time).size(size).disabled(true)),
+                        )
+                }),
+        )
+    })
+    .leave()
+    .settle();
+    ui.assert_snapshot(name);
+}
+
+#[test]
+fn time_picker_sizes_dark() {
+    time_gallery(ColorScheme::Dark, "cn_time_picker_sizes_dark");
+}
+
+#[test]
+fn time_picker_sizes_light() {
+    time_gallery(ColorScheme::Light, "cn_time_picker_sizes_light");
+}
+
+#[test]
+fn time_selection_stops_highlighting_after_blur() {
+    let mut ui = session(ColorScheme::Dark);
+    mount_time(&mut ui, TimeFormat::TwentyFourHour, true);
+    let highlighted = |ui: &Headless, selector: &str| {
+        let field = ui.find(selector).unwrap();
+        let mut pending = ui.tree().layout_tree.children(field);
+        while let Some(node) = pending.pop() {
+            let visible_box = ui.tree().get_render_node(node).is_some_and(
+                |n| matches!(&n.props.background, Some(blinc_core::Brush::Solid(c)) if c.a > 0.0),
+            ) && ui
+                .tree()
+                .get_absolute_bounds(node)
+                .is_some_and(|b| b.width > 1.0 && b.height > 1.0);
+            if visible_box {
+                return true;
+            }
+            pending.extend(ui.tree().layout_tree.children(node));
+        }
+        false
+    };
+    select_all(&mut ui, ".cn-time-picker-hour");
+    assert!(highlighted(&ui, ".cn-time-picker-hour"));
+    ui.click(".cn-time-picker-minute").settle();
+    assert!(
+        !highlighted(&ui, ".cn-time-picker-hour"),
+        "a blurred field still draws its selection"
+    );
+    select_all(&mut ui, ".cn-time-picker-minute");
+    assert!(highlighted(&ui, ".cn-time-picker-minute"));
+    ui.key(27).settle();
+    assert!(!highlighted(&ui, ".cn-time-picker-minute"));
+    let root = ui.find(".cn-time-picker").unwrap();
+    assert!(
+        ui.tree()
+            .element_registry()
+            .attribute(root, "data-focus-within")
+            .is_none()
+    );
+    ui.leave()
+        .settle()
+        .assert_snapshot("cn_time_picker_blurred");
 }
 
 #[test]

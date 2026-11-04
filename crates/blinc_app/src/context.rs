@@ -400,6 +400,7 @@ struct TextElement {
     v_align: TextVerticalAlign,
     /// Clip bounds from parent scroll container (x, y, width, height)
     clip_bounds: Option<[f32; 4]>,
+    clip_fade: [f32; 4],
     /// Clip geometry and its owner's physical frame, shared across collected spans.
     path_clip: Option<Arc<text_clip::CollectedTextPath>>,
     /// Motion opacity inherited from parent motion container

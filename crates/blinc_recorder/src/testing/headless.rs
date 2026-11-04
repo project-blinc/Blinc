@@ -168,6 +168,7 @@ impl Headless {
                 ctx.dirty_flag().clone(),
             );
         }
+        blinc_core::BlincContextState::get().set_viewport_size(width as f32, height as f32);
         if !blinc_layout::overlay_state::OverlayContext::is_initialized() {
             blinc_layout::overlay_state::OverlayContext::init(ctx.overlay_manager().clone());
         }

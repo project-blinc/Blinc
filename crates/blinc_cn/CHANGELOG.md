@@ -7,6 +7,8 @@ All notable changes to `blinc_cn` will be documented in this file.
 ## [0.6.0] - 2026-11-03
 
 ### Fixed
+- OTP slots participate in Tab and Shift+Tab traversal, including empty slots, while disabled slots are skipped.
+- The time picker uses compact, aligned segments and a quiet AM/PM control with one outer focus ring. Blurred fields clear selection highlighting and restore two-digit formatting.
 - Colour picker fields respond to arrow keys after Tab focus, route keys to the current field and leave hex editing alone. Picker focus rings use the theme's focus colour.
 - The calendar's day grid is reachable by Tab; arrows move its day cursor and Enter/Space select it without requiring a pointer click first.
 - `cn::button` shows the pointer cursor on hover, and not-allowed while disabled; the cursor is a `.cn-button` rule, which the rule-based restyle had dropped.
@@ -17,6 +19,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - Clicking the trigger of an open `cn::dropdown_menu` or `cn::popover` closes it. The press counted as a click outside, which closed the menu, and the click that followed reopened it; the trigger is now inside the click-outside set.
 
 ### Added
+- The time picker's clock button opens a compact popup over the control, with native scroll containers for hours, minutes and optional seconds, built-in overflow fade and separate AM/PM controls. Mouse wheel, trackpad, drag, row clicks and keyboard input edit a draft; Save commits once and Cancel or dismissal discards it. `.popup(false)` keeps only the compact editor. CSS classes and variables are documented for restyling.
 - `cn::date_picker(Signal<Option<CalendarDay>>)`: the existing calendar in a popover with a formatted trigger, bound placeholder/disabled status, optional clear action and user-edit callbacks. `cn_demo` includes date, time and colour picker examples.
 - Tab reaches `cn::button`, `checkbox`, `switch`, `toggle`, `toggle_group`, `radio`, `tabs` triggers, `select`, `combobox`, `dropdown_menu` and `menubar` triggers, `accordion` and `collapsible` triggers, `navigation_menu` links, `sidebar` items, `pagination` buttons, linked `breadcrumb` items, `slider`, `number_gauge`, the close buttons of `sheet` and `drawer`, and `input`, `textarea` and `number_input`; Enter and Space activate them, and the arrows, Page Up/Down and Home/End move a `slider` or `number_gauge` that Tab focused. A focused control shows the `--focus-ring` outline by the rule at the head of the button section. A disabled control is skipped.
 - `cn::time_picker(Signal<TimeOfDay>)`: segmented 12/24-hour editing, optional seconds, keyboard and wheel steps, bound disabled status and user-edit callbacks.

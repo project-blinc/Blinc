@@ -13,6 +13,113 @@ const TAB: u32 = 9;
 const ENTER: u32 = 13;
 const SPACE: u32 = 32;
 
+#[test]
+fn tab_reaches_empty_otp_slots_and_leaves_the_group() {
+    let Some(mut ui) = session() else { return };
+    let code = blinc_core::reactive::signal(String::new());
+    ui.mount(move |_| {
+        div()
+            .flex_col()
+            .gap(2.0)
+            .child(button("Before"))
+            .child(blinc_cn::input_otp(code, 4).numeric_only(true))
+            .child(button("After"))
+    })
+    .settle();
+    let stops = ui.tree().tab_stops();
+    assert_eq!(stops.len(), 6);
+    for node in &stops {
+        ui.key(TAB).settle();
+        assert_eq!(ui.focused(), Some(*node));
+    }
+    for node in stops[..5].iter().rev() {
+        ui.key_with_shift(TAB, true).settle();
+        assert_eq!(ui.focused(), Some(*node));
+    }
+}
+
+#[test]
+fn tab_skips_disabled_otp_slots() {
+    let Some(mut ui) = session() else { return };
+    let code = blinc_core::reactive::signal(String::new());
+    ui.mount(move |_| {
+        div()
+            .flex_col()
+            .gap(2.0)
+            .child(blinc_cn::input_otp(code, 4).disabled(true))
+            .child(button("After"))
+    })
+    .settle();
+    assert_eq!(ui.tree().tab_stops().len(), 1);
+    ui.key(TAB);
+    assert_eq!(ui.focused(), ui.find(".cn-button"));
+}
+
+fn tab_starts_in_scrolled_view(shift: bool, focus_first: bool) {
+    use blinc_layout::widgets::scroll::scroll;
+    let Some(mut ui) = session() else { return };
+    ui.mount(|_| {
+        scroll().id("tab-viewport").w_full().h(120.0).child(
+            div()
+                .flex_col()
+                .gap(2.0)
+                .children((0..20).map(|i| button(format!("Item {i}")))),
+        )
+    })
+    .settle();
+    if focus_first {
+        ui.key(TAB).settle();
+        assert_eq!(ui.focused(), ui.find(".cn-button"));
+    }
+    ui.move_to(100.0, 60.0).scroll(0.0, -400.0).settle();
+    let view = ui
+        .tree()
+        .get_absolute_bounds(ui.find("#tab-viewport").unwrap())
+        .unwrap();
+    let visible: Vec<_> = ui
+        .tree()
+        .tab_stops()
+        .into_iter()
+        .filter(|node| {
+            let b = ui.tree().get_absolute_bounds(*node).unwrap();
+            b.y < view.y + view.height && b.y + b.height > view.y
+        })
+        .collect();
+    assert!(!visible.is_empty());
+    let expected = if shift {
+        *visible.last().unwrap()
+    } else {
+        visible[0]
+    };
+    assert_ne!(
+        Some(expected),
+        ui.find(".cn-button"),
+        "fixture did not scroll"
+    );
+    ui.key_with_shift(TAB, shift).settle();
+    assert_eq!(ui.focused(), Some(expected));
+}
+
+#[test]
+fn initial_tab_starts_at_the_visible_scroll_position() {
+    tab_starts_in_scrolled_view(false, false);
+}
+
+#[test]
+fn initial_shift_tab_starts_at_the_visible_scroll_position() {
+    tab_starts_in_scrolled_view(true, false);
+}
+
+#[test]
+fn tab_resumes_in_view_after_scrolling_the_focused_control_away() {
+    tab_starts_in_scrolled_view(false, true);
+}
+
+#[test]
+fn shift_tab_resumes_in_view_after_scrolling_the_focused_control_away() {
+    tab_starts_in_scrolled_view(true, true);
+}
+
 fn session() -> Option<Headless> {
     if !Headless::available() {
         eprintln!("no GPU adapter: skipped");

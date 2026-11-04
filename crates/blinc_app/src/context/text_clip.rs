@@ -26,6 +26,7 @@ pub(super) fn prepare_layer_glyphs(
         if let Some(clip) = scissor {
             glyph.clip_bounds = clip;
         }
+        glyph.clip_fade = text.clip_fade;
     }
     let mut owned = if let Some(path) = &text.path_clip {
         path.in_layer(info).prepare(&glyphs, scissor, size)
@@ -34,6 +35,9 @@ pub(super) fn prepare_layer_glyphs(
         batch.glyphs = glyphs;
         batch
     };
+    for glyph in &mut owned.glyphs {
+        glyph.clip_fade = text.clip_fade;
+    }
     if let Some([a, b, c, d, tx, ty]) = text.css_affine {
         cached_text::convert_affine(
             &mut owned,
@@ -62,13 +66,17 @@ pub(super) fn prepare_glyphs(
             glyph.clip_bounds = clip;
         }
     }
-    if let Some(path) = &text.path_clip {
+    let mut owned = if let Some(path) = &text.path_clip {
         path.prepare(&glyphs, text.clip_bounds, size)
     } else {
         let mut owned = PrimitiveBatch::new();
         owned.glyphs = glyphs;
         owned
+    };
+    for glyph in &mut owned.glyphs {
+        glyph.clip_fade = text.clip_fade;
     }
+    owned
 }
 
 impl RenderContext {

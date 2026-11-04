@@ -120,6 +120,7 @@ impl RenderContext {
                 1.0,  // Initial composite-layer opacity (no ancestor promoted)
                 None, // No composite-promoted ancestor at root
                 None, // No inherited text path at root
+                [0.0; 4],
             );
         }
 
@@ -187,6 +188,7 @@ impl RenderContext {
         // it for the dispatch-time live patch.
         nearest_composite_ancestor: Option<blinc_layout::tree::StableNodeId>,
         inherited_text_path: Option<Arc<text_clip::CollectedTextPath>>,
+        inherited_text_fade: [f32; 4],
     ) {
         // Use animated bounds if this node has layout animation, otherwise use layout bounds
         // This ensures children are positioned correctly during layout animation transitions
@@ -584,6 +586,7 @@ impl RenderContext {
                 current_clip,
                 current_scroll_clip,
                 current_clip_radius,
+                text_fade: inherited_text_fade,
                 effective_text_color,
                 effective_motion_opacity,
                 inherited_css_opacity,
@@ -689,6 +692,9 @@ impl RenderContext {
                 effective_composite_layer_opacity,
                 nearest_composite_ancestor,
                 text_path.clone(),
+                tree.get_render_node(node)
+                    .filter(|n| should_clip && !n.props.overflow_fade.is_none())
+                    .map_or(inherited_text_fade, |n| n.props.overflow_fade.to_array()),
             );
         }
 

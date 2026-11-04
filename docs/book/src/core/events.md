@@ -249,6 +249,11 @@ stops, in tree order, wrapping at the ends. The page scrolls to show the
 control that takes focus. Enter and Space click the focused control. A press
 anywhere clears focus set by Tab.
 
+When nothing is focused, Tab starts at the first visible control and
+Shift+Tab at the last. Scrolling the focused control offscreen makes the
+next Tab start within the current viewport as well. Once focus is visible,
+traversal continues in tree order and scrolls the next control into view.
+
 Mark any element as a tab stop with the `tabindex` attribute:
 
 ```rust

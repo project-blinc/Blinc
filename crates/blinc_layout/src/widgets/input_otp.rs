@@ -105,12 +105,20 @@ pub fn wire_otp_slot(
     on_complete: Option<crate::widgets::TextCallback>,
 ) -> TextInput {
     let length = slots.len();
-    let mut field = field;
+    let mut field = field.class("tabindex=text");
 
     {
         let slots = slots.clone();
         field = field.on_focus_request(move || {
             if index >= slots.len() {
+                return false;
+            }
+            if crate::event_router::keyboard_focused_node().is_some_and(|node| {
+                slots[index]
+                    .lock()
+                    .ok()
+                    .is_some_and(|slot| slot.node_id == Some(node))
+            }) {
                 return false;
             }
             let current_is_empty = slots[index]

@@ -1698,20 +1698,20 @@ pub const CN_STYLES: &str = concat!(
     to { transform: translateX(-100%); }
 }
 @keyframes cn-slide-from-bottom {
-    from { transform: translateY(100%); }
+    from { top: calc(var(--cn-time-picker-wheel-row-height, 32px) * 3); }
     to { transform: translateY(0); }
 }
 @keyframes cn-slide-to-bottom {
     from { transform: translateY(0); }
-    to { transform: translateY(100%); }
+    to { top: calc(var(--cn-time-picker-wheel-row-height, 32px) * 3); }
 }
 @keyframes cn-slide-from-top {
-    from { transform: translateY(-100%); }
+    from { top: calc(var(--cn-time-picker-wheel-row-height, 32px) * 1); }
     to { transform: translateY(0); }
 }
 @keyframes cn-slide-to-top {
     from { transform: translateY(0); }
-    to { transform: translateY(-100%); }
+    to { top: calc(var(--cn-time-picker-wheel-row-height, 32px) * 1); }
 }
 .cn-dialog-motion[data-motion="enter"] { animation: cn-rise-in var(--duration-normal) var(--ease-sheet); }
 .cn-dialog-motion[data-motion="exit"] { animation: cn-rise-out var(--duration-fast) var(--ease-in) forwards; }
@@ -2029,39 +2029,93 @@ pub const CN_STYLES: &str = concat!(
     color: var(--text-primary);
 }
 .cn-time-picker {
-    gap: 2px;
+    height: 36px; gap: 0; padding: 0 8px;
     border: 1px solid var(--cn-time-picker-border, var(--border));
     border-radius: var(--cn-time-picker-radius, var(--radius-md));
     background: var(--cn-time-picker-bg, var(--input-bg));
-    padding: 2px;
+    transition: border-color var(--duration-fast) var(--ease-state);
+}
+.cn-time-picker[data-size="sm"] { height: 32px; padding: 0 6px; }
+.cn-time-picker[data-size="lg"] { height: 40px; }
+.cn-time-picker[data-focus-within] {
+    border-color: var(--focus-ring); outline: 2px solid var(--focus-ring); outline-offset: 2px;
 }
 .cn-time-picker-segment {
-    width: 40px; height: 36px; padding: 0 4px;
-    border: 0; border-radius: var(--radius-sm);
+    width: 28px; height: 28px; padding: 0 2px;
+    border: 0; border-radius: 3px;
     background: transparent; color: var(--text-primary);
     font-family: var(--font-mono); font-size: 14px;
     transition: background var(--duration-fast) var(--ease-state);
 }
-.cn-time-picker-segment:hover,
-.cn-time-picker-segment:focus {
-    background: var(--cn-time-picker-field-hover, var(--surface-overlay));
+.cn-time-picker-segment:hover {
+    background: var(--cn-time-picker-field-hover, color-mix(in srgb, var(--text-primary) 5%, transparent));
 }
 .cn-time-picker-segment:focus {
-    outline: 2px solid var(--focus-ring); outline-offset: -2px;
+    background: var(--cn-time-picker-field-focus, color-mix(in srgb, var(--primary) 10%, transparent));
+    outline: none;
 }
-.cn-time-picker-segment--sm { width: 36px; height: 28px; font-size: 12px; }
-.cn-time-picker-segment--lg { width: 48px; height: 44px; font-size: 16px; }
-.cn-time-picker-separator { color: var(--text-secondary); }
+.cn-time-picker-segment--sm { width: 24px; height: 24px; font-size: 12px; }
+.cn-time-picker-segment--lg { width: 32px; height: 32px; font-size: 16px; }
+.cn-time-picker-separator { width: 6px; text-align: center; color: var(--text-tertiary); font-size: 14px; }
+.cn-time-picker[data-size="sm"] .cn-time-picker-separator { font-size: 12px; }
+.cn-time-picker[data-size="lg"] .cn-time-picker-separator { font-size: 16px; }
 .cn-time-picker-period {
-    padding: 6px; border-radius: var(--radius-sm); cursor: pointer;
-    font-size: 13px; color: var(--text-primary);
+    width: 36px; height: 28px; padding: 0; margin-left: 6px;
+    border-radius: 3px; background: transparent; cursor: pointer;
+    font-size: 12px; font-weight: 500; color: var(--text-secondary);
     transition: background var(--duration-fast) var(--ease-state);
 }
-.cn-time-picker-period:hover { background: var(--surface-overlay); }
-.cn-time-picker-period:focus { outline: 2px solid var(--focus-ring); }
-.cn-time-picker:disabled { opacity: 0.5; }
+.cn-time-picker[data-size="sm"] .cn-time-picker-period { width: 32px; height: 24px; font-size: 11px; }
+.cn-time-picker[data-size="lg"] .cn-time-picker-period { width: 40px; height: 32px; font-size: 14px; }
+.cn-time-picker-period:hover { color: var(--text-primary); background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
+.cn-time-picker-period:focus { outline: 1px solid var(--focus-ring); outline-offset: -1px; }
+.cn-time-picker:disabled { opacity: 0.65; }
 .cn-time-picker-segment:disabled,
 .cn-time-picker-period:disabled { cursor: not-allowed; background: transparent; opacity: 1; }
+.cn-time-picker-clock {
+    width: 28px; height: 28px; margin-left: 4px; border-radius: 3px;
+    color: var(--text-secondary); background: transparent; cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-state), color var(--duration-fast) var(--ease-state);
+}
+.cn-time-picker-clock:hover, .cn-time-picker-clock[data-state="open"] {
+    color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+.cn-time-picker-clock:focus { outline: 1px solid var(--focus-ring); outline-offset: -1px; }
+.cn-time-picker-clock:disabled { color: var(--text-tertiary); cursor: not-allowed; background: transparent; }
+.cn-time-picker[data-size="sm"] .cn-time-picker-clock { width: 24px; height: 24px; }
+.cn-time-picker[data-size="lg"] .cn-time-picker-clock { width: 32px; height: 32px; }
+.cn-time-picker-wheel {
+    width: 232px; padding: 12px; gap: 12px; color: var(--text-primary);
+    font-family: var(--font-sans);
+}
+.cn-time-picker-wheel[data-seconds] { width: 288px; }
+.cn-time-picker-wheel-header { gap: 8px; }
+.cn-time-picker-wheel-title { font-size: 14px; font-weight: 500; }
+.cn-time-picker-wheels { height: calc(var(--cn-time-picker-wheel-row-height, 32px) * 5); }
+.cn-time-picker-wheel-selection {
+    left: 0; right: 0; top: calc(var(--cn-time-picker-wheel-row-height, 32px) * 2); height: var(--cn-time-picker-wheel-row-height, 32px);
+    border: 1px solid var(--cn-time-picker-wheel-border, var(--border));
+    border-radius: var(--radius-lg);
+    background: var(--cn-time-picker-wheel-selection-bg, var(--input-bg));
+}
+.cn-time-picker-wheel-column {
+    flex-grow: 1; flex-basis: 0; height: 100%; border-radius: var(--radius-sm);
+    cursor: ns-resize;
+}
+.cn-time-picker-wheel-column:focus { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.cn-time-picker-wheel-list { padding-top: calc(var(--cn-time-picker-wheel-row-height, 32px) * 2); padding-bottom: calc(var(--cn-time-picker-wheel-row-height, 32px) * 2); }
+.cn-time-picker-wheel-column { overflow-fade: var(--cn-time-picker-wheel-fade, 64px) 0; scrollbar-width: none; }
+.cn-time-picker-wheel-option {
+    width: 100%; height: var(--cn-time-picker-wheel-row-height, 32px);
+    font-size: var(--cn-time-picker-wheel-font-size, 22px); color: var(--text-primary);
+}
+.cn-time-picker-wheel-separator { width: 12px; height: 100%; font-size: 20px; color: var(--text-tertiary); }
+.cn-time-picker-wheel-period { gap: 2px; padding: 2px; border-radius: var(--radius-sm); background: var(--surface-overlay); }
+.cn-time-picker-wheel-period-option { width: 36px; height: 24px; border-radius: var(--radius-sm); font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+.cn-time-picker-wheel-period-option:hover { color: var(--text-primary); }
+.cn-time-picker-wheel-period-option[data-selected] { color: var(--text-primary); background: var(--surface-elevated); box-shadow: var(--shadow-sm); }
+.cn-time-picker-wheel-period-option:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.cn-time-picker-wheel-footer { gap: 8px; }
 
 .cn-color-picker-trigger {
     gap: 8px; padding: 6px 10px;

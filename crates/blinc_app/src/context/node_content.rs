@@ -23,6 +23,7 @@ pub(super) struct NodeContent<'a> {
     pub(super) current_clip: Option<[f32; 4]>,
     pub(super) current_scroll_clip: Option<[f32; 4]>,
     pub(super) current_clip_radius: Option<[f32; 4]>,
+    pub(super) text_fade: [f32; 4],
     pub(super) effective_text_color: Option<[f32; 4]>,
     pub(super) effective_motion_opacity: f32,
     pub(super) inherited_css_opacity: f32,
@@ -60,6 +61,7 @@ impl RenderContext {
             current_clip,
             current_scroll_clip,
             current_clip_radius,
+            text_fade,
             effective_text_color,
             effective_motion_opacity,
             inherited_css_opacity,
@@ -267,6 +269,7 @@ impl RenderContext {
                             .map_or(text_data.italic, |fs| fs.is_italic()),
                         v_align: text_data.v_align,
                         clip_bounds: scaled_clip,
+                        clip_fade: text_fade.map(|distance| distance * scale),
                         // Apply promoted opacity at dispatch; keep cached glyphs at base alpha.
                         motion_opacity: effective_motion_opacity
                             * render_node.props.opacity
@@ -857,6 +860,7 @@ impl RenderContext {
                                 italic,
                                 v_align: styled_data.v_align,
                                 clip_bounds: scaled_clip,
+                                clip_fade: text_fade.map(|distance| distance * scale),
                                 // Base-alpha contract: composite factor
                                 // applied live at dispatch.
                                 motion_opacity: effective_motion_opacity

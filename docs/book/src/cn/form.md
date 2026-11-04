@@ -83,6 +83,11 @@ cn::input_otp(code, 6)
 
 ### OTP Options
 
+Tab and Shift+Tab reach each enabled slot and continue to the controls before
+or after the OTP input. Typing still advances automatically, Backspace in an
+empty slot moves back, and pasting distributes the code across the slots.
+Disabled slots are skipped.
+
 ```rust
 cn::input_otp(code, 6)
     .numeric_only(true)

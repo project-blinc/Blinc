@@ -86,6 +86,28 @@ Hiding seconds preserves their stored value. Midnight is `12 AM`; noon is
 `12 PM`. Clicking the period toggles AM/PM. Tab moves between the fields and
 the period; Shift+Tab moves back. Enter/Space activates the focused period.
 
+The clock button opens a compact wheel popup over the control, kept within
+the window edges, with five visible rows for each numeric
+field. The middle row marks the draft selection and neighbouring values fade
+out toward the edges. Scroll a column with the mouse wheel or trackpad, drag
+it vertically, or click a nearby value. In 12-hour mode, separate **AM** and
+**PM** buttons sit above the wheels. They preserve the selected hour while
+switching periods. Seconds add a third numeric column when enabled.
+
+**Save** writes the draft to the bound signal and calls `on_change` once if
+it changed. **Cancel**, Escape, clicking outside, or disabling the picker
+discards the draft. External writes update the open draft without calling
+`on_change`. The compact fields continue to commit edits immediately.
+
+Tab reaches each column and the footer actions; Shift+Tab goes back.
+Up/Down step the focused column, Page Up/Down step five times, and Home/End
+select its first/last value. `minute_step` and `second_step` apply to keyboard
+stepping and the compact fields’ wheel input. Popup columns are native scroll
+containers with every valid value and stop at their ends; keyboard stepping
+wraps. Other fields and hidden seconds are preserved. Leaving a column
+centres its nearest value.
+Use `.popup(false)` for the compact editor without a clock button.
+
 Type up to two digits per field, or use Up/Down and the mouse wheel to step.
 Stepping wraps within that field without carrying into neighbouring fields.
 `minute_step` and `second_step` affect stepping; typing accepts any valid
@@ -96,6 +118,9 @@ text leaves the selected time unchanged.
 
 `.class(...)` and `.id(...)` apply to the outer `.cn-time-picker`, which
 exposes `data-size="sm|md|lg"`, `data-format="12|24"` and `disabled`.
+The control heights are 32, 36 and 40px. Numeric fields share the outer
+focus ring (`data-focus-within`); their local highlight identifies the part
+being edited. Selection highlighting clears when a field loses focus.
 
 | Class | Part |
 |---|---|
@@ -105,13 +130,43 @@ exposes `data-size="sm|md|lg"`, `data-format="12|24"` and `disabled`.
 | `.cn-time-picker-hour`, `.cn-time-picker-minute`, `.cn-time-picker-second` | Individual fields |
 | `.cn-time-picker-separator` | Colon |
 | `.cn-time-picker-period` | AM/PM button; `:focus`, `:disabled` |
+| `.cn-time-picker-clock` | Wheel popup trigger; `data-state="open"`, `:focus`, `:disabled` |
+| `.cn-time-picker-wheel` | Detached popup; `data-format="12|24"`, `data-seconds` |
+| `.cn-time-picker-wheel-header`, `.cn-time-picker-wheel-title` | Heading |
+| `.cn-time-picker-wheels` | Five-row numeric viewport |
+| `.cn-time-picker-wheel-selection` | Shared selected-row border and fill |
+| `.cn-time-picker-wheel-column` | Native scroll, drag and keyboard target; `:focus`, `overflow-fade`, `scrollbar-width: none` |
+| `.cn-time-picker-wheel-hour`, `.cn-time-picker-wheel-minute`, `.cn-time-picker-wheel-second` | Individual columns |
+| `.cn-time-picker-wheel-list`, `.cn-time-picker-wheel-option` | Scrollable number list and static value rows |
+| `.cn-time-picker-wheel-separator` | Colon between columns |
+| `.cn-time-picker-wheel-period`, `.cn-time-picker-wheel-period-option` | Separate period control; options expose `data-selected`, `:focus` |
+| `.cn-time-picker-wheel-am`, `.cn-time-picker-wheel-pm` | Individual period choices |
+| `.cn-time-picker-wheel-footer`, `.cn-time-picker-wheel-cancel`, `.cn-time-picker-wheel-save` | Footer and actions |
 
 Override `--cn-time-picker-bg`, `--cn-time-picker-border`,
-`--cn-time-picker-radius` and `--cn-time-picker-field-hover`, or write rules:
+`--cn-time-picker-radius`, `--cn-time-picker-field-hover` and
+`--cn-time-picker-field-focus`, or write rules:
 
 ```css
 .appointment .cn-time-picker-segment { width: 48px; }
-.appointment .cn-time-picker-segment:focus { outline-color: #6366f1; }
+.appointment[data-focus-within] { outline-color: #6366f1; }
+```
+
+The popup lives in the overlay layer, outside the trigger's descendants.
+Style its classes directly. Define size/colour variables in `:root` before
+loading `CN_STYLES`.
+`--cn-time-picker-wheel-row-height` (32px) scales
+all five rows together, and `--cn-time-picker-wheel-font-size` (22px) sets
+the digits. `--cn-time-picker-wheel-border` and
+`--cn-time-picker-wheel-selection-bg` style the selected row. Layout and
+typography are CSS rules. Columns use Blinc’s `overflow-fade` for their edge
+fade; `--cn-time-picker-wheel-fade` defaults to 64px. The default popup is 232px wide (288px with seconds), with 32px
+rows and small footer actions.
+
+```css
+:root { --cn-time-picker-wheel-row-height: 36px; }
+.cn-time-picker-wheel-selection { border-color: var(--primary); }
+.cn-time-picker-wheel-period-option[data-selected] { color: var(--primary); }
 ```
 
 ## Colour Picker

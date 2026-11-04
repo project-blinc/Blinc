@@ -35,6 +35,30 @@ impl RenderTree {
         self.tab_walk(None).0
     }
 
+    fn tab_stop_visible(&self, node: LayoutNodeId) -> bool {
+        let Some(mut bounds) = self.get_absolute_bounds(node) else {
+            return false;
+        };
+        for ancestor in self.layout_tree.ancestors(node) {
+            if (self.is_scroll_container(ancestor) || Some(ancestor) == self.root())
+                && let Some(view) = self.get_absolute_bounds(ancestor)
+            {
+                let left = bounds.x.max(view.x);
+                let top = bounds.y.max(view.y);
+                let right = (bounds.x + bounds.width).min(view.x + view.width);
+                let bottom = (bounds.y + bounds.height).min(view.y + view.height);
+                if right <= left || bottom <= top {
+                    return false;
+                }
+                bounds.x = left;
+                bounds.y = top;
+                bounds.width = right - left;
+                bounds.height = bottom - top;
+            }
+        }
+        true
+    }
+
     /// The stops in tree order, and how many of them precede `at` (counted
     /// before `at` itself, whether or not it is one).
     fn tab_walk(&self, at: Option<LayoutNodeId>) -> (Vec<LayoutNodeId>, usize) {
@@ -196,7 +220,20 @@ impl RenderTree {
                 }
                 let len = stops.len();
                 let on_stop = focused.is_some_and(|f| stops.contains(&f));
-                let next = if shift {
+                let next = if !focused.is_some_and(|node| self.tab_stop_visible(node)) {
+                    let mut visible = stops
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, node)| self.tab_stop_visible(**node));
+                    if shift {
+                        visible
+                            .next_back()
+                            .map(|(index, _)| index)
+                            .unwrap_or(len - 1)
+                    } else {
+                        visible.next().map(|(index, _)| index).unwrap_or(0)
+                    }
+                } else if shift {
                     (before + len - 1) % len
                 } else if on_stop {
                     (before + 1) % len
@@ -208,6 +245,7 @@ impl RenderTree {
                     blur_all_text_inputs();
                 }
                 self.scroll_into_view(target);
+                router.focus_via_keyboard(target);
                 if self
                     .element_registry()
                     .attribute(target, "tabindex")
@@ -216,8 +254,6 @@ impl RenderTree {
                 {
                     // A text input takes focus the way a press gives it.
                     self.click_node(target);
-                } else {
-                    router.focus_via_keyboard(target);
                 }
                 true
             }

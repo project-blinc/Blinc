@@ -22,6 +22,7 @@ impl TextInputData {
             computed_width: None,
             layout_bounds_storage: Arc::new(Mutex::new(None)),
             revision: None,
+            focus_signal: None,
             node_id: None,
             on_change_callback: None,
             force_sync_once: false,

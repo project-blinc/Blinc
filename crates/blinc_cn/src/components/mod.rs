@@ -60,6 +60,7 @@ pub mod table;
 pub mod tabs;
 pub mod textarea;
 pub mod time_picker;
+mod time_picker_wheel;
 pub mod toast;
 pub mod toggle;
 pub mod toggle_group;

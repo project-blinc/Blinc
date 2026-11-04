@@ -53,10 +53,35 @@ pub fn refresh_text_input(state: &SharedTextInputData) {
     notify_text_input(state);
 }
 
+/// A reactive read of whether this field owns text focus.
+pub fn text_input_focused(data: &SharedTextInputData) -> blinc_core::reactive::Computed<bool> {
+    use blinc_core::reactive::{computed, signal};
+    let focused = {
+        let mut data = data.lock().unwrap();
+        let initial = data.visual.is_focused();
+        *data.focus_signal.get_or_insert_with(|| signal(initial))
+    };
+    computed(move |graph| graph.get(focused).unwrap_or(false))
+}
+
 /// The field's data changed: have what it shows follow. Called with the data
 /// unlocked, since what follows reads it.
 pub(crate) fn notify_text_input(state: &SharedTextInputData) {
-    let revision = state.lock().ok().and_then(|d| d.revision);
+    let (revision, focus) = state
+        .lock()
+        .ok()
+        .map(|d| {
+            (
+                d.revision,
+                d.focus_signal.map(|signal| (signal, d.visual.is_focused())),
+            )
+        })
+        .unwrap_or_default();
+    if let Some((signal, focused)) = focus {
+        if signal.try_get() != Some(focused) {
+            signal.set(focused);
+        }
+    }
     if let Some(revision) = revision {
         revision.update(|n| n.wrapping_add(1));
     }

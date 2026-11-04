@@ -966,6 +966,7 @@ impl RenderTree {
             self.scroll_physics.insert(node_id, physics);
             self.handler_registry.register(stable_id, handlers);
         }
+        self.apply_base_scrollbar_styles();
     }
 }
 
