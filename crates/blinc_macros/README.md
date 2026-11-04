@@ -1,149 +1,65 @@
 # blinc_macros
 
-> **Part of the [Blinc UI Framework](https://project-blinc.github.io/Blinc)**
->
-> This crate is a component of Blinc, a GPU-accelerated UI framework for Rust.
-> For full documentation and guides, visit the [Blinc documentation](https://project-blinc.github.io/Blinc).
+Procedural macros for Blinc UI. See the
+[component guide](https://blinc.rs/docs/components/blinc-component.html).
 
-Procedural macros for Blinc UI.
+## BlincComponent
 
-## Overview
-
-`blinc_macros` provides derive macros for generating boilerplate code in Blinc applications.
-
-## Macros
-
-### BlincComponent
-
-Generate component infrastructure including unique keys, animation hooks, and state management:
+Declare ordinary field types. The derive generates a companion props type,
+fluent `IntoReactive<T>` setters, and persistent `Signal<T>` hooks:
 
 ```rust
-use blinc_macros::BlincComponent;
+use blinc_app::prelude::*;
+use blinc_core::reactive::{computed, signal};
 
 #[derive(BlincComponent)]
-struct MyButton {
-    label: String,
-    #[animate]
-    scale: f32,
-    #[animate]
-    opacity: f32,
+pub struct Status {
+    pub label: String,
+    pub disabled: bool,
 }
 
-impl MyButton {
-    fn new(label: impl Into<String>) -> Self {
-        Self {
-            label: label.into(),
-            scale: 1.0,
-            opacity: 1.0,
-        }
-    }
-
-    fn render(&self) -> impl ElementBuilder {
-        button(&self.label)
-            .transform(Transform::scale(self.scale, self.scale))
-            .opacity(self.opacity)
-    }
+fn status(props: StatusProps) -> Div {
+    div()
+        .class("status")
+        .attr_when("disabled", "", props.disabled)
+        .child(Text::bound(props.label))
 }
+
+let busy = signal(false);
+let label = computed(move |g| {
+    if g.get(busy).unwrap_or(false) { "Working" } else { "Ready" }.to_string()
+});
+let props = Status::props("Initial", false).label(label).disabled(busy);
+let view = status(props);
 ```
 
-### Generated Code
+`StatusProps` stores `Reactive<String>` and `Reactive<bool>`. Constants,
+Signal, Computed, borrowed sources and existing reactive props all use the
+same setters. Their source identities are retained, so forward fields to
+bindings instead of reading a value during construction. Field visibility,
+documentation, generic parameters and bounds are preserved. Props can be cloned.
 
-The `BlincComponent` derive generates:
+The original struct is unchanged. The constructor takes all ordinary fields
+in declaration order; every field also has a fluent setter on the props.
 
-```rust
-impl MyButton {
-    // Unique component key for diffing
-    fn component_key() -> &'static str {
-        "MyButton_abc123"  // Compile-time unique ID
-    }
+For component-owned mutable data, `Status::use_label(ctx, initial)` returns
+a persisted Signal. `_for(ctx, instance_key, initial)` isolates list items;
+`_auto(ctx, initial)` keys by caller location. Initial values seed hooks once.
+Use Computed to combine prop values with `prop.read(g)`; use Effect for side
+effects. Visual changes belong in property bindings and CSS rules.
 
-    // Instance key for multiple instances
-    fn instance_key(&self) -> String {
-        format!("{}_{}", Self::component_key(), /* instance id */)
-    }
+`#[animation]` fields generate spring hooks returning `SharedAnimatedValue`
+and are excluded from props. Unit structs retain the shared spring/timeline
+hooks and instance-key methods without generating a props type.
 
-    // Animation state accessors
-    fn animated_scale(&self) -> AnimatedValue<f32> { ... }
-    fn animated_opacity(&self) -> AnimatedValue<f32> { ... }
-}
-```
+Consumers need `blinc_core` and `blinc_animation`; named reactive fields also
+need `blinc_layout`. The derive is exported by this crate and reexported as
+`BlincComponent` and `Component` by `blinc_app`.
 
-## Attributes
+## flow!
 
-### `#[animate]`
-
-Mark a field as animatable:
-
-```rust
-#[derive(BlincComponent)]
-struct Card {
-    #[animate]
-    height: f32,  // Generates AnimatedValue<f32>
-
-    #[animate(spring = "bouncy")]
-    scale: f32,   // Use bouncy spring preset
-
-    #[animate(duration = 300)]
-    opacity: f32, // 300ms duration
-}
-```
-
-### `#[state]`
-
-Mark a field as reactive state:
-
-```rust
-#[derive(BlincComponent)]
-struct Counter {
-    #[state]
-    count: i32,  // Generates Signal<i32>
-}
-
-// Usage:
-counter.count.set(5);
-let value = counter.count.get();
-```
-
-### `#[key]`
-
-Customize instance key generation:
-
-```rust
-#[derive(BlincComponent)]
-#[key(field = "id")]
-struct ListItem {
-    id: String,
-    label: String,
-}
-
-// Instance key will use the `id` field
-```
-
-## Instance Key Variants
-
-```rust
-// Single instance (default)
-#[derive(BlincComponent)]
-struct Header { ... }
-
-// Multiple instances with auto key
-#[derive(BlincComponent)]
-#[key(auto)]
-struct ListItem { ... }
-
-// Multiple instances with explicit key field
-#[derive(BlincComponent)]
-#[key(field = "item_id")]
-struct ListItem {
-    item_id: String,
-    ...
-}
-```
-
-## Requirements
-
-- Rust 1.65+ (for proc-macro2 features)
-- `syn` and `quote` for macro implementation
+Compile a flow shader to WGSL with `flow!(name, fragment, { ... })` and draw
+it with `Canvas::flow`. See the [flow shader guide](https://blinc.rs/docs/advanced/flow-shaders.html).
 
 ## License
 

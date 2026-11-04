@@ -4,6 +4,9 @@ All notable changes to `blinc_app` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- `BlincComponent` generates companion reactive props with `IntoReactive` setters, and ordinary field hooks return `Signal`. Props preserve Signal and Computed bindings.
+
 ### Fixed
 - Desktop and web runners reconcile overlay focus before styling and share navigation handling. Web consumes navigation keys without browser defaults or duplicate text input; desktop maps Shift+F10 for context menus.
 

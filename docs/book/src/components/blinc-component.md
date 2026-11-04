@@ -1,347 +1,203 @@
 # BlincComponent Macro
 
-The `BlincComponent` derive macro generates type-safe hooks for **state and animations**, eliminating manual string keys and reducing boilerplate. Use it to define component-scoped state that persists across UI rebuilds.
+`BlincComponent` generates reactive props and persistent Signal hooks from a
+struct. Props accept ordinary values, `Signal<T>` and `Computed<T>` through
+`IntoReactive<T>`. Forward them to UI bindings so changes patch mounted elements.
 
-## Overview
-
-`BlincComponent` is designed for two primary use cases:
-
-1. **State Management** - Generate `State<T>` hooks for component data (counters, toggles, form values)
-2. **Animations** - Generate `SharedAnimatedValue` hooks for spring-based animations
-
-## Basic Usage
+## Declare the Fields
 
 ```rust
 use blinc_app::prelude::*;
 
 #[derive(BlincComponent)]
-struct MyComponent;
-```
-
-This generates:
-- `MyComponent::COMPONENT_KEY` - Unique compile-time key
-- `MyComponent::use_animated_value(ctx, initial, config)` - Spring animation
-- `MyComponent::use_animated_value_with(ctx, suffix, initial, config)` - Named spring
-- `MyComponent::use_animated_timeline(ctx)` - Keyframe timeline
-- `MyComponent::use_animated_timeline_with(ctx, suffix)` - Named timeline
-
----
-
-## State Fields
-
-Fields without `#[animation]` generate state hooks:
-
-```rust
-#[derive(BlincComponent)]
-struct Counter {
-    count: i32,              // Generates: use_count(ctx, initial) -> State<i32>
-    step: i32,               // Generates: use_step(ctx, initial) -> State<i32>
+pub struct Counter {
+    /// Text displayed before the count.
+    pub label: String,
+    pub count: i32,
+    pub disabled: bool,
 }
 ```
 
-### Using State Fields
+This generates `CounterProps`, `Counter::props(label, count, disabled)` and
+fluent setters on the props. The original `Counter` struct stays unchanged;
+its fields describe the prop types and named hooks.
+
+The companion has the same visibility and generic parameters as the declared
+struct. Each prop keeps its field visibility and documentation, and stores
+`Reactive<T>`. Cloning props retains their Signal and Computed sources.
+
+## Supply Reactive Props
 
 ```rust
-fn counter_demo(ctx: &WindowedContext) -> impl ElementBuilder {
-    // BlincComponent generates type-safe state hooks
-    let count = Counter::use_count(ctx, 0);
-    let step = Counter::use_step(ctx, 1);
-
-    // Use stateful::<S>() with .deps() to react to state changes
-    stateful::<ButtonState>()
-        .flex_col()
-        .gap(16.0)
-        .p(16.0)
-        .deps([count.signal_id(), step.signal_id()])
-        .on_state(move |ctx| {
-            // Read current values inside on_state
-            let current_count = count.get();
-            let current_step = step.get();
-
-            let bg = match ctx.state() {
-                ButtonState::Idle => Color::rgba(0.15, 0.15, 0.2, 1.0),
-                ButtonState::Hovered => Color::rgba(0.18, 0.18, 0.25, 1.0),
-                _ => Color::rgba(0.15, 0.15, 0.2, 1.0),
-            };
-
-            // Return a Div with dynamic content
-            div()
-                .bg(bg)
-                .child(text(&format!("Count: {}", current_count)).color(Color::WHITE))
-                .child(text(&format!("Step: {}", current_step)).color(Color::WHITE))
-        })
-        .on_click(move |_| {
-            let current_step = step.get();
-            count.update(|v| v + current_step);
-        })
-        .child(increment_button())
-}
-
-fn increment_button() -> impl ElementBuilder {
-    stateful::<ButtonState>()
-        .px(16.0)
-        .py(8.0)
-        .rounded(8.0)
-        .on_state(|ctx| {
-            let bg = match ctx.state() {
-                ButtonState::Idle => Color::rgba(0.3, 0.5, 0.9, 1.0),
-                ButtonState::Hovered => Color::rgba(0.4, 0.6, 1.0, 1.0),
-                ButtonState::Pressed => Color::rgba(0.2, 0.4, 0.8, 1.0),
-                _ => Color::rgba(0.3, 0.5, 0.9, 1.0),
-            };
-            div().bg(bg)
-        })
-        .child(text("Increment").color(Color::WHITE))
-}
-```
-
-**Key point:** When UI content depends on state values that can change, use `stateful::<S>()` with `.deps()` to declare the dependency. The `on_state` callback re-runs whenever those signals change, and you return a `Div` with the updated content.
-
-### Common State Patterns
-
-```rust
-#[derive(BlincComponent)]
-struct TodoList {
-    items: Vec<String>,      // List of items
-    filter: Filter,          // Current filter mode
-    selected_index: Option<usize>,  // Currently selected item
-}
+use blinc_app::prelude::*;
+use blinc_core::reactive::{computed, signal};
 
 #[derive(BlincComponent)]
-struct FormData {
-    username: String,
-    email: String,
-    is_valid: bool,
+pub struct Status {
+    pub label: String,
+    pub disabled: bool,
 }
 
-#[derive(BlincComponent)]
-struct Settings {
-    theme: Theme,
-    notifications_enabled: bool,
-    volume: f32,
-}
-```
-
----
-
-## Animation Fields
-
-Fields with `#[animation]` generate spring animation hooks:
-
-```rust
-#[derive(BlincComponent)]
-struct PullToRefresh {
-    #[animation]
-    content_offset: f32,    // Generates: use_content_offset(ctx, initial, config)
-
-    #[animation]
-    icon_scale: f32,        // Generates: use_icon_scale(ctx, initial, config)
-
-    #[animation]
-    icon_opacity: f32,      // Generates: use_icon_opacity(ctx, initial, config)
-}
-```
-
-### Using Animation Fields
-
-```rust
-fn pull_to_refresh_demo(ctx: &WindowedContext) -> impl ElementBuilder {
-    // Each field gets its own type-safe hook
-    let content_offset = PullToRefresh::use_content_offset(ctx, 0.0, SpringConfig::wobbly());
-    let icon_scale = PullToRefresh::use_icon_scale(ctx, 0.5, SpringConfig::snappy());
-    let icon_opacity = PullToRefresh::use_icon_opacity(ctx, 0.0, SpringConfig::snappy());
-
-    // Use with motion() for animated rendering
-    motion()
-        .translate_y(content_offset.lock().unwrap().get())
-        .child(/* content */)
-}
-```
-
----
-
-## Combining State and Animation
-
-A component can have both state and animation fields:
-
-```rust
-#[derive(BlincComponent)]
-struct ExpandableCard {
-    // State fields
-    is_expanded: bool,
-    content: String,
-
-    // Animation fields
-    #[animation]
-    height: f32,
-    #[animation]
-    arrow_rotation: f32,
+fn status(props: StatusProps) -> Div {
+    div()
+        .class("status")
+        .attr_when("disabled", "", props.disabled)
+        .child(Text::bound(props.label).class("status-label"))
 }
 
-fn expandable_card(ctx: &WindowedContext) -> impl ElementBuilder {
-    let is_expanded = ExpandableCard::use_is_expanded(ctx, false);
-    let height = ExpandableCard::use_height(ctx, 60.0, SpringConfig::snappy());
-    let arrow_rotation = ExpandableCard::use_arrow_rotation(ctx, 0.0, SpringConfig::snappy());
-
-    let expanded = is_expanded.get();
-
-    motion()
-        .h(height.lock().unwrap().get())
-        .on_click(move |_| {
-            is_expanded.update(|v| !v);
-            let target_height = if !expanded { 200.0 } else { 60.0 };
-            let target_rotation = if !expanded { 180.0 } else { 0.0 };
-            height.lock().unwrap().set_target(target_height);
-            arrow_rotation.lock().unwrap().set_target(target_rotation);
-        })
-        .child(/* card content */)
-}
-```
-
----
-
-## Multiple Values per Component
-
-Use `_with` suffix methods for multiple values of the same type:
-
-```rust
-#[derive(BlincComponent)]
-struct DraggableBox;
-
-fn draggable(ctx: &WindowedContext) -> impl ElementBuilder {
-    // Multiple animated values with suffixes
-    let x = DraggableBox::use_animated_value_with(ctx, "x", 100.0, SpringConfig::wobbly());
-    let y = DraggableBox::use_animated_value_with(ctx, "y", 100.0, SpringConfig::wobbly());
-
-    // ...
-}
-```
-
----
-
-## Timelines with BlincComponent
-
-```rust
-#[derive(BlincComponent)]
-struct SpinningLoader;
-
-fn loader(ctx: &WindowedContext) -> impl ElementBuilder {
-    let timeline = SpinningLoader::use_animated_timeline(ctx);
-
-    let entry_id = timeline.lock().unwrap().configure(|t| {
-        let id = t.add(0, 1000, 0.0, 360.0);
-        t.set_loop(-1);
-        t.start();
-        id
+fn example() -> Div {
+    let busy = signal(false);
+    let label = computed(move |g| {
+        if g.get(busy).unwrap_or(false) {
+            "Working".to_string()
+        } else {
+            "Ready".to_string()
+        }
     });
-
-    // ...
+    let props = Status::props("Initial", false)
+        .label(label)
+        .disabled(busy);
+    status(props)
 }
 ```
 
----
+The constructor accepts every ordinary field in declaration order. Setters
+accept the same `impl IntoReactive<T>` inputs, including borrowed signals,
+borrowed computeds and an existing `Reactive<T>` from another props value.
 
-## How It Works
+`Status::props("Ready", false)` uses constants. Passing `busy` keeps its signal
+identity; passing `label` keeps its computation. No value is read or copied
+into a new signal while constructing props.
 
-The macro generates a unique key from `module_path!()` and the struct name:
+The `status` class styles the root, `status-label` styles its text, and the
+root's `disabled` attribute exposes the bound state for restyling:
 
-```rust
-impl MyCard {
-    pub const COMPONENT_KEY: &'static str = concat!(module_path!(), "::", stringify!(MyCard));
-    // e.g., "my_app::components::MyCard"
-}
+```css
+.status { padding: 12px; border-radius: var(--radius-md); }
+.status-label { color: var(--text-primary); }
+.status[disabled] { opacity: 0.5; }
 ```
 
-This ensures:
-- **Uniqueness** - Keys are unique across your entire codebase
-- **Stability** - Keys don't change unless you move/rename the struct
-- **No collisions** - Different modules can have same-named components
+The derive generates data APIs. Declare classes and CSS rules in the component
+that consumes the props.
 
----
-
-## Generated Methods
-
-### For Unit Structs
+## Own Mutable Values with Signal Hooks
 
 ```rust
+use blinc_app::prelude::*;
+use blinc_app::windowed::WindowedContext;
+
 #[derive(BlincComponent)]
-struct MyComponent;
+pub struct Counter {
+    pub label: String,
+    pub count: i32,
+    pub disabled: bool,
+}
 
-// Generates:
-impl MyComponent {
-    pub const COMPONENT_KEY: &'static str;
-
-    pub fn use_animated_value(
-        ctx: &WindowedContext,
-        initial: f32,
-        config: SpringConfig,
-    ) -> SharedAnimatedValue;
-
-    pub fn use_animated_value_with(
-        ctx: &WindowedContext,
-        suffix: &str,
-        initial: f32,
-        config: SpringConfig,
-    ) -> SharedAnimatedValue;
-
-    pub fn use_animated_timeline(
-        ctx: &WindowedContext,
-    ) -> SharedAnimatedTimeline;
-
-    pub fn use_animated_timeline_with(
-        ctx: &WindowedContext,
-        suffix: &str,
-    ) -> SharedAnimatedTimeline;
+fn counter(ctx: &WindowedContext) -> Div {
+    let count: Signal<i32> = Counter::use_count(ctx, 0);
+    let caption = blinc_core::reactive::computed(move |g| {
+        format!("Count: {}", g.get(count).unwrap_or(0))
+    });
+    let props = Counter::props(caption, count, false);
+    div()
+        .class("counter")
+        .attr("tabindex", "0")
+        .attr_when("disabled", "", props.disabled)
+        .child(Text::bound(props.label))
+        .on_click(move |_| count.update(|value| value + 1))
 }
 ```
 
-### For Structs with Fields
+`use_count` creates a writable `Signal<i32>` on its first call and retrieves
+that same signal on later builds. Its `initial` argument is a plain `i32`,
+used only to seed owned data. External Signal or Computed inputs belong in
+`Counter::props`, whose fields are read-only binding sources.
+
+| Generated hook | Identity |
+|---|---|
+| `Counter::use_count(ctx, initial)` | Component type and field |
+| `Counter::use_count_for(ctx, key, initial)` | Component type, field and explicit instance key |
+| `Counter::use_count_auto(ctx, initial)` | Component type, field and caller location |
+
+Use `_for` in lists and loops. Two calls to `_auto` from one loop body share
+a call site. Different fields, modules, component types and generic
+instantiations have separate hook identities.
+
+Hooks work with any `BlincContext`; they do not require a native window.
+
+## Combine Props in Computed and Effect
+
+Use `Reactive::read(g)` inside computations so dependencies stay tracked.
+Use `now()` only when taking a snapshot, such as reading a prop in an event
+handler. Reading a prop while building a view does not create a binding.
 
 ```rust
+use blinc_app::prelude::*;
+use blinc_core::reactive::{computed, effect};
+use blinc_layout::binding::IntoReactive;
+
 #[derive(BlincComponent)]
-struct MyComponent {
-    #[animation]
-    scale: f32,
-    count: i32,
+pub struct Counter {
+    pub label: String,
+    pub count: i32,
 }
 
-// Additionally generates:
-impl MyComponent {
-    pub fn use_scale(
-        ctx: &WindowedContext,
-        initial: f32,
-        config: SpringConfig,
-    ) -> SharedAnimatedValue;
-
-    pub fn use_count(
-        ctx: &WindowedContext,
-        initial: i32,
-    ) -> State<i32>;
+fn counter(props: CounterProps) -> Div {
+    let count = props.count.clone();
+    let _observer = effect(move |g| {
+        tracing::debug!(count = count.read(g).unwrap_or(0), "Counter changed");
+    });
+    let caption = computed(move |g| {
+        format!("{}: {}",
+            props.label.read(g).unwrap_or_default(),
+            props.count.read(g).unwrap_or(0))
+    });
+    div().class("counter").child(Text::bound(caption.into_reactive()))
 }
 ```
 
----
+Use Computed for values derived from props, Effect for side effects, and UI
+bindings for visual updates. Components built under a build scope share its
+cleanup lifetime. Ordinary prop changes do not need `.deps()` or an
+`on_state` rebuild.
 
-## Best Practices
+## Animation Hooks and Unit Structs
 
-1. **Group related state and animations** - A component should represent one logical UI element with its related state and animations.
+`#[animation]` fields retain the existing spring hooks and are omitted from
+props. For example, a component with `label: String` and
+`#[animation] scale: f32` receives `Component::props(label)` and
+`use_scale(ctx, initial, config)` returning `SharedAnimatedValue`.
 
-2. **Use fields for named values** - Prefer `#[animation] scale: f32` over `use_animated_value_with(ctx, "scale", ...)`.
-
-3. **Combine state and animations** - Use state fields for data, animation fields for visual transitions.
-
-4. **Document fields** - Add doc comments to fields for generated method documentation.
+Unit and tuple structs generate component keys and shared spring/timeline
+hooks. A unit struct has no companion props type:
 
 ```rust
-#[derive(BlincComponent)]
-struct ExpandableSection {
-    /// Whether the section is currently expanded
-    is_expanded: bool,
+use blinc_app::prelude::*;
+use blinc_app::windowed::WindowedContext;
 
-    /// Animated height for smooth expand/collapse
-    #[animation]
-    height: f32,
+#[derive(BlincComponent)]
+struct LoadingIndicator;
+
+fn animation(ctx: &WindowedContext) {
+    let _spring = LoadingIndicator::use_animated_value(ctx, 1.0, SpringConfig::snappy());
+    let _timeline = LoadingIndicator::use_animated_timeline(ctx);
 }
 ```
 
-5. **Use `motion()` with animated values** - Wrap content using animated values in `motion()` for proper redraws.
+All component types expose `COMPONENT_KEY`, `instance_key()` and
+`instance_key_for(suffix)`. Shared spring and timeline methods also have
+`_with(ctx, suffix, ...)` variants. Prefer CSS transitions, keyframes and
+`motion()` for component appearance and interaction states.
+
+## Dependencies and Migration
+
+Consumers depend directly on `blinc_macros` (or use the derive reexport from
+`blinc_app`), `blinc_core` and `blinc_animation`. Named reactive fields also
+require `blinc_layout`, which owns `IntoReactive` and `Reactive`.
+
+Existing field hooks now return `Signal<T>`. Use its `get`, `set` and `update`
+methods and forward the signal to a binding. Hooks retain their existing
+keys for module-level non-generic component types. Ordinary Rust struct literals
+keep their declared field types; use the generated `Name::props(...)` factory
+when supplying reactive inputs.

@@ -2,6 +2,12 @@
 
 This guide covers patterns for creating composable, reusable UI components in Blinc.
 
+Use `#[derive(BlincComponent)]` on a named struct to generate a companion
+`NameProps` type. Its constructor and fluent field setters accept
+`IntoReactive<T>`, including Signal and Computed inputs. Forward these fields
+to bindings and expose documented classes for CSS restyling. See the
+[derive guide](blinc-component.md) for constructors, signal hooks and examples.
+
 ## Component Patterns
 
 ### Simple Function Components
@@ -350,8 +356,8 @@ pub fn notification(props: NotificationProps) -> Div {
 
 6. **Separate stateless and stateful** - Pure components are easier to test and reuse.
 
-7. **Use BlincComponent for state and animations** - Type-safe hooks for both `State<T>` and `SharedAnimatedValue` prevent key collisions.
+7. **Use BlincComponent for reactive props and owned signals** - Generated `NameProps` accepts values, Signal and Computed; keyed hooks persist mutable Signal data.
 
-8. **Use `stateful::<S>()` for visual states** - Hover, press, focus effects should use stateful containers rather than signals.
+8. **Declare interaction styling in CSS** - Use `:hover`, `:active`, `:focus-visible` and bound classes or attributes for appearance.
 
 9. **Use motion() for animated values** - Wrap animated content in `motion()` for proper redraws.
