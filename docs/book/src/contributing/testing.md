@@ -152,7 +152,15 @@ cargo check -p blinc_app --target wasm32-unknown-unknown --features web --no-def
 cargo nextest run --no-fail-fast --workspace --all-features --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
 cargo test --doc --workspace --all-features --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
+cargo check -p blinc_gpu --target x86_64-pc-windows-msvc
+cargo check -p blinc_app --no-default-features --target aarch64-apple-ios --features ios
 ```
+
+Three more checks catch what the list above cannot:
+
+- **A Windows target.** The tracked lockfile can pin two crates to versions that agree on one platform and disagree on another (`gpu-allocator` and `wgpu-hal` on D3D12). `cargo check` for `x86_64-pc-windows-msvc` finds it without a Windows machine.
+- **The web wrappers.** An example that is new or changed must still build for wasm. Run `cargo run -p blinc-build-web-examples`, then `cargo check --target wasm32-unknown-unknown` on the wrapper of each example you touched, and revert the gallery pages it rewrites. An example's `fn main` is gated `#[cfg(not(target_arch = "wasm32"))]`.
+- **A machine with no GPU.** The coverage runner has no adapter. Every test that builds a `Headless` starts with `if !Headless::available() { return; }`, including tests that go through a helper.
 
 Run them on a clean checkout of your commit, not on a tree with uncommitted work: the workspace
 feature set compiles code a single crate's check does not, and an untracked file can hide a
