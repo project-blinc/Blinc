@@ -1,6 +1,6 @@
 //! Collecting pointer events for the router.
 
-#![allow(unused_variables)]
+#![allow(unused_variables, clippy::too_many_arguments)]
 
 use super::collect::{Collect, PendingEvent};
 use super::*;

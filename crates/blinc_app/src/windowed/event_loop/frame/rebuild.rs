@@ -1,6 +1,6 @@
 //! Frame phases 1 and 2: decide whether the tree needs a rebuild, then rebuild it.
 
-#![allow(unused_variables, unused_mut, unused_assignments)]
+#![allow(unused_variables, unused_mut, unused_assignments, clippy::too_many_arguments)]
 
 use super::super::frame::FrameVars;
 use super::super::*;
