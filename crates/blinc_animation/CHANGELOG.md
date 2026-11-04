@@ -4,7 +4,7 @@ All notable changes to `blinc_animation` will be documented in this file.
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-11-03
+## [0.6.0] - 2026-11-04
 
 ### Performance
 - **EMA-smoothed tick `dt`** — `AnimationScheduler::tick` now feeds the raw vsync interval through an exponential moving average before stepping springs / keyframes. Single-frame stutters from jittery vsync (Wayland fractional scaling, GPU contention) stop hitting the spring damping equation as a sharp impulse, killing the "shudder" on long-running springs at the cost of a one-frame phase lag — invisible in normal motion, measurable on slow-mo capture.

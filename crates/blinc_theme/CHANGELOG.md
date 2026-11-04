@@ -4,7 +4,7 @@ All notable changes to `blinc_theme` will be documented in this file.
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-11-03
+## [0.6.0] - 2026-11-04
 
 ### Added
 - `--chart-1` to `--chart-5` and `--chart-baseline`: a palette for charts, one per scheme, in the CSS variable map (`chart_palette(scheme)`).

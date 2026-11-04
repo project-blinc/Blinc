@@ -4,7 +4,7 @@ All notable changes to `blinc_core` will be documented in this file.
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-11-03
+## [0.6.0] - 2026-11-04
 
 ### Added
 - `owner::BuildScope` is what a runner holds to build its UI under an `Owner`: `begin` a pass, then `finish` it when the build made a fresh tree (the scopes of the builds before it are disposed) or `keep` it when the build was merged into the tree that was there. `Owner::enter` makes a scope current until its guard drops, and `Owner::detached` runs code owned by no scope, for what a widget registers once for a signal that outlives builds.

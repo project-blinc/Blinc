@@ -10,7 +10,7 @@ All notable changes to `blinc_app` will be documented in this file.
 ### Fixed
 - Desktop and web runners reconcile overlay focus before styling and share navigation handling. Web consumes navigation keys without browser defaults or duplicate text input; desktop maps Shift+F10 for context menus.
 
-## [0.6.0] - 2026-11-03
+## [0.6.0] - 2026-11-04
 
 ### Changed
 - Flow shaders are drawn by canvases (`Canvas::flow`, `DrawContext::draw_shader`) as canvas GPU passes, and no longer collected from elements. The element path, its caches and `FlowElement` are removed.

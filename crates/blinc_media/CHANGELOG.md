@@ -4,7 +4,7 @@ All notable changes to `blinc_media` will be documented in this file.
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-11-03
+## [0.6.0] - 2026-11-04
 
 ### Changed
 - **Bumped `rodio` 0.19 → 0.22** (closes #31). Decoders route through `symphonia` (`vorbis` / `wav` / `flac` features map to `symphonia/{vorbis,wav,flac}`); the `recording` feature pulls `cpal` directly and rodio re-exports it as `rodio::cpal`.

@@ -10,7 +10,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ### Fixed
 - Overlay focus returns to stable trigger identities on dismissal, and nested scopes constrain Tab to the topmost active popup. Pointer focus persists without a keyboard ring. Menu roles support roving focus, submenu keys and keyboard context-menu activation.
 
-## [0.6.0] - 2026-11-03
+## [0.6.0] - 2026-11-04
 
 ### Fixed
 - CSS `scrollbar-width: none` hides scrollbars on existing native scroll containers during scrolling; `auto` and `thin` apply their width modes.
