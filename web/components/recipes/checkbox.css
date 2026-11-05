@@ -3,9 +3,11 @@
   border-width: 2px;
 }
 
-.cn-checkbox:checked {
-  background: var(--success);
-  border-color: var(--success);
+@layer components {
+  .cn-checkbox:checked {
+    background: var(--success) !important;
+    border-color: var(--success) !important;
+  }
 }
 
 .cn-checkbox:focus-visible {

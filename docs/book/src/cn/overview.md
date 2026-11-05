@@ -13,6 +13,11 @@ blinc = { version = "0.6", features = ["cn"] }
 
 ## Quick Start
 
+Application rules restyle ordinary component colours. Selected, active and
+checked colours retain contrast through explicit colour importance. Use theme
+variables or a variant's component-layer declarations to restyle those states;
+see [Selected component colours](../core/css-styling.md#selected-component-colours).
+
 Install the cn theme bundle with `WindowedApp::run_with_theme`. `cn_bundle()` is the framework's platform-detected
 theme pre-loaded with `CN_STYLES`, so cn components look right out of the box without any manual `add_css` calls:
 

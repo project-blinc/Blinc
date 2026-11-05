@@ -268,24 +268,7 @@ impl RenderTree {
     /// Calculate CSS specificity for a complex selector as (ids, classes, types).
     /// Used for sorting: lower specificity rules apply first, higher ones override.
     pub(crate) fn selector_specificity(selector: &ComplexSelector) -> (u32, u32, u32) {
-        let (mut ids, mut classes, mut types) = (0u32, 0u32, 0u32);
-        for (compound, _) in &selector.segments {
-            for part in &compound.parts {
-                match part {
-                    SelectorPart::Id(_) => ids += 1,
-                    SelectorPart::Class(_)
-                    | SelectorPart::State(_)
-                    | SelectorPart::PseudoClass(_)
-                    | SelectorPart::Not(_)
-                    | SelectorPart::Is(_)
-                    | SelectorPart::Attribute { .. }
-                    | SelectorPart::Has(_) => classes += 1,
-                    SelectorPart::Type(_) => types += 1,
-                    SelectorPart::Universal | SelectorPart::PseudoElement(_) => {}
-                }
-            }
-        }
-        (ids, classes, types)
+        selector.specificity()
     }
 
     /// Check if a complex selector matches a given target node.

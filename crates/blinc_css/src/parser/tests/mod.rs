@@ -4,6 +4,7 @@ mod animation;
 mod conversions;
 mod errors;
 mod gradient;
+mod important;
 mod keyframes;
 mod length;
 mod parsing;

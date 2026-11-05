@@ -1,6 +1,8 @@
 /* The checked track and the moving thumb have separate hooks. */
-.cn-switch:checked {
-  background: var(--success);
+@layer components {
+  .cn-switch:checked {
+    background: var(--success) !important;
+  }
 }
 
 .cn-switch-thumb {

@@ -85,6 +85,40 @@ impl RenderTree {
         props: &mut RenderProps,
         style: &crate::element_style::ElementStyle,
     ) {
+        let important = blinc_css::element_style::ImportantColors::combine(
+            props.important_colors.as_ref(),
+            style.important_colors.as_ref(),
+        );
+        Self::apply_element_style_values_to_props(props, style);
+        if let Some(colors) = &important {
+            if let Some(background) = colors.background() {
+                props.background = Some(background.clone());
+            }
+            if let Some(color) = colors.color() {
+                props.text_color = Some([color.r, color.g, color.b, color.a]);
+            }
+            if let Some(color) = colors.border_color() {
+                props.border_color = Some(color);
+                for side in [
+                    &mut props.border_sides.top,
+                    &mut props.border_sides.right,
+                    &mut props.border_sides.bottom,
+                    &mut props.border_sides.left,
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    side.color = color;
+                }
+            }
+        }
+        props.important_colors = important;
+    }
+
+    fn apply_element_style_values_to_props(
+        props: &mut RenderProps,
+        style: &crate::element_style::ElementStyle,
+    ) {
         let tier = if style.component {
             StyleTier::Default
         } else {
@@ -764,7 +798,7 @@ impl RenderTree {
     /// Snapshot keyframe properties for transition "before" state.
     ///
     /// When an active transition exists, overlays the transition's current
-    /// interpolated values for transform fields. This avoids QR decomposition
+    /// interpolated values for transforms and colours. This avoids QR decomposition
     /// drift: the affine→decompose roundtrip introduces tiny floating-point
     /// errors that would cause spurious property changes and defeat the
     /// same-target guard in `detect_and_start_transitions`.
@@ -814,6 +848,13 @@ impl RenderTree {
                 }
                 if cp.background_color.is_some() {
                     kp.background_color = cp.background_color;
+                }
+                // A state refold may already have restored the target colour.
+                if cp.text_color.is_some() {
+                    kp.text_color = cp.text_color;
+                }
+                if cp.border_color.is_some() {
+                    kp.border_color = cp.border_color;
                 }
                 // Mask gradient
                 if cp.mask_gradient.is_some() {

@@ -50,9 +50,12 @@ pub struct BorderSideStyle {
 
 #[derive(Clone, Default, Debug)]
 pub struct ElementStyle {
-    /// Set when the rule came from a component's own stylesheet, which sits
-    /// below the application's regardless of specificity.
+    /// Component stylesheet tier. Normal declarations yield to application
+    /// rules; important colour declarations take precedence over them.
     pub component: bool,
+    /// Declaration priorities for explicitly protected CSS colours.
+    #[doc(hidden)]
+    pub important_colors: Option<std::sync::Arc<ImportantColors>>,
     // =========================================================================
     // Visual Properties
     // =========================================================================

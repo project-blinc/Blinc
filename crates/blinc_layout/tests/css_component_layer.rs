@@ -45,3 +45,47 @@ fn an_application_rule_still_wins() {
         Some(RED)
     );
 }
+
+#[test]
+fn an_important_component_colour_wins_over_normal_app_and_fluent_colours() {
+    assert_eq!(
+        fill(
+            "@layer components { .x { background: red !important; } } .x { background: blue; }",
+            div().bg(BLUE),
+        ),
+        Some(RED)
+    );
+}
+
+#[test]
+fn important_component_colours_outrank_unlayered_important_colours() {
+    assert_eq!(
+        fill(
+            "@layer components { .x { background: red !important; } } #sample { background: blue !important; }",
+            div().id("sample"),
+        ),
+        Some(RED)
+    );
+}
+
+#[test]
+fn app_importance_does_not_promote_other_properties_in_the_rule() {
+    assert_eq!(
+        fill(
+            ".x { background: red; color: white !important; } #sample { background: blue; }",
+            div().id("sample"),
+        ),
+        Some(BLUE)
+    );
+}
+
+#[test]
+fn a_component_layer_variant_can_restyle_protected_selection_colours() {
+    assert_eq!(
+        fill(
+            "@layer components { .x { background: red !important; } } @layer components { .x.variant { background: blue !important; } }",
+            div().class("variant"),
+        ),
+        Some(BLUE)
+    );
+}

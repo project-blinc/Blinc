@@ -18,9 +18,11 @@
   border-radius: var(--radius-sm);
 }
 
-.demo-project-tree .cn-tree-row[data-selected] {
-  background: var(--surface-overlay);
-  color: var(--primary);
+@layer components {
+  .demo-project-tree .cn-tree-row[data-selected] {
+    background: var(--surface-overlay) !important;
+    color: var(--primary) !important;
+  }
 }
 
 .cn-drawer-footer {

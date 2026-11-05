@@ -12,9 +12,11 @@
   border-radius: var(--radius-sm);
 }
 
-.cn-calendar-day[data-selected] {
-  background: var(--success);
-  color: var(--text-inverse);
+@layer components {
+  .cn-calendar-day[data-selected] {
+    background: var(--success) !important;
+    color: var(--text-inverse) !important;
+  }
 }
 
 .cn-calendar-day:hover {

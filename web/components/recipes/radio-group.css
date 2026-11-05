@@ -2,12 +2,14 @@
   border-width: 2px;
 }
 
-.cn-radio:checked {
-  border-color: var(--success);
-}
+@layer components {
+  .cn-radio:checked {
+    border-color: var(--success) !important;
+  }
 
-.cn-radio-dot {
-  background: var(--success);
+  .cn-radio:checked > .cn-radio-dot {
+    background: var(--success) !important;
+  }
 }
 
 .cn-radio:focus-visible {

@@ -6,7 +6,9 @@
 //! rules of the layout stylesheet, with `.cn-radio` as cn's hooks on them. Restyle it with rules of your own:
 //!
 //! ```css
-//! .my-radio:checked { border-color: #16a34a; }
+//! @layer components {
+//!     .my-radio:checked { border-color: #16a34a !important; }
+//! }
 //! ```
 //! It reads and writes a `Signal<String>`; `label` and `disabled` are bound
 //! in place.

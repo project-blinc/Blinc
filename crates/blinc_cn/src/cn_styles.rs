@@ -673,8 +673,14 @@ pub const CN_STYLES: &str = concat!(
    hooks on top of them: the custom properties a theme can set, and the
    disabled class. */
 .cn-checkbox:checked {
-    background: var(--cn-checkbox-checked-bg, var(--primary));
-    border-color: var(--cn-checkbox-checked-border, var(--primary));
+    background: var(--cn-checkbox-checked-bg, var(--primary)) !important;
+    border-color: var(--cn-checkbox-checked-border, var(--primary)) !important;
+    color: var(--cn-checkbox-checked-color, var(--text-inverse)) !important;
+}
+
+.cn-checkbox:checked:disabled {
+    background: var(--input-bg-disabled) !important;
+    border-color: var(--border-secondary) !important;
 }
 
 /* ============================================================================
@@ -695,8 +701,8 @@ pub const CN_STYLES: &str = concat!(
 .cn-switch:hover:not(:disabled) {
     background: color-mix(in srgb, var(--text-primary) 10%, var(--border-secondary));
 }
-.cn-switch:checked { background: var(--primary); }
-.cn-switch:checked:hover:not(:disabled) { background: var(--primary-hover); }
+.cn-switch:checked { background: var(--primary) !important; }
+.cn-switch:checked:hover:not(:disabled) { background: var(--primary-hover) !important; }
 /* A disabled track takes the disabled-button palette, with a thin outline so
    it keeps a silhouette. */
 .cn-switch:disabled {
@@ -705,6 +711,8 @@ pub const CN_STYLES: &str = concat!(
     opacity: 0.5;
     cursor: not-allowed;
 }
+.cn-switch:checked:disabled { background: var(--input-bg-disabled) !important; }
+.cn-switch:checked > .cn-switch-thumb { background: var(--cn-switch-checked-thumb, var(--text-inverse)) !important; }
 .cn-switch-thumb {
     background: var(--text-inverse);
     border-radius: var(--radius-full);
@@ -734,6 +742,14 @@ pub const CN_STYLES: &str = concat!(
    and `data-size`. `.cn-toggle` and its variant and size classes are hooks for
    an app's own rules. */
 
+.cn-toggle[data-state="on"] {
+    background: var(--cn-toggle-selected-bg, color-mix(in srgb, var(--text-primary) 10%, var(--background))) !important;
+    color: var(--cn-toggle-selected-color, var(--text-primary)) !important;
+}
+.cn-toggle[data-state="on"]:hover:not(:disabled) {
+    background: var(--cn-toggle-selected-hover-bg, color-mix(in srgb, var(--text-primary) 14%, var(--background))) !important;
+}
+
 /* ============================================================================
    Radio
    ============================================================================ */
@@ -742,7 +758,9 @@ pub const CN_STYLES: &str = concat!(
    top of them: the custom properties a theme can set. */
 .cn-radio { border-color: var(--cn-radio-border, var(--border-secondary)); }
 .cn-radio:hover:not(:disabled) { border-color: var(--cn-radio-hover-border, var(--primary)); }
-.cn-radio:checked { border-color: var(--cn-radio-selected, var(--primary)); }
+.cn-radio:checked { border-color: var(--cn-radio-selected, var(--primary)) !important; }
+.cn-radio:checked:disabled { border-color: var(--border-secondary) !important; }
+.cn-radio:checked > .cn-radio-dot { background: var(--cn-radio-dot, var(--primary)) !important; }
 .cn-radio-dot { background: var(--cn-radio-dot, var(--primary)); }
 
 /* ============================================================================
@@ -767,13 +785,13 @@ pub const CN_STYLES: &str = concat!(
     color: var(--text-primary);
 }
 .cn-tabs-trigger--active {
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
     font-weight: 500;
 }
 /* The pill behind the active trigger, raised to --surface over the
    --surface-overlay tray. It slides to the next trigger on a switch. */
 .cn-tabs-indicator {
-    background: var(--cn-tabs-active-bg, var(--surface));
+    background: var(--cn-tabs-active-bg, var(--surface)) !important;
     border-radius: var(--radius-default);
     box-shadow: var(--shadow-sm);
 }
@@ -944,8 +962,12 @@ pub const CN_STYLES: &str = concat!(
    `--accent-subtle` (~10 % alpha) so the currently-chosen row is
    visibly distinct from hovered rows and from the panel itself. */
 .cn-select-item--selected {
-    background: var(--selection);
-    color: var(--accent);
+    background: var(--selection) !important;
+    color: var(--accent) !important;
+}
+.cn-select-item--selected:disabled {
+    color: var(--text-tertiary) !important;
+    background: transparent !important;
 }
 .cn-select-item:disabled {
     color: var(--text-tertiary);
@@ -1335,8 +1357,8 @@ pub const CN_STYLES: &str = concat!(
     color: var(--text-primary);
 }
 .cn-nav-link--active {
-    background: var(--surface-elevated);
-    color: var(--text-primary);
+    background: var(--surface-elevated) !important;
+    color: var(--text-primary) !important;
 }
 /* The dropdown panel (`.cn-nav-menu-content`) is itself painted at
    `--surface-elevated`, so the generic `.cn-nav-link:hover` rule
@@ -1642,8 +1664,8 @@ pub const CN_STYLES: &str = concat!(
 }
 .cn-tree-row:hover { background: var(--accent-subtle); color: var(--text-primary); }
 .cn-tree-row[data-selected], .cn-tree-row[data-selected]:hover {
-    background: color-mix(in srgb, var(--primary) 24%, transparent);
-    color: var(--text-primary);
+    background: color-mix(in srgb, var(--primary) 24%, transparent) !important;
+    color: var(--text-primary) !important;
 }
 .cn-tree-row[data-focus-visible] { outline-width: 2px; }
 .cn-tree-row[data-diff="added"] { color: var(--success); }
@@ -1655,7 +1677,7 @@ pub const CN_STYLES: &str = concat!(
 }
 .cn-tree-item[data-state="open"] > .cn-tree-row > .cn-tree-chevron { transform: rotate(90deg); }
 .cn-tree-icon { color: var(--text-tertiary); }
-.cn-tree-row[data-selected] > .cn-tree-icon { color: var(--primary); }
+.cn-tree-row[data-selected] > .cn-tree-icon { color: var(--primary) !important; }
 .cn-tree-group { overflow: hidden; }
 .cn-tree-group[data-state="closed"] { height: 0; }
 .cn-tree-guide { background: transparent; }
@@ -1822,8 +1844,8 @@ pub const CN_STYLES: &str = concat!(
 .cn-calendar-day[data-outside] { color: var(--text-tertiary); }
 .cn-calendar-day[data-today] { background: var(--accent-subtle); color: var(--accent); font-weight: 600; }
 .cn-calendar-day[data-selected], .cn-calendar-day[data-selected]:hover {
-    background: var(--primary);
-    color: var(--text-inverse);
+    background: var(--cn-calendar-selected-bg, var(--primary)) !important;
+    color: var(--cn-calendar-selected-color, var(--text-inverse)) !important;
 }
 .cn-calendar-day[data-focus-visible] { outline-width: 2px; }
 .cn-calendar-day:disabled { opacity: 0.4; cursor: default; }
@@ -1834,8 +1856,8 @@ pub const CN_STYLES: &str = concat!(
     background: var(--primary);
 }
 .cn-calendar-event--icon { width: 8px; height: 8px; border-radius: 0; background: transparent; color: var(--primary); }
-.cn-calendar-day[data-selected] .cn-calendar-event { background: var(--text-inverse); }
-.cn-calendar-day[data-selected] .cn-calendar-event--icon { background: transparent; color: var(--text-inverse); }
+.cn-calendar-day[data-selected] .cn-calendar-event { background: var(--cn-calendar-selected-color, var(--text-inverse)) !important; }
+.cn-calendar-day[data-selected] .cn-calendar-event--icon { background: transparent !important; color: var(--cn-calendar-selected-color, var(--text-inverse)) !important; }
 
 /* ============================================================================
    Resizable
@@ -1960,8 +1982,12 @@ pub const CN_STYLES: &str = concat!(
     background: var(--accent-subtle);
 }
 .cn-combobox-item--selected {
-    background: var(--selection);
-    color: var(--accent);
+    background: var(--selection) !important;
+    color: var(--accent) !important;
+}
+.cn-combobox-item--selected:disabled {
+    color: var(--text-tertiary) !important;
+    background: transparent !important;
 }
 .cn-combobox-item:disabled {
     color: var(--text-tertiary);
@@ -2005,7 +2031,7 @@ pub const CN_STYLES: &str = concat!(
 }
 .cn-table-row[data-state="selected"],
 .cn-table-row[data-state="selected"]:hover {
-    background: var(--cn-table-row-selected, var(--selection));
+    background: var(--cn-table-row-selected, var(--selection)) !important;
 }
 
 .cn-table-head {
@@ -2112,7 +2138,7 @@ pub const CN_STYLES: &str = concat!(
 .cn-time-picker-wheel-period { gap: 2px; padding: 2px; border-radius: var(--radius-sm); background: var(--surface-overlay); }
 .cn-time-picker-wheel-period-option { width: 36px; height: 24px; border-radius: var(--radius-sm); font-size: 12px; color: var(--text-secondary); cursor: pointer; }
 .cn-time-picker-wheel-period-option:hover { color: var(--text-primary); }
-.cn-time-picker-wheel-period-option[data-selected] { color: var(--text-primary); background: var(--surface-elevated); box-shadow: var(--shadow-sm); }
+.cn-time-picker-wheel-period-option[data-selected] { color: var(--text-primary) !important; background: var(--surface-elevated) !important; box-shadow: var(--shadow-sm); }
 .cn-time-picker-wheel-period-option:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .cn-time-picker-wheel-footer { gap: 8px; }
 

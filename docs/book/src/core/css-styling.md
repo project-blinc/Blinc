@@ -1408,7 +1408,49 @@ Rules inside `@layer components { ... }` are a component's own defaults. They si
 .card { border-radius: 0; }   /* wins */
 ```
 
-Only the block form is supported, and it is a single level: `@layer a, b;` ordering statements are skipped. Id rules inside a layer are not layered.
+Only the block form is supported, and it is a single level: `@layer a, b;` ordering statements are skipped. Normal Id rules inside a layer are not layered; their important colours retain layer precedence.
+
+### Selected component colours
+
+Selected, active and checked component colours use `!important` declarations
+to keep their contrast when an application colours ordinary items. A Calendar
+event can be red normally and use the selected day's foreground colour when
+its day is selected. Deselecting restores the application's colour.
+
+Importance is per declaration: protecting `color` leaves properties such as
+padding, corner radius and font size available to ordinary application rules.
+For `background` / `background-color`, `color` and `border-color`, an important
+component-layer declaration wins over unlayered declarations, including
+unlayered important declarations. Within that tier, specificity and source
+order decide. Importance on other properties reports an unsupported-property
+error.
+
+Theme variables provide shared selection colours:
+
+```css
+:root {
+    --cn-calendar-selected-bg: var(--success);
+    --cn-calendar-selected-color: var(--text-inverse);
+    --cn-checkbox-checked-bg: var(--success);
+    --cn-checkbox-checked-border: var(--success);
+    --cn-toggle-selected-bg: var(--accent-subtle);
+}
+```
+
+For a component variant, place its protected colours in the component layer
+after the default stylesheet:
+
+```css
+@layer components {
+    .approval:checked {
+        background: var(--success) !important;
+        border-color: var(--success) !important;
+    }
+}
+```
+
+Disabled checked controls retain their disabled palette. Colour transitions
+still interpolate to their resolved target.
 
 ### Quick Example
 

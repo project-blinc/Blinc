@@ -116,6 +116,7 @@ CARGO_BUILD_JOBS=2 cargo nextest run -p blinc_component_demos --features capture
 node --experimental-vm-modules --test web/components/tests/*.test.mjs
 node web/components/tests/artifacts.mjs target/component-site
 python3 web/components/tests/browser.py --dpr 2
+python3 web/components/tests/selection_styles_browser.py --dpr 2
 python3 web/components/tests/content_nudge_browser.py
 python3 web/components/tests/audio_waveform_browser.py
 python3 web/components/tests/charts_browser.py
@@ -140,6 +141,11 @@ without replacing its worker or canvas; Reset CSS removes the named overrides.
 Invalid edits leave the current styles intact. Theme changes keep the applied CSS.
 Draft typing leaves the current runtime alone. Parse errors stay beside the editor.
 The live viewport follows its container automatically.
+
+Selected colours are protected from ordinary app colour rules. Use the documented
+theme variables or a component-layer `!important` colour declaration to restyle
+them. The Calendar browser check covers selection, deselection, both schemes,
+token and variant overrides, and invalid-CSS rollback without replacing the worker.
 
 Installation lives at `/components/installation/` and never redirects to mdBook.
 Component and installation source blocks use the bundled highlight.js module.

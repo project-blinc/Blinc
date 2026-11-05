@@ -897,7 +897,7 @@
         ".cn-checkbox"
       ],
       "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
-      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "tokens": "--cn-checkbox-checked-bg, --cn-checkbox-checked-border, --cn-checkbox-checked-color, --primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Make a choice that can be checked, cleared and bound to application data. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "checkbox.css",
       "recording": {
@@ -1035,7 +1035,7 @@
         ".cn-switch-label"
       ],
       "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
-      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "tokens": "--cn-switch-checked-thumb, --primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Turn a setting on or off with clear, theme-aware feedback. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "switch.css",
       "recording": {
@@ -1096,7 +1096,7 @@
         ".cn-toggle"
       ],
       "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
-      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "tokens": "--cn-toggle-selected-bg, --cn-toggle-selected-hover-bg, --cn-toggle-selected-color, --primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Keep an independent action selected or unselected. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "toggle.css",
       "recording": {
@@ -1518,7 +1518,7 @@
         ".cn-calendar-event--icon"
       ],
       "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
-      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "tokens": "--cn-calendar-selected-bg, --cn-calendar-selected-color, --primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Browse months, select a date and mark events in an inline calendar. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "calendar.css",
       "recording": {

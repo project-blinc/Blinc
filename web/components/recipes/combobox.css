@@ -12,9 +12,11 @@
   padding: 10px 12px;
 }
 
-.cn-combobox-item--selected {
-  color: var(--primary);
-  background: var(--surface-overlay);
+@layer components {
+  .cn-combobox-item--selected {
+    color: var(--primary) !important;
+    background: var(--surface-overlay) !important;
+  }
 }
 
 .cn-combobox-empty {

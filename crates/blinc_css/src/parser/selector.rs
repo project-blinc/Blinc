@@ -260,6 +260,28 @@ pub struct ComplexSelector {
 }
 
 impl ComplexSelector {
+    /// Selector specificity used to order declarations.
+    pub fn specificity(&self) -> (u32, u32, u32) {
+        let (mut ids, mut classes, mut types) = (0u32, 0u32, 0u32);
+        for (compound, _) in &self.segments {
+            for part in &compound.parts {
+                match part {
+                    SelectorPart::Id(_) => ids += 1,
+                    SelectorPart::Class(_)
+                    | SelectorPart::State(_)
+                    | SelectorPart::PseudoClass(_)
+                    | SelectorPart::Not(_)
+                    | SelectorPart::Is(_)
+                    | SelectorPart::Attribute { .. }
+                    | SelectorPart::Has(_) => classes += 1,
+                    SelectorPart::Type(_) => types += 1,
+                    SelectorPart::Universal | SelectorPart::PseudoElement(_) => {}
+                }
+            }
+        }
+        (ids, classes, types)
+    }
+
     /// Get the rightmost (target) compound selector
     pub fn target(&self) -> Option<&CompoundSelector> {
         self.segments.last().map(|(compound, _)| compound)

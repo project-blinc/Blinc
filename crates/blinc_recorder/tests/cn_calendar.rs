@@ -16,6 +16,9 @@ const RIGHT: u32 = 39;
 const PAGE_DOWN: u32 = 34;
 const ENTER: u32 = 13;
 
+#[path = "cn_calendar/selected.rs"]
+mod selected;
+
 fn session() -> Option<Headless> {
     session_sized(W, H)
 }

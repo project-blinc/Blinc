@@ -96,7 +96,11 @@ impl Stylesheet {
                 let mut stylesheet = Stylesheet::new();
                 stylesheet.variables = parsed.variables;
                 for (id, style) in parsed.rules {
-                    stylesheet.styles.insert(id, style);
+                    let merged = stylesheet
+                        .styles
+                        .get(&id)
+                        .map_or_else(|| style.clone(), |earlier| earlier.merge(&style));
+                    stylesheet.styles.insert(id, merged);
                 }
                 stylesheet.complex_rules = parsed.complex_rules;
                 stylesheet.index_class_styles();
@@ -171,7 +175,11 @@ impl Stylesheet {
                 let mut stylesheet = Stylesheet::new();
                 stylesheet.variables = parsed.variables;
                 for (id, style) in parsed.rules {
-                    stylesheet.styles.insert(id, style);
+                    let merged = stylesheet
+                        .styles
+                        .get(&id)
+                        .map_or_else(|| style.clone(), |earlier| earlier.merge(&style));
+                    stylesheet.styles.insert(id, merged);
                 }
                 stylesheet.complex_rules = parsed.complex_rules;
                 stylesheet.index_class_styles();
@@ -550,7 +558,12 @@ impl Stylesheet {
                 1 => {
                     // Single .class selector
                     if let SelectorPart::Class(class_name) = &parts[0] {
-                        self.class_styles.insert(class_name.clone(), style.clone());
+                        let key = class_name.clone();
+                        let merged = self
+                            .class_styles
+                            .get(&key)
+                            .map_or_else(|| style.clone(), |earlier| earlier.merge(style));
+                        self.class_styles.insert(key, merged);
                     }
                 }
                 2 => {
@@ -560,7 +573,11 @@ impl Stylesheet {
                         (class_part, state_part)
                     {
                         let key = format!("{}:{}", class_name, state);
-                        self.class_styles.insert(key, style.clone());
+                        let merged = self
+                            .class_styles
+                            .get(&key)
+                            .map_or_else(|| style.clone(), |earlier| earlier.merge(style));
+                        self.class_styles.insert(key, merged);
                     } else if let (
                         SelectorPart::Class(class_name),
                         SelectorPart::PseudoElement(name),
@@ -568,7 +585,11 @@ impl Stylesheet {
                     {
                         // `.class::placeholder`, `.class::selection`
                         let key = format!("{}::{}", class_name, name);
-                        self.class_styles.insert(key, style.clone());
+                        let merged = self
+                            .class_styles
+                            .get(&key)
+                            .map_or_else(|| style.clone(), |earlier| earlier.merge(style));
+                        self.class_styles.insert(key, merged);
                     }
                 }
                 _ => {}
@@ -580,7 +601,24 @@ impl Stylesheet {
     ///
     /// This follows CSS cascade rules: styles from `other` override matching
     /// styles in `self`. Variables and keyframes are also merged.
-    pub fn merge(&mut self, other: Stylesheet) {
+    pub fn merge(&mut self, mut other: Stylesheet) {
+        let offset = self
+            .styles
+            .values()
+            .chain(self.class_styles.values())
+            .chain(self.complex_rules.iter().map(|(_, style)| style))
+            .filter_map(|style| style.important_colors.as_ref())
+            .map(|colors| colors.latest_order())
+            .max()
+            .map_or(0, |order| order + 1);
+        for style in other
+            .styles
+            .values_mut()
+            .chain(other.class_styles.values_mut())
+            .chain(other.complex_rules.iter_mut().map(|(_, style)| style))
+        {
+            style.offset_important_order(offset);
+        }
         for (key, style) in other.styles {
             let merged = match self.styles.get(&key) {
                 Some(existing) => existing.merge(&style),
@@ -616,11 +654,14 @@ impl Stylesheet {
     /// application's rules whatever their specificity. Id rules are left as
     /// they are: they apply after all class rules.
     pub fn into_component(mut self) -> Self {
+        for style in self.styles.values_mut() {
+            style.mark_important_component();
+        }
         for style in self.class_styles.values_mut() {
-            style.component = true;
+            style.mark_component();
         }
         for (_, style) in self.complex_rules.iter_mut() {
-            style.component = true;
+            style.mark_component();
         }
         self
     }

@@ -15,7 +15,7 @@ fn session() -> Option<Headless> {
     }
     let mut ui = Headless::new(400, 120).ok()?;
     let css = format!(
-        "{}\n.cn-tabs-indicator {{ background: #ff0000; box-shadow: none; }}",
+        "{}\n:root {{ --cn-tabs-active-bg: #ff0000; }} .cn-tabs-indicator {{ box-shadow: none; }}",
         blinc_cn::cn_styles::CN_STYLES
     );
     ui.theme(HybridTheme::bundle().with_css(&css), ColorScheme::Dark);

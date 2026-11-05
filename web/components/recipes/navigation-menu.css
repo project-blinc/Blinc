@@ -2,9 +2,11 @@
   padding: 10px 16px;
 }
 
-.cn-nav-link--active {
-  color: var(--primary);
-  background: var(--surface-overlay);
+@layer components {
+  .cn-nav-link--active {
+    color: var(--primary) !important;
+    background: var(--surface-overlay) !important;
+  }
 }
 
 .cn-nav-menu-content {

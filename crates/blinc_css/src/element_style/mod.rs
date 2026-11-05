@@ -39,6 +39,7 @@
 mod builder;
 pub mod dynamic;
 pub mod filter;
+mod importance;
 pub mod keywords;
 mod macros;
 pub mod schema;
@@ -47,5 +48,6 @@ mod tests;
 
 pub use dynamic::*;
 pub use filter::*;
+pub use importance::ImportantColors;
 pub use keywords::*;
 pub use schema::*;

@@ -6,7 +6,9 @@
 //! `CN_STYLES`. Restyle it with rules of your own:
 //!
 //! ```css
-//! .my-checkbox:checked { background: #16a34a; border-color: #16a34a; }
+//! @layer components {
+//!     .my-checkbox:checked { background: #16a34a !important; border-color: #16a34a !important; }
+//! }
 //! ```
 //!
 //! # Example

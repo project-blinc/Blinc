@@ -338,6 +338,9 @@ pub struct RenderProps {
     pub z_index: i32,
     /// Which writers have claimed each visual property. Recorded, not yet consulted.
     pub tiers: crate::style_tier::PropTiers,
+    /// Winning explicit CSS colour declarations, retained across rule passes.
+    #[doc(hidden)]
+    pub important_colors: Option<Arc<blinc_css::element_style::ImportantColors>>,
     /// Text foreground color override (when set, overrides TextData.color during rendering)
     pub text_color: Option<[f32; 4]>,
     /// Font family override from a stylesheet
@@ -511,6 +514,7 @@ impl Default for RenderProps {
             motion_is_exiting: false,
             z_index: 0,
             tiers: Default::default(),
+            important_colors: None,
             text_color: None,
             font_family: None,
             font_size: None,

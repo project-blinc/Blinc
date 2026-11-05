@@ -1387,7 +1387,25 @@ impl RenderTree {
             props.border_width = bw;
         }
         if let Some([r, g, b, a]) = anim_props.border_color {
-            props.border_color = Some(blinc_core::Color::rgba(r, g, b, a));
+            let color = blinc_core::Color::rgba(r, g, b, a);
+            props.border_color = Some(color);
+            if props
+                .important_colors
+                .as_ref()
+                .is_some_and(|colors| colors.border_color().is_some())
+            {
+                for side in [
+                    &mut props.border_sides.top,
+                    &mut props.border_sides.right,
+                    &mut props.border_sides.bottom,
+                    &mut props.border_sides.left,
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    side.color = color;
+                }
+            }
         }
 
         // Outline

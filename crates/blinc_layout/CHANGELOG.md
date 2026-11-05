@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Explicit CSS colour importance survives base, state and dynamic-selector passes while border transitions keep their interpolated colours.
 - Audio waveforms read live playback progress instead of a fixed ratio, follow pause/seek, and request animation frames only during playback.
 - Virtual List updates its mounted window as it scrolls, measures variable row heights and preserves its offset through fresh builds and CSS changes. A bounded window renders both ends of large datasets.
 - Textareas retain their revision source with their shared document, so typing repaints after a fresh tree build.
@@ -14,6 +15,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Overlay focus returns to stable trigger identities on dismissal, and nested scopes constrain Tab to the topmost active popup. Pointer focus persists without a keyboard ring. Menu roles support roving focus, submenu keys and keyboard context-menu activation.
 
 ### Added
+- `RenderProps` carries optional `important_colors` metadata. Initialize it to `None` in exhaustive literals or use `..Default::default()`.
 - CSS `:focus-visible` distinguishes keyboard focus from pointer focus.
 
 ## [0.6.0] - 2026-11-04

@@ -3,10 +3,12 @@
   border: 1px solid var(--border);
 }
 
-.cn-toggle:checked {
-  color: var(--primary);
-  background: var(--surface-elevated);
-  border-color: var(--primary);
+@layer components {
+  .cn-toggle[data-state="on"] {
+    color: var(--primary) !important;
+    background: var(--surface-elevated) !important;
+    border-color: var(--primary);
+  }
 }
 
 .cn-toggle:focus-visible {

@@ -10,7 +10,9 @@
   height: 36px;
 }
 
-.cn-toggle:checked {
-  background: var(--surface-overlay);
-  color: var(--primary);
+@layer components {
+  .cn-toggle[data-state="on"] {
+    background: var(--surface-overlay) !important;
+    color: var(--primary) !important;
+  }
 }

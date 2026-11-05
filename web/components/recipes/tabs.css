@@ -9,12 +9,14 @@
   padding: 10px 18px;
 }
 
-.cn-tabs-trigger--active {
-  color: var(--primary);
-}
+@layer components {
+  .cn-tabs-trigger--active {
+    color: var(--primary) !important;
+  }
 
-.cn-tabs-indicator {
-  background: var(--surface-overlay);
+  .cn-tabs-indicator {
+    background: var(--surface-overlay) !important;
+  }
 }
 
 .cn-tabs-panel {

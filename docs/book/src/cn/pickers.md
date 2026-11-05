@@ -10,6 +10,12 @@ existing fields; `on_change` runs only for changed user edits. Install
 that calendar in a popover and shows its selected date in a compact trigger.
 It uses the same `CalendarDay` and `Signal<Option<CalendarDay>>` model.
 
+Calendar selection uses `--cn-calendar-selected-bg` (default `--primary`) and
+`--cn-calendar-selected-color` (default `--text-inverse`). Event dots and icons
+use the selected foreground colour while their day is selected, then return to
+application colours. These colours follow the
+[protected selection rules](../core/css-styling.md#selected-component-colours).
+
 ```rust
 use blinc::cn::prelude::*;
 use blinc::core::reactive::signal;

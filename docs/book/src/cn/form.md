@@ -181,7 +181,12 @@ disabled palette and the mark's fade-in are the `.cn-checkbox` rules of
 `CN_STYLES`, with a `transition`. Restyle it with rules of your own:
 
 ```css
-.my-checkbox:checked { background: #16a34a; border-color: #16a34a; }
+@layer components {
+    .my-checkbox:checked {
+        background: #16a34a !important;
+        border-color: #16a34a !important;
+    }
+}
 .my-checkbox:hover:not(:disabled):not(:checked) { border-color: #16a34a; }
 ```
 
@@ -212,8 +217,14 @@ pressed. All of it is the `.cn-switch` rules of `CN_STYLES`, per size
 (`.cn-switch--sm`, `--md`, `--lg`):
 
 ```css
-.my-switch:checked { background: #16a34a; }
-.my-switch:checked:hover:not(:disabled) { background: #15803d; }
+@layer components {
+    .my-switch:checked {
+        background: #16a34a !important;
+    }
+    .my-switch:checked:hover:not(:disabled) {
+        background: #15803d !important;
+    }
+}
 ```
 
 ```rust
@@ -250,8 +261,14 @@ hover (which also highlights an unselected option) and the disabled fill are
 the `.cn-radio` and `.cn-radio-dot` rules of `CN_STYLES`:
 
 ```css
-.my-radio:checked { border-color: #16a34a; }
-.my-radio:checked > .cn-radio-dot { background: #16a34a; }
+@layer components {
+    .my-radio:checked {
+        border-color: #16a34a !important;
+    }
+    .my-radio:checked > .cn-radio-dot {
+        background: #16a34a !important;
+    }
+}
 ```
 
 ## Toggle
@@ -290,7 +307,12 @@ lighter wash on hover, and a slight shrink while pressed, all eased by a
 can use them the same way:
 
 ```css
-.my-toggle[data-state="on"] { background: #16a34a; color: white; }
+@layer components {
+    .my-toggle[data-state="on"] {
+        background: #16a34a !important;
+        color: white !important;
+    }
+}
 .my-toggle[data-size="lg"] { min-width: 48px; }
 ```
 

@@ -43,3 +43,13 @@ fn none_removes_a_side() {
     assert!(s.left.is_none());
     assert!(s.right.is_some());
 }
+
+#[test]
+fn important_uniform_colour_protects_sides_without_changing_their_widths() {
+    let s = sides(
+        "@layer components { .x { border: 1px solid red; border-color: red !important; } } .x { border-top: 3px solid blue; }",
+    );
+    assert_eq!(s.top.unwrap().width, 3.0);
+    assert_eq!(s.top.unwrap().color, Color::from_hex(0xff0000));
+    assert_eq!(s.bottom.unwrap().width, 1.0);
+}

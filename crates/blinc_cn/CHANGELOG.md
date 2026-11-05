@@ -8,6 +8,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - Typography has a dedicated guide covering all helpers, reactive content, inline composition and CSS class hooks; the gallery embeds that guide.
 
 ### Fixed
+- Selected, active and checked colours preserve contrast over application colour rules and restore app colours when deselected. Checked disabled controls retain the disabled palette; component-layer variants and theme variables can restyle selection.
 - Accordion renders caller-supplied content directly. Body wrappers and spacing belong to the caller; the animated content container stays unpadded and folds to zero height.
 - Sheet and Drawer close controls use the standard icon button with a centered SVG and invoke the dismissal callback once.
 - Aspect Ratio preserves its native ratio and accepts CSS overrides.

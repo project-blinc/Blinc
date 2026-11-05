@@ -173,7 +173,12 @@ pub(crate) fn css_rule(input: &str) -> ParseResult<(String, ElementStyle)> {
 
     let mut style = ElementStyle::new();
     for (name, value) in properties {
+        let (value, important) = property_importance(value);
         apply_property(&mut style, name, value);
+        if important {
+            style.protect_color(name);
+        }
+        style.restore_important_colors();
     }
 
     // Use the selector key (id or id:state)
@@ -357,8 +362,14 @@ fn parse_stylesheet_resolved<'a>(
         if trimmed.starts_with("@layer") {
             if let Some((inner, rest)) = layer_block(trimmed) {
                 if let Ok((_, mut layered)) = parse_stylesheet_resolved(inner, errors, variables) {
-                    for (_, style) in layered.complex_rules.iter_mut() {
-                        style.component = true;
+                    let offset = rules.len() + complex_rules.len();
+                    for (_, style) in &mut layered.complex_rules {
+                        style.mark_component();
+                        style.offset_important_order(offset);
+                    }
+                    for (_, style) in &mut layered.rules {
+                        style.mark_important_component();
+                        style.offset_important_order(offset);
                     }
                     rules.extend(layered.rules);
                     complex_rules.extend(layered.complex_rules);
@@ -391,8 +402,12 @@ fn parse_stylesheet_resolved<'a>(
             Ok((rest, parsed_rules)) => {
                 for rule in parsed_rules {
                     match rule {
-                        ParsedRule::Simple(key, style) => rules.push((key, style)),
-                        ParsedRule::Complex(selector, style) => {
+                        ParsedRule::Simple(key, mut style) => {
+                            style.important_order(rules.len() + complex_rules.len());
+                            rules.push((key, style));
+                        }
+                        ParsedRule::Complex(selector, mut style) => {
+                            style.important_order(rules.len() + complex_rules.len());
                             complex_rules.push((selector, style))
                         }
                     }
@@ -574,20 +589,38 @@ where
 
         let mut style = ElementStyle::new();
         for (name, value) in properties {
+            let (value, important) = property_importance(value);
+            if important
+                && !matches!(
+                    name,
+                    "background" | "background-color" | "color" | "border-color"
+                )
+            {
+                let (line, column, _) = calculate_position(original_css, input);
+                errors.push(ParseError::new(Severity::Error,
+                    format!("!important is supported on background, color and border-color; not `{name}`"), line, column));
+                continue;
+            }
             let resolved_value = resolve_var_references(value, variables);
-            apply_property_with_errors(
-                &mut style,
-                name,
-                &resolved_value,
-                original_css,
-                input,
-                errors,
-            );
+            let mut declaration = ElementStyle::new();
+            let target = if important {
+                &mut declaration
+            } else {
+                &mut style
+            };
+            apply_property_with_errors(target, name, &resolved_value, original_css, input, errors);
+            if important {
+                declaration.protect_color(name);
+                style = style.merge(&declaration);
+            }
+            style.restore_important_colors();
         }
 
         // Create a rule for each selector in the comma-separated list
         let mut rules = Vec::with_capacity(selectors.len());
         for selector in selectors {
+            let mut style = style.clone();
+            style.important_selector(selector.specificity());
             let rule = if selector.is_simple() {
                 let compound = &selector.segments[0].0;
                 if let Some(simple_key) = try_as_simple_selector(compound) {
@@ -608,6 +641,15 @@ where
         }
 
         Ok((input, rules))
+    }
+}
+
+fn property_importance(value: &str) -> (&str, bool) {
+    match value.rsplit_once('!') {
+        Some((value, annotation)) if annotation.trim().eq_ignore_ascii_case("important") => {
+            (value.trim_end(), true)
+        }
+        _ => (value, false),
     }
 }
 

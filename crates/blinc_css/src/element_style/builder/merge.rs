@@ -12,8 +12,12 @@ impl ElementStyle {
     /// Properties from `other` will override properties in `self` if they are set.
     /// Unset properties in `other` will not override.
     pub fn merge(&self, other: &ElementStyle) -> ElementStyle {
-        ElementStyle {
+        let mut merged = ElementStyle {
             component: self.component && other.component,
+            important_colors: ImportantColors::combine(
+                self.important_colors.as_ref(),
+                other.important_colors.as_ref(),
+            ),
             // Visual
             background: other.background.clone().or_else(|| self.background.clone()),
             corner_radius: other.corner_radius.or(self.corner_radius),
@@ -195,7 +199,9 @@ impl ElementStyle {
                     Some(merged)
                 }
             },
-        }
+        };
+        merged.restore_important_colors();
+        merged
     }
 
     /// Check if any visual property is set
