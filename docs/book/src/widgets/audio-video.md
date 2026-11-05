@@ -77,6 +77,10 @@ audio_player(Rc::clone(&player))
     .into_div()
 ```
 
+The waveform follows the player's position and duration: its played region
+advances during playback, holds when paused, and follows seeks. The waveform
+asks for animation frames only while its player is playing.
+
 ## Video Widget
 
 ```rust

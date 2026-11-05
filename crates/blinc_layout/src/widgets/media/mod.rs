@@ -106,6 +106,7 @@ impl AudioPlayerWidget {
         if let Some(ref buckets) = self.samples {
             container = container.child(
                 waveform(Arc::clone(buckets))
+                    .playback(self.player.clone())
                     .w_full()
                     .h(60.0)
                     .class("blinc-audio-waveform")

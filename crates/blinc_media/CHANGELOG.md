@@ -29,6 +29,7 @@ All notable changes to `blinc_media` will be documented in this file.
 - `SdfVertexInstance` struct for vertex-buffer-based SDF vertex data (VERTEX_STORAGE fallback)
 
 ### Fixed
+- Native audio retains decoded source duration so waveform progress can use the actual track length.
 - Wasm video: `duration_signal` now propagated from tick callback (was always 0:00)
 - Wasm video: `playing_signal.set(false)` on video end (button no longer stuck on pause)
 - Wasm video: `load_bytes` no longer prematurely sets playing state before user interaction

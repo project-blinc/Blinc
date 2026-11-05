@@ -68,6 +68,7 @@ struct AudioPlayerInner {
     play_start: Option<std::time::Instant>,
     /// Position offset (from seek or pause)
     position_offset_ms: u64,
+    duration_ms: u64,
     /// rodio 0.22 Player (renamed from Sink in 0.19); appended sources
     /// play sequentially, volume + transport ops route through here.
     #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
@@ -93,6 +94,7 @@ impl AudioPlayer {
                     looping: false,
                     play_start: None,
                     position_offset_ms: 0,
+                    duration_ms: 0,
                 })),
             }
         }
@@ -109,6 +111,7 @@ impl AudioPlayer {
                         looping: false,
                         play_start: None,
                         position_offset_ms: 0,
+                        duration_ms: 0,
                         sink: None,
                         _stream: stream,
                     })),
@@ -124,6 +127,7 @@ impl AudioPlayer {
                         looping: false,
                         play_start: None,
                         position_offset_ms: 0,
+                        duration_ms: 0,
                     })),
                 }
             }
@@ -159,35 +163,31 @@ impl AudioPlayer {
 
             #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
             {
-                if let Some(ref stream) = inner._stream {
-                    let sink = rodio::Player::connect_new(stream.mixer());
-                    match &source {
-                        AudioSource::File(path) => {
-                            if let Ok(file) = std::fs::File::open(path) {
-                                let reader = std::io::BufReader::new(file);
-                                if let Ok(decoder) = rodio::Decoder::new(reader) {
-                                    sink.append(decoder);
-                                }
-                            }
-                        }
-                        AudioSource::Bytes(data) => {
-                            let cursor = std::io::Cursor::new(data.as_ref().clone());
-                            if let Ok(decoder) = rodio::Decoder::new(cursor) {
-                                sink.append(decoder);
-                            }
-                        }
-                        AudioSource::Asset(path) => {
-                            // Try loading via platform asset loader
-                            if let Ok(data) = blinc_platform::assets::load_asset(path) {
-                                let cursor = std::io::Cursor::new(data);
-                                if let Ok(decoder) = rodio::Decoder::new(cursor) {
-                                    sink.append(decoder);
-                                }
+                inner.duration_ms = 0;
+                match &source {
+                    AudioSource::File(path) => {
+                        if let Ok(file) = std::fs::File::open(path) {
+                            let reader = std::io::BufReader::new(file);
+                            if let Ok(decoder) = rodio::Decoder::new(reader) {
+                                inner.set_source(decoder);
                             }
                         }
                     }
-                    sink.set_volume(inner.volume);
-                    inner.sink = Some(sink);
+                    AudioSource::Bytes(data) => {
+                        let cursor = std::io::Cursor::new(data.as_ref().clone());
+                        if let Ok(decoder) = rodio::Decoder::new(cursor) {
+                            inner.set_source(decoder);
+                        }
+                    }
+                    AudioSource::Asset(path) => {
+                        // Try loading via platform asset loader
+                        if let Ok(data) = blinc_platform::assets::load_asset(path) {
+                            let cursor = std::io::Cursor::new(data);
+                            if let Ok(decoder) = rodio::Decoder::new(cursor) {
+                                inner.set_source(decoder);
+                            }
+                        }
+                    }
                 }
             }
 
@@ -209,6 +209,7 @@ impl AudioPlayer {
             }
 
             inner.state = PlaybackState::Playing;
+            inner.position_offset_ms = 0;
             inner.play_start = Some(std::time::Instant::now());
         }
     }
@@ -421,6 +422,22 @@ impl Default for AudioPlayer {
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+impl AudioPlayerInner {
+    fn set_source<S: rodio::Source + Send + 'static>(&mut self, source: S) {
+        self.duration_ms = source
+            .total_duration()
+            .map(|duration| duration.as_millis() as u64)
+            .unwrap_or(0);
+        if let Some(stream) = &self._stream {
+            let sink = rodio::Player::connect_new(stream.mixer());
+            sink.append(source);
+            sink.set_volume(self.volume);
+            self.sink = Some(sink);
+        }
+    }
+}
+
 impl crate::player::Player for AudioPlayer {
     fn play(&self) {
         self.resume();
@@ -444,7 +461,7 @@ impl crate::player::Player for AudioPlayer {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            0
+            self.inner.borrow().duration_ms
         }
     }
     fn volume(&self) -> f32 {
@@ -457,3 +474,10 @@ impl crate::player::Player for AudioPlayer {
         AudioPlayer::is_playing(self)
     }
 }
+
+#[cfg(all(
+    test,
+    not(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))
+))]
+#[path = "audio/tests.rs"]
+mod tests;

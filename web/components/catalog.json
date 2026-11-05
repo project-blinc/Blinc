@@ -4424,7 +4424,9 @@
       "implementation": [
         "examples/blinc_component_demos/src/gallery/media.rs",
         "crates/blinc_layout/src/widgets/media/mod.rs",
-        "crates/blinc_layout/src/widgets/media/controls.rs"
+        "crates/blinc_layout/src/widgets/media/controls.rs",
+        "crates/blinc_layout/src/widgets/media/waveform.rs",
+        "crates/blinc_media/src/audio.rs"
       ],
       "viewport": {
         "width": 560,
@@ -4454,7 +4456,7 @@
         ".blinc-audio-player",
         ".blinc-media-controls"
       ],
-      "keyboard": "Native transport controls support pointer interaction. Playback is not available in the worker gallery.",
+      "keyboard": "Press Play to start playback. Seek, pause and resume using the transport controls; the waveform follows the playback position.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Live playback uses browser media decoding with the same Blinc controls as the native preview. Playback starts when you press Play.",
       "recipe": "audio-player.css",

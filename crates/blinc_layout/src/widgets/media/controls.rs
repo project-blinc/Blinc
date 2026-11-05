@@ -52,7 +52,7 @@ impl MediaControls {
                     .child(svg(play_icon).square(14.0))
                     .on_click(move |_| {
                         tracing::info!("play/pause clicked, is_playing={}", is_playing);
-                        if is_playing {
+                        if player_for_click.is_playing() {
                             player_for_click.pause();
                         } else {
                             player_for_click.play();

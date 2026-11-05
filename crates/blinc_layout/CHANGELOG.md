@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Audio waveforms read live playback progress instead of a fixed ratio, follow pause/seek, and request animation frames only during playback.
 - Virtual List updates its mounted window as it scrolls, measures variable row heights and preserves its offset through fresh builds and CSS changes. A bounded window renders both ends of large datasets.
 - Textareas retain their revision source with their shared document, so typing repaints after a fresh tree build.
 - Text inputs retain their revision and focus sources across fresh tree builds, so typing after a viewport resize updates the visible field as well as callbacks.

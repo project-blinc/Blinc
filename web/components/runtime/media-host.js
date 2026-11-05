@@ -10,7 +10,7 @@ export class MediaHost {
       media.muted = this.video; media.crossOrigin = 'anonymous';
       document.body.append(media);
       const canvas = document.createElement('canvas');
-      p = { media, canvas, context: canvas.getContext('2d', { willReadFrequently: true }), inFlight: false, disposed: false };
+      p = { media, canvas, context: canvas.getContext('2d', { willReadFrequently: true }), inFlight: false, disposed: false, clockFrame: null };
       this.players.set(id, p);
       const state = () => {
         let buffered = 0;
@@ -32,6 +32,17 @@ export class MediaHost {
         this.send('media-frame', { id, width, height, pixels }, [pixels]);
       };
       for (const type of ['loadedmetadata', 'durationchange', 'play', 'pause', 'ended', 'timeupdate', 'progress']) media.addEventListener(type, state);
+      if (!this.video) {
+        const stopClock = () => { if (p.clockFrame !== null) cancelAnimationFrame(p.clockFrame); p.clockFrame = null; };
+        const tick = () => {
+          p.clockFrame = null;
+          if (p.disposed || media.paused || media.ended) return;
+          state();
+          p.clockFrame = requestAnimationFrame(tick);
+        };
+        media.addEventListener('play', () => { if (p.clockFrame === null) p.clockFrame = requestAnimationFrame(tick); });
+        for (const type of ['pause', 'ended']) media.addEventListener(type, stopClock);
+      }
       for (const type of ['loadeddata', 'seeked']) media.addEventListener(type, capture);
       media.addEventListener('error', () => this.onError(media.error?.message || 'Media could not be loaded.'));
       const frame = () => {
@@ -60,6 +71,7 @@ export class MediaHost {
   stop() {
     for (const p of this.players.values()) {
       p.disposed = true; p.media.pause(); p.media.cancelVideoFrameCallback(p.frame);
+      if (p.clockFrame !== null) cancelAnimationFrame(p.clockFrame);
       p.media.removeAttribute('src'); p.media.load(); p.media.remove();
       if (p.url) URL.revokeObjectURL(p.url);
     }

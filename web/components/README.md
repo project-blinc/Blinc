@@ -117,6 +117,7 @@ node --experimental-vm-modules --test web/components/tests/*.test.mjs
 node web/components/tests/artifacts.mjs target/component-site
 python3 web/components/tests/browser.py --dpr 2
 python3 web/components/tests/content_nudge_browser.py
+python3 web/components/tests/audio_waveform_browser.py
 python3 web/components/tests/charts_browser.py
 python3 web/components/tests/gallery_browser.py
 ```
