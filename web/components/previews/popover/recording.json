@@ -6,7 +6,7 @@
   },
   "cursor": "interaction-specific pointer movement and deliberate actions",
   "delay_ms": 60,
-  "fixture_sha256": "fe75eeb8c5a2b94709c60523d5e85b14315f23d214f4134a4c95f5e11ba3e88f",
+  "fixture_sha256": "b2211a89254bb195116b22515fc4a41a645ce79ea9cd66501a46fad6260c4666",
   "frames": 48,
   "logical_height": 320,
   "logical_width": 560,

@@ -23,7 +23,8 @@ The image and media fixtures do not fetch remote assets.
 
 `handpan.mp4` is a 960 × 540 H.264 conversion of ashui's
 `tools/demo/assets/MediaPlayback.mp4`, its original outdoor handpan session.
-The conversion omits audio; the video preview is silent.
+The H.264 video retains the session's original stereo AAC soundtrack. Live
+playback starts with sound after pressing Play; the player controls its volume.
 
 `night-drive.flac` is the first 20 seconds of ashui's original **Night Drive**
 by Ash Drive, converted from `apps/dashboard/audio/night-drive.m4a` to mono

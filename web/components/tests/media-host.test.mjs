@@ -7,7 +7,7 @@ async function setup(video = false) {
   const frames = new Map(), messages = [];
   let id = 0;
   const media = {
-    paused: true, ended: false, currentTime: 0, duration: 20, videoWidth: 0,
+    paused: true, ended: false, muted: false, volume: 1, currentTime: 0, duration: 20, videoWidth: 0,
     buffered: { length: 0 }, events: {},
     addEventListener(name, fn) { (this.events[name] ||= []).push(fn); },
     emit(name) { for (const fn of this.events[name] || []) fn(); },
@@ -50,5 +50,22 @@ test('video retains its decoded-frame clock without a second animation loop', as
   const { host, frames } = await setup(true);
   host.request({ id: 1, operation: 'play' });
   assert.equal(frames.size, 0);
+  host.stop();
+});
+
+test('video starts paused and audible, with volume controlled by the player', async () => {
+  const { host, media } = await setup(true);
+  assert.equal(media.paused, true);
+  assert.equal(media.muted, false);
+  assert.equal(media.volume, 1);
+  host.request({ id: 1, operation: 'play' });
+  assert.equal(media.paused, false);
+  for (const volume of [0.35, 0, 1]) {
+    host.request({ id: 1, operation: 'volume', value: volume });
+    assert.equal(media.volume, volume);
+    assert.equal(media.muted, false, 'the host must not override the player volume');
+  }
+  host.pause();
+  assert.equal(media.paused, true);
   host.stop();
 });

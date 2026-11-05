@@ -126,6 +126,7 @@ python3 web/components/tests/selection_styles_browser.py --dpr 2
 python3 web/components/tests/component_styles_browser.py
 python3 web/components/tests/content_nudge_browser.py
 python3 web/components/tests/audio_waveform_browser.py
+python3 web/components/tests/video_audio_browser.py --dpr 2
 python3 web/components/tests/charts_browser.py
 python3 web/components/tests/gallery_browser.py
 ```

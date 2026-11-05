@@ -7,7 +7,7 @@ export class MediaHost {
       if (p) return;
       const media = document.createElement('video');
       media.playsInline = true; media.preload = 'metadata'; media.hidden = true;
-      media.muted = this.video; media.crossOrigin = 'anonymous';
+      media.crossOrigin = 'anonymous';
       document.body.append(media);
       const canvas = document.createElement('canvas');
       p = { media, canvas, context: canvas.getContext('2d', { willReadFrequently: true }), inFlight: false, disposed: false, clockFrame: null };
