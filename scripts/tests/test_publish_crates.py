@@ -29,6 +29,14 @@ def metadata(*packages):
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_facade_follows_all_its_dependencies_in_the_release(self):
+        source = metadata(package("blinc", ["blinc_app", "blinc_cn", "blinc_svg", "blinc_icons"]),
+                          package("blinc_app"), package("blinc_cn"), package("blinc_svg"), package("blinc_icons"))
+        selected = [p["name"] for p in source["packages"]]
+        plan = publisher.release_plan(source, selected)
+        self.assertEqual(plan[-1]["name"], "blinc")
+        self.assertIn("blinc", publisher.RELEASE_CRATES)
+
     def test_css_precedes_layout_even_if_selection_is_reversed(self):
         source = metadata(package("layout", ["css"]), package("css"))
         plan = publisher.release_plan(source, ["layout", "css"])

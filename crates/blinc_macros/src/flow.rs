@@ -53,6 +53,7 @@ fn compile(source: &str) -> Result<FlowShader, String> {
 
 /// The shader as a constant expression, so it works in a `const` and builds nothing at run time.
 fn emit(shader: &FlowShader) -> TokenStream {
+    let core = crate::paths::resolve("blinc_core", "core");
     let name = &*shader.name;
     let wgsl = &*shader.wgsl;
     let target = match shader.target {
@@ -67,7 +68,7 @@ fn emit(shader: &FlowShader) -> TokenStream {
     let buffers = shader.buffers.iter().map(|b| {
         let (name, size, rw) = (&*b.name, b.element_size, b.read_write);
         quote! {
-            ::blinc_core::FlowBuffer {
+            #core::FlowBuffer {
                 name: ::std::borrow::Cow::Borrowed(#name),
                 element_size: #size,
                 read_write: #rw,
@@ -75,9 +76,9 @@ fn emit(shader: &FlowShader) -> TokenStream {
         }
     });
     quote! {
-        ::blinc_core::FlowShader {
+        #core::FlowShader {
             name: ::std::borrow::Cow::Borrowed(#name),
-            target: ::blinc_core::FlowTarget::#target,
+            target: #core::FlowTarget::#target,
             wgsl: ::std::borrow::Cow::Borrowed(#wgsl),
             needs_scene: #needs_scene,
             animated: #animated,

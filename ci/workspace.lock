@@ -687,6 +687,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "blinc"
+version = "0.6.0"
+dependencies = [
+ "blinc_animation",
+ "blinc_app",
+ "blinc_cn",
+ "blinc_core",
+ "blinc_css",
+ "blinc_flow",
+ "blinc_gpu",
+ "blinc_icons",
+ "blinc_image",
+ "blinc_layout",
+ "blinc_macros",
+ "blinc_media",
+ "blinc_paint",
+ "blinc_platform",
+ "blinc_router",
+ "blinc_svg",
+ "blinc_text",
+ "blinc_theme",
+]
+
+[[package]]
 name = "blinc-build-web-examples"
 version = "0.6.0"
 dependencies = [
@@ -1088,6 +1112,7 @@ dependencies = [
  "blinc_core",
  "blinc_flow",
  "naga",
+ "proc-macro-crate 3.5.0",
  "proc-macro2",
  "quote",
  "syn 2.0.119",

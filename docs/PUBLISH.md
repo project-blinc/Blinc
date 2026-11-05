@@ -36,6 +36,7 @@ Level 5:
 └── blinc_app         → (many deps including platform extensions)
 
 Level 6 (top-level):
+├── blinc             → facade over the public crates (publish after blinc_app)
 ├── blinc_debugger    → blinc_app, blinc_layout, blinc_theme, blinc_cn, blinc_icons, blinc_recorder
 ├── blinc_cli         → blinc_core, blinc_animation
 ├── blinc_runtime     → optional deps
@@ -56,6 +57,7 @@ These crates form the public Blinc API:
 | `blinc_theme` | Theming system | High |
 | `blinc_macros` | Procedural macros | High |
 | `blinc_app` | Application framework | High |
+| `blinc` | Unified facade, with optional components, SVG and icons | High |
 | `blinc_gpu` | GPU renderer (wgpu) - for custom renderers | High |
 | `blinc_paint` | Paint primitives and operations | High |
 | `blinc_cn` | Component library (buttons, inputs, etc.) | Medium |
@@ -122,6 +124,9 @@ cargo publish -p blinc_platform_ios
 
 # Phase 6: Application framework
 cargo publish -p blinc_app
+
+# Unified facade (after all its dependencies, including blinc_macros)
+cargo publish -p blinc
 
 # Phase 7: CLI (binary)
 cargo publish -p blinc_cli

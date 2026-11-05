@@ -4,6 +4,8 @@ use syn::ext::IdentExt;
 use super::has_animation_attr;
 
 pub(super) fn expand(field: &syn::Field) -> proc_macro2::TokenStream {
+    let animation = crate::paths::resolve("blinc_animation", "animation");
+    let core = crate::paths::resolve("blinc_core", "core");
     let name = field.ident.as_ref().unwrap();
     let key = name.unraw().to_string();
     let single = format_ident!("use_{}", key);
@@ -12,17 +14,17 @@ pub(super) fn expand(field: &syn::Field) -> proc_macro2::TokenStream {
     let ty = &field.ty;
     let (context, arguments, output, bounds, get) = if has_animation_attr(field) {
         (
-            quote!(::blinc_animation::AnimationContext),
-            quote!(initial: f32, config: ::blinc_animation::SpringConfig),
-            quote!(::blinc_animation::SharedAnimatedValue),
+            quote!(#animation::AnimationContext),
+            quote!(initial: f32, config: #animation::SpringConfig),
+            quote!(#animation::SharedAnimatedValue),
             quote!(),
             quote!(ctx.use_animated_value_for(key, initial, config)),
         )
     } else {
         (
-            quote!(::blinc_core::BlincContext),
+            quote!(#core::BlincContext),
             quote!(initial: #ty),
-            quote!(::blinc_core::Signal<#ty>),
+            quote!(#core::Signal<#ty>),
             quote!(where #ty: ::core::clone::Clone + ::core::marker::Send + 'static),
             quote!(ctx.use_signal_keyed(&key, || initial)),
         )

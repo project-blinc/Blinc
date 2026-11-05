@@ -78,6 +78,14 @@ jobs:
       - name: Run cargo check
         run: cargo check --workspace --all-features --all-targets
 
+      - name: Check facade-only consumer
+        env:
+          CARGO_BUILD_JOBS: 2
+          CARGO_TARGET_DIR: target
+        run: |
+          cargo check -p blinc --no-default-features
+          cargo test --manifest-path crates/blinc/tests/consumer/Cargo.toml --features components
+
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -350,6 +358,12 @@ jobs:
             --target wasm32-unknown-unknown \
             --features web \
             --no-default-features
+
+      - name: Cargo check (facade consumer, wasm32)
+        env:
+          CARGO_BUILD_JOBS: 2
+          CARGO_TARGET_DIR: target
+        run: cargo check --manifest-path crates/blinc/tests/consumer/Cargo.toml --target wasm32-unknown-unknown --features web,components
 
       - name: Cargo check (web examples, wasm32)
         run: |

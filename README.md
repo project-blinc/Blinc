@@ -40,6 +40,10 @@ fn main() -> Result<()> {
 
 The same `build_ui` function runs on desktop and web and no separate codebase.
 
+The [`blinc` package](crates/blinc/README.md) provides one dependency
+with `blinc::app`, `blinc::layout` and the other framework modules. Components,
+SVG APIs and icons are exposed through the `cn`, `svg` and `icons` flags.
+
 ## Running the examples
 
 A fresh clone builds every example with no extra setup — the sibling crates

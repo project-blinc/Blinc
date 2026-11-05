@@ -12,6 +12,7 @@ fn has_animation_attr(field: &syn::Field) -> bool {
 }
 
 pub(crate) fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let animation = crate::paths::resolve("blinc_animation", "animation");
     let name = &input.ident;
     let (impl_generics, type_generics, where_clause) = input.generics.split_for_impl();
     let props = props::expand(&input)?;
@@ -51,37 +52,37 @@ pub(crate) fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream
             }
 
             /// Get a persisted animated value for this component.
-            pub fn use_animated_value<__BlincContext: ::blinc_animation::AnimationContext>(
+            pub fn use_animated_value<__BlincContext: #animation::AnimationContext>(
                 ctx: &__BlincContext,
                 initial: f32,
-                config: ::blinc_animation::SpringConfig,
-            ) -> ::blinc_animation::SharedAnimatedValue {
+                config: #animation::SpringConfig,
+            ) -> #animation::SharedAnimatedValue {
                 ctx.use_animated_value_for(::core::any::type_name::<Self>(), initial, config)
             }
 
             /// Get a persisted animated value with a suffix for multiple values per component.
-            pub fn use_animated_value_with<__BlincContext: ::blinc_animation::AnimationContext>(
+            pub fn use_animated_value_with<__BlincContext: #animation::AnimationContext>(
                 ctx: &__BlincContext,
                 suffix: &str,
                 initial: f32,
-                config: ::blinc_animation::SpringConfig,
-            ) -> ::blinc_animation::SharedAnimatedValue {
+                config: #animation::SpringConfig,
+            ) -> #animation::SharedAnimatedValue {
                 let key = ::std::format!("{}:{}", ::core::any::type_name::<Self>(), suffix);
                 ctx.use_animated_value_for(key, initial, config)
             }
 
             /// Get a persisted animated timeline for this component.
-            pub fn use_animated_timeline<__BlincContext: ::blinc_animation::AnimationContext>(
+            pub fn use_animated_timeline<__BlincContext: #animation::AnimationContext>(
                 ctx: &__BlincContext,
-            ) -> ::blinc_animation::SharedAnimatedTimeline {
+            ) -> #animation::SharedAnimatedTimeline {
                 ctx.use_animated_timeline_for(::core::any::type_name::<Self>())
             }
 
             /// Get a persisted animated timeline with a suffix for multiple timelines per component.
-            pub fn use_animated_timeline_with<__BlincContext: ::blinc_animation::AnimationContext>(
+            pub fn use_animated_timeline_with<__BlincContext: #animation::AnimationContext>(
                 ctx: &__BlincContext,
                 suffix: &str,
-            ) -> ::blinc_animation::SharedAnimatedTimeline {
+            ) -> #animation::SharedAnimatedTimeline {
                 let key = ::std::format!("{}:{}", ::core::any::type_name::<Self>(), suffix);
                 ctx.use_animated_timeline_for(key)
             }

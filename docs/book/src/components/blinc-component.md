@@ -192,9 +192,11 @@ All component types expose `COMPONENT_KEY`, `instance_key()` and
 
 ## Dependencies and Migration
 
-Consumers depend directly on `blinc_macros` (or use the derive reexport from
-`blinc_app`), `blinc_core` and `blinc_animation`. Named reactive fields also
-require `blinc_layout`, which owns `IntoReactive` and `Reactive`.
+Consumers can use the `blinc` package alone, including when renamed
+in Cargo.toml. The derive resolves its core, animation and layout modules.
+Direct dependencies still work: `blinc_macros` (or the derive reexport from
+`blinc_app`), `blinc_core`, `blinc_animation` and, for named reactive fields,
+`blinc_layout`.
 
 Existing field hooks now return `Signal<T>`. Use its `get`, `set` and `update`
 methods and forward the signal to a binding. Hooks retain their existing

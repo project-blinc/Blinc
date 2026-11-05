@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/blinc",
     "crates/blinc_app",
     "crates/blinc_cli",
     "crates/blinc_core",

@@ -1,0 +1,57 @@
+[package]
+name = "blinc"
+description = "GPU-accelerated, cross-platform UI framework for Rust"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+documentation = "https://docs.rs/blinc"
+homepage = "https://blinc.rs"
+readme = "README.md"
+keywords = ["ui", "gui", "gpu", "cross-platform", "blinc"]
+categories = ["gui", "graphics"]
+include = ["src/**", "Cargo.toml", "README.md", "CHANGELOG.md"]
+
+[features]
+default = ["windowed"]
+windowed = ["blinc_app/windowed"]
+web = ["blinc_app/web"]
+android = ["blinc_app/android"]
+ios = ["blinc_app/ios"]
+dialogs = ["blinc_app/dialogs"]
+tray = ["blinc_app/tray"]
+notifications = ["blinc_app/notifications"]
+hotkeys = ["blinc_app/hotkeys"]
+hot-reload = ["blinc_app/hot-reload"]
+windowed-full = ["windowed", "dialogs", "tray", "notifications", "hotkeys"]
+cn = ["dep:blinc_cn"]
+svg = ["dep:blinc_svg"]
+icons = ["dep:blinc_icons"]
+media = ["dep:blinc_media", "blinc_layout/media"]
+clipboard-image = ["blinc_layout/clipboard_image"]
+svg-raster-images = ["svg", "blinc_svg/svg_raster_images"]
+icons-registry = ["icons", "blinc_icons/registry"]
+
+[dependencies]
+blinc_app = { path = "../blinc_app", version = "0.6.0", default-features = false }
+blinc_animation = { path = "../blinc_animation", version = "0.6.0" }
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
+blinc_css = { path = "../blinc_css", version = "0.6.0" }
+blinc_flow = { path = "../blinc_flow", version = "0.6.0" }
+blinc_gpu = { path = "../blinc_gpu", version = "0.6.0", default-features = false }
+blinc_image = { path = "../blinc_image", version = "0.6.0" }
+blinc_layout = { path = "../blinc_layout", version = "0.6.0" }
+blinc_macros = { path = "../blinc_macros", version = "0.6.0" }
+blinc_paint = { path = "../blinc_paint", version = "0.6.0" }
+blinc_platform = { path = "../blinc_platform", version = "0.6.0" }
+blinc_router = { path = "../blinc_router", version = "0.6.0" }
+blinc_text = { path = "../blinc_text", version = "0.6.0" }
+blinc_theme = { path = "../blinc_theme", version = "0.6.0" }
+blinc_cn = { path = "../blinc_cn", version = "0.6.0", optional = true }
+blinc_svg = { path = "../blinc_svg", version = "0.6.0", optional = true }
+blinc_icons = { path = "../blinc_icons", version = "0.6.0", optional = true }
+blinc_media = { path = "../blinc_media", version = "0.6.0", optional = true }
+
+[package.metadata.docs.rs]
+features = ["cn", "svg", "icons"]

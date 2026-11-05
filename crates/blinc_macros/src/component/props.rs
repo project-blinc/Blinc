@@ -4,6 +4,7 @@ use syn::{Data, DeriveInput, Fields};
 use super::has_animation_attr;
 
 pub(super) fn expand(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let layout = crate::paths::resolve("blinc_layout", "layout");
     let Data::Struct(data) = &input.data else {
         return Err(syn::Error::new_spanned(
             input,
@@ -54,12 +55,15 @@ pub(super) fn expand(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
     let setters = fields.iter().map(|field| {
         let field_name = field.ident.as_ref().unwrap();
         let ty = &field.ty;
-        let docs = field.attrs.iter().filter(|attr| attr.path().is_ident("doc"));
+        let docs = field
+            .attrs
+            .iter()
+            .filter(|attr| attr.path().is_ident("doc"));
         quote! {
             #(#docs)*
             #[must_use]
-            pub fn #field_name(mut self, value: impl ::blinc_layout::binding::IntoReactive<#ty>) -> Self {
-                self.#field_name = ::blinc_layout::binding::IntoReactive::into_reactive(value);
+            pub fn #field_name(mut self, value: impl #layout::binding::IntoReactive<#ty>) -> Self {
+                self.#field_name = #layout::binding::IntoReactive::into_reactive(value);
                 self
             }
         }
@@ -73,7 +77,7 @@ pub(super) fn expand(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
         #visibility struct #props_name #generics #where_clause {
             #(
                 #(#docs)*
-                #field_visibility #names: ::blinc_layout::binding::Reactive<#types>,
+                #field_visibility #names: #layout::binding::Reactive<#types>,
             )*
             #marker: ::core::marker::PhantomData<fn() -> #name #type_generics>,
         }
@@ -89,9 +93,9 @@ pub(super) fn expand(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
 
         impl #impl_generics #name #type_generics #where_clause {
             /// Construct reactive props from values, signals or computeds.
-            pub fn props(#(#names: impl ::blinc_layout::binding::IntoReactive<#types>),*) -> #props_name #type_generics {
+            pub fn props(#(#names: impl #layout::binding::IntoReactive<#types>),*) -> #props_name #type_generics {
                 #props_name {
-                    #(#names: ::blinc_layout::binding::IntoReactive::into_reactive(#names),)*
+                    #(#names: #layout::binding::IntoReactive::into_reactive(#names),)*
                     #marker: ::core::marker::PhantomData,
                 }
             }

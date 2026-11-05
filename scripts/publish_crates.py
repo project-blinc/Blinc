@@ -18,7 +18,7 @@ RELEASE_CRATES = (
     "blinc_noto_emoji", "blinc_noto_symbols", "blinc_gpu", "blinc_cn",
     "blinc_tabler_icons", "blinc_router", "blinc_platform_desktop",
     "blinc_platform_android", "blinc_platform_ios", "blinc_platform_web",
-    "blinc_app", "blinc_cli",
+    "blinc_app", "blinc", "blinc_cli",
 )
 ROOT = Path(__file__).resolve().parent.parent
 

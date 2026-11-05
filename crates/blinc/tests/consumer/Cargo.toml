@@ -1,0 +1,14 @@
+[package]
+name = "blinc-facade-consumer"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+ui = { package = "blinc", path = "../..", default-features = false }
+
+[features]
+components = ["ui/cn", "ui/svg", "ui/icons"]
+web = ["ui/web"]

@@ -3,7 +3,7 @@
 ## Prerequisites
 
 Blinc requires:
-- **Rust 1.70+** (for stable async and other features)
+- **Rust 1.89+** (edition 2024)
 - A GPU with Vulkan, Metal, or DX12 support
 
 ## Adding Blinc to Your Project
@@ -19,10 +19,44 @@ The `windowed` feature enables desktop windowing support. For headless rendering
 
 ## Feature Flags
 
+The feature table below refers to `blinc_app`. The unified package described
+next forwards these platform features to it.
+
 | Feature | Description |
 |---------|-------------|
 | `windowed` | Desktop window support via winit (default) |
 | `android` | Android platform support |
+
+## Unified package
+
+The `blinc` facade exposes the existing crates through short module paths:
+`blinc::app`, `blinc::layout`, `blinc::core`, `blinc::theme`, and the other
+framework modules:
+
+```toml
+[dependencies]
+blinc = { version = "0.6", features = ["cn", "icons"] }
+```
+
+```rust
+use blinc::{app::windowed::WindowedApp, prelude::*};
+
+fn main() -> Result<()> {
+    WindowedApp::run(WindowConfig::default(), |ctx| {
+        div().w(ctx.width).h(ctx.height).items_center().justify_center()
+            .child(text("Your workspace"))
+    })
+}
+```
+
+Desktop windowing is enabled by default. For WebAssembly, disable defaults
+and enable `web`. The `cn`, `svg` and `icons` flags expose their respective
+modules; `media` exposes playback APIs and layout media widgets. Module flags
+control the facade's exports; the application renderer still uses SVG
+internally and components use icon data. Derives and flow macros support a
+facade-only dependency, including a renamed dependency.
+
+Individual `blinc_*` crates remain available for direct use.
 
 ## Verifying Installation
 

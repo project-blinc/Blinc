@@ -52,7 +52,8 @@ effects. Visual changes belong in property bindings and CSS rules.
 and are excluded from props. Unit structs retain the shared spring/timeline
 hooks and instance-key methods without generating a props type.
 
-Consumers need `blinc_core` and `blinc_animation`; named reactive fields also
+Consumers can use the `blinc` facade alone, including a renamed dependency.
+Direct users need `blinc_core` and `blinc_animation`; named reactive fields also
 need `blinc_layout`. The derive is exported by this crate and reexported as
 `BlincComponent` and `Component` by `blinc_app`.
 

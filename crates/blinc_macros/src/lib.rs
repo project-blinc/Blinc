@@ -7,6 +7,7 @@
 
 mod component;
 mod flow;
+mod paths;
 
 use proc_macro::TokenStream;
 use syn::{DeriveInput, parse_macro_input};
@@ -22,8 +23,8 @@ use syn::{DeriveInput, parse_macro_input};
 /// `_for` accepts an explicit instance key; `_auto` keys by the call site.
 /// Fields marked `#[animation]` generate spring hooks and are omitted from props.
 /// All structs also receive `COMPONENT_KEY`, instance keys, and shared spring
-/// and timeline hooks. Named props require a direct `blinc_layout` dependency;
-/// hook consumers depend on `blinc_core` and `blinc_animation`.
+/// and timeline hooks. Consumers can use the `blinc` facade or direct layout,
+/// core and animation dependencies. Renamed dependencies are supported.
 ///
 /// ```ignore
 /// #[derive(BlincComponent)]
@@ -80,7 +81,7 @@ pub fn derive_blinc_component(input: TokenStream) -> TokenStream {
 /// ```
 ///
 /// A flow that does not parse or generate is a compile error at the macro call. The expansion
-/// names `::blinc_core`, so the calling crate depends on it.
+/// resolves core types through `blinc_core` or the `blinc` facade.
 #[proc_macro]
 pub fn flow(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as flow::FlowInput);
