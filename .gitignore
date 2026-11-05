@@ -80,6 +80,9 @@ coverage/
 # Plans (local development notes)
 docs/plan/
 
+# Internal references stay local; plans live in git-bug.
+/docs/internal/
+
 test_output/
 
 # Per-machine artifacts: snapshot goldens (BLINC_SNAPSHOT=bless), failed frames.

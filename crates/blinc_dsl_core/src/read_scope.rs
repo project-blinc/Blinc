@@ -2,9 +2,8 @@
 //!
 //! A scope is one render of one reactive region. While it is open, every
 //! signal read performed by the JIT'd body records its id here; when it
-//! closes, the accumulated set IS the region's dependency set. See
-//! `docs/effects-reactivity.md` for why this replaces scraping the AST
-//! for `.get()` calls.
+//! closes, the recorded ids become the region's dependencies. This observes
+//! the reads made by that render instead of inferring them from the AST.
 //!
 //! Two rules, both of which fall out of the stack rather than needing to
 //! be enforced:
