@@ -2,7 +2,7 @@
 
 Typography helpers provide defaults for headings, body copy and short inline
 fragments. They return `Text`, except `chained_text`, which groups fragments in a
-`Div`. Import them through `blinc_cn::cn` or the component prelude. Install
+`Div`. Import them through `blinc::cn::cn` or the component prelude. Install
 `cn_bundle()` as described in [Getting Started](overview.md).
 
 ## Headings
@@ -20,8 +20,8 @@ Use a level that reflects the content hierarchy. The named helpers and
 | `cn::h6` | 14px / medium | `.cn-h6` |
 
 ```rust
-use blinc_cn::cn;
-use blinc_layout::prelude::*;
+use blinc::cn::cn;
+use blinc::layout::prelude::*;
 
 div().flex_col().gap(3.0)
     .child(cn::h1("Project overview"))
@@ -46,8 +46,8 @@ also accepts a Signal or Computed.
 - `cn::small(content)`: short fine print; 12px, no wrapping. No automatic class.
 
 ```rust
-use blinc_cn::cn;
-use blinc_layout::prelude::*;
+use blinc::cn::cn;
+use blinc::layout::prelude::*;
 
 div().flex_col().gap(2.0)
     .child(cn::p("Keep project notes, decisions and next steps together."))
@@ -69,7 +69,7 @@ that needs multiple lines, enable wrapping with `.wrap(true)`.
   `Text` fragments.
 
 ```rust
-use blinc_cn::cn;
+use blinc::cn::cn;
 
 cn::chained_text([
     cn::span("Saved to "),
@@ -85,9 +85,9 @@ that wraps mixed styles as flowing text, use
 [`rich_text()`](../widgets/text.md#rich-text). For syntax-highlighted code blocks,
 use [`code()`](../widgets/code-editor.md#read-only-code-block).
 
-The plain `blinc_layout::typography::label(content)` helper returns 14px,
+The plain `blinc::layout::typography::label(content)` helper returns 14px,
 medium-weight inline `Text`; it is also re-exported from
-`blinc_cn::components::typography`. `cn::label(content)` instead creates the
+`blinc::cn::components::typography`. `cn::label(content)` instead creates the
 themed [form Label component](form.md#label), with required and disabled options.
 
 ## Reactive text
@@ -97,9 +97,9 @@ themed [form Label component](form.md#label), with required and disabled options
 text, bind a Signal or Computed with `Text::bound` and give it a CSS class:
 
 ```rust
-use blinc_cn::cn;
-use blinc_core::{computed, signal};
-use blinc_layout::{binding::IntoReactive, prelude::*};
+use blinc::cn::cn;
+use blinc::core::{computed, signal};
+use blinc::layout::{binding::IntoReactive, prelude::*};
 
 let title = signal("Project overview".to_string());
 let pending = signal(3usize);
@@ -122,7 +122,7 @@ across UI builds. Updating either source replaces the bound text in place.
 The heading, paragraph, muted and caption classes listed above are styling
 hooks. `span`, `b`, `strong`, `small`, `inline_code` and `chained_text` do not add
 `cn-*` classes; attach your own with `.class(...)`. The equivalent helpers in
-`blinc_layout::typography` have the same text defaults without the CN classes.
+`blinc::layout::typography` have the same text defaults without the CN classes.
 
 Add overrides after the component stylesheet, using the theme's root variables:
 

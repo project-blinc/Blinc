@@ -5,8 +5,8 @@ Blinc includes a full-featured CSS engine that lets you style your UI with famil
 ## Quick Start
 
 ```rust
-use blinc_app::prelude::*;
-use blinc_app::windowed::{WindowedApp, WindowedContext};
+use blinc::app::prelude::*;
+use blinc::app::windowed::{WindowedApp, WindowedContext};
 
 fn main() -> Result<()> {
     let mut css_loaded = false;
@@ -1413,8 +1413,8 @@ Only the block form is supported, and it is a single level: `@layer a, b;` order
 ### Quick Example
 
 ```rust
-use blinc_layout::prelude::*;
-use blinc_core::Color;
+use blinc::layout::prelude::*;
+use blinc::core::Color;
 
 // CSS-style syntax
 let card = css_style! {
@@ -1458,8 +1458,8 @@ let s = css_style! {
     clip-path: my_clip_path;           // ClipPath value
     filter: my_filter;                 // CssFilter value
     mask-image: my_mask;               // MaskImage value
-    mask-mode: blinc_core::MaskMode::Alpha;
-    mix-blend-mode: blinc_core::BlendMode::Overlay;
+    mask-mode: blinc::core::MaskMode::Alpha;
+    mix-blend-mode: blinc::core::BlendMode::Overlay;
 };
 
 // style! macro
@@ -1472,8 +1472,8 @@ let s = style! {
     filter: my_filter,
     mask_image: my_mask,
     mask_gradient: my_gradient,        // Gradient mask shorthand
-    mask_mode: blinc_core::MaskMode::Alpha,
-    mix_blend_mode: blinc_core::BlendMode::Overlay,
+    mask_mode: blinc::core::MaskMode::Alpha,
+    mix_blend_mode: blinc::core::BlendMode::Overlay,
 };
 ```
 

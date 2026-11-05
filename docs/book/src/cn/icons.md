@@ -1,11 +1,13 @@
 # Icons
 
+Enable the `cn` and `icons` features on your `blinc` dependency for these examples.
+
 `cn::icon` renders Lucide paths from `blinc_icons` and inherits its surrounding text colour.
 
 ```rust
-use blinc_cn as cn;
-use blinc_icons::icons;
-use blinc_layout::prelude::*;
+use blinc::cn as cn;
+use blinc::icons::icons;
+use blinc::layout::prelude::*;
 
 let icons = div().class("toolbar-icons")
     .child(cn::icon(icons::SEARCH).size(cn::IconSize::Large))

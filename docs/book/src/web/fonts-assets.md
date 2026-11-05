@@ -11,7 +11,7 @@ Browsers can't hand wgpu their system fonts — those live in the compositor's 2
 The simplest option. Font bytes ship inside the wasm artifact via `include_bytes!`. Adds ~750 KB to the bundle per typical TTF, but the font is "available" the moment `WebApp::new` returns — no extra network round-trip, no fallback flicker.
 
 ```rust
-use blinc_app::web::WebApp;
+use blinc::app::web::WebApp;
 use wasm_bindgen::prelude::*;
 
 const ARIAL_TTF: &[u8] = include_bytes!("../fonts/Arial.ttf");
@@ -46,9 +46,9 @@ This is the pattern `web_hello`, `web_scroll`, and `web_drag` use. It's the righ
 Recommended for real apps that ship more than one font, or for any font over a few hundred KB. The font lives next to `index.html` as a static asset; the browser caches it independently across reloads, and the wasm artifact stays small.
 
 ```rust
-use blinc_app::web::WebApp;
-use blinc_app::BlincError;
-use blinc_platform_web::WebAssetLoader;
+use blinc::app::web::WebApp;
+use blinc::app::BlincError;
+use blinc::platform_web::WebAssetLoader;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(start)]
@@ -88,9 +88,9 @@ This is the pattern the [`web_assets`](https://github.com/project-blinc/Blinc/tr
 The first-frame timing of pattern 2 has one downside: the canvas is blank until the fetch resolves. For apps that care about FOIT/FOUT, ship a tiny system-ish fallback font *bundled* and fetch the real font asynchronously. The fallback renders the first frame; the real font replaces it the moment it lands:
 
 ```rust
-use blinc_app::web::WebApp;
-use blinc_app::BlincError;
-use blinc_platform_web::WebAssetLoader;
+use blinc::app::web::WebApp;
+use blinc::app::BlincError;
+use blinc::platform_web::WebAssetLoader;
 
 // Tiny system-ish fallback bundled inside the wasm — ~50-100 KB.
 const FALLBACK_TTF: &[u8] = include_bytes!("../fonts/SystemFallback.ttf");
@@ -158,8 +158,8 @@ app.load_font_data(mono?);
 `WebAssetLoader::preload(urls)` is the API for general-purpose asset preloading. Unlike `fetch_bytes`, it stores fetched bytes in the loader's HashMap so later synchronous `AssetLoader::load(...)` calls can resolve them:
 
 ```rust
-use blinc_platform_web::WebAssetLoader;
-use blinc_platform::assets::AssetPath;
+use blinc::platform_web::WebAssetLoader;
+use blinc::platform::assets::AssetPath;
 
 let loader = WebAssetLoader::new();
 

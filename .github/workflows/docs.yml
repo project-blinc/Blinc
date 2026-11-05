@@ -1,6 +1,8 @@
 name: Documentation
 
 on:
+  release:
+    types: [published]
   push:
     branches: [main]
     paths:
@@ -14,6 +16,11 @@ on:
       - 'tools/build-web-examples/**'
       - 'assets/**'
       - 'Cargo.lock'
+      - 'scripts/book_versions.py'
+      - 'scripts/tests/test_book_versions.py'
+      - 'scripts/tests/test_book_release_restore.py'
+      - 'scripts/check_book_examples.py'
+      - '.github/scripts/prepare-book-releases.py'
   pull_request:
     branches: [main]
     paths:
@@ -27,6 +34,11 @@ on:
       - 'tools/build-web-examples/**'
       - 'assets/**'
       - 'Cargo.lock'
+      - 'scripts/book_versions.py'
+      - 'scripts/tests/test_book_versions.py'
+      - 'scripts/tests/test_book_release_restore.py'
+      - 'scripts/check_book_examples.py'
+      - '.github/scripts/prepare-book-releases.py'
   workflow_dispatch:
 
 permissions:
@@ -42,11 +54,23 @@ jobs:
   build:
     name: Build Book
     runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_JOBS: 2
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'release' && 'main' || '' }}
       - name: Strip local-dev [patch] block (CI-only)
         shell: bash
         run: bash scripts/ci-strip-local-patch.sh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Test book edition assembly
+        run: python3 -m unittest scripts.tests.test_book_versions scripts.tests.test_book_release_restore
 
       # The codegen tool + wasm-pack invocations need a working
       # Rust toolchain with the wasm32 target. Cached between runs
@@ -169,43 +193,35 @@ jobs:
         run: |
           cargo run -p blinc-build-web-examples -- --build
 
+      - name: Check book application examples
+        env:
+          CARGO_BUILD_JOBS: 2
+        run: |
+          python3 scripts/check_book_examples.py
+          python3 scripts/check_book_examples.py --wasm
+
       - name: Setup mdBook
         uses: peaceiris/actions-mdbook@v2
         with:
-          mdbook-version: 'latest'
+          mdbook-version: '0.4.40'
 
-      # mdBook writes into `target/site/docs/` (see book.toml). The
-      # landing page lives in `web/` at the repo root and gets copied
-      # into `target/site/` after the book is built — together they
-      # form the GitHub Pages tree:
-      #   target/site/index.html        ← landing
-      #   target/site/assets/…          ← landing assets
-      #   target/site/robots.txt        ← SEO
-      #   target/site/sitemap.xml       ← SEO (landing entries)
-      #   target/site/.nojekyll         ← stop Pages running Jekyll
-      #   target/site/docs/             ← mdBook output
-      #   target/site/docs/sitemap.xml  ← SEO (book pages, mdBook-gen)
-      - name: Build mdBook
-        run: mdbook build docs/book
+      - name: Restore released books
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CARGO_BUILD_JOBS: 2
+          BLINC_BOOK_UPLOAD: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
+        run: python3 .github/scripts/prepare-book-releases.py
 
-      # Now that mdBook has populated `target/site/docs/`, copy each
-      # wrapper's `index.html` + `pkg/` into
-      # `target/site/docs/examples/<name>/`. The path keeps mdBook's
-      # iframe references under
-      # `docs/book/src/web/example-gallery/<name>.md`
-      # (`src="../../examples/<name>/index.html"`) resolving
-      # correctly: from `…/docs/web/example-gallery/<name>.html`,
-      # `../../examples/<name>/index.html` → `…/docs/examples/<name>/`.
-      #
-      # `--no-build` would be nice here to explicitly skip the
-      # wasm-pack re-run, but since the previous step already
-      # produced every `pkg/` directory, `wasm-pack build` is a
-      # no-op (cargo cache hit) and takes seconds.
+      # Build main separately so it cannot replace the released book.
+      - name: Build development book
+        run: python3 scripts/book_versions.py build --source . --output target/book-dev --edition dev --commit "$(git rev-parse HEAD)"
+
+      # Stage after mdBook, which replaces its output directory.
       - name: Stage example artifacts into book output
         run: |
           cargo run -p blinc-build-web-examples -- \
             --no-gallery \
-            --stage-to target/site/docs/examples
+            --stage-to target/book-dev/examples
 
       # Keep the landing page and book together. The following catalog step
       # replaces the copied component sources with generated pages and assets.
@@ -227,6 +243,9 @@ jobs:
           node --experimental-vm-modules --test web/components/tests/*.test.mjs
           node web/components/tests/artifacts.mjs target/site
 
+      - name: Assemble stable and versioned books
+        run: python3 scripts/book_versions.py assemble --dev target/book-dev --archives target/book-releases --output target/site/docs
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -234,7 +253,7 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'release' && !github.event.release.prerelease)
     needs: build
     runs-on: ubuntu-latest
     environment:

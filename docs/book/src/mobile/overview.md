@@ -1,5 +1,7 @@
 # Mobile Development
 
+Enable the appropriate `android` or `ios` runner on `blinc`; camera and audio examples also use `media`.
+
 Blinc supports building native mobile applications for both Android and iOS. The same Rust UI code runs on mobile with platform-specific rendering backends (Vulkan for Android, Metal for iOS) and a unified API for native platform features.
 
 ## Cross-Platform Architecture
@@ -58,7 +60,7 @@ my-app/
 │   │   │           └── BlincNativeBridge.kt
 │   │   ├── build.gradle.kts
 │   │   └── settings.gradle.kts
-│   ├── ios/                # iOS Xcode project
+│   └── ios/                # iOS Xcode project
 │   │   ├── BlincApp/
 │   │   │   ├── AppDelegate.swift
 │   │   │   ├── BlincViewController.swift
@@ -68,10 +70,8 @@ my-app/
 │   │   │   ├── Info.plist
 │   │   │   └── Fonts/
 │   │   └── BlincApp.xcodeproj/
-│   └── harmony/            # HarmonyOS (in progress)
 ├── build-android.sh        # Cross-compile + copy .so → jniLibs
-├── build-ios.sh            # Cross-compile + copy .a → libs/{device,simulator}
-└── build-ohos.sh           # HarmonyOS build script
+└── build-ios.sh            # Cross-compile + copy .a → libs/{device,simulator}
 ```
 
 ## Quick Start
@@ -83,9 +83,9 @@ blinc run android   # or: blinc run ios
 ```
 
 ```rust
-use blinc_app::prelude::*;
-use blinc_core::reactive::{computed, signal};
-use blinc_layout::IntoReactive;
+use blinc::app::prelude::*;
+use blinc::core::reactive::{computed, signal};
+use blinc::layout::IntoReactive;
 
 fn app(ctx: &mut WindowedContext) -> impl ElementBuilder {
     let count = signal(0i32);
@@ -111,7 +111,7 @@ Blinc's native bridge provides a typed function-call protocol between Rust and K
 ### Rust side — call into native
 
 ```rust
-use blinc_core::native_bridge::native_call;
+use blinc::core::native_bridge::native_call;
 
 // Synchronous call returning a value
 let level: String = native_call("device", "get_battery_level", ())?;
@@ -205,7 +205,7 @@ func application(
 Streams deliver continuous data (frames, samples, sensor readings) from the platform back to Rust without polling. The platform pushes data via `dispatch_stream_data`, which fires the registered Rust callback. Drop the returned `NativeStream` handle to stop the stream and release resources.
 
 ```rust
-use blinc_core::native_bridge::{native_stream, NativeValue};
+use blinc::core::native_bridge::{native_stream, NativeValue};
 
 let stream = native_stream(
     "sensors",
@@ -230,7 +230,7 @@ The platform side calls `nativeDispatchStreamData(streamId, byteArray)` (Android
 `CameraStream` from `blinc_media` wraps the bridge stream API in a typed reactive interface:
 
 ```rust
-use blinc_media::{CameraStream, CameraConfig, CameraFacing};
+use blinc::media::{CameraStream, CameraConfig, CameraFacing};
 
 let camera = CameraStream::open(CameraConfig {
     width: 640,
@@ -257,7 +257,7 @@ The platform side uses `Camera2` (Android) or `AVCaptureSession` (iOS) and pushe
 ### Audio recording
 
 ```rust
-use blinc_media::{AudioRecorder, AudioRecorderConfig};
+use blinc::media::{AudioRecorder, AudioRecorderConfig};
 
 let recorder = AudioRecorder::open(AudioRecorderConfig {
     sample_rate: 44100,
@@ -280,7 +280,7 @@ Blinc Router auto-handles deep links — no manual wiring required after `Router
 ### Rust — define routes
 
 ```rust
-use blinc_router::RouterBuilder;
+use blinc::router::RouterBuilder;
 
 let router = RouterBuilder::new()
     .route("/", home_page)
@@ -334,7 +334,7 @@ The system back button is also auto-registered: `Key::Back` events route through
 ## App Lifecycle
 
 ```rust
-use blinc_platform::event::{Event, LifecycleEvent};
+use blinc::platform::event::{Event, LifecycleEvent};
 
 match event {
     Event::Lifecycle(LifecycleEvent::Resumed) => {
@@ -399,7 +399,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder {
 
 - **iOS**: read from `UIWindow.safeAreaInsets` via `objc2` at context-creation time. Fetched from the first key window of the first foreground-active `UIWindowScene`.
 - **Android**: delivered by `BlincNativeBridge`'s `setOnApplyWindowInsetsListener` on the decor view. On API 30+ it merges `WindowInsets.Type.systemBars()` with `WindowInsets.Type.displayCutout()` so landscape notches are covered; on API 24–29 it falls back to the (deprecated but functional) `systemWindowInset*` accessors. The four values are pushed into Rust via the `nativeDispatchSafeArea` JNI export; the `android_main` poll loop copies them into `WindowedContext.safe_area` whenever an edge changes (rotation, split-screen, PiP exit, immersive-mode toggle).
-- **Desktop / Web / Fuchsia**: always `(0, 0, 0, 0)`.
+- **Desktop / Web**: always `(0, 0, 0, 0)`.
 
 `safe_width()` / `safe_height()` return the content rect with both horizontal or both vertical insets subtracted, for when you want the full safe content area as a single number.
 

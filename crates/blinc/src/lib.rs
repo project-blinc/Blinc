@@ -17,6 +17,9 @@ pub use blinc_router as router;
 pub use blinc_text as text;
 pub use blinc_theme as theme;
 
+#[cfg(all(feature = "web", target_arch = "wasm32"))]
+pub use blinc_platform_web as platform_web;
+
 #[cfg(feature = "cn")]
 pub use blinc_cn as cn;
 #[cfg(feature = "icons")]

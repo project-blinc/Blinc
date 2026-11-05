@@ -36,7 +36,7 @@ is global and best for skybox-style backgrounds or full-frame
 post-processing.
 
 This chapter focuses on the first. For the second, see the docs on
-`blinc_gpu::CustomRenderPass` and `RenderStage`.
+`blinc::gpu::CustomRenderPass` and `RenderStage`.
 
 ## The `CustomRenderPass` trait
 
@@ -44,7 +44,7 @@ Both scheduling models share the same trait. Implement it on a struct
 that owns your GPU state:
 
 ```rust
-use blinc_gpu::custom_pass::{CustomRenderPass, RenderPassContext, RenderStage};
+use blinc::gpu::custom_pass::{CustomRenderPass, RenderPassContext, RenderStage};
 
 struct Particles {
     pipeline: Option<wgpu::RenderPipeline>,
@@ -95,7 +95,7 @@ The natural place to embed a `CustomRenderPass` is inside a regular
 `run_gpu_pass` from the canvas closure:
 
 ```rust
-use blinc_gpu::GpuPass;
+use blinc::gpu::GpuPass;
 
 let pass = GpuPass::new(Particles { /* ... */ });
 let pass_for_canvas = pass.clone();

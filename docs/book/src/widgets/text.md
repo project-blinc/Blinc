@@ -10,7 +10,7 @@ For headings, paragraphs, captions and inline composition, see the
 The `text()` element is the simplest way to display text:
 
 ```rust
-use blinc_layout::prelude::*;
+use blinc::layout::prelude::*;
 
 // Basic text
 text("Hello, World!")
@@ -49,7 +49,7 @@ text("Underlined and struck")
 The `rich_text()` element supports inline formatting using HTML-like tags. This is ideal for text that needs mixed styling within a single block.
 
 ```rust
-use blinc_layout::prelude::*;
+use blinc::layout::prelude::*;
 
 // Basic formatting
 rich_text("This has <b>bold</b> and <i>italic</i> text.")
@@ -201,7 +201,7 @@ colour) is set on the element and wins over the rule.
 For integration with syntax highlighting or markdown rendering, create rich text from a pre-built `StyledText`:
 
 ```rust
-use blinc_layout::styled_text::{StyledText, StyledLine, TextSpan};
+use blinc::layout::styled_text::{StyledText, StyledLine, TextSpan};
 
 let styled = StyledText {
     lines: vec![
@@ -230,8 +230,8 @@ rich_text_styled(styled)
 Here's a complete example demonstrating various text features:
 
 ```rust
-use blinc_app::prelude::*;
-use blinc_core::Color;
+use blinc::app::prelude::*;
+use blinc::core::Color;
 
 fn demo_ui() -> impl ElementBuilder {
     div()

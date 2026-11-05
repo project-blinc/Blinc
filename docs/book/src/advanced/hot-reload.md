@@ -30,11 +30,11 @@ out of default builds; they only show up when the feature is on.
 
 ## Setup
 
-1. Enable the feature on `blinc_app`:
+1. Enable the feature on `blinc`:
 
    ```toml
    [dependencies]
-   blinc_app = { version = "0.6", features = ["windowed", "hot-reload"] }
+   blinc = { version = "0.6", features = ["windowed", "hot-reload"] }
    ```
 
 2. Install the Dioxus CLI (one-time):
@@ -48,7 +48,7 @@ out of default builds; they only show up when the feature is on.
    ```bash
    dx serve --hot-patch \
        --package my_app \
-       --features blinc_app/hot-reload \
+       --features blinc/hot-reload \
        --platform macos
    ```
 
@@ -89,9 +89,9 @@ out of default builds; they only show up when the feature is on.
 - **Runtime-loaded image and SVG assets**, when you opt the
   app's asset directory into the file watcher:
   ```rust
-  fn main() -> blinc_app::Result<()> {
+  fn main() -> blinc::app::Result<()> {
       #[cfg(feature = "hot-reload")]
-      blinc_app::hot_reload::watch_dir("assets");
+      blinc::app::hot_reload::watch_dir("assets");
       WindowedApp::run(WindowConfig::default(), |ctx| build_ui(ctx))
   }
   ```
@@ -183,7 +183,7 @@ For now, use `dx serve --hot-patch` (above) to drive Rust hot-patches.
   The app didn't open the websocket back to dx, so dx couldn't
   compute jump-table offsets. Check that you compiled the app
   with the `hot-reload` feature on (`--features
-  blinc_app/hot-reload`) and that you're running the resulting
+  blinc/hot-reload`) and that you're running the resulting
   binary as a child of `dx serve --hot-patch` (which sets the
   `DIOXUS_DEVSERVER_*` env vars the client reads). On startup
   the client logs `hot-reload: connected` at info level when the

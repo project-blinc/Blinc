@@ -6,9 +6,9 @@ application's content. Install `cn_bundle()` as described in
 builder's `ctx`:
 
 ```rust
-use blinc_cn::prelude::*;
-use blinc_layout::binding::IntoReactive;
-use blinc_layout::prelude::{FontWeight, Text, div, text};
+use blinc::cn::prelude::*;
+use blinc::layout::binding::IntoReactive;
+use blinc::layout::prelude::{FontWeight, Text, div, text};
 ```
 
 ## Tooltip
@@ -87,7 +87,7 @@ chart marks the category under it (a line through its points, a band behind
 its bars) and shows each series' value there.
 
 ```rust
-use blinc_cn::prelude::*;
+use blinc::cn::prelude::*;
 
 cn::line_chart()
     .series("CPU", &[30.0, 45.0, 40.0, 60.0, 55.0])

@@ -4,26 +4,26 @@ Blinc provides APIs for common desktop system features: file dialogs, system tra
 
 ## Feature flags
 
-Each surface is a separate `blinc_app` feature so apps that don't use them don't pay the transitive dep cost (each pulls 25–130 crates on Linux):
+Each surface is a separate `blinc` feature so apps that don't use them don't pay the transitive dep cost (each pulls 25–130 crates on Linux):
 
 | Feature | Module | Backed by |
 |---|---|---|
-| `dialogs` | `blinc_app::dialog` | `rfd` |
-| `tray` | `blinc_app::tray` | `tray-icon` + `muda` |
-| `notifications` | `blinc_app::notify` | `notify-rust` |
-| `hotkeys` | `blinc_app::hotkey` | `global-hotkey` |
+| `dialogs` | `blinc::app::dialog` | `rfd` |
+| `tray` | `blinc::app::tray` | `tray-icon` + `muda` |
+| `notifications` | `blinc::app::notify` | `notify-rust` |
+| `hotkeys` | `blinc::app::hotkey` | `global-hotkey` |
 
 Enable in `Cargo.toml`:
 
 ```toml
 [dependencies]
-blinc_app = { version = "0.6", features = ["dialogs", "tray", "notifications", "hotkeys"] }
+blinc = { version = "0.6", features = ["dialogs", "tray", "notifications", "hotkeys"] }
 ```
 
 Or use the umbrella `windowed-full` to enable all four:
 
 ```toml
-blinc_app = { version = "0.6", features = ["windowed-full"] }
+blinc = { version = "0.6", features = ["windowed-full"] }
 ```
 
 Without the corresponding feature, the matching module's APIs compile to no-op stubs — calls return `None` / silently do nothing — so you can prototype against them and turn the flag on later.
@@ -33,7 +33,7 @@ Without the corresponding feature, the matching module's APIs compile to no-op s
 Open, save, and folder picker dialogs via the `rfd` crate (requires the `dialogs` feature):
 
 ```rust
-use blinc_app::dialog::{open_file, save_file, pick_folder, FileFilter};
+use blinc::app::dialog::{open_file, save_file, pick_folder, FileFilter};
 
 // Open a file
 if let Some(path) = open_file()
@@ -75,7 +75,7 @@ if let Some(dir) = pick_folder()
 Create a tray icon with a context menu for background apps:
 
 ```rust
-use blinc_app::tray::{TrayIconBuilder, TrayMenuItem};
+use blinc::app::tray::{TrayIconBuilder, TrayMenuItem};
 
 let _tray = TrayIconBuilder::new()
     .tooltip("My App v1.0")
@@ -110,7 +110,7 @@ TrayIconBuilder::new()
 Send native desktop notifications:
 
 ```rust
-use blinc_app::notify::Notification;
+use blinc::app::notify::Notification;
 
 Notification::new("Download Complete")
     .body("Your file has been saved to ~/Downloads")
@@ -124,7 +124,7 @@ Notification::new("Download Complete")
 Register a global file drop handler:
 
 ```rust
-use blinc_app::dnd::{on_file_drop, DropEvent};
+use blinc::app::dnd::{on_file_drop, DropEvent};
 
 on_file_drop(|event| match event {
     DropEvent::Hovered(paths) => println!("Dragging: {:?}", paths),
@@ -163,7 +163,7 @@ div()
 Register system-wide hotkeys that work even when the app isn't focused:
 
 ```rust
-use blinc_app::hotkey::GlobalHotkey;
+use blinc::app::hotkey::GlobalHotkey;
 
 // Active until `_hotkey` is dropped
 let _hotkey = GlobalHotkey::new("Ctrl+Shift+P", || {

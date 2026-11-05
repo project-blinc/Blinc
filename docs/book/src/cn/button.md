@@ -5,7 +5,7 @@ Buttons trigger actions.
 ## Basic Usage
 
 ```rust
-use blinc_cn::prelude::*;
+use blinc::cn::prelude::*;
 
 button("Click me")
     .on_click(|_| println!("Clicked!"))
@@ -52,7 +52,7 @@ button("Wide").size(ButtonSize::Custom(160.0, 48.0))
 ## With Icons
 
 ```rust
-use blinc_icons::icons;
+use blinc::icons::icons;
 
 button("Settings").icon(icons::SETTINGS)
 
@@ -151,7 +151,7 @@ button("Save")
 | `variant` | `ButtonVariant` | `Primary` | Visual style |
 | `size` | `ButtonSize` | `Medium` | `Small`, `Medium`, `Large`, `Icon` or `Custom(w, h)` |
 | `disabled` | `bool` or signal | `false` | Disable interaction |
-| `icon` | `&str` | none | An icon from `blinc_icons::icons` |
+| `icon` | `&str` | none | An icon from `blinc::icons::icons` |
 | `icon_position` | `IconPosition` | `Start` | `Start` or `End` |
 | `icon_size` | `f32` | label size + 2 | Icon size in px |
 | `color` | `Color` | by variant | Text colour in every state |

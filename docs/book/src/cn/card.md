@@ -5,7 +5,7 @@ Cards group related content and actions.
 ## Basic Usage
 
 ```rust
-use blinc_cn::prelude::*;
+use blinc::cn::prelude::*;
 
 card()
     .child(card_header()

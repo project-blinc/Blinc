@@ -7,7 +7,7 @@ Blinc supports multiple windows on desktop platforms. Each window has its own UI
 Use `open_window_with()` to create a new window with a custom UI builder:
 
 ```rust
-use blinc_app::windowed::open_window_with;
+use blinc::app::windowed::open_window_with;
 
 open_window_with(
     WindowConfig::new("Settings")
@@ -109,7 +109,7 @@ open_window_with(
 Save and restore window position/size across launches:
 
 ```rust
-use blinc_app::window_state::{WindowStateStore, SavedWindowState};
+use blinc::app::window_state::{WindowStateStore, SavedWindowState};
 
 let store = WindowStateStore::new("my_app");
 

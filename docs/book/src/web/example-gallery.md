@@ -60,6 +60,6 @@ manageable.
 - [**Theme System**](./example-gallery/theme_demo.md) — This example demonstrates the Blinc theming system capabilities:
 - [**Timeline Animation**](./example-gallery/timeline_demo.md) — This example demonstrates timeline-based animations using the stateful API:
 - [**Typography**](./example-gallery/typography_demo.md) — This example demonstrates typography helpers:
-- [**Video Player**](./example-gallery/video_demo.md) — Demonstrates the video_player widget with `blinc_media::VideoPlayer` instance and controls.
+- [**Video Player**](./example-gallery/video_demo.md) — Demonstrates the video_player widget with `blinc::media::VideoPlayer` instance and controls.
 - [**Wet Glass**](./example-gallery/wet_glass_demo.md) — Procedural wet-window effect with real light refraction through water drops.
 - [**Windowed Application**](./example-gallery/windowed.md) — This example demonstrates how to create a windowed Blinc application

@@ -74,7 +74,7 @@ timeline.lock().unwrap().configure(|t| {
 ### With Easing
 
 ```rust
-use blinc_animation::Easing;
+use blinc::animation::Easing;
 
 timeline.lock().unwrap().configure(|t| {
     // add_with_easing(offset_ms, duration_ms, start, end, easing)
@@ -364,7 +364,7 @@ let ids: Vec<TimelineEntryId> = t.configure(|t| {
 ## Available Easing Functions
 
 ```rust
-use blinc_animation::Easing;
+use blinc::animation::Easing;
 
 Easing::Linear          // No easing
 Easing::EaseIn          // Slow start (cubic)

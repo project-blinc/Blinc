@@ -14,10 +14,10 @@ The repo ships four runnable web examples under [`examples/`](https://github.com
 The "Hello, WebGPU!" canonical example. Centered text on a dark background, no input handlers, no animations, no state. If this draws on a real canvas in a real browser, the entire wgpu / wasm-bindgen / requestAnimationFrame / `WebApp::run` pipeline is alive end-to-end.
 
 ```rust
-use blinc_app::web::WebApp;
-use blinc_layout::div::{div, Div};
-use blinc_layout::text::text;
-use blinc_core::Color;
+use blinc::app::web::WebApp;
+use blinc::layout::div::{div, Div};
+use blinc::layout::text::text;
+use blinc::core::Color;
 use wasm_bindgen::prelude::*;
 
 const ARIAL: &[u8] = include_bytes!("../fonts/Arial.ttf");
@@ -35,7 +35,7 @@ pub fn _start() {
     });
 }
 
-fn build_ui(_ctx: &mut blinc_app::windowed::WindowedContext) -> Div {
+fn build_ui(_ctx: &mut blinc::app::windowed::WindowedContext) -> Div {
     div()
         .w_full().h_full()
         .bg(Color::rgba(0.07, 0.07, 0.10, 1.0))
@@ -104,10 +104,10 @@ Full example: [`examples/web_scroll/src/lib.rs`](https://github.com/project-blin
 A single draggable card that lifts (opacity dip + raised z-index) and follows the cursor while held, then snaps back on release. **Structurally identical to the `sortable_list_section` in the desktop `sortable_demo.rs`** — same `DragFSM`, same `Stateful::on_state` recipe, same handler chain, same code that runs on Android and iOS:
 
 ```rust
-use blinc_layout::stateful::{stateful_with_key, StateTransitions};
-use blinc_core::reactive::State;
-use blinc_core::context_state::BlincContextState;
-use blinc_core::events::event_types;
+use blinc::layout::stateful::{stateful_with_key, StateTransitions};
+use blinc::core::reactive::State;
+use blinc::core::context_state::BlincContextState;
+use blinc::core::events::event_types;
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum DragFSM {
@@ -174,9 +174,9 @@ Full example: [`examples/web_drag/src/lib.rs`](https://github.com/project-blinc/
 Demonstrates the `WebApp::run_with_async_setup` + `WebAssetLoader::fetch_bytes` pattern. The font isn't bundled inside the wasm artifact; it's fetched at runtime as a separate static asset that the browser caches independently. This example's wasm is **612 KB smaller** than `web_hello` purely because Arial is no longer baked into the bundle:
 
 ```rust
-use blinc_app::web::WebApp;
-use blinc_app::BlincError;
-use blinc_platform_web::WebAssetLoader;
+use blinc::app::web::WebApp;
+use blinc::app::BlincError;
+use blinc::platform_web::WebAssetLoader;
 
 const FONT_URL: &str = "fonts/Arial.ttf";
 

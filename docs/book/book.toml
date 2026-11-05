@@ -6,14 +6,13 @@ title = "Blinc UI Framework"
 description = "A GPU-accelerated, reactive UI framework for Rust. Fine-grained signals, declarative views, and a wgpu renderer that targets desktop, mobile, and the browser from one source tree."
 
 [build]
-# The docs book is published at https://blinc.rs/docs/ — the landing
-# page at https://blinc.rs/ lives in `web/` at the repo root and is
-# copied into `target/site/` alongside this output by the docs workflow.
-build-dir = "../../target/site/docs"
+# The publishing script assembles stable, release and development editions.
+build-dir = "../../target/book-dev"
 
 [output.html]
-# Used by mdBook for canonical links + sitemap.xml.
-site-url = "/docs/"
+additional-js = ["theme/version-selector.js"]
+additional-css = ["theme/version-selector.css"]
+site-url = "/docs/dev/"
 git-repository-url = "https://github.com/project-blinc/Blinc"
 edit-url-template = "https://github.com/project-blinc/Blinc/edit/main/docs/book/{path}"
 

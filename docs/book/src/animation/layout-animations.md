@@ -25,7 +25,7 @@ The result: elements glide from their old positions to their new positions, even
 The primary way to add layout animations. Call `.animate_bounds()` on any `Div` with a `VisualAnimationConfig`:
 
 ```rust
-use blinc_layout::visual_animation::VisualAnimationConfig;
+use blinc::layout::visual_animation::VisualAnimationConfig;
 
 div()
     .animate_bounds(
@@ -117,7 +117,7 @@ The key principle: **Taffy owns layout truth** — animations only apply visual 
 An accordion animates the height of collapsible content panels. When a section opens, the content grows from 0 to its natural height. When it closes, it shrinks back.
 
 ```rust
-use blinc_layout::visual_animation::VisualAnimationConfig;
+use blinc::layout::visual_animation::VisualAnimationConfig;
 
 // The outer accordion container — animates total height as sections open/close
 let mut container = div()
@@ -168,7 +168,7 @@ The three animation layers work together:
 A sidebar animates width when collapsing from expanded (with labels) to collapsed (icons only):
 
 ```rust
-use blinc_layout::visual_animation::VisualAnimationConfig;
+use blinc::layout::visual_animation::VisualAnimationConfig;
 
 // Items container — animates width + clips during collapse
 let items = div()

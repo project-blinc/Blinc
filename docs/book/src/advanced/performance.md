@@ -29,8 +29,8 @@ Anything that invalidates a gate forces a full walker rerun.
 **Do:** Let a stylesheet or a bound property carry hover, press and focus:
 
 ```rust
-use blinc_core::reactive::computed;
-use blinc_layout::prelude::*;
+use blinc::core::reactive::computed;
+use blinc::layout::prelude::*;
 
 fn hover_button() -> impl ElementBuilder {
     let pointer = Interaction::keyed("hover-button");

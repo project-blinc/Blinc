@@ -1,126 +1,96 @@
 # Installation
 
-## Prerequisites
+Blinc requires Rust 1.89 or newer and a GPU supported by Vulkan, Metal or
+DirectX 12. Browser applications use WebAssembly and WebGPU.
 
-Blinc requires:
-- **Rust 1.89+** (edition 2024)
-- A GPU with Vulkan, Metal, or DX12 support
-
-## Adding Blinc to Your Project
-
-Add `blinc_app` to your `Cargo.toml`:
+## Add Blinc
 
 ```toml
 [dependencies]
-blinc_app = { version = "0.6", features = ["windowed"] }
+blinc = { version = "0.6", features = ["cn"] }
 ```
 
-The `windowed` feature enables desktop windowing support. For headless rendering (e.g., server-side), omit this feature.
+The `blinc` package exposes the framework through `blinc::app`,
+`blinc::layout`, `blinc::core`, `blinc::theme` and the other API modules.
+`blinc::prelude::*` imports the common builders, core types and reactive
+functions. The `cn` feature adds the component library.
 
-## Feature Flags
+## Verify the installation
 
-The feature table below refers to `blinc_app`. The unified package described
-next forwards these platform features to it.
+Create `src/main.rs`:
 
-| Feature | Description |
-|---------|-------------|
-| `windowed` | Desktop window support via winit (default) |
-| `android` | Android platform support |
+```rust
+use blinc::{app::windowed::WindowedApp, cn, prelude::*};
 
-## Unified package
+fn main() -> Result<()> {
+    let theme = cn::cn_bundle().with_css(r#"
+        .welcome {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--background);
+        }
+    "#);
 
-The `blinc` facade exposes the existing crates through short module paths:
-`blinc::app`, `blinc::layout`, `blinc::core`, `blinc::theme`, and the other
-framework modules:
+    WindowedApp::run_with_theme(
+        WindowConfig::default(), theme, ColorScheme::Dark,
+        |_ctx| div().class("welcome").child(cn::h1("Your workspace")),
+    )
+}
+```
+
+Run `cargo run`. A window opens using Blinc's built-in theme and the
+application's stylesheet. Continue with [Your First App](first-app.md) to add
+Signals, Computeds and interactive components.
+
+## Feature flags
+
+Desktop windowing is enabled by default. Other platforms disable defaults
+and select their runner:
 
 ```toml
-[dependencies]
-blinc = { version = "0.6", features = ["cn", "icons"] }
+# Browser application
+blinc = { version = "0.6", default-features = false, features = ["web", "cn"] }
+
+# Android application
+blinc = { version = "0.6", default-features = false, features = ["android", "cn"] }
+
+# iOS application
+blinc = { version = "0.6", default-features = false, features = ["ios", "cn"] }
 ```
 
-```rust
-use blinc::{app::windowed::WindowedApp, prelude::*};
+| Feature | API |
+|---------|-----|
+| `windowed` | Desktop runner; enabled by default |
+| `web` | Browser runner and `blinc::platform_web` helpers |
+| `android`, `ios` | Mobile runners |
+| `cn` | Components through `blinc::cn` |
+| `svg` | SVG loading and rasterization through `blinc::svg` |
+| `icons` | Lucide icon data and SVG helpers through `blinc::icons` |
+| `media` | `blinc::media` and the layout playback widgets |
+| `dialogs`, `tray`, `notifications`, `hotkeys` | Desktop system integrations |
+| `windowed-full` | Desktop runner and all four system integrations |
+| `clipboard-image` | Image clipboard support |
+| `svg-raster-images` | SVG module with embedded raster decoding |
+| `icons-registry` | Icons module with name-based lookup |
+| `theme-watcher` | System colour-scheme watcher |
+| `hot-reload` | Application hot reload |
 
-fn main() -> Result<()> {
-    WindowedApp::run(WindowConfig::default(), |ctx| {
-        div().w(ctx.width).h(ctx.height).items_center().justify_center()
-            .child(text("Your workspace"))
-    })
-}
-```
+For headless rendering, use `default-features = false` without a runner
+feature. Add `icons`, `svg` or `media` when using the corresponding examples
+in this book. Module flags expose the public API; the application renderer
+also uses SVG internally, and components depend on icon data.
 
-Desktop windowing is enabled by default. For WebAssembly, disable defaults
-and enable `web`. The `cn`, `svg` and `icons` flags expose their respective
-modules; `media` exposes playback APIs and layout media widgets. Module flags
-control the facade's exports; the application renderer still uses SVG
-internally and components use icon data. Derives and flow macros support a
-facade-only dependency, including a renamed dependency.
+## Platform setup
 
-Individual `blinc_*` crates remain available for direct use.
-
-## Verifying Installation
-
-Create a simple test application:
-
-```rust
-// src/main.rs
-use blinc_app::prelude::*;
-use blinc_app::windowed::{WindowedApp, WindowedContext};
-
-fn main() -> Result<()> {
-    WindowedApp::run(WindowConfig::default(), |ctx| {
-        div()
-            .w(ctx.width)
-            .h(ctx.height)
-            .bg(Color::rgba(0.1, 0.1, 0.15, 1.0))
-            .flex_center()
-            .child(text("Blinc is working!").size(32.0).color(Color::WHITE))
-    })
-}
-```
-
-Run with:
+macOS uses Metal. Windows uses DirectX 12 or Vulkan with supported GPU
+drivers. Linux needs its graphics and window-system development libraries;
+for a Vulkan setup:
 
 ```bash
-cargo run
-```
-
-You should see a window with "Blinc is working!" displayed in the center.
-
-## Recommended Dev Dependencies
-
-For a better development experience, add these to your `Cargo.toml`:
-
-```toml
-[dev-dependencies]
-tracing-subscriber = "0.3"
-```
-
-Then initialize logging in your app:
-
-```rust
-fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .init();
-
-    WindowedApp::run(/* ... */)
-}
-```
-
-## Platform-Specific Notes
-
-### macOS
-No additional setup required. Blinc uses Metal for GPU rendering.
-
-### Windows
-Ensure you have up-to-date GPU drivers. Blinc uses DX12 by default, falling back to Vulkan.
-
-### Linux
-Install Vulkan development libraries:
-
-```bash
-# Ubuntu/Debian
+# Ubuntu / Debian
 sudo apt install libvulkan-dev
 
 # Fedora
@@ -130,5 +100,5 @@ sudo dnf install vulkan-devel
 sudo pacman -S vulkan-icd-loader
 ```
 
-### Android
-See the Android platform guide for cross-compilation setup.
+Platform-specific setup is covered in the [Web](../web/setup.md),
+[Android](../mobile/android.md) and [iOS](../mobile/ios.md) guides.

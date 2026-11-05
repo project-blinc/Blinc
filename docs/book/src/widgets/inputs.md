@@ -9,7 +9,7 @@ pointer moves.
 ### Basic Button
 
 ```rust
-use blinc_layout::prelude::*;
+use blinc::layout::prelude::*;
 
 button("Save").on_click(|_| println!("Saved!"))
 ```
@@ -28,7 +28,7 @@ div().flex_row().gap(2.0).children(
 A button is an element: `:hover`, `:active` and `:disabled` match it, so how
 it looks in each state, and how it eases between them, is a stylesheet.
 `button()` starts from the theme's primary look (the `.blinc-button` rules of
-`blinc_layout::ua_styles::UA_STYLES`); give it a class and write your own
+`blinc::layout::ua_styles::UA_STYLES`); give it a class and write your own
 rules, which win over the default look:
 
 ```rust
@@ -51,7 +51,7 @@ The label takes a string or a signal, and `.disabled(..)` takes a bool or a
 signal. Both are patched in place:
 
 ```rust
-use blinc_core::reactive::{computed, signal};
+use blinc::core::reactive::{computed, signal};
 
 let saving = signal(false);
 let label = computed(move |g| {
@@ -69,7 +69,7 @@ button(label)
 button's `color`, so a rule that changes it on `:hover` changes them too:
 
 ```rust
-use blinc_layout::widgets::button_with;
+use blinc::layout::widgets::button_with;
 
 button_with(|_| {
     div()
@@ -102,7 +102,7 @@ gives it the theme's disabled fill and muted text; restyle it with a
 ### Basic Checkbox
 
 ```rust
-use blinc_layout::widgets::checkbox::checkbox;
+use blinc::layout::widgets::checkbox::checkbox;
 
 let remember = ctx.use_signal(false);
 
@@ -127,7 +127,7 @@ checkbox(remember).label("Remember me")
 A checkbox is an element with a `checked` attribute while it is checked and
 `disabled` while it cannot be used. Its fill, border colour, hover, the
 disabled palette and the mark's fade-in are the `.blinc-checkbox` rules of
-`blinc_layout::ua_styles::UA_STYLES`, with a `transition`. Restyle it with
+`blinc::layout::ua_styles::UA_STYLES`, with a `transition`. Restyle it with
 rules of your own; they win over the defaults:
 
 ```css
@@ -157,7 +157,7 @@ let remember = ctx.use_signal(true); // Start checked
 ## Radio Groups
 
 ```rust
-use blinc_layout::widgets::radio_group;
+use blinc::layout::widgets::radio_group;
 
 let theme = ctx.use_signal("light".to_string());
 
@@ -178,7 +178,7 @@ Each ring has a `checked` attribute while its option is selected and
 `disabled` while it cannot be chosen. The ring's border, the dot's fade-in,
 hover (which also highlights an unselected option) and the disabled fill are
 the `.blinc-radio` and `.blinc-radio-dot` rules of
-`blinc_layout::ua_styles::UA_STYLES`, with a `transition`. Restyle them with
+`blinc::layout::ua_styles::UA_STYLES`, with a `transition`. Restyle them with
 rules of your own:
 
 ```css
@@ -196,7 +196,7 @@ colours come from rules, so there are no colour setters.
 ### Basic Text Input
 
 ```rust
-use blinc_layout::widgets::text_input::{text_input, text_input_state_with_placeholder};
+use blinc::layout::widgets::text_input::{text_input, text_input_state_with_placeholder};
 
 fn my_ui(ctx: &WindowedContext) -> impl ElementBuilder {
     let state = text_input_state_with_placeholder("Enter your name...");
@@ -249,7 +249,7 @@ stepper button does, call `refresh_text_input` so the field shows the
 change:
 
 ```rust
-use blinc_layout::widgets::text_input::refresh_text_input;
+use blinc::layout::widgets::text_input::refresh_text_input;
 
 {
     let mut data = state.lock().unwrap();
@@ -268,7 +268,7 @@ verification codes and PINs. It keeps a joined `State<String>` in sync
 while handling focus movement across slots.
 
 ```rust
-use blinc_layout::widgets::input_otp::input_otp;
+use blinc::layout::widgets::input_otp::input_otp;
 
 fn verification_code(ctx: &WindowedContext) -> impl ElementBuilder {
     let code = ctx.use_signal(String::new());
@@ -303,7 +303,7 @@ input_otp(&code, 6)
 ### Basic Text Area
 
 ```rust
-use blinc_layout::widgets::text_area::{text_area, text_area_state_with_placeholder};
+use blinc::layout::widgets::text_area::{text_area, text_area_state_with_placeholder};
 
 fn my_ui(ctx: &WindowedContext) -> impl ElementBuilder {
     let state = text_area_state_with_placeholder("Enter description...");
@@ -350,7 +350,7 @@ in place. After changing its state from outside the widget, call
 `refresh_text_area` so the field shows the change:
 
 ```rust
-use blinc_layout::widgets::text_area::refresh_text_area;
+use blinc::layout::widgets::text_area::refresh_text_area;
 
 state.lock().unwrap().set_value("First line\nSecond line");
 refresh_text_area(&state);
@@ -363,7 +363,7 @@ refresh_text_area(&state);
 ### Syntax Highlighted Code
 
 ```rust
-use blinc_layout::widgets::code::code;
+use blinc::layout::widgets::code::code;
 
 fn my_ui() -> impl ElementBuilder {
     let source = r#"

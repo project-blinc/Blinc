@@ -20,8 +20,8 @@ The cleanest entry point is [`WindowedApp::run_with_theme`], which installs a `T
 the runtime's platform default has a chance to claim the global slot:
 
 ```rust
-use blinc_app::prelude::*;
-use blinc_theme::{BlincTheme, ColorScheme};
+use blinc::app::prelude::*;
+use blinc::theme::{BlincTheme, ColorScheme};
 
 WindowedApp::run_with_theme(
     WindowConfig::default(),
@@ -52,7 +52,7 @@ A `ThemeBundle` can carry one or more CSS sources that the runtime registers aut
 after the bundle is installed:
 
 ```rust
-use blinc_theme::BlincTheme;
+use blinc::theme::BlincTheme;
 
 let bundle = BlincTheme::bundle()
     .with_css(r#"
@@ -77,13 +77,13 @@ installed bundle's variables.
 
 ### `cn_bundle()`
 
-When you're using `blinc_cn`, [`blinc_cn::cn_bundle()`] returns the platform default already
+When you're using `blinc_cn`, [`blinc::cn::cn_bundle()`] returns the platform default already
 pre-loaded with the cn components' default stylesheet:
 
 ```rust
 WindowedApp::run_with_theme(
     config,
-    blinc_cn::cn_bundle(),       // platform theme + CN_STYLES
+    blinc::cn::cn_bundle(),       // platform theme + CN_STYLES
     ColorScheme::Dark,
     |ctx| build_ui(ctx),
 )
@@ -99,7 +99,7 @@ defaults.
 ### Accessing Theme Tokens
 
 ```rust
-use blinc_theme::{ThemeState, ColorToken};
+use blinc::theme::{ThemeState, ColorToken};
 
 fn my_component() -> impl ElementBuilder {
     let theme = ThemeState::get();
@@ -140,7 +140,7 @@ a UI rebuild + CSS reparse so cached stylesheets resolve against the new variabl
 ThemeState::get().toggle_scheme();
 
 // Or set explicitly
-use blinc_theme::ColorScheme;
+use blinc::theme::ColorScheme;
 ThemeState::get().set_scheme(ColorScheme::Dark);
 ThemeState::get().set_scheme(ColorScheme::Light);
 
@@ -192,7 +192,7 @@ Color tokens provide semantic meaning to colors, making it easy to build consist
 ### Usage Example
 
 ```rust
-use blinc_theme::{ThemeState, ColorToken};
+use blinc::theme::{ThemeState, ColorToken};
 
 fn themed_card() -> impl ElementBuilder {
     let theme = ThemeState::get();
@@ -409,7 +409,7 @@ Blinc automatically detects the system's preferred color scheme on supported pla
 ### Manual Detection
 
 ```rust
-use blinc_theme::platform::detect_system_color_scheme;
+use blinc::theme::platform::detect_system_color_scheme;
 
 // Get system preference
 let scheme = detect_system_color_scheme();
@@ -428,17 +428,17 @@ For apps that need to automatically follow system theme changes (e.g., when the 
 
 ### Enabling the Feature
 
-Add the `watcher` feature to your `Cargo.toml`:
+Add the `theme-watcher` feature to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-blinc_theme = { version = "0.6", features = ["watcher"] }
+blinc = { version = "0.6", features = ["theme-watcher"] }
 ```
 
 ### Basic Usage
 
 ```rust
-use blinc_theme::{SystemSchemeWatcher, WatcherConfig};
+use blinc::theme::{SystemSchemeWatcher, WatcherConfig};
 use std::time::Duration;
 
 // Start watching with default interval (1 second)
@@ -457,7 +457,7 @@ let watcher = SystemSchemeWatcher::start_with_interval(Duration::from_secs(5));
 ### Using WatcherConfig
 
 ```rust
-use blinc_theme::WatcherConfig;
+use blinc::theme::WatcherConfig;
 use std::time::Duration;
 
 // Builder pattern for configuration
@@ -495,7 +495,7 @@ A `ThemeBundle` is a `(name, light, dark)` triple plus any attached CSS. To buil
 implement the [`Theme`] trait on two structs (one per scheme) and hand them to `ThemeBundle::new`:
 
 ```rust
-use blinc_theme::{
+use blinc::theme::{
     AnimationTokens, ColorScheme, ColorTokens, RadiusTokens, ShadowTokens, SpacingTokens, Theme,
     ThemeBundle, TypographyTokens,
 };
@@ -561,8 +561,8 @@ WindowedApp::run_with_theme(
 You can override individual tokens at runtime without changing the entire theme:
 
 ```rust
-use blinc_theme::{ThemeState, ColorToken};
-use blinc_core::Color;
+use blinc::theme::{ThemeState, ColorToken};
+use blinc::core::Color;
 
 // Override a specific color
 ThemeState::get().set_color_override(
@@ -681,8 +681,8 @@ status_badge("Error", ColorToken::Error)
 ## Example: Complete Themed Component
 
 ```rust
-use blinc_app::prelude::*;
-use blinc_theme::{ThemeState, ColorToken};
+use blinc::app::prelude::*;
+use blinc::theme::{ThemeState, ColorToken};
 
 fn notification_toast(
     message: &str,

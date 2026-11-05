@@ -6,8 +6,8 @@ around application content. Install `cn_bundle()` as described in
 builder's `ctx`:
 
 ```rust
-use blinc_cn::prelude::*;
-use blinc_layout::prelude::{div, img, text};
+use blinc::cn::prelude::*;
+use blinc::layout::prelude::{div, img, text};
 ```
 
 ## Avatar

@@ -3,11 +3,11 @@
 The built-in editor stores a structured document and supports selection, formatting and keyboard editing. Create its shared document once outside the UI builder so resizes and theme changes preserve edits.
 
 ```rust
-use blinc_layout::prelude::*;
-use blinc_layout::widgets::rich_text_editor::{
+use blinc::layout::prelude::*;
+use blinc::layout::widgets::rich_text_editor::{
     RichDocument, RichTextTheme, rich_text_editor, rich_text_state,
 };
-use blinc_core::Color;
+use blinc::core::Color;
 
 let document = rich_text_state(RichDocument::from_markdown(
     "## Your ideas\n\nWrite **something meaningful**.", Color::TRANSPARENT,

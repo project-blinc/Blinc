@@ -6,8 +6,8 @@ children follow it. When the signal changes, only what depends on it is
 updated, and nothing around it is rebuilt.
 
 ```rust
-use blinc_core::reactive::{computed, signal};
-use blinc_layout::prelude::*;
+use blinc::core::reactive::{computed, signal};
+use blinc::layout::prelude::*;
 
 let count = signal(0_i32);
 let label_color = computed(move |g| {
@@ -84,9 +84,9 @@ The call site doesn't change — the type of the argument selects the
 behaviour:
 
 ```rust
-use blinc_core::reactive::signal;            // bare reactive primitive
-use blinc_core::context_state::use_state;    // hook-keyed
-use blinc_layout::prelude::*;
+use blinc::core::reactive::signal;            // bare reactive primitive
+use blinc::core::context_state::use_state;    // hook-keyed
+use blinc::layout::prelude::*;
 
 let bg = signal(Color::from_hex(0x1a1a1a));  // Copy
 let w  = use_state(120.0_f32);                // Clone
@@ -107,7 +107,7 @@ Four free functions provide the bare reactive-primitive surface, all
 operating against the process-global reactive graph:
 
 ```rust
-use blinc_core::reactive::{signal, computed, derived, effect};
+use blinc::core::reactive::{signal, computed, derived, effect};
 
 let count: Signal<i32> = signal(0);
 
@@ -175,7 +175,7 @@ These take `impl IntoReactive<T>`: a value, a signal, a state or a computed.
 | `.line_height(value)` | `f32` |
 
 `Text::bound` takes a `Reactive<String>`: make one from a signal, state or
-computed with `.into_reactive()` (`blinc_layout::IntoReactive`).
+computed with `.into_reactive()` (`blinc::layout::IntoReactive`).
 
 **Others**
 
@@ -189,9 +189,9 @@ Visual-only updates skip layout and just repaint. Layout-affecting updates
 patch the live layout style and run one layout pass on the next frame.
 
 ```rust
-use blinc_core::reactive::{computed, signal};
-use blinc_layout::prelude::*;
-use blinc_layout::IntoReactive;
+use blinc::core::reactive::{computed, signal};
+use blinc::layout::prelude::*;
+use blinc::layout::IntoReactive;
 
 let name = signal("Ada".to_string());
 let greeting = computed(move |g| format!("Hello, {}", g.get(name).unwrap_or_default()));
@@ -246,7 +246,7 @@ the same as `.class(name)` or nothing.
   `animate_bounds` the element animates open and shut:
 
   ```rust
-  use blinc_layout::visual_animation::VisualAnimationConfig;
+  use blinc::layout::visual_animation::VisualAnimationConfig;
 
   let closed = computed(move |g| !g.get(open).unwrap_or(false));
 
@@ -266,8 +266,8 @@ When a stylesheet can't say it, `Interaction` gives an element's hover,
 press and focus as signals:
 
 ```rust
-use blinc_core::reactive::computed;
-use blinc_layout::prelude::*;
+use blinc::core::reactive::computed;
+use blinc::layout::prelude::*;
 
 let pointer = Interaction::keyed("save-card");
 let hovered = pointer.hovered().signal();
@@ -295,7 +295,7 @@ lazily and tracks every signal it reads through the graph it is given. Pass
 it to a reactive setter like a signal:
 
 ```rust
-use blinc_core::reactive::{computed, signal};
+use blinc::core::reactive::{computed, signal};
 
 let count = signal(0_i32);
 let label_color = computed(move |g| {
@@ -372,7 +372,7 @@ patches the element in place, which is cheaper.
 ### Basic Usage
 
 ```rust
-use blinc_layout::prelude::*;
+use blinc::layout::prelude::*;
 
 fn feature_card(label: &str, accent: Color) -> impl ElementBuilder {
     let label = label.to_string();
@@ -469,7 +469,7 @@ stateful::<ButtonState>()
 Use `ctx.event()` to access the event that triggered the callback:
 
 ```rust
-use blinc_core::events::event_types::*;
+use blinc::core::events::event_types::*;
 
 stateful::<ButtonState>()
     .on_state(|ctx| {
@@ -767,8 +767,8 @@ Define your own state enum for complex interactions. The `StateTransitions` trai
 ### Event-driven transitions (`on_event`)
 
 ```rust
-use blinc_layout::stateful::StateTransitions;
-use blinc_core::events::event_types::*;
+use blinc::layout::stateful::StateTransitions;
+use blinc::core::events::event_types::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug)]
 enum DragState {
@@ -813,8 +813,8 @@ fn draggable_item() -> impl ElementBuilder {
 Use it for state that should follow data automatically (loading completion, threshold crossings, timeouts driven by an external clock signal) rather than user input.
 
 ```rust
-use blinc_layout::stateful::StateTransitions;
-use blinc_core::use_state_keyed;
+use blinc::layout::stateful::StateTransitions;
+use blinc::core::use_state_keyed;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug)]
 enum LoaderState {
@@ -827,7 +827,7 @@ enum LoaderState {
 // A signal the state machine reads inside on_tick. Anything that
 // can be read globally works — a keyed state, a singleton value,
 // or a thread-local context.
-use blinc_core::State;
+use blinc::core::State;
 fn progress_signal() -> State<f32> {
     use_state_keyed("loader_progress", || 0.0)
 }
@@ -889,8 +889,8 @@ or drive it from external events — you need a `SharedState<S>`
 handle that survives UI rebuilds. Two factory functions cover this:
 
 ```rust
-use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, use_fsm, use_fsm_keyed};
+use blinc::layout::prelude::*;
+use blinc::layout::stateful::{ButtonState, use_fsm, use_fsm_keyed};
 
 // Bare — keyed by the source location of THIS call via `#[track_caller]`.
 // One slot per source line. Don't use inside a loop.

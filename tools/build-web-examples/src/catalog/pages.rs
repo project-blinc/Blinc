@@ -388,7 +388,7 @@ fn docs(root: &Path, c: &Component) -> Result<String> {
                 && !dest_url.starts_with('/')
             {
                 format!(
-                    "/docs/{}",
+                    "/docs/dev/{}",
                     parent
                         .join(dest_url.as_ref())
                         .to_string_lossy()
@@ -515,6 +515,10 @@ mod tests {
             assert!(page.contains("role=\"switch\" id=\"demo-dark\""));
             assert_eq!(page.matches("data-theme-family=").count(), 3);
             assert!(page.contains("/components/installation/"));
+            assert!(page.contains(&format!(
+                "href=\"/docs/dev/{}\"",
+                component.doc.strip_prefix("docs/book/src/").unwrap().replace(".md", ".html")
+            )));
             assert!(!page.contains("{{"), "unexpanded page template");
             let config_start = page.find("id=\"component-config\">").unwrap();
             let config = &page[config_start..];

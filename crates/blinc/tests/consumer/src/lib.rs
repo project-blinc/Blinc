@@ -29,6 +29,9 @@ pub fn project_actions() -> Div {
 #[cfg(all(feature = "web", target_arch = "wasm32"))]
 pub fn browser_app(_: &ui::app::web::WebApp) {}
 
+#[cfg(all(feature = "web", target_arch = "wasm32"))]
+pub fn browser_assets(_: &ui::platform_web::WebAssetLoader) {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

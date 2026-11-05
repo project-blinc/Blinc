@@ -5,7 +5,7 @@ Blinc includes a built-in markdown renderer that converts CommonMark + GFM markd
 ## Basic Usage
 
 ```rust
-use blinc_layout::markdown::markdown;
+use blinc::layout::markdown::markdown;
 
 // Render markdown to a Div
 let content = markdown(r#"
@@ -28,7 +28,7 @@ div()
 The renderer supports light and dark themes:
 
 ```rust
-use blinc_layout::markdown::{markdown, markdown_light, markdown_with_config, MarkdownConfig};
+use blinc::layout::markdown::{markdown, markdown_light, markdown_with_config, MarkdownConfig};
 
 // Dark theme (default) - for dark backgrounds
 let dark_content = markdown("# Dark Theme");
@@ -176,8 +176,8 @@ markdown(r#"
 Customize the renderer with `MarkdownConfig`:
 
 ```rust
-use blinc_layout::markdown::{markdown_with_config, MarkdownConfig};
-use blinc_core::Color;
+use blinc::layout::markdown::{markdown_with_config, MarkdownConfig};
+use blinc::core::Color;
 
 let config = MarkdownConfig {
     // Typography sizes

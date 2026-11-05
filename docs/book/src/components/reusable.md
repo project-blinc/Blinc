@@ -68,7 +68,7 @@ card_with_content("Settings",
 For components needing interactive state or reactive updates:
 
 ```rust
-use blinc_layout::stateful::stateful;
+use blinc::layout::stateful::stateful;
 
 fn counter_card(count: State<i32>) -> impl ElementBuilder {
     stateful::<ButtonState>()
@@ -112,7 +112,7 @@ fn increment_btn(count: State<i32>) -> impl ElementBuilder {
 Use `motion()` for components with spring animations:
 
 ```rust
-use blinc_layout::motion::motion;
+use blinc::layout::motion::motion;
 
 #[derive(BlincComponent)]
 struct AnimatedCard {
@@ -158,7 +158,7 @@ fn animated_card(ctx: &WindowedContext, title: &str) -> impl ElementBuilder {
 Use `stateful::<S>()` for components with visual states:
 
 ```rust
-use blinc_layout::stateful::stateful;
+use blinc::layout::stateful::stateful;
 
 fn interactive_card(title: &str) -> impl ElementBuilder {
     stateful::<ButtonState>()
@@ -267,7 +267,7 @@ Organize related components in modules:
 ```rust
 // src/components/cards.rs
 pub mod cards {
-    use blinc_app::prelude::*;
+    use blinc::app::prelude::*;
 
     pub fn simple_card(title: &str) -> Div {
         // ...

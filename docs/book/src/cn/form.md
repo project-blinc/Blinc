@@ -7,8 +7,8 @@ Components for building forms: inputs, checkboxes, selects, and more.
 Text input field, bound to a `SharedTextInputData`:
 
 ```rust
-use blinc_cn::prelude::*;
-use blinc_layout::widgets::text_input::text_input_data;
+use blinc::cn::prelude::*;
+use blinc::layout::widgets::text_input::text_input_data;
 
 let name = text_input_data();
 
@@ -21,7 +21,7 @@ cn::input(&name)
 ### Input Types
 
 ```rust
-use blinc_layout::widgets::text_input::InputType;
+use blinc::layout::widgets::text_input::InputType;
 
 cn::input(&email).input_type(InputType::Email).placeholder("Email")
 cn::input(&password).password().placeholder("Password")
@@ -72,7 +72,7 @@ style, which the component rules do not replace. The `hover_*`, `focused_*`,
 Segmented one-time-code input:
 
 ```rust
-use blinc_cn::prelude::*;
+use blinc::cn::prelude::*;
 
 let code = ctx.use_signal(String::new());
 
@@ -101,7 +101,7 @@ cn::input_otp(code, 6)
 Multi-line text input, bound to a `SharedTextAreaState`:
 
 ```rust
-use blinc_layout::widgets::text_area::text_area_state;
+use blinc::layout::widgets::text_area::text_area_state;
 
 let description = text_area_state();
 
@@ -574,8 +574,8 @@ cn::label(status)                  // a Signal<String>
 ## Form Layout Example
 
 ```rust
-use blinc_core::reactive::computed;
-use blinc_layout::widgets::text_input::{InputType, text_input_data};
+use blinc::core::reactive::computed;
+use blinc::layout::widgets::text_input::{InputType, text_input_data};
 
 let name = text_input_data();
 let email = text_input_data();

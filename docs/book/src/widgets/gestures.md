@@ -3,9 +3,9 @@
 `GestureExt` adds tap, long-press and directional swipe recognition to a `Div`.
 
 ```rust
-use blinc_layout::prelude::*;
-use blinc_layout::widgets::gesture::GestureExt;
-use blinc_core::reactive::signal;
+use blinc::layout::prelude::*;
+use blinc::layout::widgets::gesture::GestureExt;
+use blinc::core::reactive::signal;
 
 let message = signal(String::new());
 let surface = div().class("gesture-surface")

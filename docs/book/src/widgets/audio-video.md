@@ -1,12 +1,14 @@
 # Audio & Video
 
+Enable the `media` feature on your `blinc` dependency for the playback and capture APIs in this chapter.
+
 The `blinc_media` crate provides cross-platform audio/video with royalty-free codecs.
 Media widgets in `blinc_layout` (behind the `media` feature) provide player UIs.
 
 ## Audio Playback
 
 ```rust
-use blinc_media::{AudioPlayer, AudioSource};
+use blinc::media::{AudioPlayer, AudioSource};
 
 let player = AudioPlayer::new();
 player.play(AudioSource::file("music.ogg"));
@@ -23,7 +25,7 @@ Desktop: Vorbis, WAV, FLAC via rodio. Mobile: platform codecs via native bridge.
 ## Video Playback
 
 ```rust
-use blinc_media::{VideoPlayer, VideoDecoder};
+use blinc::media::{VideoPlayer, VideoDecoder};
 
 let mut decoder = VideoDecoder::new();
 let player = VideoPlayer::new();
@@ -44,7 +46,7 @@ Desktop: OpenH264 (royalty-free). Mobile: platform decoders via native bridge.
 Both players implement the shared `Player` trait:
 
 ```rust
-use blinc_media::Player;
+use blinc::media::Player;
 
 fn show_status(p: &dyn Player) {
     println!("{} / {} | vol: {}", p.position_ms(), p.duration_ms(), p.volume());
@@ -63,7 +65,7 @@ fn show_status(p: &dyn Player) {
 
 ```rust
 use std::rc::Rc;
-use blinc_layout::widgets::media::audio_player;
+use blinc::layout::widgets::media::audio_player;
 
 let player = Rc::new(AudioPlayer::new());
 
@@ -85,7 +87,7 @@ asks for animation frames only while its player is playing.
 
 ```rust
 use std::rc::Rc;
-use blinc_layout::widgets::media::video_player;
+use blinc::layout::widgets::media::video_player;
 
 let player = Rc::new(VideoPlayer::new());
 
@@ -101,7 +103,7 @@ video_player(Rc::clone(&player))
 Standalone amplitude visualization:
 
 ```rust
-use blinc_layout::widgets::media::waveform;
+use blinc::layout::widgets::media::waveform;
 
 waveform(buckets)
     .progress(0.5)
@@ -116,7 +118,7 @@ waveform(buckets)
 `MediaControls` is generic over `Player`:
 
 ```rust
-use blinc_layout::widgets::media::MediaControls;
+use blinc::layout::widgets::media::MediaControls;
 
 MediaControls::new(player_rc).class("my-controls").into_div()
 ```
@@ -128,7 +130,7 @@ Live streams: `[ ▶ ] [ LIVE ] [ ════════════ ]`
 ## Camera & Recording
 
 ```rust
-use blinc_media::rtc::{CameraStream, CameraConfig, AudioRecorder};
+use blinc::media::rtc::{CameraStream, CameraConfig, AudioRecorder};
 
 let camera = CameraStream::open(CameraConfig::default());
 let frame = camera.latest_frame(); // RGBA Frame
@@ -143,7 +145,7 @@ drop(recorder);  // stops recording
 ## Frame Utilities
 
 ```rust
-use blinc_media::{Frame, AudioSamples};
+use blinc::media::{Frame, AudioSamples};
 
 // Video
 let small = Frame::from_rgba(data, 640, 480).scale(320, 240);

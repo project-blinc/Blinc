@@ -12,7 +12,7 @@ changes, every subscriber (signal-bound property binding, stateful
 element with `.deps([…])`, derived computation) is notified.
 
 ```rust
-use blinc_core::context_state::use_state;
+use blinc::core::context_state::use_state;
 
 // Auto-keyed by source location (#[track_caller]).
 let count = use_state(0_i32);
@@ -99,7 +99,7 @@ Derived values compute from other signals and cache the result.
 around a `Derived<T>` handle plus the reactive graph it lives in:
 
 ```rust
-use blinc_core::context_state::{use_state, use_computed};
+use blinc::core::context_state::{use_state, use_computed};
 
 let count = use_state(0_i32);
 

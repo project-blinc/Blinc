@@ -704,6 +704,7 @@ dependencies = [
  "blinc_media",
  "blinc_paint",
  "blinc_platform",
+ "blinc_platform_web",
  "blinc_router",
  "blinc_svg",
  "blinc_text",

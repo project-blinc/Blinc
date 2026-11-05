@@ -8,8 +8,8 @@ The examples use these imports. `ctx` is the `WindowedContext` supplied to
 the application builder:
 
 ```rust
-use blinc_cn::prelude::*;
-use blinc_layout::prelude::{div, text};
+use blinc::cn::prelude::*;
+use blinc::layout::prelude::{div, text};
 ```
 
 ## Open a Dialog
@@ -79,7 +79,7 @@ Create editor data once and clone its handle into the deferred body. Input
 changes can update a Signal that the confirmation callback reads:
 
 ```rust
-use blinc_layout::widgets::text_input::text_input_data;
+use blinc::layout::widgets::text_input::text_input_data;
 
 let name_data = text_input_data();
 let name = ctx.use_signal(String::new());

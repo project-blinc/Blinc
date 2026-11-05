@@ -7,7 +7,7 @@ Blinc uses spring physics for natural, responsive animations. Springs provide sm
 All spring animations are configured with `SpringConfig`:
 
 ```rust
-use blinc_animation::SpringConfig;
+use blinc::animation::SpringConfig;
 
 // Custom spring
 let config = SpringConfig {
@@ -84,7 +84,7 @@ For smooth spring-animated hover effects, use `motion()` with animated values:
 
 ```rust
 use std::sync::Arc;
-use blinc_layout::motion::motion;
+use blinc::layout::motion::motion;
 
 fn hover_scale_card(ctx: &WindowedContext) -> impl ElementBuilder {
     let scale = ctx.use_animated_value(1.0, SpringConfig::snappy());
@@ -120,7 +120,7 @@ fn hover_scale_card(ctx: &WindowedContext) -> impl ElementBuilder {
 Use `motion()` for elements with animated position:
 
 ```rust
-use blinc_layout::motion::motion;
+use blinc::layout::motion::motion;
 
 fn draggable_element(ctx: &WindowedContext) -> impl ElementBuilder {
     let x = ctx.use_animated_value(100.0, SpringConfig::wobbly());
@@ -157,7 +157,7 @@ fn draggable_element(ctx: &WindowedContext) -> impl ElementBuilder {
 For declarative enter/exit animations, use `motion()`:
 
 ```rust
-use blinc_layout::motion::motion;
+use blinc::layout::motion::motion;
 
 motion()
     .fade_in(300)      // Fade in over 300ms

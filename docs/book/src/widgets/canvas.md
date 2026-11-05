@@ -5,7 +5,7 @@ The `canvas()` element provides direct GPU drawing access for custom graphics, c
 ## Basic Usage
 
 ```rust
-use blinc_core::{DrawContext, Rect, Brush, Color, CornerRadius};
+use blinc::core::{DrawContext, Rect, Brush, Color, CornerRadius};
 
 canvas(|ctx: &mut dyn DrawContext, bounds| {
     // bounds contains the canvas size
@@ -71,7 +71,7 @@ ctx.stroke_circle(
 ### Text
 
 ```rust
-use blinc_core::TextStyle;
+use blinc::core::TextStyle;
 
 ctx.draw_text(
     "Hello, Canvas!",
@@ -83,7 +83,7 @@ ctx.draw_text(
 ## Gradients
 
 ```rust
-use blinc_core::{Gradient, GradientStop, Point};
+use blinc::core::{Gradient, GradientStop, Point};
 
 // Linear gradient
 let gradient = Brush::Gradient(Gradient::linear(
@@ -114,7 +114,7 @@ let gradient = Brush::Gradient(Gradient::linear_with_stops(
 ## Transforms
 
 ```rust
-use blinc_core::Transform;
+use blinc::core::Transform;
 
 // Push transform
 ctx.push_transform(Transform::translate(50.0, 50.0));

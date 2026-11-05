@@ -6,7 +6,7 @@ A sketch is a `struct` that owns its own animation state plus a `draw()` method 
 
 ```rust
 use blinc_canvas_kit::prelude::*;
-use blinc_core::layer::Color;
+use blinc::core::layer::Color;
 
 struct Bouncer {
     x: f32,

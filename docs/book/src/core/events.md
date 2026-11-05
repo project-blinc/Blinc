@@ -147,7 +147,7 @@ pub struct EventContext {
 Use `ToggleState` for toggle buttons - it handles click transitions automatically:
 
 ```rust
-use blinc_layout::stateful::stateful;
+use blinc::layout::stateful::stateful;
 
 fn toggle_button() -> impl ElementBuilder {
     stateful::<ToggleState>()
@@ -178,8 +178,8 @@ fn toggle_button() -> impl ElementBuilder {
 no relayout.
 
 ```rust
-use blinc_core::context_state::use_state;
-use blinc_core::Transform;
+use blinc::core::context_state::use_state;
+use blinc::core::Transform;
 
 fn draggable_box() -> impl ElementBuilder {
     let offset = use_state((100.0_f32, 100.0_f32));
@@ -222,7 +222,7 @@ fn keyboard_handler(ctx: &WindowedContext) -> impl ElementBuilder {
 ### Hover Preview
 
 ```rust
-use blinc_layout::stateful::stateful;
+use blinc::layout::stateful::stateful;
 
 fn hover_card() -> impl ElementBuilder {
     stateful::<ButtonState>()
@@ -258,7 +258,7 @@ traversal continues in tree order and scrolls the next control into view.
 Mark any element as a tab stop with the `tabindex` attribute:
 
 ```rust
-use blinc_layout::prelude::div;
+use blinc::layout::prelude::div;
 
 div()
     .attr("tabindex", "0")
@@ -301,8 +301,8 @@ Event handlers are `Fn` closures. `State<T>` is cheap to `clone()`
 the handle into each closure that needs it:
 
 ```rust
-use blinc_core::context_state::use_state;
-use blinc_layout::stateful::{NoState, stateful};
+use blinc::core::context_state::use_state;
+use blinc::layout::stateful::{NoState, stateful};
 
 fn counter_buttons() -> impl ElementBuilder {
     let count = use_state(0_i32);

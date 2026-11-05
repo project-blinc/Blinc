@@ -5,8 +5,8 @@ For complex interactions beyond hover/press, define custom state types with the 
 ## Defining Custom States
 
 ```rust
-use blinc_layout::stateful::StateTransitions;
-use blinc_core::events::event_types::*;
+use blinc::layout::stateful::StateTransitions;
+use blinc::core::events::event_types::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 enum PlayerState {
@@ -32,7 +32,7 @@ impl StateTransitions for PlayerState {
 ## Using Custom States
 
 ```rust
-use blinc_layout::prelude::*;
+use blinc::layout::prelude::*;
 
 fn player_button() -> impl ElementBuilder {
     stateful::<PlayerState>()
@@ -56,7 +56,7 @@ fn player_button() -> impl ElementBuilder {
 Available event types for state transitions:
 
 ```rust
-use blinc_core::events::event_types::*;
+use blinc::core::events::event_types::*;
 
 POINTER_ENTER    // Mouse enters element
 POINTER_LEAVE    // Mouse leaves element

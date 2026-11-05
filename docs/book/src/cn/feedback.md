@@ -5,8 +5,8 @@ Install `cn_bundle()` as described in [Getting Started](overview.md).
 Examples use these imports and the application builder's `ctx`:
 
 ```rust
-use blinc_cn::prelude::*;
-use blinc_layout::prelude::{div, text};
+use blinc::cn::prelude::*;
+use blinc::layout::prelude::{div, text};
 ```
 
 ## Alert
@@ -78,8 +78,8 @@ badge("Verified")
 Convert a Signal or Computed with `IntoReactive`:
 
 ```rust
-use blinc_core::reactive::computed;
-use blinc_layout::binding::IntoReactive;
+use blinc::core::reactive::computed;
+use blinc::layout::binding::IntoReactive;
 
 let count = ctx.use_signal(3usize);
 let shown = computed(move |graph| format!("{} new", graph.get(count).unwrap_or(0)));
@@ -139,7 +139,7 @@ The track is `.cn-progress`, with `data-size` and, when applicable,
 ### With a Label
 
 ```rust
-use blinc_core::reactive::computed;
+use blinc::core::reactive::computed;
 
 let pct = ctx.use_signal(0.0_f32);
 let shown = computed(move |graph| format!("{}%", graph.get(pct).unwrap_or(0.0) as i32));
@@ -170,7 +170,7 @@ The track is `.cn-spinner__track`; `.cn-spinner__arc` turns by the
 A button binds its label and disabled prop. Compose a spinner while it is busy:
 
 ```rust
-use blinc_core::reactive::computed;
+use blinc::core::reactive::computed;
 
 let busy = ctx.use_signal(false);
 let caption = computed(move |graph| {
@@ -289,7 +289,7 @@ through a computed condition. The completion button stands in for a request
 callback in this interactive example:
 
 ```rust
-use blinc_core::reactive::computed;
+use blinc::core::reactive::computed;
 
 let submitting = ctx.use_signal(false);
 let message = ctx.use_signal(String::new());
@@ -321,14 +321,14 @@ once at build time. Error feedback can use a separate error Signal and a
 
 ```rust
 fn notify_success(message: &str) {
-    blinc_cn::cn::toast_success("Success")
+    blinc::cn::cn::toast_success("Success")
         .description(message)
         .duration_ms(5000)
         .show();
 }
 
 fn notify_error(message: &str) {
-    blinc_cn::cn::toast_error("Error")
+    blinc::cn::cn::toast_error("Error")
         .description(message)
         .duration_ms(10000)
         .show();

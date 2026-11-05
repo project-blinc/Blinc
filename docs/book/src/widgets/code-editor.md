@@ -7,8 +7,8 @@ The `code_editor` widget provides a full-featured code editing experience with s
 Display syntax-highlighted code:
 
 ```rust
-use blinc_layout::prelude::*;
-use blinc_layout::syntax::{SyntaxConfig, RustHighlighter};
+use blinc::layout::prelude::*;
+use blinc::layout::syntax::{SyntaxConfig, RustHighlighter};
 
 code(r#"fn main() { println!("Hello"); }"#)
     .syntax(SyntaxConfig::new(RustHighlighter::new()))
@@ -120,7 +120,7 @@ the element; both win over the rules.
 Built-in highlighters:
 
 ```rust
-use blinc_layout::syntax::*;
+use blinc::layout::syntax::*;
 
 // Rust
 SyntaxConfig::new(RustHighlighter::new())

@@ -61,8 +61,7 @@ name = "my_app"
 crate-type = ["cdylib", "staticlib"]
 
 [target.'cfg(target_os = "ios")'.dependencies]
-blinc_app = { version = "0.6", features = ["ios"] }
-blinc_platform_ios = "0.6"
+blinc = { version = "0.6", default-features = false, features = ["ios"] }
 ```
 
 ### Xcode Build Settings

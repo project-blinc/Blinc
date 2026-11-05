@@ -70,8 +70,8 @@ For type-safe state definitions, implement `StateTransitions`. The trait has two
 ### Event-driven (`on_event`)
 
 ```rust
-use blinc_layout::stateful::StateTransitions;
-use blinc_core::events::event_types::*;
+use blinc::layout::stateful::StateTransitions;
+use blinc::core::events::event_types::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug)]
 enum ButtonState {
@@ -102,8 +102,8 @@ impl StateTransitions for ButtonState {
 Use it for state that should follow data automatically — loading completion, threshold crossings, timeouts driven by an external clock signal — rather than user input.
 
 ```rust
-use blinc_layout::stateful::StateTransitions;
-use blinc_core::{use_state_keyed, State};
+use blinc::layout::stateful::StateTransitions;
+use blinc::core::{use_state_keyed, State};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug)]
 enum LoaderState {
@@ -179,7 +179,7 @@ DRAG_END         // Drag completed
 ### Creating Stateful Elements
 
 ```rust
-use blinc_layout::prelude::*;
+use blinc::layout::prelude::*;
 
 fn interactive_card() -> impl ElementBuilder {
     stateful::<ButtonState>()
@@ -486,7 +486,7 @@ need its handle for external dispatch — is the `use_fsm`
 family.
 
 ```rust
-use blinc_layout::stateful::{ButtonState, use_fsm, use_fsm_keyed};
+use blinc::layout::stateful::{ButtonState, use_fsm, use_fsm_keyed};
 
 // Bare — keyed by source location of the caller via `#[track_caller]`.
 let modal_btn = use_fsm(ButtonState::Idle);

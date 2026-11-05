@@ -1,0 +1,42 @@
+.book-version-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-inline-end: 0.75rem;
+  color: var(--fg);
+  font-size: 1.3rem;
+}
+
+.book-version-picker select {
+  min-height: 32px;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--table-border-color);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.book-version-picker select:focus-visible {
+  outline: 2px solid var(--links);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  #menu-bar:has(.book-version-picker) .menu-title {
+    display: none;
+  }
+
+  .book-version-picker {
+    margin-inline-end: 0.25rem;
+  }
+
+  .book-version-picker > span {
+    display: none;
+  }
+
+  .book-version-picker select {
+    max-width: 120px;
+  }
+}

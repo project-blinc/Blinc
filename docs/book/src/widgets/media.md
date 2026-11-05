@@ -7,7 +7,7 @@ Blinc supports raster images and SVG graphics with flexible sizing and styling o
 ### Basic Image
 
 ```rust
-use blinc_layout::image::image;
+use blinc::layout::image::image;
 
 image("path/to/photo.png")
     .w(200.0)
@@ -103,7 +103,7 @@ For content-heavy apps with many images (galleries, feeds, chat) lazy loading de
 #### Builder API
 
 ```rust
-use blinc_layout::prelude::*;
+use blinc::layout::prelude::*;
 use std::time::Duration;
 
 // Basic lazy loading — no placeholder, just defer decode
@@ -215,7 +215,7 @@ CSS values override builder values. Use the builder for one-off images and CSS f
 Render emoji as images at arbitrary sizes using the system emoji font. Emoji images are **automatically lazy-loaded** for memory efficiency.
 
 ```rust
-use blinc_layout::image::{emoji, emoji_sized};
+use blinc::layout::image::{emoji, emoji_sized};
 
 // Default size (64px)
 emoji("😀")
@@ -241,7 +241,7 @@ Emoji images use the system color emoji font (Apple Color Emoji on macOS, Segoe 
 ### Basic SVG
 
 ```rust
-use blinc_layout::svg::svg;
+use blinc::layout::svg::svg;
 
 svg("icons/menu.svg")
     .w(24.0)
@@ -296,7 +296,7 @@ fn avatar(url: &str, size: f32) -> impl ElementBuilder {
 ### Icon Button
 
 ```rust
-use blinc_layout::stateful::stateful;
+use blinc::layout::stateful::stateful;
 
 fn icon_button(icon_path: &str) -> impl ElementBuilder {
     stateful::<ButtonState>()

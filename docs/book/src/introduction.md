@@ -1,120 +1,86 @@
 # Introduction
 
-**Blinc** is a GPU-accelerated, reactive UI framework for Rust. It provides a declarative, component-based approach to building high-performance user interfaces with smooth animations and modern visual effects.
+Blinc is a GPU-accelerated UI framework for Rust. Build desktop, mobile and
+browser interfaces with composable components, CSS styling and reactive
+property bindings.
 
-## Why Blinc?
+This book uses the `blinc` package. Its modules provide the application runner,
+layout builders, reactive primitives, themes and optional component APIs.
 
-- **GPU-Accelerated Rendering** - All rendering is done on the GPU via wgpu, enabling smooth 60fps animations and complex visual effects like glass materials and shadows.
+## Compose an interface
 
-- **Declarative UI** - Build interfaces using a fluent, composable API inspired by SwiftUI and modern web frameworks. No manual DOM manipulation.
-
-- **Reactive State** - Automatic UI updates when state changes, with fine-grained reactivity for optimal performance.
-
-- **Spring Physics** - Natural, physics-based animations using spring dynamics instead of fixed durations.
-
-- **Cross-Platform** - Runs on macOS, Windows, Linux, Android, iOS and Web (WASM + WebGPU).
-
-## Key Features
-
-### Flexbox Layout
-All layout is powered by [Taffy](https://github.com/DioxusLabs/taffy), a high-performance flexbox implementation. Use familiar CSS-like properties:
+Rust builders describe the content and its structure:
 
 ```rust
-div()
-    .flex_col()
-    .gap(16.0)
-    .p(24.0)
-    .child(text("Hello"))
-    .child(text("World"))
-```
+use blinc::{cn, prelude::*};
 
-### Material Effects
-Built-in support for glass, metallic, and other material effects:
-
-```rust
-div()
-    .glass()
-    .rounded(16.0)
-    .p(24.0)
-    .child(text("Frosted Glass"))
-```
-
-### Type-Safe Animations
-The `BlincComponent` derive macro generates type-safe animation hooks:
-
-```rust
-#[derive(BlincComponent)]
-struct MyCard {
-    #[animation]
-    scale: f32,
-    #[animation]
-    opacity: f32,
-}
-
-// Usage
-let scale = MyCard::use_scale(ctx, 1.0, SpringConfig::snappy());
-let opacity = MyCard::use_opacity(ctx, 0.0, SpringConfig::gentle());
-```
-
-### Event Handling
-Intuitive event handling with closures:
-
-```rust
-div()
-    .on_click(|_| println!("Clicked!"))
-    .on_hover_enter(|_| println!("Hovered"))
-```
-
-## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────┐
-│                   Your Application                   │
-├─────────────────────────────────────────────────────┤
-│  blinc_app   │  WindowedApp, Context, State Hooks   │
-├──────────────┼──────────────────────────────────────┤
-│  blinc_layout│  Elements, Flexbox, Event Routing    │
-├──────────────┼──────────────────────────────────────┤
-│  blinc_animation │  Springs, Timelines, Motion      │
-├──────────────┼──────────────────────────────────────┤
-│  blinc_gpu   │  Render Pipeline, Materials          │
-├──────────────┼──────────────────────────────────────┤
-│  wgpu        │  GPU Abstraction Layer               │
-└─────────────────────────────────────────────────────┘
-```
-
-## Quick Example
-
-Here's a minimal Blinc application:
-
-```rust
-use blinc_app::prelude::*;
-use blinc_app::windowed::{WindowedApp, WindowedContext};
-
-fn main() -> Result<()> {
-    WindowedApp::run(WindowConfig::default(), |ctx| {
-        div()
-            .w(ctx.width)
-            .h(ctx.height)
-            .bg(Color::rgba(0.1, 0.1, 0.15, 1.0))
-            .flex_center()
-            .child(
-                div()
-                    .glass()
-                    .rounded(16.0)
-                    .p(32.0)
-                    .child(text("Hello, Blinc!").size(24.0).color(Color::WHITE))
-            )
-    })
+fn project_card() -> Div {
+    div().class("project-card")
+        .child(cn::h2("Website"))
+        .child(cn::p("Keep decisions and next steps together."))
 }
 ```
 
-## For AI Agents
+Stylesheets define the appearance:
 
-If you're an AI coding agent working with Blinc, see [Skills.md](https://github.com/project-blinc/Blinc/blob/main/Skills.md) in the repository root — a concise, example-driven reference with verified APIs, CSS-first styling patterns, and common pitfalls.
+```css
+.project-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-default);
+  background: var(--surface);
+}
+```
 
-## Next Steps
+Built-in themes supply colours, spacing, corner shapes and motion tokens.
+Component classes let an application restyle controls while retaining their
+input behaviour.
 
-- [Installation](./getting-started/installation.md) - Set up your development environment
-- [Your First App](./getting-started/first-app.md) - Build a complete application step by step
-- [Elements & Layout](./core/elements-layout.md) - Learn about available UI elements
+## Bind data to properties
+
+Signals hold values, Computeds derive them, and Effects connect changes to
+application logic. Properties accept reactive sources directly:
+
+```rust
+use blinc::{cn, core::{computed, signal}};
+
+let pending = signal(3usize);
+let summary = computed(move |g| {
+    format!("{} files awaiting review", g.get(pending).unwrap_or_default())
+});
+
+let heading = cn::heading(2, summary);
+pending.set(5);
+```
+
+Changing the Signal updates the bound heading in place. Reactive lists and
+branches handle changes to children. Finite state machines remain available
+for interactions that need explicit states and transitions.
+
+## Draw beyond standard controls
+
+Blinc combines text shaping, SDF geometry, images, SVG, canvas drawing and
+material effects in its GPU renderer. Flow shaders provide custom visual
+behaviour. CSS transitions, keyframes and motion containers animate the UI.
+
+## Find the API
+
+| Module | Purpose |
+|--------|---------|
+| `blinc::app` | Desktop, mobile and browser runners |
+| `blinc::layout` | Elements, layout and input routing |
+| `blinc::core` | Signals, Computeds, Effects and drawing types |
+| `blinc::theme` | Built-in themes and custom theme bundles |
+| `blinc::cn` | Components, enabled with `cn` |
+| `blinc::icons` | Lucide icons, enabled with `icons` |
+| `blinc::svg` | SVG loading APIs, enabled with `svg` |
+| `blinc::media` | Playback and capture APIs, enabled with `media` |
+
+The version selector opens documentation for the release you use. The main
+`/docs/` entry shows the latest stable book; Development follows the current
+source tree.
+
+Start with [Installation](getting-started/installation.md), then build
+[Your First App](getting-started/first-app.md).

@@ -5,7 +5,7 @@ The `blinc_router` crate provides cross-platform routing with path matching, nav
 ## Setup
 
 ```rust
-use blinc_router::{RouterBuilder, Route, PageTransition};
+use blinc::router::{RouterBuilder, Route, PageTransition};
 
 let router = RouterBuilder::new()
     .route(Route::new("/").name("home").view(home_page))
@@ -103,7 +103,7 @@ exit animation is done.
 Protect routes with guards that allow, redirect, or reject:
 
 ```rust
-use blinc_router::{NavigationGuard, GuardResult};
+use blinc::router::{NavigationGuard, GuardResult};
 use std::sync::Arc;
 
 let auth_guard: NavigationGuard = Arc::new(|_from, _to| {
@@ -229,7 +229,7 @@ router.has_route("/users/42"); // true
 Use the `tabs()` component from `blinc_cn` with the router's current path as the active tab:
 
 ```rust
-use blinc_cn::tabs;
+use blinc::cn::tabs;
 
 fn app_shell(router: &Router) -> Div {
     // Track active tab via router path
@@ -281,7 +281,7 @@ When you `router.back()`:
 ### Page state
 
 ```rust
-use blinc_router::PageState;
+use blinc::router::PageState;
 
 let pages = router.page_stack();
 for page in &pages {
@@ -340,7 +340,7 @@ fn dashboard_layout(ctx: RouteContext) -> Div {
 Use `sheet()` from `blinc_cn` for modal-like navigation that slides up from the bottom:
 
 ```rust
-use blinc_cn::sheet;
+use blinc::cn::sheet;
 
 fn show_details(router: &Router, item_id: &str) {
     // Navigate to detail route
@@ -374,9 +374,9 @@ sheet()
 | Pattern | Widget | Router Integration |
 |---------|--------|-------------------|
 | **Page navigation** | `router.outlet()` | Direct — renders current route |
-| **Tab bar** | `blinc_cn::tabs()` | Tab clicks call `router.push()` |
+| **Tab bar** | `blinc::cn::tabs()` | Tab clicks call `router.push()` |
 | **Stack with animations** | `stack()` + `motion()` | Wrap route views in motion containers |
-| **Bottom sheet** | `blinc_cn::sheet()` | Content renders `router.outlet()`, dismiss calls `router.back()` |
-| **Drawer / sidebar** | `blinc_cn::drawer()` | Navigation links call `router.push()` |
+| **Bottom sheet** | `blinc::cn::sheet()` | Content renders `router.outlet()`, dismiss calls `router.back()` |
+| **Drawer / sidebar** | `blinc::cn::drawer()` | Navigation links call `router.push()` |
 | **Back button** | Auto-registered | `RouterBuilder::build()` wires it |
 | **Deep links** | Auto-registered | Platform dispatches to router automatically |

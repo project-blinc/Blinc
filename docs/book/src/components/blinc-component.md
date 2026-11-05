@@ -7,7 +7,7 @@ struct. Props accept ordinary values, `Signal<T>` and `Computed<T>` through
 ## Declare the Fields
 
 ```rust
-use blinc_app::prelude::*;
+use blinc::app::prelude::*;
 
 #[derive(BlincComponent)]
 pub struct Counter {
@@ -29,8 +29,8 @@ struct. Each prop keeps its field visibility and documentation, and stores
 ## Supply Reactive Props
 
 ```rust
-use blinc_app::prelude::*;
-use blinc_core::reactive::{computed, signal};
+use blinc::app::prelude::*;
+use blinc::core::reactive::{computed, signal};
 
 #[derive(BlincComponent)]
 pub struct Status {
@@ -84,8 +84,8 @@ that consumes the props.
 ## Own Mutable Values with Signal Hooks
 
 ```rust
-use blinc_app::prelude::*;
-use blinc_app::windowed::WindowedContext;
+use blinc::app::prelude::*;
+use blinc::app::windowed::WindowedContext;
 
 #[derive(BlincComponent)]
 pub struct Counter {
@@ -96,7 +96,7 @@ pub struct Counter {
 
 fn counter(ctx: &WindowedContext) -> Div {
     let count: Signal<i32> = Counter::use_count(ctx, 0);
-    let caption = blinc_core::reactive::computed(move |g| {
+    let caption = blinc::core::reactive::computed(move |g| {
         format!("Count: {}", g.get(count).unwrap_or(0))
     });
     let props = Counter::props(caption, count, false);
@@ -133,9 +133,9 @@ Use `now()` only when taking a snapshot, such as reading a prop in an event
 handler. Reading a prop while building a view does not create a binding.
 
 ```rust
-use blinc_app::prelude::*;
-use blinc_core::reactive::{computed, effect};
-use blinc_layout::binding::IntoReactive;
+use blinc::app::prelude::*;
+use blinc::core::reactive::{computed, effect};
+use blinc::layout::binding::IntoReactive;
 
 #[derive(BlincComponent)]
 pub struct Counter {
@@ -173,8 +173,8 @@ Unit and tuple structs generate component keys and shared spring/timeline
 hooks. A unit struct has no companion props type:
 
 ```rust
-use blinc_app::prelude::*;
-use blinc_app::windowed::WindowedContext;
+use blinc::app::prelude::*;
+use blinc::app::windowed::WindowedContext;
 
 #[derive(BlincComponent)]
 struct LoadingIndicator;

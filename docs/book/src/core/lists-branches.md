@@ -8,8 +8,8 @@ them is not rebuilt, and rows that stay keep their elements and their state.
 ## Lists: `for_each`
 
 ```rust
-use blinc_core::reactive::signal;
-use blinc_layout::prelude::*;
+use blinc::core::reactive::signal;
+use blinc::layout::prelude::*;
 
 #[derive(Clone)]
 struct Todo {
@@ -100,8 +100,8 @@ element in a `Row` and say how it leaves:
 ```rust
 use std::sync::{Arc, Mutex};
 
-use blinc_animation::{AnimatedValue, SpringConfig, get_scheduler};
-use blinc_layout::region::Row;
+use blinc::animation::{AnimatedValue, SpringConfig, get_scheduler};
+use blinc::layout::region::Row;
 
 div().flex_col().gap(2.0).for_each(
     todos,
@@ -155,13 +155,13 @@ gone.
 
 ## Scopes: `Owner`
 
-Rows and branches use `blinc_core::owner::Owner` to give back what they
+Rows and branches use `blinc::core::owner::Owner` to give back what they
 create. You can use it directly for anything that is built, used for a
 while, then thrown away:
 
 ```rust
-use blinc_core::owner::Owner;
-use blinc_core::reactive::signal;
+use blinc::core::owner::Owner;
+use blinc::core::reactive::signal;
 
 let owner = Owner::new();
 let count = owner.run(|| {

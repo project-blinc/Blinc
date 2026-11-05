@@ -5,7 +5,7 @@ The `virtual_list` widget efficiently renders large datasets by only creating el
 ## Basic Usage
 
 ```rust
-use blinc_layout::widgets::virtual_list::virtual_list;
+use blinc::layout::widgets::virtual_list::virtual_list;
 
 let items: Vec<String> = (0..10_000)
     .map(|i| format!("Item {}", i))

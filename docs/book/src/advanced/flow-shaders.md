@@ -7,7 +7,7 @@ Flow shaders are a DAG-based (directed acyclic graph) real-time shader compute s
 The fastest way to draw a flow shader:
 
 ```rust
-use blinc_layout::flow;
+use blinc::layout::flow;
 
 let ripple = flow!(ripple, fragment, {
     input uv: builtin(uv);
@@ -335,7 +335,7 @@ A flow shader is drawn by a canvas, after the canvas's own render callback.
 Define the shader in Rust and pass it to the canvas:
 
 ```rust
-use blinc_layout::flow;
+use blinc::layout::flow;
 
 let shader = flow!(my_effect, fragment, {
     input uv: builtin(uv);
@@ -388,7 +388,7 @@ The shader carries its own name, and the GPU pipeline cache keys on it. A flow t
 The body is the flow language written as Rust tokens. Step types take their underscore names (`pattern_noise`, `color_ramp`) and colours are hex integers, `0xrrggbb` or `0xrrggbbaa`:
 
 ```rust
-use blinc_layout::flow;
+use blinc::layout::flow;
 
 const TERRAIN: FlowShader = flow!(terrain, fragment, {
     input uv: builtin(uv);
@@ -404,14 +404,14 @@ const TERRAIN: FlowShader = flow!(terrain, fragment, {
 canvas(|_, _| {}).flow(TERRAIN).w(300.0).h(300.0).rounded(16.0)
 ```
 
-`blinc_layout::flow_shader(source)` compiles `@flow` source text at run time, with `#rrggbb` colours and hyphenated step names, for source that is not known when the app is built.
+`blinc::layout::flow_shader(source)` compiles `@flow` source text at run time, with `#rrggbb` colours and hyphenated step names, for source that is not known when the app is built.
 
 ## Complete Example
 
 Here's the wet glass demo that creates a realistic rain-on-glass effect using semantic steps:
 
 ```rust
-use blinc_layout::flow;
+use blinc::layout::flow;
 
 let wetglass = flow!(wetglass, fragment, {
     input uv: builtin(uv);

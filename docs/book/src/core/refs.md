@@ -9,7 +9,7 @@ There is no string you can write into a signal that means "put the
 cursor here".
 
 ```rust,ignore
-use blinc_layout::selector::InputRef;
+use blinc::layout::selector::InputRef;
 
 let email = InputRef::new();
 

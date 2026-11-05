@@ -119,6 +119,7 @@ For headless use, set `default-features = false` without choosing a platform.
 | `clipboard-image` | Image clipboard support |
 | `svg-raster-images` | SVG module and embedded raster-image decoding |
 | `icons-registry` | Icons module and name-based icon lookup |
+| `theme-watcher` | System colour-scheme watcher |
 | `dialogs`, `tray`, `notifications`, `hotkeys` | Corresponding desktop integration |
 | `windowed-full` | Desktop runner plus dialogs, tray, notifications and hotkeys |
 | `hot-reload` | Application hot reload |
@@ -145,6 +146,7 @@ and `effect`. Framework APIs are also available through these modules:
 | `macros` | `blinc_macros` |
 | `paint` | `blinc_paint` |
 | `platform` | `blinc_platform` |
+| `platform_web` | Browser asset and input helpers, with `web` on WebAssembly |
 | `router` | `blinc_router` |
 | `text` | `blinc_text` |
 | `theme` | `blinc_theme` |

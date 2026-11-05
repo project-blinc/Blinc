@@ -7,7 +7,7 @@ Blinc provides a GPU-accelerated 3D mesh rendering pipeline alongside its 2D UI.
 The interchange format for 3D geometry is `MeshData`. Users convert from any source format (glTF, OBJ, FBX, procedural) into this struct.
 
 ```rust
-use blinc_core::{MeshData, Vertex, Material, Mat4};
+use blinc::core::{MeshData, Vertex, Material, Mat4};
 use std::sync::Arc;
 
 let mesh = MeshData {
@@ -62,7 +62,7 @@ Vertex::new([0.0, 1.0, 0.0])
 The `Material` struct controls PBR shading:
 
 ```rust
-use blinc_core::{Material, TextureData, AlphaMode};
+use blinc::core::{Material, TextureData, AlphaMode};
 
 let material = Material {
     base_color: [0.8, 0.2, 0.1, 1.0],  // Red-ish
@@ -214,7 +214,7 @@ Animate meshes with bone transforms. The GPU applies per-vertex skinning using u
 ### Skeleton Definition
 
 ```rust
-use blinc_core::{Bone, Skeleton, SkinningData};
+use blinc::core::{Bone, Skeleton, SkinningData};
 
 let skeleton = Skeleton {
     bones: vec![
@@ -289,7 +289,7 @@ Inject your own GPU render passes into the pipeline. Passes execute at specific 
 ### Basic Custom Pass
 
 ```rust
-use blinc_gpu::{CustomRenderPass, RenderPassContext, RenderStage};
+use blinc::gpu::{CustomRenderPass, RenderPassContext, RenderStage};
 
 struct SkyboxPass {
     pipeline: Option<wgpu::RenderPipeline>,
@@ -340,7 +340,7 @@ renderer.register_custom_pass(Box::new(SkyboxPass { pipeline: None }));
 The `BindGroupBuilder` creates matched layout + bind group pairs:
 
 ```rust
-use blinc_gpu::BindGroupBuilder;
+use blinc::gpu::BindGroupBuilder;
 
 let mut builder = BindGroupBuilder::new("my_effect");
 builder.add_uniform_buffer(uniforms_buffer.as_entire_binding());
@@ -367,7 +367,7 @@ Supported binding types:
 Execute compute shaders for simulation, particle updates, or data processing:
 
 ```rust
-use blinc_gpu::{create_compute_pipeline, ComputeDispatch, BindGroupBuilder};
+use blinc::gpu::{create_compute_pipeline, ComputeDispatch, BindGroupBuilder};
 
 // Create pipeline from WGSL
 let pipeline = create_compute_pipeline(
@@ -393,7 +393,7 @@ dispatch.execute(device, queue);
 Chain multiple screen-space effects with automatic ping-pong texture management:
 
 ```rust
-use blinc_gpu::{PostProcessChain, PostProcessEffect};
+use blinc::gpu::{PostProcessChain, PostProcessEffect};
 
 struct BloomEffect { /* ... */ }
 
@@ -435,7 +435,7 @@ The [flow shader system](./flow-shaders.md) extends beyond 2D effects — it is 
 Instead of writing raw WGSL, define vertex transforms as a flow DAG:
 
 ```rust
-use blinc_layout::flow;
+use blinc::layout::flow;
 
 let wave_vertex = flow!(wave_vertex, vertex, {
     input pos: builtin(vertex_position);

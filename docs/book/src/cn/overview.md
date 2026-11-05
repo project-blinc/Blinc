@@ -4,11 +4,11 @@
 
 ## Installation
 
-Add `blinc_cn` to your `Cargo.toml`:
+Enable the `cn` feature on `blinc`:
 
 ```toml
 [dependencies]
-blinc_cn = { path = "path/to/blinc_cn" }
+blinc = { version = "0.6", features = ["cn"] }
 ```
 
 ## Quick Start
@@ -17,10 +17,10 @@ Install the cn theme bundle with `WindowedApp::run_with_theme`. `cn_bundle()` is
 theme pre-loaded with `CN_STYLES`, so cn components look right out of the box without any manual `add_css` calls:
 
 ```rust
-use blinc_app::prelude::{ColorScheme, Result, WindowConfig};
-use blinc_app::windowed::WindowedApp;
-use blinc_cn::{cn_bundle, prelude::*};
-use blinc_layout::prelude::{div, text};
+use blinc::app::prelude::{ColorScheme, Result, WindowConfig};
+use blinc::app::windowed::WindowedApp;
+use blinc::cn::{cn_bundle, prelude::*};
+use blinc::layout::prelude::{div, text};
 
 fn main() -> Result<()> {
     WindowedApp::run_with_theme(
@@ -49,10 +49,10 @@ Chain [`with_css`](../core/theming.md#themebundlewith_css) (or `with_css_file`) 
 stylesheets. Application rules take precedence over the component layer:
 
 ```rust
-use blinc_app::prelude::{ColorScheme, WindowConfig};
-use blinc_app::windowed::WindowedApp;
-use blinc_cn::{cn_bundle, prelude::*};
-use blinc_layout::prelude::div;
+use blinc::app::prelude::{ColorScheme, WindowConfig};
+use blinc::app::windowed::WindowedApp;
+use blinc::cn::{cn_bundle, prelude::*};
+use blinc::layout::prelude::div;
 
 let bundle = cn_bundle().with_css(r#"
     .cn-button--primary { border-radius: 0; }
@@ -80,8 +80,8 @@ references theme tokens via `var()`.
 Components are built from smaller primitives that can be combined:
 
 ```rust
-use blinc_cn::prelude::*;
-use blinc_layout::prelude::{div, text};
+use blinc::cn::prelude::*;
+use blinc::layout::prelude::{div, text};
 
 button("Open").on_click(|_| {
     dialog()
@@ -98,8 +98,8 @@ button("Open").on_click(|_| {
 All components use theme tokens and automatically support dark mode:
 
 ```rust
-use blinc_cn::prelude::*;
-use blinc_theme::{ColorScheme, ThemeState};
+use blinc::cn::prelude::*;
+use blinc::theme::{ColorScheme, ThemeState};
 
 button("Use dark mode").on_click(|_| {
     ThemeState::get().set_scheme(ColorScheme::Dark);
@@ -136,7 +136,7 @@ Components include keyboard navigation and proper semantics:
 Import common components with the prelude:
 
 ```rust
-use blinc_cn::prelude::*;
+use blinc::cn::prelude::*;
 
 // Includes:
 // - All component builders (button, card, dialog, etc.)

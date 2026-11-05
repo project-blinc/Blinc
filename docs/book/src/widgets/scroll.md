@@ -5,7 +5,7 @@ Blinc provides scroll containers with WebKit-style momentum scrolling and bounce
 ## Basic Scroll
 
 ```rust
-use blinc_layout::widgets::scroll::scroll;
+use blinc::layout::widgets::scroll::scroll;
 
 fn scrollable_content() -> impl ElementBuilder {
     scroll()
@@ -22,7 +22,7 @@ fn scrollable_content() -> impl ElementBuilder {
 ## Scroll Without Bounce
 
 ```rust
-use blinc_layout::widgets::scroll::scroll_no_bounce;
+use blinc::layout::widgets::scroll::scroll_no_bounce;
 
 scroll_no_bounce()
     .h(400.0)
@@ -32,8 +32,8 @@ scroll_no_bounce()
 ## Scroll Configuration
 
 ```rust
-use blinc_layout::widgets::scroll::{Scroll, ScrollConfig, ScrollDirection};
-use blinc_animation::SpringConfig;
+use blinc::layout::widgets::scroll::{Scroll, ScrollConfig, ScrollDirection};
+use blinc::animation::SpringConfig;
 
 Scroll::with_config(ScrollConfig {
     bounce_enabled: true,
@@ -198,7 +198,7 @@ for the handles onto fields and ordinary elements.
 Use `ctx.use_scroll_ref()` to create a persistent scroll reference:
 
 ```rust
-use blinc_layout::selector::{ScrollRef, ScrollOptions, ScrollBehavior, ScrollBlock};
+use blinc::layout::selector::{ScrollRef, ScrollOptions, ScrollBehavior, ScrollBlock};
 
 fn my_component(ctx: &WindowedContext) -> impl ElementBuilder {
     // Create a ScrollRef — auto-keyed by call site via #[track_caller],
@@ -310,9 +310,9 @@ let progress = scroll_ref.scroll_progress();
 Here's a complete example of a horizontal carousel with clickable navigation dots:
 
 ```rust
-use blinc_app::prelude::*;
-use blinc_layout::selector::{ScrollBehavior, ScrollBlock, ScrollOptions, ScrollRef};
-use blinc_layout::units::px;  // Semantic unit for raw pixels
+use blinc::app::prelude::*;
+use blinc::layout::selector::{ScrollBehavior, ScrollBlock, ScrollOptions, ScrollRef};
+use blinc::layout::units::px;  // Semantic unit for raw pixels
 
 fn carousel(ctx: &WindowedContext) -> impl ElementBuilder {
     let scroll_ref = ctx.use_scroll_ref();

@@ -11,8 +11,8 @@ that calendar in a popover and shows its selected date in a compact trigger.
 It uses the same `CalendarDay` and `Signal<Option<CalendarDay>>` model.
 
 ```rust
-use blinc_cn::prelude::*;
-use blinc_core::reactive::signal;
+use blinc::cn::prelude::*;
+use blinc::core::reactive::signal;
 
 let selected = signal(None::<CalendarDay>);
 let disabled = signal(false);
@@ -60,8 +60,8 @@ the popup lives in the overlay layer, outside the trigger's descendants.
 ## Time Picker
 
 ```rust
-use blinc_cn::prelude::*;
-use blinc_core::reactive::{computed, signal};
+use blinc::cn::prelude::*;
+use blinc::core::reactive::{computed, signal};
 
 let time = signal(TimeOfDay::new(14, 30, 0).unwrap());
 let disabled = signal(false);
@@ -172,8 +172,8 @@ rows and small footer actions.
 ## Colour Picker
 
 ```rust
-use blinc_cn::prelude::*;
-use blinc_core::{Color, reactive::signal};
+use blinc::cn::prelude::*;
+use blinc::core::{Color, reactive::signal};
 
 let color = signal(Color::from_hex(0x6366f1));
 let disabled = signal(false);

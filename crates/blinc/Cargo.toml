@@ -16,7 +16,7 @@ include = ["src/**", "Cargo.toml", "README.md", "CHANGELOG.md"]
 [features]
 default = ["windowed"]
 windowed = ["blinc_app/windowed"]
-web = ["blinc_app/web"]
+web = ["blinc_app/web", "dep:blinc_platform_web"]
 android = ["blinc_app/android"]
 ios = ["blinc_app/ios"]
 dialogs = ["blinc_app/dialogs"]
@@ -32,6 +32,7 @@ media = ["dep:blinc_media", "blinc_layout/media"]
 clipboard-image = ["blinc_layout/clipboard_image"]
 svg-raster-images = ["svg", "blinc_svg/svg_raster_images"]
 icons-registry = ["icons", "blinc_icons/registry"]
+theme-watcher = ["blinc_theme/watcher"]
 
 [dependencies]
 blinc_app = { path = "../blinc_app", version = "0.6.0", default-features = false }
@@ -52,6 +53,9 @@ blinc_cn = { path = "../blinc_cn", version = "0.6.0", optional = true }
 blinc_svg = { path = "../blinc_svg", version = "0.6.0", optional = true }
 blinc_icons = { path = "../blinc_icons", version = "0.6.0", optional = true }
 blinc_media = { path = "../blinc_media", version = "0.6.0", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+blinc_platform_web = { path = "../../extensions/blinc_platform_web", version = "0.6.0", optional = true }
 
 [package.metadata.docs.rs]
 features = ["cn", "svg", "icons"]

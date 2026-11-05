@@ -171,7 +171,7 @@ On-ready callbacks:
 Inside event handlers, use the global `query()` function to get an `ElementHandle`:
 
 ```rust
-use blinc_layout::prelude::*;
+use blinc::layout::prelude::*;
 
 div()
     .on_click(|_| {
@@ -188,7 +188,7 @@ The `query()` function uses the global `BlincContextState` internally, so you do
 For simple operations like scroll and focus without needing the full handle:
 
 ```rust
-use blinc_core::BlincContextState;
+use blinc::core::BlincContextState;
 
 div()
     .on_click(|_| {

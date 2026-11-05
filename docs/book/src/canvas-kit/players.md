@@ -25,9 +25,9 @@ pub trait Player: Send + 'static {
 `blinc_lottie::LottiePlayer` implements `Player`. Wrap it in a sketch to run at any size:
 
 ```rust
-use blinc_app::prelude::*;
+use blinc::app::prelude::*;
 use blinc_canvas_kit::prelude::*;
-use blinc_core::{Color, Rect};
+use blinc::core::{Color, Rect};
 use blinc_lottie::LottiePlayer;
 
 const LOTTIE_JSON: &str = include_str!("assets/my_animation.json");
@@ -65,7 +65,7 @@ Anything that can resolve a pose from a float time implements `Player`. A minima
 
 ```rust
 use blinc_canvas_kit::prelude::*;
-use blinc_core::{Color, CornerRadius, Brush, Rect};
+use blinc::core::{Color, CornerRadius, Brush, Rect};
 
 struct Orbit;
 

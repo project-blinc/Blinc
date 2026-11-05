@@ -5,9 +5,9 @@ Install `cn_bundle()` as described in [Getting Started](overview.md).
 Examples use these imports and the application builder's `ctx`:
 
 ```rust
-use blinc_cn::prelude::*;
-use blinc_layout::binding::IntoReactive;
-use blinc_layout::prelude::{Text, div, text};
+use blinc::cn::prelude::*;
+use blinc::layout::binding::IntoReactive;
+use blinc::layout::prelude::{Text, div, text};
 ```
 
 ## Tabs
@@ -111,8 +111,8 @@ Add SVG icons with `item_with_icon`; the menu aligns each icon with its label:
 
 ```rust
 context_menu().at(x, y)
-    .item_with_icon("Duplicate", blinc_icons::to_svg(blinc_icons::icons::COPY, 16.0), || {})
-    .item_with_icon("Share", blinc_icons::to_svg(blinc_icons::icons::SHARE_2, 16.0), || {})
+    .item_with_icon("Duplicate", blinc::icons::to_svg(blinc::icons::icons::COPY, 16.0), || {})
+    .item_with_icon("Share", blinc::icons::to_svg(blinc::icons::icons::SHARE_2, 16.0), || {})
     .show();
 ```
 
@@ -197,7 +197,7 @@ The collapse state is a `Signal<bool>`. Click handlers can also update a
 page signal, which the content binds independently:
 
 ```rust
-use blinc_core::reactive::computed;
+use blinc::core::reactive::computed;
 
 let collapsed = ctx.use_signal(false);
 let page = ctx.use_signal("Dashboard".to_string());

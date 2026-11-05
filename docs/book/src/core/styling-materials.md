@@ -40,7 +40,7 @@ div().bg([0.1, 0.1, 0.15, 1.0])
 For gradients, use the `.background()` method with a `Brush`:
 
 ```rust
-use blinc_core::{Brush, Gradient, GradientStop, Point};
+use blinc::core::{Brush, Gradient, GradientStop, Point};
 
 div()
     .w(200.0)
@@ -129,7 +129,7 @@ div()
 For combined transforms:
 
 ```rust
-use blinc_core::Transform;
+use blinc::core::Transform;
 
 div().transform(
     Transform::translate(100.0, 50.0)
@@ -149,8 +149,8 @@ Blinc includes GPU-accelerated material effects for modern, polished UIs.
 Creates a frosted glass effect with background blur:
 
 ```rust
-use blinc_core::Color;
-use blinc_layout::prelude::*;
+use blinc::core::Color;
+use blinc::layout::prelude::*;
 
 // Quick glass
 div().glass();
@@ -185,7 +185,7 @@ panels composite their material and children together before applying the panel'
 opacity and effects. Overlapping children therefore share the panel fade.
 
 ```rust
-use blinc_layout::prelude::*;
+use blinc::layout::prelude::*;
 
 let panel = div()
     .w(280.0)
@@ -211,8 +211,8 @@ child ownership and automatic nesting as `.effect(GlassMaterial)`. The material
 form lowers to `Brush::Glass` when drawn; `.glass()` is its default shorthand.
 
 ```rust
-use blinc_core::GlassStyle;
-use blinc_layout::prelude::*;
+use blinc::core::GlassStyle;
+use blinc::layout::prelude::*;
 
 let panel = div()
     .w(280.0)
@@ -237,7 +237,7 @@ glass guarantees. The `wet_glass_demo` uses a custom Flow shader with
 Creates reflective metallic surfaces:
 
 ```rust
-use blinc_core::MetallicMaterial;
+use blinc::core::MetallicMaterial;
 
 div().material(Material::Metallic(
     MetallicMaterial::new()
@@ -274,7 +274,7 @@ div().gold()        // Gold preset
 Control rendering order with layers:
 
 ```rust
-use blinc_layout::RenderLayer;
+use blinc::layout::RenderLayer;
 
 div()
     .layer(RenderLayer::Background)  // Rendered first
@@ -289,8 +289,8 @@ Glass materials select the glass render layer automatically. Put the background
 and panel in the same scene:
 
 ```rust
-use blinc_core::Color;
-use blinc_layout::prelude::*;
+use blinc::core::Color;
+use blinc::layout::prelude::*;
 
 stack()
     .child(div().w(320.0).h(200.0).bg(Color::BLUE))
@@ -364,7 +364,7 @@ fn ghost_button() -> Div {
 Use `stateful::<S>()` to create elements with automatic hover/press state transitions:
 
 ```rust
-use blinc_layout::stateful::stateful;
+use blinc::layout::stateful::stateful;
 
 fn hoverable_card() -> impl ElementBuilder {
     stateful::<ButtonState>()

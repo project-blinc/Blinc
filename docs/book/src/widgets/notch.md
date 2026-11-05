@@ -3,11 +3,11 @@
 `notch` creates concave, rounded and stepped corners. Shape is configured by the builder; keep the surface's colours in CSS.
 
 ```rust
-use blinc_layout::prelude::*;
+use blinc::layout::prelude::*;
 
-let fill = blinc_layout::css_parser::active_stylesheet()
+let fill = blinc::layout::css_parser::active_stylesheet()
     .and_then(|sheet| sheet.resolve_color("var(--shaped-panel-fill)"))
-    .unwrap_or(blinc_core::Color::TRANSPARENT);
+    .unwrap_or(blinc::core::Color::TRANSPARENT);
 let panel = notch().w(280.0).h(160.0)
     .concave_tr(32.0).rounded_bl(24.0)
     .bg(fill)

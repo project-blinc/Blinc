@@ -8,7 +8,7 @@ For a lower-level intro (raw `MeshData`, shaders, materials), see [3D Rendering]
 
 ```rust
 use blinc_canvas_kit::prelude::*;
-use blinc_core::{Material, MeshData};
+use blinc::core::{Material, MeshData};
 use std::sync::Arc;
 
 fn build_ui() -> impl ElementBuilder {
@@ -60,7 +60,7 @@ kit.update_camera(|cam| {
 Lights are added via `with_light(...)` (builder) or `set_lights(vec)` (runtime):
 
 ```rust
-use blinc_core::Light;
+use blinc::core::Light;
 
 let kit = SceneKit3D::new("viewer")
     .with_light(Light::directional([0.5, -1.0, 0.3], [1.0, 0.95, 0.9], 1.2))

@@ -51,9 +51,7 @@ wasm-opt = false
 # the browser. The target gate keeps `cargo build --workspace` from
 # trying to link an empty cdylib on macOS / Linux.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-blinc_app = { version = "0.6", default-features = false, features = ["web"] }
-blinc_layout = { version = "0.6" }
-blinc_core = { version = "0.6" }
+blinc = { version = "0.6", default-features = false, features = ["web"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["console"] }
@@ -65,7 +63,7 @@ tracing-wasm = "0.2"
 The critical bits:
 
 - **`crate-type = ["cdylib", "rlib"]`** — wasm-pack needs `cdylib` to emit the `.wasm` artifact. The `rlib` is optional but lets `cargo check` work without `--target wasm32-unknown-unknown`.
-- **`features = ["web"]` on `blinc_app`** — gates in `WebApp`, `WebApp::run`, the `requestAnimationFrame` driver, and the wasm32-only event listeners. Without `default-features = false`, you'd accidentally pull in `winit` and the desktop platform crates.
+- **`features = ["web"]` on `blinc`** — gates in `WebApp`, `WebApp::run`, the `requestAnimationFrame` driver, and the wasm32-only event listeners. Without `default-features = false`, you'd accidentally pull in `winit` and the desktop platform crates.
 - **`[target.'cfg(target_arch = "wasm32")'.dependencies]`** — every Blinc dep is target-gated so a desktop `cargo build --workspace` doesn't try to compile the web example.
 
 ## `src/lib.rs`
@@ -73,11 +71,11 @@ The critical bits:
 ```rust
 #![cfg(target_arch = "wasm32")]
 
-use blinc_app::web::WebApp;
-use blinc_app::windowed::WindowedContext;
-use blinc_core::Color;
-use blinc_layout::div::{div, Div};
-use blinc_layout::text::text;
+use blinc::app::web::WebApp;
+use blinc::app::windowed::WindowedContext;
+use blinc::core::Color;
+use blinc::layout::div::{div, Div};
+use blinc::layout::text::text;
 use wasm_bindgen::prelude::*;
 
 const FONT: &[u8] = include_bytes!("../fonts/Inter.ttf");
