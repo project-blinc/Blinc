@@ -1,0 +1,17 @@
+.cn-nav-link {
+  padding: 10px 16px;
+}
+
+.cn-nav-link--active {
+  color: var(--primary);
+  background: var(--surface-overlay);
+}
+
+.cn-nav-menu-content {
+  background: var(--surface-elevated);
+}
+
+.cn-nav-link-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+}

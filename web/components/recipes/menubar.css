@@ -1,0 +1,18 @@
+.cn-menubar {
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-elevated);
+}
+
+.cn-menubar-trigger {
+  padding: 8px 14px;
+}
+
+.cn-menubar-item {
+  padding: 10px 14px;
+}
+
+.cn-menubar-trigger:hover, .cn-menubar-item:hover {
+  color: var(--primary);
+  background: var(--surface-overlay);
+}

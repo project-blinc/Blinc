@@ -1,0 +1,5 @@
+/* A separator can be stronger without adding another container. */
+.cn-separator {
+  background: var(--primary);
+  opacity: 0.35;
+}

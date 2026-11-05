@@ -76,7 +76,128 @@
       ],
       "keyboard": ":hover, :active, :disabled and :focus-visible. Tab reaches the button; Enter or Space activates it.",
       "tokens": "--primary, --primary-hover, --primary-active, --text-inverse, --focus-ring, --radius-default",
-      "notes": "The label can be a value, Signal or Computed. A disabled button ignores activation. Choose variants and sizes when building the component."
+      "notes": "The label can be a value, Signal or Computed. A disabled button ignores activation. Choose variants and sizes when building the component.",
+      "module": "cn::button",
+      "implementation": [
+        "crates/blinc_cn/src/components/button.rs"
+      ],
+      "controls": [
+        "disabled"
+      ]
+    },
+    {
+      "slug": "link",
+      "title": "Link",
+      "library": "layout",
+      "module": "layout::widgets::link",
+      "category": "Content",
+      "tags": [
+        "content",
+        "css",
+        "built-in"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Connect content with an accessible, theme-aware inline link.",
+      "doc": "docs/book/src/widgets/text.md",
+      "doc_section": null,
+      "entry": "link_demo",
+      "source": "examples/blinc_component_demos/src/gallery/builtin.rs",
+      "implementation": [
+        "crates/blinc_layout/src/widgets/link.rs",
+        "examples/blinc_component_demos/src/gallery/builtin.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "label / url",
+          "kind": "Construction",
+          "type": "strings",
+          "example": "Read the guide / installation"
+        },
+        {
+          "name": "on_click",
+          "kind": "Callback",
+          "type": "Fn(&str, &EventContext)",
+          "example": "Updates the in-app feedback label"
+        }
+      ],
+      "classes": [
+        ".blinc-link"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Connect content with an accessible, theme-aware inline link. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
+      "recipe": "link.css",
+      "recording": {
+        "target": "#demo-action",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "label",
+      "title": "Label",
+      "library": "cn",
+      "module": "cn::label",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Give a form control a clear label and required marker.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Label",
+      "entry": "label_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/label.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "content",
+          "kind": "Construction",
+          "type": "string",
+          "example": "Email address"
+        },
+        {
+          "name": "required",
+          "kind": "Construction",
+          "type": "builder flag",
+          "example": "enabled"
+        }
+      ],
+      "classes": [
+        ".cn-label",
+        ".cn-label-text",
+        ".cn-label-required"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Give a form control a clear label and required marker. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "label.css"
     },
     {
       "slug": "input",
@@ -148,7 +269,165 @@
       ],
       "keyboard": ":hover, :focus, :disabled, :focus-visible and [data-invalid]. Tab focuses the editor; ordinary editing keys, selection and clipboard shortcuts apply.",
       "tokens": "--input-bg, --input-bg-hover, --input-bg-focus, --input-bg-disabled, --border, --focus-ring, --text-primary",
-      "notes": "Keep SharedTextInputData across rebuilds. The browser host forwards committed text, composition and clipboard events into the Blinc editor. Its hidden textarea is an input bridge; the visible field is rendered by Blinc."
+      "notes": "Keep SharedTextInputData across rebuilds. The browser host forwards committed text, composition and clipboard events into the Blinc editor. Its hidden textarea is an input bridge; the visible field is rendered by Blinc.",
+      "module": "cn::input",
+      "implementation": [
+        "crates/blinc_cn/src/components/input.rs"
+      ],
+      "controls": [
+        "disabled"
+      ]
+    },
+    {
+      "slug": "textarea",
+      "title": "Textarea",
+      "library": "cn",
+      "module": "cn::textarea",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Write a message with a themed multiline field.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Textarea",
+      "entry": "textarea_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/textarea.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "document",
+          "kind": "Shared document",
+          "type": "SharedTextAreaState",
+          "example": "values.multiline"
+        },
+        {
+          "name": "rows / placeholder",
+          "kind": "Construction",
+          "type": "usize / string",
+          "example": "4 / Tell us what you are building\u2026"
+        },
+        {
+          "name": "on_change",
+          "kind": "Callback",
+          "type": "Fn(&str)",
+          "example": "Updates the character count"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-textarea"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Write a message with a themed multiline field. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "textarea.css",
+      "recording": {
+        "target": ".cn-textarea",
+        "kind": "type",
+        "text": "A clearer way to build UI.",
+        "frames": 96
+      }
+    },
+    {
+      "slug": "input-otp",
+      "title": "OTP Input",
+      "library": "cn",
+      "module": "cn::input_otp",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Enter a verification code with automatic advance and paste support.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "OTP Input",
+      "entry": "input_otp_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/input_otp.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "value",
+          "kind": "Bound",
+          "type": "Signal<String>",
+          "example": "values.name"
+        },
+        {
+          "name": "length / group_every",
+          "kind": "Construction",
+          "type": "usize",
+          "example": "6 / 3"
+        },
+        {
+          "name": "numeric_only",
+          "kind": "Construction",
+          "type": "bool",
+          "example": "true"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-input-otp",
+        ".cn-input-otp-slot",
+        ".cn-input-otp-separator"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Enter a verification code with automatic advance and paste support. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "input-otp.css",
+      "recording": {
+        "target": ".cn-input-otp-slot",
+        "kind": "type",
+        "text": "123456"
+      }
     },
     {
       "slug": "select",
@@ -218,7 +497,1841 @@
       ],
       "keyboard": "[data-state=\"open\"], [data-placeholder], :hover, :disabled and :focus-visible. Enter/Space opens; arrows move; Enter selects; Escape dismisses.",
       "tokens": "--surface-elevated, --surface-overlay, --border, --primary, --focus-ring, --text-primary, --text-secondary",
-      "notes": "The value Signal owns the selection. Popover content lives in the overlay root, outside .catalog-demo; target .cn-select-content and .cn-select-item directly when restyling."
+      "notes": "The value Signal owns the selection. Popover content lives in the overlay root, outside .catalog-demo; target .cn-select-content and .cn-select-item directly when restyling.",
+      "module": "cn::select",
+      "implementation": [
+        "crates/blinc_cn/src/components/select.rs"
+      ],
+      "controls": [
+        "disabled"
+      ]
+    },
+    {
+      "slug": "combobox",
+      "title": "Combobox",
+      "library": "cn",
+      "module": "cn::combobox",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Search a list and select an option.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Combobox",
+      "entry": "combobox_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/combobox.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 420,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "value",
+          "kind": "Bound",
+          "type": "Signal<String>",
+          "example": "rust"
+        },
+        {
+          "name": "option(value, label)",
+          "kind": "Construction",
+          "type": "strings",
+          "example": "Rust / TypeScript / Python"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-combobox",
+        ".cn-combobox-trigger",
+        ".cn-chevron",
+        ".cn-combobox-box",
+        ".cn-combobox-content",
+        ".cn-combobox-search",
+        ".cn-combobox-search-row",
+        ".cn-combobox-empty",
+        ".cn-combobox-item",
+        ".cn-combobox-item--selected"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Search a list and select an option. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "combobox.css",
+      "recording": {
+        "target": ".cn-combobox-trigger",
+        "kind": "menu",
+        "secondary": ".cn-combobox-item"
+      }
+    },
+    {
+      "slug": "dropdown-menu",
+      "title": "Dropdown Menu",
+      "library": "cn",
+      "module": "cn::dropdown_menu",
+      "category": "Navigation",
+      "tags": [
+        "navigation",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Group actions in a compact menu.",
+      "doc": "docs/book/src/cn/navigation.md",
+      "doc_section": "Dropdown Menu",
+      "entry": "dropdown_menu_demo",
+      "source": "examples/blinc_component_demos/src/gallery/navigation.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/dropdown_menu.rs",
+        "examples/blinc_component_demos/src/gallery/navigation.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "label",
+          "kind": "Construction",
+          "type": "string",
+          "example": "Project actions"
+        },
+        {
+          "name": "item / item_with_shortcut",
+          "kind": "Callback",
+          "type": "Menu items",
+          "example": "Rename / Save / Archive"
+        }
+      ],
+      "classes": [
+        ".cn-dropdown-trigger",
+        ".cn-chevron",
+        ".cn-dropdown-menu",
+        ".cn-menu-item",
+        ".cn-dropdown-item",
+        ".cn-dropdown-item--has-submenu"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Group actions in a compact menu. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "dropdown-menu.css",
+      "recording": {
+        "target": ".cn-dropdown-trigger",
+        "kind": "menu",
+        "secondary": ".cn-menu-item"
+      }
+    },
+    {
+      "slug": "context-menu",
+      "title": "Context Menu",
+      "library": "cn",
+      "module": "cn::context_menu",
+      "category": "Navigation",
+      "tags": [
+        "navigation",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Show actions at the pointer or keyboard-focused target.",
+      "doc": "docs/book/src/cn/navigation.md",
+      "doc_section": "Context Menu",
+      "entry": "context_menu_demo",
+      "source": "examples/blinc_component_demos/src/gallery/navigation.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/context_menu.rs",
+        "examples/blinc_component_demos/src/gallery/navigation.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "items",
+          "kind": "Construction",
+          "type": "Vec<ContextMenuItem>",
+          "example": "Project actions"
+        },
+        {
+          "name": "on_context_menu",
+          "kind": "Callback",
+          "type": "EventContext",
+          "example": "Opens at the pointer position"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-context-menu",
+        ".cn-menu-item",
+        ".cn-context-menu-item",
+        ".cn-context-menu-item--has-submenu"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Show actions at the pointer or keyboard-focused target. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "context-menu.css",
+      "recording": {
+        "target": "#demo-action",
+        "kind": "context",
+        "secondary": ".cn-menu-item"
+      }
+    },
+    {
+      "slug": "menubar",
+      "title": "Menubar",
+      "library": "cn",
+      "module": "cn::menubar",
+      "category": "Navigation",
+      "tags": [
+        "navigation",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Organise application commands in adjacent menus.",
+      "doc": "docs/book/src/cn/navigation.md",
+      "doc_section": "Menubar",
+      "entry": "menubar_demo",
+      "source": "examples/blinc_component_demos/src/gallery/navigation.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/menubar.rs",
+        "examples/blinc_component_demos/src/gallery/navigation.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "menu",
+          "kind": "Construction",
+          "type": "menu builder",
+          "example": "File / Edit"
+        }
+      ],
+      "classes": [
+        ".cn-menubar",
+        ".cn-menubar-trigger",
+        ".cn-menubar-content",
+        ".cn-menu-item",
+        ".cn-menubar-item",
+        ".cn-menubar-item--has-submenu"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Organise application commands in adjacent menus. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "menubar.css",
+      "recording": {
+        "target": ".cn-menubar-trigger",
+        "kind": "menu",
+        "secondary": ".cn-menu-item"
+      }
+    },
+    {
+      "slug": "navigation-menu",
+      "title": "Navigation Menu",
+      "library": "cn",
+      "module": "cn::navigation_menu",
+      "category": "Navigation",
+      "tags": [
+        "navigation",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Mix direct navigation and grouped resource links.",
+      "doc": "docs/book/src/cn/navigation.md",
+      "doc_section": "Navigation Menu",
+      "entry": "navigation_menu_demo",
+      "source": "examples/blinc_component_demos/src/gallery/navigation.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/navigation_menu.rs",
+        "examples/blinc_component_demos/src/gallery/navigation.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "item / trigger",
+          "kind": "Construction",
+          "type": "navigation builders",
+          "example": "Overview and resource links"
+        }
+      ],
+      "classes": [
+        ".cn-nav-menu",
+        ".cn-nav-link",
+        ".cn-nav-menu-content",
+        ".cn-nav-link-description",
+        ".cn-nav-link--active"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Mix direct navigation and grouped resource links. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "navigation-menu.css",
+      "recording": {
+        "target": ".cn-nav-link",
+        "kind": "menu",
+        "secondary": ".cn-nav-link",
+        "target_index": 1,
+        "secondary_index": 2
+      }
+    },
+    {
+      "slug": "checkbox",
+      "title": "Checkbox",
+      "library": "cn",
+      "module": "cn::checkbox",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Make a choice that can be checked, cleared and bound to application data.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Checkbox",
+      "entry": "checkbox_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/checkbox.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "checked",
+          "kind": "Bound",
+          "type": "Signal<bool>",
+          "example": "values.confirmed"
+        },
+        {
+          "name": "label",
+          "kind": "Construction",
+          "type": "string",
+          "example": "Keep me signed in"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-checkbox"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Make a choice that can be checked, cleared and bound to application data. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "checkbox.css",
+      "recording": {
+        "target": ".cn-checkbox",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "radio-group",
+      "title": "Radio Group",
+      "library": "cn",
+      "module": "cn::radio",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Choose one option from a labelled group.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Radio Group",
+      "entry": "radio_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/radio.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "value",
+          "kind": "Bound",
+          "type": "Signal<String>",
+          "example": "values.choice"
+        },
+        {
+          "name": "option(value, label)",
+          "kind": "Construction",
+          "type": "strings",
+          "example": "TypeScript / Rust / Python"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-radio",
+        ".cn-radio-dot"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Choose one option from a labelled group. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "radio-group.css",
+      "recording": {
+        "target": ".cn-radio",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "switch",
+      "title": "Switch",
+      "library": "cn",
+      "module": "cn::switch",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Turn a setting on or off with clear, theme-aware feedback.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Switch",
+      "entry": "switch_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/switch.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "checked",
+          "kind": "Bound",
+          "type": "Signal<bool>",
+          "example": "values.confirmed"
+        },
+        {
+          "name": "label",
+          "kind": "Construction",
+          "type": "string",
+          "example": "Email notifications"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-switch",
+        ".cn-switch-thumb",
+        ".cn-switch-row",
+        ".cn-switch-label"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Turn a setting on or off with clear, theme-aware feedback. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "switch.css",
+      "recording": {
+        "target": ".cn-switch",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "toggle",
+      "title": "Toggle",
+      "library": "cn",
+      "module": "cn::toggle",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Keep an independent action selected or unselected.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Toggle",
+      "entry": "toggle_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/toggle.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "value",
+          "kind": "Bound",
+          "type": "Signal<bool>",
+          "example": "values.confirmed"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-toggle"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Keep an independent action selected or unselected. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "toggle.css",
+      "recording": {
+        "target": ".cn-toggle",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "toggle-group",
+      "title": "Toggle Group",
+      "library": "cn",
+      "module": "cn::toggle_group",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Switch text alignment with accessible icon buttons and see the content respond.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Toggle Group",
+      "entry": "toggle_group_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/toggle_group.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "value",
+          "kind": "Bound",
+          "type": "Signal<String>",
+          "example": "values.choice"
+        },
+        {
+          "name": "item",
+          "kind": "Construction",
+          "type": "ToggleItem",
+          "example": "TS / Rust / Py"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-toggle-group",
+        ".cn-toggle"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Choose one item in a compact group of toggle buttons. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "toggle-group.css",
+      "recording": {
+        "target": ".cn-toggle",
+        "kind": "click",
+        "target_index": 0
+      }
+    },
+    {
+      "slug": "number-input",
+      "title": "Number Input",
+      "library": "cn",
+      "module": "cn::number_input",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Edit a bounded number with typing, step controls or the mouse wheel.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Number Input",
+      "entry": "number_input_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/number_input.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "value",
+          "kind": "Bound",
+          "type": "Signal<f64>",
+          "example": "42"
+        },
+        {
+          "name": "min / max / step",
+          "kind": "Construction",
+          "type": "f64",
+          "example": "0 / 99 / 1"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-number-input-group",
+        ".cn-number-input-field",
+        ".cn-number-input-step"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Edit a bounded number with typing, step controls or the mouse wheel. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "number-input.css",
+      "recording": {
+        "target": ".cn-number-input-step--inc",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "slider",
+      "title": "Slider",
+      "library": "cn",
+      "module": "cn::slider",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Adjust a value along a track, with a bound label and readout.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Slider",
+      "entry": "slider_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/slider.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "value",
+          "kind": "Bound",
+          "type": "Signal<f32>",
+          "example": "42"
+        },
+        {
+          "name": "min / max / step",
+          "kind": "Construction",
+          "type": "numbers",
+          "example": "0 / 100 / 1"
+        },
+        {
+          "name": "show_value",
+          "kind": "Construction",
+          "type": "builder flag",
+          "example": "enabled"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-slider",
+        ".cn-slider-header",
+        ".cn-slider-field",
+        ".cn-slider-fill",
+        ".cn-slider-rest",
+        ".cn-slider-thumb"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Adjust a value along a track, with a bound label and readout. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "slider.css",
+      "recording": {
+        "target": ".cn-slider",
+        "kind": "drag"
+      }
+    },
+    {
+      "slug": "number-gauge",
+      "title": "Number Gauge",
+      "library": "cn",
+      "module": "cn::number_gauge",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Scrub a number directly with a compact, draggable gauge.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Number Gauge",
+      "entry": "number_gauge_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/number_gauge.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "value",
+          "kind": "Bound",
+          "type": "Signal<f64>",
+          "example": "42"
+        },
+        {
+          "name": "range / step",
+          "kind": "Construction",
+          "type": "RangeInclusive<f64> / f64",
+          "example": "0..=100 / 1"
+        }
+      ],
+      "classes": [
+        ".cn-number-gauge",
+        ".cn-number-gauge-fill",
+        ".cn-number-gauge-thumb",
+        ".cn-number-gauge-grip",
+        ".cn-number-gauge-rest",
+        ".cn-number-gauge-value"
+      ],
+      "keyboard": "Use the pointer to explore the control.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Scrub a number directly with a compact, draggable gauge. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "number-gauge.css",
+      "recording": {
+        "target": ".cn-number-gauge",
+        "kind": "scroll"
+      }
+    },
+    {
+      "slug": "number-range-gauge",
+      "title": "Number Range Gauge",
+      "library": "cn",
+      "module": "cn::number_range_gauge",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Choose a lower and upper bound together.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Number Gauge",
+      "entry": "number_range_gauge_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/number_range_gauge.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs",
+        "crates/blinc_cn/src/components/number_gauge.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "value",
+          "kind": "Bound",
+          "type": "Signal<RangeInclusive<f64>>",
+          "example": "20..=80"
+        },
+        {
+          "name": "range / step",
+          "kind": "Construction",
+          "type": "RangeInclusive<f64> / f64",
+          "example": "0..=100 / 1"
+        }
+      ],
+      "classes": [
+        ".cn-number-range-gauge",
+        ".cn-number-gauge-layer",
+        ".cn-number-gauge-fill",
+        ".cn-number-gauge-thumb",
+        ".cn-number-gauge-value"
+      ],
+      "keyboard": "Use the pointer to explore the control.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Choose a lower and upper bound together. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "number-range-gauge.css",
+      "recording": {
+        "target": ".cn-number-range-gauge",
+        "kind": "scroll"
+      }
+    },
+    {
+      "slug": "calendar",
+      "title": "Calendar",
+      "library": "cn",
+      "module": "cn::calendar",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Browse months, select a date and mark events in an inline calendar.",
+      "doc": "docs/book/src/cn/form.md",
+      "doc_section": "Calendar",
+      "entry": "calendar_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/calendar.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 420,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "selected",
+          "kind": "Bound",
+          "type": "Signal<Option<CalendarDay>>",
+          "example": "2026-11-04"
+        },
+        {
+          "name": "today / week_start",
+          "kind": "Construction",
+          "type": "CalendarDay / u32",
+          "example": "2026-11-04 / Monday"
+        },
+        {
+          "name": "events",
+          "kind": "Construction",
+          "type": "Vec<CalendarEvent>",
+          "example": "Design review"
+        }
+      ],
+      "classes": [
+        ".cn-calendar",
+        ".cn-calendar-weekdays",
+        ".cn-calendar-weekday",
+        ".cn-calendar-months",
+        ".cn-calendar-body",
+        ".cn-calendar-year-picker",
+        ".cn-calendar-header",
+        ".cn-calendar-caption",
+        ".cn-calendar-month-picker",
+        ".cn-calendar-nav",
+        ".cn-calendar-grid",
+        ".cn-calendar-page",
+        ".cn-calendar-day",
+        ".cn-calendar-events",
+        ".cn-calendar-event",
+        ".cn-calendar-event--icon"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Browse months, select a date and mark events in an inline calendar. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "calendar.css",
+      "recording": {
+        "target": ".cn-calendar-nav",
+        "kind": "click",
+        "target_index": 1
+      }
+    },
+    {
+      "slug": "date-picker",
+      "title": "Date Picker",
+      "library": "cn",
+      "module": "cn::date_picker",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Choose a calendar date in a compact popover.",
+      "doc": "docs/book/src/cn/pickers.md",
+      "doc_section": "Date Picker",
+      "entry": "date_picker_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/date_picker.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 480,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "selected",
+          "kind": "Bound",
+          "type": "Signal<Option<CalendarDay>>",
+          "example": "2026-11-04"
+        },
+        {
+          "name": "today",
+          "kind": "Construction",
+          "type": "CalendarDay",
+          "example": "2026-11-04"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-date-picker-trigger",
+        ".cn-date-picker-icon",
+        ".cn-date-picker-value",
+        ".cn-date-picker-content",
+        ".cn-date-picker-footer",
+        ".cn-date-picker-clear"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Choose a calendar date in a compact popover. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "date-picker.css",
+      "recording": {
+        "target": ".cn-date-picker-trigger",
+        "kind": "menu",
+        "secondary": ".cn-calendar-day",
+        "secondary_index": 10
+      }
+    },
+    {
+      "slug": "time-picker",
+      "title": "Time Picker",
+      "library": "cn",
+      "module": "cn::time_picker",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Time Picker built with Blinc.",
+      "doc": "docs/book/src/cn/pickers.md",
+      "doc_section": "Time Picker",
+      "entry": "time_picker_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/time_picker.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "value",
+          "kind": "Bound",
+          "type": "Signal<TimeOfDay>",
+          "example": "14:30:00"
+        },
+        {
+          "name": "format",
+          "kind": "Construction",
+          "type": "TimeFormat",
+          "example": "TwelveHour"
+        },
+        {
+          "name": "minute_step",
+          "kind": "Construction",
+          "type": "u8",
+          "example": "5"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-time-picker",
+        ".cn-time-picker-separator",
+        ".cn-time-picker-period",
+        ".cn-time-picker-clock",
+        ".cn-time-picker-segment",
+        ".cn-time-picker-part"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Time Picker built with Blinc. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "time-picker.css",
+      "recording": {
+        "target": ".cn-time-picker-clock",
+        "kind": "menu",
+        "secondary": ".cn-time-picker-wheel-save"
+      }
+    },
+    {
+      "slug": "color-picker",
+      "title": "Color Picker",
+      "library": "cn",
+      "module": "cn::color_picker",
+      "category": "Forms",
+      "tags": [
+        "forms",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Choose a colour with a saturation field, hue, opacity and saved swatches.",
+      "doc": "docs/book/src/cn/pickers.md",
+      "doc_section": "Colour Picker",
+      "entry": "color_picker_demo",
+      "source": "examples/blinc_component_demos/src/gallery/forms.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/color_picker.rs",
+        "examples/blinc_component_demos/src/gallery/forms.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 480,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "value",
+          "kind": "Bound",
+          "type": "Signal<Color>",
+          "example": "theme-blue sample"
+        },
+        {
+          "name": "swatches",
+          "kind": "Bound",
+          "type": "Vec<Color> or reactive source",
+          "example": "Blue / teal / amber"
+        },
+        {
+          "name": "alpha",
+          "kind": "Construction",
+          "type": "bool",
+          "example": "true"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-color-picker-trigger",
+        ".cn-color-picker-swatch",
+        ".cn-color-picker",
+        ".cn-color-picker-value",
+        ".cn-color-picker-panel",
+        ".cn-color-picker-label",
+        ".cn-color-picker-swatches",
+        ".cn-color-picker-preset",
+        ".cn-color-picker-entry",
+        ".cn-color-picker-hex",
+        ".cn-color-picker-hex-wrap"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Choose a colour with a saturation field, hue, opacity and saved swatches. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "color-picker.css",
+      "recording": {
+        "target": ".cn-color-picker-trigger",
+        "kind": "menu",
+        "secondary": ".cn-color-picker-preset",
+        "secondary_index": 1
+      }
+    },
+    {
+      "slug": "tabs",
+      "title": "Tabs",
+      "library": "cn",
+      "module": "cn::tabs",
+      "category": "Navigation",
+      "tags": [
+        "navigation",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Switch between related views in the same space.",
+      "doc": "docs/book/src/cn/navigation.md",
+      "doc_section": "Tabs",
+      "entry": "tabs_demo",
+      "source": "examples/blinc_component_demos/src/gallery/navigation.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/tabs.rs",
+        "examples/blinc_component_demos/src/gallery/navigation.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [
+        "disabled"
+      ],
+      "props": [
+        {
+          "name": "value",
+          "kind": "Bound",
+          "type": "Signal<String>",
+          "example": "rust"
+        },
+        {
+          "name": "tab(value, label, content)",
+          "kind": "Construction",
+          "type": "strings and child builder",
+          "example": "Overview / Activity"
+        },
+        {
+          "name": "transition",
+          "kind": "Construction",
+          "type": "TabsTransition",
+          "example": "Fade"
+        },
+        {
+          "name": "disabled",
+          "kind": "Bound",
+          "type": "bool or IntoReactive<bool>",
+          "example": "values.disabled"
+        }
+      ],
+      "classes": [
+        ".cn-tabs",
+        ".cn-tabs-list",
+        ".cn-tabs-trigger",
+        ".cn-tabs-indicator",
+        ".cn-tabs-trigger--disabled",
+        ".cn-tabs-panel",
+        ".cn-tabs-trigger--active"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Switch between related views in the same space. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "tabs.css",
+      "recording": {
+        "target": ".cn-tabs-trigger",
+        "kind": "click",
+        "target_index": 1
+      }
+    },
+    {
+      "slug": "accordion",
+      "title": "Accordion",
+      "library": "cn",
+      "module": "cn::accordion",
+      "category": "Layout",
+      "tags": [
+        "layout",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Organise related questions into expandable sections.",
+      "doc": "docs/book/src/cn/layout.md",
+      "doc_section": "Accordion",
+      "entry": "accordion_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/accordion.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "item(key, label, content)",
+          "kind": "Construction",
+          "type": "strings and child builder",
+          "example": "Project details"
+        },
+        {
+          "name": "mode",
+          "kind": "Construction",
+          "type": "AccordionMode",
+          "example": "See the compiled example"
+        }
+      ],
+      "classes": [
+        ".cn-accordion",
+        ".cn-accordion-trigger",
+        ".cn-chevron",
+        ".cn-accordion-content",
+        ".cn-accordion-separator"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Organise related questions into expandable sections. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "accordion.css",
+      "recording": {
+        "target": ".cn-accordion-trigger",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "collapsible",
+      "title": "Collapsible",
+      "library": "cn",
+      "module": "cn::collapsible",
+      "category": "Layout",
+      "tags": [
+        "layout",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Reveal supporting details without leaving the page.",
+      "doc": "docs/book/src/cn/layout.md",
+      "doc_section": "Collapsible",
+      "entry": "collapsible_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/collapsible.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "open",
+          "kind": "Bound",
+          "type": "Signal<bool>",
+          "example": "values.confirmed"
+        },
+        {
+          "name": "trigger / content",
+          "kind": "Construction",
+          "type": "builders",
+          "example": "Show details"
+        }
+      ],
+      "classes": [
+        ".cn-collapsible",
+        ".cn-collapsible-content",
+        ".cn-collapsible-trigger",
+        ".cn-chevron",
+        ".cn-collapsible-section",
+        ".demo-collapsible-copy"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Reveal supporting details without leaving the page. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "collapsible.css",
+      "recording": {
+        "target": ".cn-collapsible-trigger",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "breadcrumb",
+      "title": "Breadcrumb",
+      "library": "cn",
+      "module": "cn::breadcrumb",
+      "category": "Navigation",
+      "tags": [
+        "navigation",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Keep the current location visible in a navigation trail.",
+      "doc": "docs/book/src/cn/navigation.md",
+      "doc_section": "Breadcrumb",
+      "entry": "breadcrumb_demo",
+      "source": "examples/blinc_component_demos/src/gallery/navigation.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/breadcrumb.rs",
+        "examples/blinc_component_demos/src/gallery/navigation.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "item(label, callback)",
+          "kind": "Construction",
+          "type": "navigation item",
+          "example": "Workspace / Projects"
+        },
+        {
+          "name": "current",
+          "kind": "Construction",
+          "type": "string",
+          "example": "Website"
+        }
+      ],
+      "classes": [
+        ".cn-breadcrumb",
+        ".cn-breadcrumb-item",
+        ".cn-breadcrumb-separator"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Keep the current location visible in a navigation trail. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "breadcrumb.css",
+      "recording": {
+        "target": ".cn-breadcrumb-item",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "pagination",
+      "title": "Pagination",
+      "library": "cn",
+      "module": "cn::pagination",
+      "category": "Navigation",
+      "tags": [
+        "navigation",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Browse a larger collection a page at a time.",
+      "doc": "docs/book/src/cn/navigation.md",
+      "doc_section": "Pagination",
+      "entry": "pagination_demo",
+      "source": "examples/blinc_component_demos/src/gallery/navigation.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/pagination.rs",
+        "examples/blinc_component_demos/src/gallery/navigation.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "page",
+          "kind": "Bound",
+          "type": "Signal<usize>",
+          "example": "1"
+        },
+        {
+          "name": "total / visible_pages",
+          "kind": "Construction",
+          "type": "usize",
+          "example": "10 / 5"
+        }
+      ],
+      "classes": [
+        ".cn-pagination",
+        ".cn-pagination-ellipsis",
+        ".cn-pagination-btn"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Browse a larger collection a page at a time. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "pagination.css",
+      "recording": {
+        "target": ".cn-pagination-btn",
+        "kind": "click",
+        "target_index": 3
+      }
+    },
+    {
+      "slug": "sidebar",
+      "title": "Sidebar",
+      "library": "cn",
+      "module": "cn::sidebar",
+      "category": "Navigation",
+      "tags": [
+        "navigation",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Keep the main sections of a workspace in a collapsible rail.",
+      "doc": "docs/book/src/cn/navigation.md",
+      "doc_section": "Sidebar",
+      "entry": "sidebar_demo",
+      "source": "examples/blinc_component_demos/src/gallery/navigation.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/sidebar.rs",
+        "examples/blinc_component_demos/src/gallery/navigation.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "collapsed",
+          "kind": "Bound",
+          "type": "Signal<bool>",
+          "example": "values.confirmed"
+        },
+        {
+          "name": "item / section / content",
+          "kind": "Construction",
+          "type": "builders",
+          "example": "Workspace navigation and content"
+        }
+      ],
+      "classes": [
+        ".cn-sidebar",
+        ".cn-sidebar-toggle",
+        ".cn-sidebar-chevron",
+        ".cn-sidebar-group",
+        ".cn-sidebar-group-label",
+        ".cn-sidebar-layout",
+        ".cn-sidebar-inset",
+        ".cn-sidebar-item",
+        ".cn-sidebar-icon",
+        ".cn-sidebar-label"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Keep the main sections of a workspace in a collapsible rail. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "sidebar.css",
+      "recording": {
+        "target": ".cn-sidebar-toggle",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "tooltip",
+      "title": "Tooltip",
+      "library": "cn",
+      "module": "cn::tooltip",
+      "category": "Data display",
+      "tags": [
+        "data display",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Explain a control with a short hint on hover.",
+      "doc": "docs/book/src/cn/data-display.md",
+      "doc_section": "Tooltip",
+      "entry": "tooltip_demo",
+      "source": "examples/blinc_component_demos/src/gallery/overlays.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/tooltip.rs",
+        "examples/blinc_component_demos/src/gallery/overlays.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "text",
+          "kind": "Construction",
+          "type": "string",
+          "example": "Your work is saved automatically."
+        },
+        {
+          "name": "open_delay_ms",
+          "kind": "Construction",
+          "type": "u64",
+          "example": "200"
+        }
+      ],
+      "classes": [
+        ".cn-tooltip"
+      ],
+      "keyboard": "Use the pointer to explore the control.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Explain a control with a short hint on hover. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "tooltip.css",
+      "recording": {
+        "target": ".cn-button",
+        "kind": "hover"
+      }
+    },
+    {
+      "slug": "hover-card",
+      "title": "Hover Card",
+      "library": "cn",
+      "module": "cn::hover_card",
+      "category": "Data display",
+      "tags": [
+        "data display",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Reveal supporting information alongside its trigger.",
+      "doc": "docs/book/src/cn/data-display.md",
+      "doc_section": "Hover Card",
+      "entry": "hover_card_demo",
+      "source": "examples/blinc_component_demos/src/gallery/overlays.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/hover_card.rs",
+        "examples/blinc_component_demos/src/gallery/overlays.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "content",
+          "kind": "Construction",
+          "type": "child builder",
+          "example": "Blinc profile"
+        },
+        {
+          "name": "open_delay_ms",
+          "kind": "Construction",
+          "type": "u64",
+          "example": "200"
+        }
+      ],
+      "classes": [
+        ".cn-hover-card-content"
+      ],
+      "keyboard": "Use the pointer to explore the control.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Reveal supporting information alongside its trigger. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "hover-card.css",
+      "recording": {
+        "target": ".cn-button",
+        "kind": "hover"
+      }
+    },
+    {
+      "slug": "popover",
+      "title": "Popover",
+      "library": "cn",
+      "module": "cn::popover",
+      "category": "Data display",
+      "tags": [
+        "data display",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Keep a small set of preferences close to the control.",
+      "doc": "docs/book/src/cn/data-display.md",
+      "doc_section": "Popover",
+      "entry": "popover_demo",
+      "source": "examples/blinc_component_demos/src/gallery/overlays.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/popover.rs",
+        "examples/blinc_component_demos/src/gallery/overlays.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "trigger / content",
+          "kind": "Construction",
+          "type": "child builders",
+          "example": "Preferences and notifications"
+        }
+      ],
+      "classes": [
+        ".cn-popover-content"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Keep a small set of preferences close to the control. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "popover.css",
+      "recording": {
+        "target": ".cn-button",
+        "kind": "menu",
+        "secondary": ".cn-switch"
+      }
     },
     {
       "slug": "dialog",
@@ -287,7 +2400,379 @@
       ],
       "keyboard": "Tab stays within the active dialog. Escape and backdrop click dismiss it. Closing restores focus to the trigger. Confirmation and cancellation callbacks take no arguments.",
       "tokens": "--surface-elevated, --text-primary, --text-secondary, --border, --radius-lg, --focus-ring",
-      "notes": "Build and show the dialog from the trigger handler. The returned OverlayHandle supports explicit close. Dialog parts live in the overlay root, so selectors beneath .catalog-demo do not reach them."
+      "notes": "Build and show the dialog from the trigger handler. The returned OverlayHandle supports explicit close. Dialog parts live in the overlay root, so selectors beneath .catalog-demo do not reach them.",
+      "module": "cn::dialog",
+      "implementation": [
+        "crates/blinc_cn/src/components/dialog.rs"
+      ],
+      "controls": [
+        "disabled"
+      ]
+    },
+    {
+      "slug": "sheet",
+      "title": "Sheet",
+      "library": "cn",
+      "module": "cn::sheet",
+      "category": "Data display",
+      "tags": [
+        "data display",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "A bottom sharing panel with project members, guest permissions and a clear completion action.",
+      "doc": "docs/book/src/cn/dialog.md",
+      "doc_section": "Sheet",
+      "entry": "sheet_demo",
+      "source": "examples/blinc_component_demos/src/gallery/overlays.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/sheet.rs",
+        "examples/blinc_component_demos/src/gallery/overlays.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 480,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "side",
+          "kind": "Construction",
+          "type": "sheet helper",
+          "example": "sheet_right()"
+        },
+        {
+          "name": "title / description / content",
+          "kind": "Construction",
+          "type": "strings and child builder",
+          "example": "Workspace settings"
+        }
+      ],
+      "classes": [
+        ".cn-sheet",
+        ".cn-sheet-title",
+        ".cn-sheet-description",
+        ".cn-sheet-close",
+        ".cn-sheet-separator",
+        ".demo-share-content",
+        ".demo-share-member",
+        ".demo-share-permission",
+        ".cn-sheet-header",
+        ".cn-sheet-content",
+        ".cn-sheet-footer",
+        ".demo-share-done",
+        ".demo-share-permission-copy"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Open supporting content in a panel at the edge of the view. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "sheet.css",
+      "recording": {
+        "target": "#demo-action",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "drawer",
+      "title": "Drawer",
+      "library": "cn",
+      "module": "cn::drawer",
+      "category": "Data display",
+      "tags": [
+        "data display",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Inspect a project\u2019s files in a side drawer with selectable rows, file details and sync status.",
+      "doc": "docs/book/src/cn/dialog.md",
+      "doc_section": "Drawer",
+      "entry": "drawer_demo",
+      "source": "examples/blinc_component_demos/src/gallery/overlays.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/drawer.rs",
+        "examples/blinc_component_demos/src/gallery/overlays.rs",
+        "crates/blinc_cn/src/components/tree.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 480,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "title / child",
+          "kind": "Construction",
+          "type": "string and child builder",
+          "example": "Project files"
+        }
+      ],
+      "classes": [
+        ".cn-drawer",
+        ".cn-drawer-header",
+        ".cn-drawer-title",
+        ".cn-drawer-close",
+        ".cn-drawer-separator",
+        ".cn-drawer-footer",
+        ".demo-project-summary",
+        ".demo-project-tree",
+        ".cn-tree-row",
+        ".cn-tree-icon",
+        ".cn-tree-group"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "The project browser reuses Tree View for expandable folders, keyboard navigation and file selection; a bound details panel follows the selected node.",
+      "recipe": "drawer.css",
+      "recording": {
+        "target": "#demo-action",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "toast",
+      "title": "Toast",
+      "library": "cn",
+      "module": "cn::toast",
+      "category": "Feedback",
+      "tags": [
+        "feedback",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Confirm a completed action without interrupting the workflow.",
+      "doc": "docs/book/src/cn/feedback.md",
+      "doc_section": "Toast",
+      "entry": "toast_demo",
+      "source": "examples/blinc_component_demos/src/gallery/overlays.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/toast.rs",
+        "examples/blinc_component_demos/src/gallery/overlays.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "title / description",
+          "kind": "Construction",
+          "type": "strings",
+          "example": "Saved notification"
+        },
+        {
+          "name": "variant",
+          "kind": "Construction",
+          "type": "toast helper",
+          "example": "toast_success"
+        }
+      ],
+      "classes": [
+        ".cn-toast",
+        ".cn-toast-icon",
+        ".cn-toast-title",
+        ".cn-toast-description",
+        ".cn-toast-close"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Confirm a completed action without interrupting the workflow. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "toast.css",
+      "recording": {
+        "target": "#demo-action",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "alert",
+      "title": "Alert",
+      "library": "cn",
+      "module": "cn::alert",
+      "category": "Feedback",
+      "tags": [
+        "feedback",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Keep important feedback visible within the page.",
+      "doc": "docs/book/src/cn/feedback.md",
+      "doc_section": "Alert",
+      "entry": "alert_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/alert.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "title / description",
+          "kind": "Construction",
+          "type": "strings",
+          "example": "Informational and warning messages"
+        },
+        {
+          "name": "variant",
+          "kind": "Construction",
+          "type": "AlertVariant",
+          "example": "See the compiled example"
+        }
+      ],
+      "classes": [
+        ".cn-alert",
+        ".cn-alert-box"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Keep important feedback visible within the page. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "alert.css"
+    },
+    {
+      "slug": "badge",
+      "title": "Badge",
+      "library": "cn",
+      "module": "cn::badge",
+      "category": "Feedback",
+      "tags": [
+        "feedback",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Compare all five semantic variants in soft, solid and outline styles, with an optional status icon.",
+      "doc": "docs/book/src/cn/feedback.md",
+      "doc_section": "Badge",
+      "entry": "badge_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/badge.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 360,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "label",
+          "kind": "Construction",
+          "type": "string",
+          "example": "Status labels"
+        },
+        {
+          "name": "variant",
+          "kind": "Construction",
+          "type": "BadgeVariant",
+          "example": "Default, Secondary, Outline and Destructive"
+        }
+      ],
+      "classes": [
+        ".cn-badge",
+        ".cn-badge--soft-success",
+        ".cn-badge--outline-warning"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--variant",
+      "notes": "Present a compact status, category or count. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "badge.css"
+    },
+    {
+      "slug": "avatar",
+      "title": "Avatar",
+      "library": "cn",
+      "module": "cn::avatar",
+      "category": "Data display",
+      "tags": [
+        "data display",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Represent people with initials, status and grouped avatars.",
+      "doc": "docs/book/src/cn/layout.md",
+      "doc_section": "Avatar",
+      "entry": "avatar_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/avatar.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "fallback",
+          "kind": "Construction",
+          "type": "string",
+          "example": "Initials"
+        },
+        {
+          "name": "size",
+          "kind": "Construction",
+          "type": "AvatarSize",
+          "example": "See the compiled example"
+        }
+      ],
+      "classes": [
+        ".cn-avatar",
+        ".cn-avatar-placeholder",
+        ".cn-avatar--square",
+        ".cn-avatar-status",
+        ".cn-avatar-group",
+        ".cn-avatar-group__more"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Represent people with initials, status and grouped avatars. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "avatar.css"
     },
     {
       "slug": "progress",
@@ -321,7 +2806,7 @@
           "name": "value",
           "type": "f32",
           "kind": "Bound",
-          "example": "42 (0–100)"
+          "example": "42 (0\u2013100)"
         },
         {
           "name": "size",
@@ -344,11 +2829,588 @@
       ],
       "classes": [
         ".cn-progress",
-        ".cn-progress-bar"
+        ".cn-progress-bar",
+        ".demo-caption"
       ],
       "keyboard": "[data-indeterminate] on the track enables the indeterminate animation. A progress bar is informational and is not a keyboard stop; the example button advances it.",
       "tokens": "--cn-progress-track, --cn-progress-bar, --border, --primary, --radius-full, --duration-slow, --ease-nav",
-      "notes": "Bind a value, Signal or Computed. Progress does not own a task or timer; application state supplies the percentage. Use progress_indeterminate() when no percentage is available."
+      "notes": "Bind a value, Signal or Computed. Progress does not own a task or timer; application state supplies the percentage. Use progress_indeterminate() when no percentage is available.",
+      "module": "cn::progress",
+      "implementation": [
+        "crates/blinc_cn/src/components/progress.rs"
+      ],
+      "controls": [
+        "disabled",
+        "progress"
+      ]
+    },
+    {
+      "slug": "spinner",
+      "title": "Spinner",
+      "library": "cn",
+      "module": "cn::spinner",
+      "category": "Feedback",
+      "tags": [
+        "feedback",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Indicate work in progress with theme-timed motion.",
+      "doc": "docs/book/src/cn/feedback.md",
+      "doc_section": "Spinner",
+      "entry": "spinner_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/spinner.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "animation"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "size",
+          "kind": "Construction",
+          "type": "SpinnerSize",
+          "example": "Large"
+        }
+      ],
+      "classes": [
+        ".cn-spinner",
+        ".cn-spinner__track",
+        ".cn-spinner__arc"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "The Preview records the spinner turning, without a cursor. Live uses the native animation.",
+      "recipe": "spinner.css"
+    },
+    {
+      "slug": "skeleton",
+      "title": "Skeleton",
+      "library": "cn",
+      "module": "cn::skeleton",
+      "category": "Feedback",
+      "tags": [
+        "feedback",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Reserve a calm placeholder while content loads.",
+      "doc": "docs/book/src/cn/feedback.md",
+      "doc_section": "Skeleton",
+      "entry": "skeleton_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/skeleton.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "animation"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "width / height",
+          "kind": "Construction",
+          "type": "f32",
+          "example": "Placeholder dimensions"
+        },
+        {
+          "name": "shape",
+          "kind": "Construction",
+          "type": "skeleton helper",
+          "example": "Circle and text-like bars"
+        }
+      ],
+      "classes": [
+        ".cn-skeleton",
+        ".cn-skeleton--circle"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Reserve a calm placeholder while content loads. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "skeleton.css"
+    },
+    {
+      "slug": "card",
+      "title": "Card",
+      "library": "cn",
+      "module": "cn::card",
+      "category": "Layout",
+      "tags": [
+        "layout",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "A project summary with a clear heading, a short brief, reviewer avatars and its current review status.",
+      "doc": "docs/book/src/cn/card.md",
+      "doc_section": null,
+      "entry": "card_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/card.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "title / description",
+          "kind": "Construction",
+          "type": "strings",
+          "example": "Project summary"
+        },
+        {
+          "name": "content",
+          "kind": "Construction",
+          "type": "child content",
+          "example": "Project details"
+        }
+      ],
+      "classes": [
+        ".cn-card",
+        ".cn-card-header",
+        ".cn-card-title",
+        ".cn-card-description",
+        ".cn-card-footer"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Compose a surface with a header, content and footer. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "card.css"
+    },
+    {
+      "slug": "aspect-ratio",
+      "title": "Aspect Ratio",
+      "library": "cn",
+      "module": "cn::aspect_ratio",
+      "category": "Layout",
+      "tags": [
+        "layout",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Compare eight common ratios, then change the native aspect-ratio layout constraint directly with CSS.",
+      "doc": "docs/book/src/cn/layout.md",
+      "doc_section": "Aspect Ratio",
+      "entry": "aspect_ratio_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/aspect_ratio.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 400,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "ratio",
+          "kind": "Construction",
+          "type": "f32",
+          "example": "16.0 / 9.0"
+        },
+        {
+          "name": "child",
+          "kind": "Construction",
+          "type": "ElementBuilder",
+          "example": "A themed illustration surface"
+        }
+      ],
+      "classes": [
+        ".cn-aspect-ratio",
+        ".demo-ratio"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Keep content in a consistent ratio as its container changes. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "aspect-ratio.css"
+    },
+    {
+      "slug": "separator",
+      "title": "Separator",
+      "library": "cn",
+      "module": "cn::separator",
+      "category": "Layout",
+      "tags": [
+        "layout",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Separate related groups of content with a themed divider.",
+      "doc": "docs/book/src/cn/layout.md",
+      "doc_section": "Separator",
+      "entry": "separator_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/separator.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "orientation",
+          "kind": "Construction",
+          "type": "SeparatorOrientation",
+          "example": "Horizontal and vertical"
+        }
+      ],
+      "classes": [
+        ".cn-separator"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Separate related groups of content with a themed divider. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "separator.css"
+    },
+    {
+      "slug": "resizable",
+      "title": "Resizable",
+      "library": "cn",
+      "module": "cn::resizable",
+      "category": "Layout",
+      "tags": [
+        "layout",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Let people divide space between neighbouring panels.",
+      "doc": "docs/book/src/cn/layout.md",
+      "doc_section": "Resizable",
+      "entry": "resizable_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/resizable.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "panel",
+          "kind": "Construction",
+          "type": "ResizablePanel",
+          "example": "Files and preview"
+        },
+        {
+          "name": "default_size / min_size",
+          "kind": "Construction",
+          "type": "f32",
+          "example": "150 / 80"
+        }
+      ],
+      "classes": [
+        ".cn-resizable",
+        ".cn-resizable-handle",
+        ".cn-resizable-line"
+      ],
+      "keyboard": "Drag the divider to resize the panels; this example demonstrates pointer resizing.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Let people divide space between neighbouring panels. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "resizable.css",
+      "recording": {
+        "target": ".cn-resizable-handle",
+        "kind": "drag"
+      }
+    },
+    {
+      "slug": "scroll-area",
+      "title": "Scroll Area",
+      "library": "cn",
+      "module": "cn::scroll_area",
+      "category": "Layout",
+      "tags": [
+        "layout",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Browse overflowing content in a themed scroll container.",
+      "doc": "docs/book/src/cn/layout.md",
+      "doc_section": "Scroll Area",
+      "entry": "scroll_area_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/scroll_area.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "height",
+          "kind": "Construction",
+          "type": "f32",
+          "example": "208"
+        },
+        {
+          "name": "child",
+          "kind": "Construction",
+          "type": "ElementBuilder",
+          "example": "16 chapters"
+        }
+      ],
+      "classes": [
+        ".cn-scroll-area",
+        ".demo-list-row"
+      ],
+      "keyboard": "Scroll with the wheel or trackpad. The example keeps scrolling within its own viewport.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Browse overflowing content in a themed scroll container. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "scroll-area.css",
+      "recording": {
+        "target": ".cn-scroll-area",
+        "kind": "scroll"
+      }
+    },
+    {
+      "slug": "virtual-list",
+      "title": "Virtual List",
+      "library": "layout",
+      "module": "layout::widgets::virtual_list",
+      "category": "Content",
+      "tags": [
+        "content",
+        "css",
+        "built-in"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Browse thousands of rows while mounting only the visible window.",
+      "doc": "docs/book/src/widgets/virtual-list.md",
+      "doc_section": null,
+      "entry": "virtual_list_demo",
+      "source": "examples/blinc_component_demos/src/gallery/builtin.rs",
+      "implementation": [
+        "crates/blinc_layout/src/widgets/virtual_list.rs",
+        "examples/blinc_component_demos/src/gallery/builtin.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "item_count",
+          "kind": "Construction",
+          "type": "usize",
+          "example": "10,000"
+        },
+        {
+          "name": "item builder",
+          "kind": "Construction",
+          "type": "Fn(usize) -> Div",
+          "example": "Message 00001\u2026"
+        },
+        {
+          "name": "estimated_item_height / window_size",
+          "kind": "Construction",
+          "type": "f32 / usize",
+          "example": "40 / 24"
+        }
+      ],
+      "classes": [
+        ".demo-virtual-list",
+        ".demo-virtual-row"
+      ],
+      "keyboard": "Scroll with the wheel or trackpad. The example keeps scrolling within its own viewport.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Browse thousands of rows while mounting only the visible window. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
+      "recipe": "virtual-list.css",
+      "recording": {
+        "target": ".demo-virtual-list",
+        "kind": "scroll"
+      }
+    },
+    {
+      "slug": "table",
+      "title": "Table",
+      "library": "cn",
+      "module": "cn::table",
+      "category": "Data display",
+      "tags": [
+        "data display",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Present related values with themed headings, rows and cells.",
+      "doc": "docs/book/src/cn/data-display.md",
+      "doc_section": "Table",
+      "entry": "table_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/table.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "header / body / row / cell",
+          "kind": "Construction",
+          "type": "table builders",
+          "example": "Project / Status with three rows"
+        }
+      ],
+      "classes": [
+        ".cn-table",
+        ".cn-table-header",
+        ".cn-table-body",
+        ".cn-table-footer",
+        ".cn-table-row",
+        ".cn-table-head",
+        ".cn-table-cell",
+        ".cn-table-caption"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Present related values with themed headings, rows and cells. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "table.css"
+    },
+    {
+      "slug": "tree",
+      "title": "Tree",
+      "library": "cn",
+      "module": "cn::tree",
+      "category": "Data display",
+      "tags": [
+        "data display",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Browse hierarchical content with expansion and selection.",
+      "doc": "docs/book/src/cn/data-display.md",
+      "doc_section": "Tree",
+      "entry": "tree_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/tree.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "node / child",
+          "kind": "Construction",
+          "type": "tree builders",
+          "example": "src, main.rs, ui.rs and assets"
+        },
+        {
+          "name": "on_select",
+          "kind": "Callback",
+          "type": "Fn(&str)",
+          "example": "Updates values.choice"
+        }
+      ],
+      "classes": [
+        ".cn-tree",
+        ".cn-tree-row",
+        ".cn-tree-chevron",
+        ".cn-tree-chevron-space",
+        ".cn-tree-icon",
+        ".cn-tree-label",
+        ".cn-tree-item",
+        ".cn-tree-group",
+        ".cn-tree-guide"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Browse hierarchical content with expansion and selection. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "tree.css",
+      "recording": {
+        "target": ".cn-tree-row",
+        "kind": "click"
+      }
     },
     {
       "slug": "charts",
@@ -393,13 +3455,13 @@
           "name": "labels",
           "type": "Vec<String>",
           "kind": "Bound",
-          "example": "Mon–Sat"
+          "example": "Mon\u2013Sat"
         },
         {
           "name": "width / height",
           "type": "f32",
           "kind": "Structural",
-          "example": "Container size, up to 420 × 200 logical pixels"
+          "example": "Container size, up to 420 \u00d7 200 logical pixels"
         },
         {
           "name": "dots()",
@@ -500,7 +3562,9 @@
           "title": "Sparkline",
           "description": "A compact trend without axes, grid or a legend.",
           "entry": "sparkline_demo",
-          "capabilities": ["worker-canvas"]
+          "capabilities": [
+            "worker-canvas"
+          ]
         },
         {
           "slug": "threshold-chart",
@@ -520,7 +3584,1226 @@
           "description": "Compare current measurements with a baseline and show the change.",
           "entry": "comparison_demo"
         }
+      ],
+      "module": "cn::chart",
+      "implementation": [
+        "crates/blinc_cn/src/components/chart/view.rs"
+      ],
+      "controls": []
+    },
+    {
+      "slug": "typography",
+      "title": "Typography",
+      "library": "cn",
+      "module": "cn::typography",
+      "category": "Data display",
+      "tags": [
+        "data display",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Build a readable hierarchy with a shared type scale.",
+      "doc": "docs/book/src/widgets/text.md",
+      "doc_section": null,
+      "entry": "typography_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/typography.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "content",
+          "kind": "Construction",
+          "type": "text",
+          "example": "Heading, paragraph and muted text"
+        },
+        {
+          "name": "helper",
+          "kind": "Construction",
+          "type": "typography constructor",
+          "example": "h2 / p / muted"
+        }
+      ],
+      "classes": [
+        ".cn-h1",
+        ".cn-h2",
+        ".cn-h3",
+        ".cn-h4",
+        ".cn-h5",
+        ".cn-h6",
+        ".cn-h{level}",
+        ".cn-p",
+        ".cn-muted",
+        ".cn-caption"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Build a readable hierarchy with a shared type scale. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "typography.css"
+    },
+    {
+      "slug": "lists",
+      "title": "Lists",
+      "library": "layout",
+      "module": "layout::widgets::list",
+      "category": "Content",
+      "tags": [
+        "content",
+        "css",
+        "built-in"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Structure short sequences with bullets and numbers.",
+      "doc": "docs/book/src/widgets/markdown.md",
+      "doc_section": "Lists",
+      "entry": "lists_demo",
+      "source": "examples/blinc_component_demos/src/gallery/builtin.rs",
+      "implementation": [
+        "crates/blinc_layout/src/widgets/list.rs",
+        "examples/blinc_component_demos/src/gallery/builtin.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "ul / ol",
+          "kind": "Construction",
+          "type": "list builders",
+          "example": "Unordered and ordered lists"
+        },
+        {
+          "name": "child",
+          "kind": "Construction",
+          "type": "ListItem",
+          "example": "li().child(text(...))"
+        }
+      ],
+      "classes": [
+        ".demo--lists",
+        ".blinc-list-marker",
+        ".blinc-task-box"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Structure short sequences with bullets and numbers. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
+      "recipe": "lists.css"
+    },
+    {
+      "slug": "blockquote",
+      "title": "Blockquote",
+      "library": "layout",
+      "module": "layout::widgets::blockquote",
+      "category": "Content",
+      "tags": [
+        "content",
+        "css",
+        "built-in"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Give quoted content a clear place in the reading flow.",
+      "doc": "docs/book/src/widgets/markdown.md",
+      "doc_section": "Blockquotes",
+      "entry": "blockquote_demo",
+      "source": "examples/blinc_component_demos/src/gallery/builtin.rs",
+      "implementation": [
+        "crates/blinc_layout/src/widgets/blockquote.rs",
+        "examples/blinc_component_demos/src/gallery/builtin.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "child",
+          "kind": "Construction",
+          "type": "ElementBuilder",
+          "example": "Quotation and attribution"
+        }
+      ],
+      "classes": [
+        ".blinc-blockquote"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Give quoted content a clear place in the reading flow. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
+      "recipe": "blockquote.css"
+    },
+    {
+      "slug": "markdown",
+      "title": "Markdown",
+      "library": "layout",
+      "module": "layout::markdown::renderer",
+      "category": "Content",
+      "tags": [
+        "content",
+        "css",
+        "built-in"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Render formatted content directly in the native layout.",
+      "doc": "docs/book/src/widgets/markdown.md",
+      "doc_section": null,
+      "entry": "markdown_demo",
+      "source": "examples/blinc_component_demos/src/gallery/builtin.rs",
+      "implementation": [
+        "crates/blinc_layout/src/markdown/renderer.rs",
+        "examples/blinc_component_demos/src/gallery/builtin.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "source",
+          "kind": "Construction",
+          "type": "string",
+          "example": "Headings, emphasis, inline code and a list"
+        }
+      ],
+      "classes": [
+        ".demo--markdown",
+        ".blinc-list-marker",
+        ".blinc-blockquote"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Render formatted content directly in the native layout. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
+      "recipe": "markdown.css"
+    },
+    {
+      "slug": "code-block",
+      "title": "Code Block",
+      "library": "layout",
+      "module": "layout::widgets::code",
+      "category": "Content",
+      "tags": [
+        "content",
+        "css",
+        "built-in"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Present highlighted source without an editable field.",
+      "doc": "docs/book/src/widgets/code-editor.md",
+      "doc_section": "Read-Only Code Block",
+      "entry": "code_block_demo",
+      "source": "examples/blinc_component_demos/src/gallery/builtin.rs",
+      "implementation": [
+        "crates/blinc_layout/src/widgets/code/mod.rs",
+        "examples/blinc_component_demos/src/gallery/builtin.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "content",
+          "kind": "Construction",
+          "type": "string",
+          "example": "fn main() { \u2026 }"
+        },
+        {
+          "name": "syntax",
+          "kind": "Construction",
+          "type": "SyntaxConfig",
+          "example": "RustHighlighter"
+        },
+        {
+          "name": "line_numbers",
+          "kind": "Construction",
+          "type": "bool",
+          "example": "true"
+        }
+      ],
+      "classes": [
+        ".blinc-code",
+        ".blinc-code-line-number",
+        ".blinc-code-fold",
+        ".blinc-code-gutter",
+        ".blinc-code-minimap",
+        ".blinc-code-minimap-slider",
+        ".blinc-code-minimap-line",
+        ".blinc-code-guide",
+        ".blinc-code-active-line",
+        ".blinc-code-selection",
+        ".blinc-code-bracket",
+        ".blinc-code-find-match",
+        ".blinc-code-fold-hint"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--blinc-code-caret, --accent",
+      "notes": "Present highlighted source without an editable field. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
+      "recipe": "code-block.css"
+    },
+    {
+      "slug": "code-editor",
+      "title": "Code Editor",
+      "library": "layout",
+      "module": "layout::widgets::code",
+      "category": "Editors",
+      "tags": [
+        "editors",
+        "css",
+        "built-in"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Edit source with syntax highlighting, line numbers, search and selection.",
+      "doc": "docs/book/src/widgets/code-editor.md",
+      "doc_section": "Editable Code Editor",
+      "entry": "code_editor_demo",
+      "source": "examples/blinc_component_demos/src/gallery/builtin.rs",
+      "implementation": [
+        "crates/blinc_layout/src/widgets/code/mod.rs",
+        "examples/blinc_component_demos/src/gallery/builtin.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "document",
+          "kind": "Shared document",
+          "type": "SharedCodeEditorState",
+          "example": "values.code"
+        },
+        {
+          "name": "syntax",
+          "kind": "Construction",
+          "type": "SyntaxConfig",
+          "example": "RustHighlighter"
+        },
+        {
+          "name": "line_numbers / search_enabled",
+          "kind": "Construction",
+          "type": "bool",
+          "example": "true"
+        }
+      ],
+      "classes": [
+        ".blinc-code",
+        ".blinc-code-line-number",
+        ".blinc-code-fold",
+        ".blinc-code-gutter",
+        ".blinc-code-minimap",
+        ".blinc-code-minimap-slider",
+        ".blinc-code-minimap-line",
+        ".blinc-code-guide",
+        ".blinc-code-active-line",
+        ".blinc-code-selection",
+        ".blinc-code-bracket",
+        ".blinc-code-find-match",
+        ".blinc-code-fold-hint"
+      ],
+      "keyboard": "Click to focus. Type and select text; arrow keys navigate, Enter inserts a line, Tab indents, and Cmd/Ctrl+F opens search. Standard selection, clipboard and undo shortcuts apply.",
+      "tokens": "--blinc-code-caret, --accent",
+      "notes": "Edit source with syntax highlighting, line numbers, search and selection. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
+      "recipe": "code-editor.css",
+      "recording": {
+        "target": ".blinc-code",
+        "kind": "type",
+        "text": "dark",
+        "frames": 64
+      }
+    },
+    {
+      "slug": "rich-text-editor",
+      "title": "Rich Text Editor",
+      "library": "layout",
+      "module": "layout::widgets::rich_text_editor::editor",
+      "category": "Editors",
+      "tags": [
+        "editors",
+        "css",
+        "built-in"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Write formatted prose with headings, emphasis and a selection toolbar.",
+      "doc": "docs/book/src/widgets/rich-text-editor.md",
+      "doc_section": null,
+      "entry": "rich_text_editor_demo",
+      "source": "examples/blinc_component_demos/src/gallery/builtin.rs",
+      "implementation": [
+        "crates/blinc_layout/src/widgets/rich_text_editor/editor.rs",
+        "examples/blinc_component_demos/src/gallery/builtin.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "document",
+          "kind": "Shared document",
+          "type": "RichTextState",
+          "example": "values.document"
+        },
+        {
+          "name": "theme / width",
+          "kind": "Construction",
+          "type": "RichTextTheme / f32",
+          "example": "default / container width"
+        }
+      ],
+      "classes": [
+        ".blinc-rich-text"
+      ],
+      "keyboard": "Click to focus, type and select text. Use arrows, Enter, Backspace and the editor\u2019s formatting shortcuts; see the guide below.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Write formatted prose with headings, emphasis and a selection toolbar. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
+      "recipe": "rich-text-editor.css",
+      "recording": {
+        "target": ".blinc-rich-text",
+        "kind": "type",
+        "text": "Keep the details clear.",
+        "frames": 96
+      }
+    },
+    {
+      "slug": "kbd",
+      "title": "Keyboard Shortcut",
+      "library": "cn",
+      "module": "cn::kbd",
+      "category": "Data display",
+      "tags": [
+        "data display",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "A compact keyboard shortcut reference with grouped keycaps for command search, documents, saving and preferences.",
+      "doc": "docs/book/src/cn/data-display.md",
+      "doc_section": "Kbd",
+      "entry": "kbd_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/kbd.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "label",
+          "kind": "Construction",
+          "type": "string",
+          "example": "Shortcut key legends"
+        }
+      ],
+      "classes": [
+        ".cn-kbd",
+        ".demo-shortcut-row"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Show the keys behind an application shortcut. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "kbd.css"
+    },
+    {
+      "slug": "icons",
+      "title": "Icons",
+      "library": "cn",
+      "module": "cn::icon",
+      "category": "Data display",
+      "tags": [
+        "data display",
+        "css",
+        "themed"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Use crisp vector icons that inherit the surrounding theme.",
+      "doc": "docs/book/src/cn/icons.md",
+      "doc_section": null,
+      "entry": "icon_demo",
+      "source": "examples/blinc_component_demos/src/gallery/display.rs",
+      "implementation": [
+        "crates/blinc_cn/src/components/icon.rs",
+        "examples/blinc_component_demos/src/gallery/display.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "path",
+          "kind": "Construction",
+          "type": "icon path",
+          "example": "Lucide icons from blinc_icons"
+        },
+        {
+          "name": "size",
+          "kind": "Construction",
+          "type": "IconSize",
+          "example": "Large"
+        }
+      ],
+      "classes": [
+        ".cn-icon",
+        ".demo-icons"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Use crisp vector icons that inherit the surrounding theme. Apply CSS after the component layer to restyle the documented parts.",
+      "recipe": "icons.css"
+    },
+    {
+      "slug": "canvas",
+      "title": "Canvas",
+      "library": "layout",
+      "module": "layout::canvas",
+      "category": "Graphics",
+      "tags": [
+        "graphics",
+        "css",
+        "built-in"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Draw gradient fills, layered shapes, a colour palette and a progress bar with canvas-rendered text.",
+      "doc": "docs/book/src/widgets/canvas.md",
+      "doc_section": null,
+      "entry": "canvas_demo",
+      "source": "examples/blinc_component_demos/src/gallery/canvas.rs",
+      "implementation": [
+        "examples/blinc_component_demos/src/gallery/canvas.rs",
+        "crates/blinc_layout/src/canvas.rs"
+      ],
+      "viewport": {
+        "width": 680,
+        "height": 480,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "draw",
+          "kind": "Construction",
+          "type": "Fn(&mut dyn DrawContext, CanvasBounds)",
+          "example": "Theme-coloured circles and strokes"
+        },
+        {
+          "name": "width / height",
+          "kind": "Construction",
+          "type": "f32",
+          "example": "container width / 200"
+        }
+      ],
+      "classes": [
+        ".demo-canvas-examples",
+        ".demo-canvas-sample",
+        ".demo-canvas-artwork"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "These four samples adapt the original canvas_demo application. On narrow screens the drawing gallery scrolls. Drawing is configured through DrawContext, so this page has no custom CSS editor.",
+      "recipe": "canvas.css",
+      "custom_css": false
+    },
+    {
+      "slug": "svg",
+      "title": "SVG",
+      "library": "layout",
+      "module": "layout::svg",
+      "category": "Graphics",
+      "tags": [
+        "graphics",
+        "css",
+        "built-in"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "The detailed Fennec fox from the original SVG gallery, rendered at three sizes with theme-aware tints.",
+      "doc": "docs/book/src/widgets/media.md",
+      "doc_section": "SVG",
+      "entry": "svg_demo",
+      "source": "examples/blinc_component_demos/src/gallery/builtin.rs",
+      "implementation": [
+        "crates/blinc_layout/src/svg.rs",
+        "examples/blinc_component_demos/src/gallery/builtin.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 480,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "source",
+          "kind": "Construction",
+          "type": "SVG string",
+          "example": "Inline vector illustration"
+        },
+        {
+          "name": "size",
+          "kind": "Construction",
+          "type": "(f32, f32)",
+          "example": "240 \u00d7 192"
+        }
+      ],
+      "classes": [
+        ".demo-svg-samples",
+        ".demo-svg-small",
+        ".demo-svg-medium",
+        ".demo-svg-large",
+        ".demo-svg-artwork"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Render scalable vector artwork with inherited colours. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
+      "recipe": "svg.css"
+    },
+    {
+      "slug": "notch",
+      "title": "Notch",
+      "library": "layout",
+      "module": "layout::notch",
+      "category": "Graphics",
+      "tags": [
+        "graphics",
+        "css",
+        "built-in"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Explore the interactive notched menu bar, bulge navigation, angle cuts and scooped dock from the Notch example.",
+      "doc": "docs/book/src/widgets/notch.md",
+      "doc_section": null,
+      "entry": "notch_demo",
+      "source": "examples/blinc_component_demos/src/gallery/notch.rs",
+      "implementation": [
+        "crates/blinc_layout/src/notch.rs",
+        "examples/blinc_component_demos/src/gallery/notch.rs"
+      ],
+      "viewport": {
+        "width": 680,
+        "height": 560,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "concave_top / rounded_bottom",
+          "kind": "Construction",
+          "type": "f32",
+          "example": "32 / 16"
+        },
+        {
+          "name": "center_scoop_top_rounded",
+          "kind": "Construction",
+          "type": "width, depth, radius",
+          "example": "80, 42, 8"
+        }
+      ],
+      "classes": [
+        ".demo-notch-icon",
+        ".demo-notch-status",
+        ".demo-notch-dock",
+        ".demo-notch-stage",
+        ".demo-notch-label",
+        ".demo-notch-glyph"
+      ],
+      "keyboard": "Informational content; no activation or Tab stop is required.",
+      "tokens": "--gallery-notch-radius (8\u201340px), --gallery-notch-bar and --gallery-notch-active. Shape tokens are read when the UI refreshes, keeping the existing spring and hover behaviour.",
+      "notes": "The original Notch example combines concave corners, bulges, cuts, peaks and a scooped dock. Hover the menu icons to reveal their status; the middle examples scroll in shorter viewports.",
+      "recipe": "notch.css",
+      "recording": {
+        "kind": "hover",
+        "target": ".demo-notch-icon",
+        "secondary": ".demo-notch-icon",
+        "secondary_index": 3
+      },
+      "custom_css": true
+    },
+    {
+      "slug": "image",
+      "title": "Image",
+      "library": "layout",
+      "module": "layout::image",
+      "category": "Media",
+      "tags": [
+        "media",
+        "image"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Display raster images with fitting, cropping and theme-aware surfaces.",
+      "doc": "docs/book/src/widgets/media.md",
+      "doc_section": "Images",
+      "entry": "image_demo",
+      "source": "examples/blinc_component_demos/src/gallery/media.rs",
+      "implementation": [
+        "examples/blinc_component_demos/src/gallery/media.rs",
+        "crates/blinc_layout/src/widgets/media/mod.rs",
+        "crates/blinc_layout/src/widgets/media/controls.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "source",
+          "kind": "Construction",
+          "type": "data URI",
+          "example": "Embedded landscape image"
+        },
+        {
+          "name": "cover",
+          "kind": "Construction",
+          "type": "ObjectFit",
+          "example": "Crop to fill the container"
+        }
+      ],
+      "classes": [
+        ".demo-image"
+      ],
+      "keyboard": "This preview displays content without a keyboard action.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "The image is embedded, so native and live previews use the same asset.",
+      "recipe": "image.css"
+    },
+    {
+      "slug": "waveform",
+      "title": "Waveform",
+      "library": "layout",
+      "module": "layout::widgets::media",
+      "category": "Media",
+      "tags": [
+        "media",
+        "waveform"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Display audio amplitude and played progress with theme-aware colours.",
+      "doc": "docs/book/src/widgets/audio-video.md",
+      "doc_section": "Waveform",
+      "entry": "waveform_demo",
+      "source": "examples/blinc_component_demos/src/gallery/media.rs",
+      "implementation": [
+        "examples/blinc_component_demos/src/gallery/media.rs",
+        "crates/blinc_layout/src/widgets/media/mod.rs",
+        "crates/blinc_layout/src/widgets/media/controls.rs",
+        "crates/blinc_layout/src/widgets/media/waveform.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "buckets",
+          "kind": "Construction",
+          "type": "Arc<Vec<f32>>",
+          "example": "120 peak amplitudes from Night Drive"
+        },
+        {
+          "name": "progress",
+          "kind": "Construction",
+          "type": "f32",
+          "example": "0.42"
+        }
+      ],
+      "classes": [
+        ".blinc-waveform"
+      ],
+      "keyboard": "This preview displays content without a keyboard action.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Enable the blinc_layout media feature for audio, video and waveform widgets.",
+      "recipe": "waveform.css"
+    },
+    {
+      "slug": "audio-player",
+      "title": "Audio Player",
+      "library": "layout",
+      "module": "layout::widgets::media",
+      "category": "Media",
+      "tags": [
+        "media",
+        "audio-player"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Audio transport, volume controls and an optional waveform.",
+      "doc": "docs/book/src/widgets/audio-video.md",
+      "doc_section": "Audio Widget",
+      "entry": "audio_player_demo",
+      "source": "examples/blinc_component_demos/src/gallery/media.rs",
+      "implementation": [
+        "examples/blinc_component_demos/src/gallery/media.rs",
+        "crates/blinc_layout/src/widgets/media/mod.rs",
+        "crates/blinc_layout/src/widgets/media/controls.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "player",
+          "kind": "Shared player",
+          "type": "Rc<AudioPlayer>",
+          "example": "Night Drive, paused and muted"
+        },
+        {
+          "name": "waveform_data",
+          "kind": "Construction",
+          "type": "AudioSamples",
+          "example": "Peaks from the same recording"
+        }
+      ],
+      "classes": [
+        ".blinc-audio-player",
+        ".blinc-media-controls"
+      ],
+      "keyboard": "Native transport controls support pointer interaction. Playback is not available in the worker gallery.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Live playback uses browser media decoding with the same Blinc controls as the native preview. Playback starts when you press Play.",
+      "recipe": "audio-player.css",
+      "recording": {
+        "target": ".blinc-media-play-btn",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "video-player",
+      "title": "Video Player",
+      "library": "layout",
+      "module": "layout::widgets::media",
+      "category": "Media",
+      "tags": [
+        "media",
+        "video-player"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Native video surfaces with shared transport, seeking and volume controls.",
+      "doc": "docs/book/src/widgets/audio-video.md",
+      "doc_section": "Video Widget",
+      "entry": "video_player_demo",
+      "source": "examples/blinc_component_demos/src/gallery/media.rs",
+      "implementation": [
+        "examples/blinc_component_demos/src/gallery/media.rs",
+        "crates/blinc_layout/src/widgets/media/mod.rs",
+        "crates/blinc_layout/src/widgets/media/controls.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "player",
+          "kind": "Shared player",
+          "type": "Rc<VideoPlayer>",
+          "example": "ashui handpan session"
+        },
+        {
+          "name": "width / height",
+          "kind": "Construction",
+          "type": "layout size",
+          "example": "container width / 240"
+        }
+      ],
+      "classes": [
+        ".blinc-video-player",
+        ".blinc-media-controls"
+      ],
+      "keyboard": "Native transport controls support pointer interaction. Playback is not available in the worker gallery.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Live playback uses browser media decoding with the same Blinc controls as the native preview. Playback starts when you press Play.",
+      "recipe": "video-player.css",
+      "recording": {
+        "target": ".blinc-media-play-btn",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "gestures",
+      "title": "Gestures",
+      "library": "layout",
+      "module": "layout::widgets::gesture",
+      "category": "Interaction",
+      "tags": [
+        "interaction",
+        "css",
+        "built-in"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Recognise taps, long presses and directional swipes.",
+      "doc": "docs/book/src/widgets/gestures.md",
+      "doc_section": null,
+      "entry": "gestures_demo",
+      "source": "examples/blinc_component_demos/src/gallery/builtin.rs",
+      "implementation": [
+        "crates/blinc_layout/src/widgets/gesture.rs",
+        "examples/blinc_component_demos/src/gallery/builtin.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 320,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "on_tap / on_long_press / on_swipe",
+          "kind": "Callback",
+          "type": "Gesture handlers",
+          "example": "Update a Signal<String> message"
+        }
+      ],
+      "classes": [
+        ".demo-gesture"
+      ],
+      "keyboard": "Tap, hold or swipe the surface. These gestures use pointer input; provide a labelled keyboard action when an essential operation depends on a gesture.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Recognise taps, long presses and directional swipes. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
+      "recipe": "gestures.css",
+      "recording": {
+        "target": "#demo-action",
+        "kind": "click"
+      }
+    },
+    {
+      "slug": "motion",
+      "title": "Motion",
+      "library": "layout",
+      "module": "layout::motion",
+      "category": "Interaction",
+      "tags": [
+        "interaction",
+        "css",
+        "built-in"
+      ],
+      "since": null,
+      "maturity": "stable",
+      "description": "Reveal a workspace activity feed with staggered entrance and fade-out motion.",
+      "doc": "docs/book/src/animation/motion.md",
+      "doc_section": null,
+      "entry": "motion_demo",
+      "source": "examples/blinc_component_demos/src/gallery/builtin.rs",
+      "implementation": [
+        "crates/blinc_layout/src/motion.rs",
+        "examples/blinc_component_demos/src/gallery/builtin.rs"
+      ],
+      "viewport": {
+        "width": 560,
+        "height": 400,
+        "scale": 2
+      },
+      "capabilities": [
+        "worker-canvas",
+        "pointer",
+        "keyboard"
+      ],
+      "controls": [],
+      "props": [
+        {
+          "name": "data-replay",
+          "kind": "Bound",
+          "type": "Signal<bool> and Computed<bool>",
+          "example": "Alternates between two CSS animation names"
+        },
+        {
+          "name": "id",
+          "kind": "Construction",
+          "type": "string",
+          "example": "gallery-motion"
+        }
+      ],
+      "classes": [
+        ".demo-activity",
+        ".demo-activity-heading",
+        ".demo-activity-item",
+        ".demo-activity-time"
+      ],
+      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
+      "notes": "Replay declarative motion through CSS and bound attributes. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
+      "recipe": "motion.css",
+      "recording": {
+        "target": "#demo-action",
+        "kind": "click"
+      }
+    }
+  ],
+  "coverage": {
+    "cn_modules": [
+      "accordion",
+      "alert",
+      "aspect_ratio",
+      "avatar",
+      "badge",
+      "breadcrumb",
+      "button",
+      "calendar",
+      "card",
+      "chart",
+      "checkbox",
+      "collapsible",
+      "color_picker",
+      "combobox",
+      "context_menu",
+      "date_picker",
+      "dialog",
+      "drawer",
+      "dropdown_menu",
+      "hover_card",
+      "icon",
+      "input",
+      "input_otp",
+      "kbd",
+      "label",
+      "menubar",
+      "navigation_menu",
+      "number_gauge",
+      "number_input",
+      "number_range_gauge",
+      "pagination",
+      "popover",
+      "progress",
+      "radio",
+      "resizable",
+      "scroll_area",
+      "select",
+      "separator",
+      "sheet",
+      "sidebar",
+      "skeleton",
+      "slider",
+      "spinner",
+      "switch",
+      "table",
+      "tabs",
+      "textarea",
+      "time_picker",
+      "toast",
+      "toggle",
+      "toggle_group",
+      "tooltip",
+      "tree",
+      "typography"
+    ],
+    "builtins": {
+      "layout::widgets::code": "code-editor",
+      "layout::widgets::rich_text_editor::editor": "rich-text-editor",
+      "layout::markdown::renderer": "markdown",
+      "layout::widgets::virtual_list": "virtual-list",
+      "layout::canvas": "canvas",
+      "layout::widgets::gesture": "gestures",
+      "layout::motion": "motion",
+      "layout::widgets::list": "lists",
+      "layout::widgets::blockquote": "blockquote",
+      "layout::widgets::link": "link",
+      "layout::svg": "svg",
+      "layout::notch": "notch",
+      "media": [
+        "waveform",
+        "audio-player",
+        "video-player"
+      ],
+      "image": [
+        "image"
+      ]
+    },
+    "widgets": {
+      "blockquote": [
+        "blockquote"
+      ],
+      "button": [
+        "button"
+      ],
+      "checkbox": [
+        "checkbox"
+      ],
+      "code": [
+        "code-block",
+        "code-editor"
+      ],
+      "css_motion": [
+        "motion"
+      ],
+      "cursor": [
+        "code-editor",
+        "input"
+      ],
+      "gesture": [
+        "gestures"
+      ],
+      "hr": [
+        "separator"
+      ],
+      "input_otp": [
+        "input-otp"
+      ],
+      "link": [
+        "link"
+      ],
+      "list": [
+        "lists"
+      ],
+      "media": [
+        "waveform",
+        "audio-player",
+        "video-player"
+      ],
+      "number_input": [
+        "number-input"
+      ],
+      "overlay": [
+        "dialog",
+        "popover",
+        "dropdown-menu",
+        "sheet",
+        "drawer",
+        "tooltip",
+        "toast"
+      ],
+      "overlay_stack": [
+        "dialog",
+        "popover"
+      ],
+      "radio": [
+        "radio-group"
+      ],
+      "rich_text_editor": [
+        "rich-text-editor"
+      ],
+      "scroll": [
+        "scroll-area"
+      ],
+      "table": [
+        "table"
+      ],
+      "text_area": [
+        "textarea"
+      ],
+      "text_edit": [
+        "input",
+        "textarea",
+        "code-editor"
+      ],
+      "text_input": [
+        "input"
+      ],
+      "toast_tray": [
+        "toast"
+      ],
+      "toggle": [
+        "toggle"
+      ],
+      "virtual_list": [
+        "virtual-list"
       ]
     }
-  ]
+  }
 }

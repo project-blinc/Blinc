@@ -1,0 +1,6 @@
+.cn-hover-card-content {
+  padding: 16px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}

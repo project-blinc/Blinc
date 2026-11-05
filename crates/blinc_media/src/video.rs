@@ -182,46 +182,45 @@ impl VideoPlayer {
                 #[cfg(target_arch = "wasm32")]
                 {
                     let mut inner = state_for_tick.lock().unwrap();
-                    if inner.playback_state == VideoState::Playing {
-                        let new_pos = crate::web_video::position_ms(_tick_id);
-                        let new_dur = crate::web_video::duration_ms(_tick_id);
-                        let pos_changed = inner.position_ms != new_pos;
-                        let dur_changed = inner.duration_ms != new_dur;
-                        inner.position_ms = new_pos;
-                        inner.duration_ms = new_dur;
-                        drop(inner);
-
-                        // Only capture frame when video has advanced —
-                        // getImageData is expensive (~8MB copy for 1080p)
-                        if pos_changed {
-                            if let Some(frame) = crate::web_video::capture_frame(_tick_id) {
-                                let mut inner = state_for_tick.lock().unwrap();
-                                inner.current_frame = Some(std::sync::Arc::new(frame));
-                                inner.frame_generation += 1;
-                            }
-                            pos_for_tick.set(new_pos);
+                    let new_pos = crate::web_video::position_ms(_tick_id);
+                    let new_dur = crate::web_video::duration_ms(_tick_id);
+                    let pos_changed = inner.position_ms != new_pos;
+                    let dur_changed = inner.duration_ms != new_dur;
+                    let previous = inner.playback_state;
+                    let playback = if crate::web_video::is_ended(_tick_id) {
+                        VideoState::Ended
+                    } else if crate::web_video::is_paused(_tick_id) {
+                        VideoState::Paused
+                    } else {
+                        VideoState::Playing
+                    };
+                    inner.position_ms = new_pos;
+                    inner.duration_ms = new_dur;
+                    inner.playback_state = playback;
+                    let needs_frame = pos_changed || inner.current_frame.is_none();
+                    drop(inner);
+                    if needs_frame {
+                        if let Some(frame) = crate::web_video::capture_frame(_tick_id) {
+                            let mut inner = state_for_tick.lock().unwrap();
+                            inner.current_frame = Some(std::sync::Arc::new(frame));
+                            inner.frame_generation += 1;
                             redraw_handle.request_redraw();
                         }
-                        if dur_changed {
-                            dur_for_tick.set(new_dur);
-                        }
-
-                        // Buffered end drifts upward as the browser
-                        // downloads more of the file. Poll it alongside
-                        // position so the seek bar's ghost fill tracks
-                        // the download in real time — but only push
-                        // into the signal when it actually changes, to
-                        // avoid waking subscribers on every frame.
-                        let new_buf = crate::web_video::buffered_end_ms(_tick_id);
-                        if new_buf != last_buffered.load(std::sync::atomic::Ordering::Relaxed) {
-                            last_buffered.store(new_buf, std::sync::atomic::Ordering::Relaxed);
-                            buf_for_tick.set(new_buf);
-                        }
-
-                        if crate::web_video::is_ended(_tick_id) {
-                            state_for_tick.lock().unwrap().playback_state = VideoState::Ended;
-                            playing_for_tick.set(false);
-                        }
+                    }
+                    if pos_changed {
+                        pos_for_tick.set(new_pos);
+                    }
+                    if dur_changed {
+                        dur_for_tick.set(new_dur);
+                    }
+                    if previous != playback {
+                        playing_for_tick.set(playback == VideoState::Playing);
+                    }
+                    let buffered = crate::web_video::buffered_end_ms(_tick_id);
+                    if buffered
+                        != last_buffered.swap(buffered, std::sync::atomic::Ordering::Relaxed)
+                    {
+                        buf_for_tick.set(buffered);
                     }
                 }
 

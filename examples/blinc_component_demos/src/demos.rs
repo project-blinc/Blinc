@@ -1,3 +1,4 @@
+use blinc_cn as cn;
 use blinc_cn::{
     ButtonVariant, ChartBand, area_chart, bar_chart, button, comparison_bar_chart, dialog,
     histogram, input, line_chart, pie_chart, progress, select, spark_line, threshold_line_chart,
@@ -19,6 +20,17 @@ pub struct DemoState {
     pub name: Signal<String>,
     pub confirmed: Signal<bool>,
     pub input: SharedTextInputData,
+    pub number: Signal<f64>,
+    pub range: Signal<std::ops::RangeInclusive<f64>>,
+    pub page: Signal<usize>,
+    pub date: Signal<Option<cn::CalendarDay>>,
+    pub time: Signal<cn::TimeOfDay>,
+    pub color: Signal<blinc_core::Color>,
+    pub multiline: blinc_layout::widgets::text_area::SharedTextAreaState,
+    pub code: blinc_layout::widgets::code::SharedCodeEditorState,
+    pub audio: std::rc::Rc<std::cell::OnceCell<std::rc::Rc<blinc_media::AudioPlayer>>>,
+    pub video: std::rc::Rc<std::cell::OnceCell<std::rc::Rc<blinc_media::VideoPlayer>>>,
+    pub document: blinc_layout::widgets::rich_text_editor::RichTextState,
 }
 
 impl Default for DemoState {
@@ -31,6 +43,24 @@ impl Default for DemoState {
             name: signal(String::new()),
             confirmed: signal(false),
             input: text_input_data(),
+            number: signal(42.0),
+            range: signal(20.0..=80.0),
+            page: signal(1),
+            date: signal(Some(cn::CalendarDay::new(2026, 11, 4))),
+            time: signal(cn::TimeOfDay::new(14, 30, 0).unwrap()),
+            color: signal(blinc_core::Color::from_hex(0x7da8ff)),
+            multiline: blinc_layout::widgets::text_area::text_area_state(),
+            code: code_editor_state(
+                "fn main() {\n    let theme = \"light\";\n    println!(\"Theme: {theme}\");\n}\n",
+            ),
+            audio: Default::default(),
+            video: Default::default(),
+            document: blinc_layout::widgets::rich_text_editor::rich_text_state(
+                blinc_layout::widgets::rich_text_editor::RichDocument::from_markdown(
+                    "## Project notes\n\nBuild interfaces that feel natural.",
+                    blinc_core::Color::TRANSPARENT,
+                ),
+            ),
         }
     }
 }
@@ -55,15 +85,18 @@ pub fn build(slug: &str, state: &DemoState, viewport: (f32, f32)) -> Div {
         "histogram" => histogram_demo(state, viewport),
         "comparison-chart" => comparison_demo(state, viewport),
 
-        _ => panic!("unknown catalog demo: {slug}"),
+        _ => crate::gallery::build(slug, state, viewport),
     };
-    div().class("catalog-demo").child(content)
+    div()
+        .class("catalog-demo")
+        .class(&format!("demo--{slug}"))
+        .child(content)
 }
 
 pub fn button_demo(state: &DemoState) -> Div {
     let clicks = state.clicks;
     div()
-        .class("demo-stack")
+        .class("demo-wide")
         .class("demo-stack--center")
         .child(
             button("Click me")
@@ -77,6 +110,39 @@ pub fn button_demo(state: &DemoState) -> Div {
                 format!("Clicked {} times", graph.get(clicks).unwrap_or(0))
             }))
             .class("demo-caption"),
+        )
+        .child(
+            div()
+                .class("demo-row")
+                .child(
+                    cn::button("Secondary")
+                        .variant(cn::ButtonVariant::Secondary)
+                        .disabled(state.disabled),
+                )
+                .child(
+                    cn::button("Outline")
+                        .variant(cn::ButtonVariant::Outline)
+                        .disabled(state.disabled),
+                )
+                .child(
+                    cn::button("Ghost")
+                        .variant(cn::ButtonVariant::Ghost)
+                        .disabled(state.disabled),
+                ),
+        )
+        .child(
+            div()
+                .class("demo-row")
+                .child(
+                    cn::button("Remove")
+                        .variant(cn::ButtonVariant::Destructive)
+                        .disabled(state.disabled),
+                )
+                .child(
+                    cn::button("Documentation")
+                        .variant(cn::ButtonVariant::Link)
+                        .disabled(state.disabled),
+                ),
         )
 }
 
@@ -355,6 +421,6 @@ pub fn comparison_demo(_state: &DemoState, viewport: (f32, f32)) -> Div {
     )
 }
 
-fn bound_text(value: impl IntoReactive<String>) -> Text {
+pub(crate) fn bound_text(value: impl IntoReactive<String>) -> Text {
     Text::bound(value.into_reactive())
 }

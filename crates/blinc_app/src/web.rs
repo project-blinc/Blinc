@@ -465,14 +465,8 @@ pub struct WebApp {
     /// visible jank that scaled with overlay count — the symptom
     /// the user reports when nodes approach the HUD during zoom.
     last_scroll_invalidate_ms: Option<u64>,
-    /// Accumulated wheel delta (x, y) since the last `run_one_frame`
-    /// drain. The wheel handler adds into this instead of
-    /// dispatching directly so the runner can apply a true
-    /// per-frame speed cap — multiple wheel events that arrive
-    /// inside a single rAF interval coalesce into one capped
-    /// dispatch on the next frame, instead of stacking up at the
-    /// scroll widget without bound.
-    pending_wheel_delta: (f32, f32),
+    /// Coalesced wheel updates, retaining boundaries between finger strokes.
+    wheel_input: crate::web_wheel::WheelInput,
     /// Dynamic per-frame state: motion animations, cursor blink,
     /// overlays. The desktop runner creates this via
     /// `RenderState::new(animations)` — the web runner needs it so
@@ -764,7 +758,7 @@ impl WebApp {
             last_cursor: "default",
             last_wheel_time_ms: None,
             last_scroll_invalidate_ms: None,
-            pending_wheel_delta: (0.0, 0.0),
+            wheel_input: Default::default(),
             cached_modifiers: blinc_platform::Modifiers::default(),
             render_state,
             css_anim_store,
@@ -1215,7 +1209,7 @@ impl WebApp {
         //
         // The handler does NOT dispatch directly to scroll physics.
         // Instead, it accumulates the raw delta into
-        // `pending_wheel_delta`, and `run_one_frame` drains it once
+        // the wheel queue, and `run_one_frame` drains it once
         // per rAF tick through a damping function. This is what
         // gives the runner a true *per-frame* speed cap rather than
         // a per-event one — multiple wheel events arriving inside a
@@ -1253,8 +1247,7 @@ impl WebApp {
                     };
                     let raw_dx = -(evt.delta_x() as f32) * multiplier;
                     let raw_dy = -(evt.delta_y() as f32) * multiplier;
-                    app.pending_wheel_delta.0 += raw_dx;
-                    app.pending_wheel_delta.1 += raw_dy;
+                    app.wheel_input.push(raw_dx, raw_dy, evt.time_stamp());
                 }
             });
             canvas
@@ -1343,6 +1336,8 @@ impl WebApp {
                             // double-tap = native edit menu, etc.).
                             blinc_layout::widgets::text_input::set_touch_input(true);
                             if len == 1 {
+                                app.last_wheel_time_ms = None;
+                                app.wheel_input.reset();
                                 app.last_touch_pos = Some((x, y));
                                 Self::dispatch_mouse_down(
                                     &mut app,
@@ -1456,12 +1451,16 @@ impl WebApp {
                         // for the same reason. Web was the outlier.
                         if let Some(ref mut tree) = app.current_tree {
                             tree.on_scroll_end();
+                            tree.on_scroll_gesture(
+                                blinc_layout::renderer::ScrollGesturePhase::MomentumEnd,
+                            );
                         }
                         // Cancel any armed long-press timer the
                         // user just dismissed by lifting their
                         // finger before the deadline.
                         blinc_layout::widgets::text_input::cancel_long_press_timer();
                         app.last_touch_pos = None;
+                        app.last_wheel_time_ms = None;
                     }
                 });
                 canvas
@@ -1851,6 +1850,12 @@ impl WebApp {
             }
         }
 
+        // Source events define wheel strokes; slow rendering must not split one.
+        if app.last_wheel_time_ms.is_none() {
+            if let Some(tree) = app.current_tree.as_ref() {
+                tree.begin_scroll_gesture();
+            }
+        }
         let hit = {
             let tree = match app.current_tree.as_ref() {
                 Some(t) => t,
@@ -2443,9 +2448,7 @@ impl WebApp {
         }
 
         // ─── Phase 0b: drain accumulated wheel delta ─────────────
-        let (pending_dx, pending_dy) = self.pending_wheel_delta;
-        self.pending_wheel_delta = (0.0, 0.0);
-        let had_scroll = pending_dx != 0.0 || pending_dy != 0.0;
+        let had_scroll = !self.wheel_input.is_empty();
         if had_scroll {
             // Pass small (trackpad-sized) deltas straight through so
             // trackpad scrolling feels native, and only compress the
@@ -2464,7 +2467,20 @@ impl WebApp {
                     d.signum() * (PASSTHROUGH_THRESHOLD + tail)
                 }
             };
-            Self::dispatch_scroll(self, damp(pending_dx), damp(pending_dy));
+            while let Some(delta) = self.wheel_input.pop() {
+                if delta.starts_gesture {
+                    if self.last_wheel_time_ms.is_some() {
+                        if let Some(tree) = self.current_tree.as_mut() {
+                            tree.on_scroll_end();
+                            tree.on_scroll_gesture(
+                                blinc_layout::renderer::ScrollGesturePhase::MomentumEnd,
+                            );
+                        }
+                    }
+                    self.last_wheel_time_ms = None;
+                }
+                Self::dispatch_scroll(self, damp(delta.x), damp(delta.y));
+            }
             // Mirror windowed.rs:5099 — scroll updates `tree.scroll_offsets`
             // and (when the scroll reaches a canvas-kit kit) the
             // viewport pan/zoom matrix. Neither routes through the
@@ -2519,6 +2535,7 @@ impl WebApp {
                 let debounce_ms = if overscrolling { 32 } else { 120 };
                 if elapsed >= debounce_ms {
                     tree.on_scroll_end();
+                    tree.on_scroll_gesture(blinc_layout::renderer::ScrollGesturePhase::MomentumEnd);
                     self.last_wheel_time_ms = None;
                 }
             }

@@ -1,0 +1,19 @@
+.cn-toast {
+  padding: 24px;
+  background: var(--surface-elevated);
+}
+
+.cn-toast-title {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.cn-toast-description {
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.cn-toast-close:hover {
+  color: var(--primary);
+  background: var(--surface-overlay);
+}

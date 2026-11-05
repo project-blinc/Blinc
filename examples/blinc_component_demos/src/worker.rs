@@ -8,6 +8,11 @@ use blinc_platform::Modifiers;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
+pub fn set_media_bridge(callback: js_sys::Function) {
+    blinc_media::set_web_media_bridge(callback);
+}
+
+#[wasm_bindgen]
 pub struct CatalogRuntime {
     app: WebApp,
     state: DemoState,
@@ -94,9 +99,10 @@ impl CatalogRuntime {
         ctrl: bool,
         alt: bool,
         meta: bool,
+        timestamp: Option<f64>,
     ) -> Result<bool, JsValue> {
         let event: WebInput = serde_json::from_str(json).map_err(error)?;
-        Ok(self.app.dispatch_input(
+        Ok(self.app.dispatch_input_at(
             event,
             Modifiers {
                 shift,
@@ -104,6 +110,7 @@ impl CatalogRuntime {
                 alt,
                 meta,
             },
+            timestamp.unwrap_or(f64::NAN),
         ))
     }
 
@@ -166,6 +173,12 @@ impl CatalogRuntime {
             "clicks": self.state.clicks.get(), "value": self.state.value.get(),
             "name": self.state.name.get(), "choice": self.state.choice.get(),
             "confirmed": self.state.confirmed.get(),
+            "video": self.state.video.get().map(|p| serde_json::json!({"playing":p.is_playing(),"position":p.position_ms(),"duration":p.duration_ms(),"frame":p.frame_generation()})),
+            "audio": self.state.audio.get().map(|p| serde_json::json!({"playing":p.is_playing(),"position":p.position_ms(),"duration":blinc_media::Player::duration_ms(p.as_ref())})),
+            "number": self.state.number.get(), "page": self.state.page.get(),
+            "time": self.state.time.get().to_string(),
+            "code": self.state.code.lock().unwrap().value(),
+            "document": self.state.document.lock().unwrap().document.plain_text(),
         }).to_string()
     }
 }

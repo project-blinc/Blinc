@@ -1,0 +1,10 @@
+.cn-scroll-area {
+  height: 208px;
+  background: var(--surface-elevated);
+  padding: 8px;
+}
+
+.demo-list-row {
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--border);
+}

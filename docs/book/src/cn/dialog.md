@@ -157,6 +157,9 @@ edge directly. `SheetSize` is `Small`, `Medium`, `Large` or `Full`.
 `.show_close(false)` hides the close button; `.on_close(|| ...)` observes
 dismissal. The title and description accept reactive values.
 
+Sheet and Drawer close controls are standard ghost icon buttons. Their existing
+`.cn-sheet-close` and `.cn-drawer-close` classes remain available for styling.
+
 ## Drawer
 
 A drawer is a left or right navigation panel, with the left as the default:

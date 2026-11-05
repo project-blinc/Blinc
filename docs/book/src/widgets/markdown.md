@@ -115,7 +115,7 @@ markdown(r#"
 
 Fenced code blocks with optional language:
 
-```rust
+````rust
 markdown(r#"
 ```rust
 fn main() {
@@ -123,7 +123,7 @@ fn main() {
 }
 ```
 "#)
-```
+````
 
 Supported languages for syntax highlighting include Rust, Python, JavaScript, TypeScript, and more.
 

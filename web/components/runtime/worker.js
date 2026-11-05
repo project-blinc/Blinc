@@ -27,6 +27,18 @@ function draw() {
   } catch (error) { fail(error); }
 }
 
+const media = new Map();
+function mediaBridge(id, operation, value) {
+  const state = media.get(id) || { position: 0, duration: 0, buffered: 0, paused: true, ended: false };
+  if (operation === 'frame') {
+    const frame = state.frame; state.frame = null;
+    if (frame) emit('media', { id, operation: 'frame-consumed' });
+    return frame || null;
+  }
+  if (['position', 'duration', 'buffered', 'paused', 'ended'].includes(operation)) return state[operation];
+  if (operation === 'create') media.set(id, state);
+  emit('media', { id, operation, value });
+}
 self.onmessage = async ({ data }) => {
   if (!booted) {
     if (data?.version !== VERSION || data.type !== 'boot' || typeof data.instance !== 'string') return;
@@ -44,6 +56,7 @@ self.onmessage = async ({ data }) => {
         moduleUrl.searchParams.set('v', payload.build);
         const wasm = await import(moduleUrl.href);
         await wasm.default({ module_or_path: new URL(`./pkg/blinc_component_demos_bg.wasm?v=${encodeURIComponent(payload.build)}`, import.meta.url) });
+        wasm.set_media_bridge(mediaBridge);
         emit('progress', { message: 'Creating a worker GPU surface…' });
         const created = await wasm.create_runtime(payload.canvas, payload.width, payload.height, payload.dpr,
           payload.slug, payload.dark, payload.family, payload.css || '');
@@ -63,10 +76,20 @@ self.onmessage = async ({ data }) => {
       case 'dispose':
         active = false; disposed = true; cancelFrame(); runtime?.free(); runtime = null;
         emit('disposed', {}); self.close(); break;
+      case 'media-state':
+        Object.assign(media.get(payload.id) || {}, payload);
+        if (runtime && !active && frameId === null) frameId = requestAnimationFrame(draw);
+        break;
+      case 'media-frame': {
+        const state = media.get(payload.id);
+        if (state) state.frame = { width: payload.width, height: payload.height, pixels: payload.pixels };
+        if (runtime && !active && frameId === null) frameId = requestAnimationFrame(draw);
+        break;
+      }
       case 'input':
         if (runtime) {
           const mods = payload.modifiers || {};
-          runtime.input(JSON.stringify(payload.event), !!mods.shift, !!mods.ctrl, !!mods.alt, !!mods.meta);
+          runtime.input(JSON.stringify(payload.event), !!mods.shift, !!mods.ctrl, !!mods.alt, !!mods.meta, payload.timestamp);
         }
         break;
       case 'resize': if (runtime) runtime.resize(payload.width, payload.height, payload.dpr); break;

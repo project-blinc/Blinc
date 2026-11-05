@@ -93,6 +93,7 @@ impl ElementStyle {
                 other.margin_auto[3] || self.margin_auto[3],
             ],
             flex_basis: other.flex_basis.or(self.flex_basis),
+            aspect_ratio: other.aspect_ratio.or(self.aspect_ratio),
             grid_template_columns: other
                 .grid_template_columns
                 .clone()
@@ -236,6 +237,7 @@ impl ElementStyle {
             || self.row_gap.is_some()
             || self.column_gap.is_some()
             || self.flex_basis.is_some()
+            || self.aspect_ratio.is_some()
             || self.grid_template_columns.is_some()
             || self.grid_template_rows.is_some()
             || self.grid_column.is_some()

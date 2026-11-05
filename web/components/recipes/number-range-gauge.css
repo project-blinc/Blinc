@@ -1,0 +1,12 @@
+/* Both handles and the selected interval share these subparts. */
+.cn-number-gauge-fill {
+  background: color-mix(in srgb, var(--success) 24%, var(--input-bg));
+}
+
+.cn-number-gauge-thumb {
+  background: var(--success);
+}
+
+.cn-number-gauge-value {
+  font-size: 15px;
+}

@@ -150,7 +150,7 @@ impl Default for TextAreaState {
             available_width: 276.0,   // Default width minus padding/borders
             wrap_enabled: true,       // Default to wrapping (visual lines handle cursor tracking)
             visual_lines: Vec::new(), // Computed on first layout
-            revision: None,
+            revision: Some(blinc_core::reactive::signal(0u64)),
             node_id: None,
             config: None,
             laid_out: None,

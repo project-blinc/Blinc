@@ -4,6 +4,9 @@ All notable changes to `blinc_core` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Keyed initializers can create nested signals and keyed values without holding the graph or hook locks. Nested reactive values retain the persistent key’s lifetime across fresh builds.
+
 ## [0.6.0] - 2026-11-04
 
 ### Added

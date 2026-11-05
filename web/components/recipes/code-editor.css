@@ -1,0 +1,16 @@
+/* Gutter, active line and selection are useful editor-specific hooks. */
+.blinc-code {
+  background: var(--surface-elevated);
+}
+
+.blinc-code-gutter {
+  background: var(--surface);
+}
+
+.blinc-code-active-line {
+  background: var(--surface-overlay);
+}
+
+.blinc-code-selection {
+  background: color-mix(in srgb, var(--primary) 25%, transparent);
+}

@@ -39,7 +39,9 @@ async function host() {
   const module = new vm.SourceTextModule(await readFile(new URL('../runtime/host.js', import.meta.url), 'utf8'), {
     context, initializeImportMeta: meta => { meta.url = 'https://blinc.test/components/releases/test/runtime/host.js'; },
   });
-  await module.link(() => protocol); await module.evaluate();
+  const media = new vm.SourceTextModule(await readFile(new URL('../runtime/media-host.js', import.meta.url), 'utf8'), { context });
+  await media.link(() => {});
+  await module.link(specifier => specifier.endsWith('media-host.js') ? media : protocol); await module.evaluate();
   const demo = new module.namespace.LiveDemo(container, { slug: 'button', title: 'Button', build: 'test', width: 560, height: 320 }, () => {});
   let seq = 0;
   return { demo, container, worker: workers[0],
@@ -82,5 +84,26 @@ test('Pointer release keeps hover and text commits are forwarded once', async ()
   demo.editor.emit('compositionend', { data: 'é' });
   demo.editor.emit('input', { inputType: 'insertFromComposition', data: 'é' });
   assert.deepEqual(input().filter(event => event.kind === 'text').map(event => event.text), ['é']);
+  demo.stop();
+});
+
+test('in-canvas context menu, dragging and text selection suppress browser defaults', async () => {
+  const { demo } = await host();
+  for (const type of ['contextmenu', 'dragstart', 'selectstart']) {
+    let prevented = false;
+    (type === 'contextmenu' ? demo.container : demo.canvas).emit(type, { preventDefault() { prevented = true; } });
+    assert.ok(prevented, type);
+  }
+});
+
+test('Wheel timing uses the original DOM event timestamp', async () => {
+  const { demo, worker, notify } = await host();
+  demo.setVisible(true); notify('ready');
+  for (const timeStamp of [233, 249, 281]) {
+    demo.canvas.emit('wheel', { clientX: 180, clientY: 210, deltaX: 12, deltaY: 0, deltaMode: 0, timeStamp });
+  }
+  const wheel = worker.messages.filter(m => m.type === 'input' && m.payload.event.kind === 'wheel');
+  assert.deepEqual(wheel.map(m => m.payload.timestamp), [233, 249, 281]);
+  assert.deepEqual(wheel.map(m => m.payload.event.x), [-12, -12, -12]);
   demo.stop();
 });

@@ -1,0 +1,17 @@
+{
+  "animated": true,
+  "artifacts_sha256": {
+    "poster.png": "f540ab6c53bd4378a894737c68ba3402038b0a990d3f6ea58fcb9cc1fb074cc8",
+    "preview.gif": "94ccdf26d4884e9d1ee1d761fe59212dc1995ea8340cfe31bfe8a4b414e776be"
+  },
+  "cursor": "interaction-specific pointer movement and deliberate actions",
+  "delay_ms": 60,
+  "fixture_sha256": "ca68d73f46d6c70b4d86c1c33f4e2a1afaf415a489e438d32ac53222480d3b35",
+  "frames": 64,
+  "logical_height": 320,
+  "logical_width": 560,
+  "pixel_height": 640,
+  "pixel_width": 1120,
+  "scheme": "dark",
+  "theme": "hybrid"
+}

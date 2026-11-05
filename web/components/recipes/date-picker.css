@@ -1,0 +1,20 @@
+/* Compact date trigger; the calendar and footer remain separately styled. */
+.cn-date-picker-trigger {
+  min-width: 0;
+  width: fit-content;
+  padding: 0 12px;
+  gap: 10px;
+}
+
+.cn-date-picker-icon {
+  color: var(--primary);
+}
+
+.cn-date-picker-content {
+  background: var(--surface-elevated);
+}
+
+.cn-date-picker-footer {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}

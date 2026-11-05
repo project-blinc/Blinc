@@ -3,8 +3,11 @@
 //! Frame pixels are captured each tick via a hidden `<canvas>` + `getImageData`.
 
 use crate::frame::Frame;
+mod bridge;
+pub use bridge::set_web_media_bridge;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use wasm_bindgen::JsValue;
 
 use wasm_bindgen::JsCast;
 use web_sys::{
@@ -29,6 +32,10 @@ fn document() -> web_sys::Document {
 }
 
 pub(crate) fn create(player_id: u64) {
+    if let Some(_value) = bridge::call(player_id, "create", JsValue::UNDEFINED) {
+        return;
+    }
+
     let video: HtmlVideoElement = document()
         .create_element("video")
         .unwrap()
@@ -100,6 +107,10 @@ pub(crate) fn create(player_id: u64) {
 /// procedurally generated clip); URL-based loading is the right
 /// default for shipped content.
 pub(crate) fn load_url(player_id: u64, url: &str) {
+    if let Some(_value) = bridge::call(player_id, "load-url", JsValue::from_str(url)) {
+        return;
+    }
+
     WEB_VIDEOS.with(|map| {
         let map = map.borrow();
         if let Some(state) = map.get(&player_id) {
@@ -110,6 +121,14 @@ pub(crate) fn load_url(player_id: u64, url: &str) {
 }
 
 pub(crate) fn load_bytes(player_id: u64, bytes: &[u8]) {
+    if let Some(_value) = bridge::call(
+        player_id,
+        "load-bytes",
+        js_sys::Uint8Array::from(bytes).into(),
+    ) {
+        return;
+    }
+
     WEB_VIDEOS.with(|map| {
         let map = map.borrow();
         let Some(state) = map.get(&player_id) else {
@@ -132,6 +151,10 @@ pub(crate) fn load_bytes(player_id: u64, bytes: &[u8]) {
 }
 
 pub(crate) fn play(player_id: u64) {
+    if let Some(_value) = bridge::call(player_id, "play", JsValue::UNDEFINED) {
+        return;
+    }
+
     WEB_VIDEOS.with(|map| {
         let map = map.borrow();
         if let Some(state) = map.get(&player_id) {
@@ -141,6 +164,10 @@ pub(crate) fn play(player_id: u64) {
 }
 
 pub(crate) fn pause(player_id: u64) {
+    if let Some(_value) = bridge::call(player_id, "pause", JsValue::UNDEFINED) {
+        return;
+    }
+
     WEB_VIDEOS.with(|map| {
         let map = map.borrow();
         if let Some(state) = map.get(&player_id) {
@@ -150,6 +177,10 @@ pub(crate) fn pause(player_id: u64) {
 }
 
 pub(crate) fn seek(player_id: u64, position_ms: u64) {
+    if let Some(_value) = bridge::call(player_id, "seek", JsValue::from_f64(position_ms as f64)) {
+        return;
+    }
+
     WEB_VIDEOS.with(|map| {
         let map = map.borrow();
         if let Some(state) = map.get(&player_id) {
@@ -159,6 +190,10 @@ pub(crate) fn seek(player_id: u64, position_ms: u64) {
 }
 
 pub(crate) fn set_volume(player_id: u64, volume: f32) {
+    if let Some(_value) = bridge::call(player_id, "volume", JsValue::from_f64(volume as f64)) {
+        return;
+    }
+
     WEB_VIDEOS.with(|map| {
         let map = map.borrow();
         if let Some(state) = map.get(&player_id) {
@@ -168,6 +203,10 @@ pub(crate) fn set_volume(player_id: u64, volume: f32) {
 }
 
 pub(crate) fn duration_ms(player_id: u64) -> u64 {
+    if let Some(value) = bridge::call(player_id, "duration", JsValue::UNDEFINED) {
+        return value.as_f64().unwrap_or(0.0) as u64;
+    }
+
     WEB_VIDEOS.with(|map| {
         let map = map.borrow();
         map.get(&player_id)
@@ -177,6 +216,10 @@ pub(crate) fn duration_ms(player_id: u64) -> u64 {
 }
 
 pub(crate) fn position_ms(player_id: u64) -> u64 {
+    if let Some(value) = bridge::call(player_id, "position", JsValue::UNDEFINED) {
+        return value.as_f64().unwrap_or(0.0) as u64;
+    }
+
     WEB_VIDEOS.with(|map| {
         let map = map.borrow();
         map.get(&player_id)
@@ -195,6 +238,10 @@ pub(crate) fn position_ms(player_id: u64) -> u64 {
 /// current position we fall back to the last range's end, so the UI
 /// still shows the most-recently-downloaded chunk rather than zero.
 pub(crate) fn buffered_end_ms(player_id: u64) -> u64 {
+    if let Some(value) = bridge::call(player_id, "buffered", JsValue::UNDEFINED) {
+        return value.as_f64().unwrap_or(0.0) as u64;
+    }
+
     WEB_VIDEOS.with(|map| {
         let map = map.borrow();
         let Some(state) = map.get(&player_id) else {
@@ -223,6 +270,10 @@ pub(crate) fn buffered_end_ms(player_id: u64) -> u64 {
 
 #[allow(dead_code)]
 pub(crate) fn is_paused(player_id: u64) -> bool {
+    if let Some(value) = bridge::call(player_id, "paused", JsValue::UNDEFINED) {
+        return value.as_bool().unwrap_or(true);
+    }
+
     WEB_VIDEOS.with(|map| {
         let map = map.borrow();
         map.get(&player_id)
@@ -232,6 +283,10 @@ pub(crate) fn is_paused(player_id: u64) -> bool {
 }
 
 pub(crate) fn is_ended(player_id: u64) -> bool {
+    if let Some(value) = bridge::call(player_id, "ended", JsValue::UNDEFINED) {
+        return value.as_bool().unwrap_or(false);
+    }
+
     WEB_VIDEOS.with(|map| {
         let map = map.borrow();
         map.get(&player_id)
@@ -243,6 +298,10 @@ pub(crate) fn is_ended(player_id: u64) -> bool {
 /// Capture the current video frame as RGBA pixels.
 /// Returns None if the video isn't ready or has no dimensions.
 pub(crate) fn capture_frame(player_id: u64) -> Option<Frame> {
+    if let Some(value) = bridge::call(player_id, "frame", JsValue::UNDEFINED) {
+        return bridge::frame(value);
+    }
+
     WEB_VIDEOS.with(|map| {
         let mut map = map.borrow_mut();
         let state = map.get_mut(&player_id)?;

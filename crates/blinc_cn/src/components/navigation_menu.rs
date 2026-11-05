@@ -148,52 +148,51 @@ impl NavigationMenu {
 
                     // Chevron down icon
                     let chevron = r#"<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
-                    entry = entry
-                        .child(
-                            div()
-                                .pointer_events_none()
-                                .child(svg(chevron).size(12.0, 12.0)),
-                        )
-                        .on_hover_enter(move |ctx| {
-                            // This menu is open already: revive an exit in
-                            // flight and cancel a pending close.
-                            if active_menu_for_hover.get() == Some(idx) {
-                                if let Some(handle_id) = overlay_handle_for_hover.get() {
-                                    let handle = OverlayHandle::from_raw(handle_id);
-                                    if let Ok(mut stack) = overlay_stack().lock() {
-                                        let exiting = stack
-                                            .iter_bottom_up()
-                                            .any(|e| e.handle == handle && e.exiting);
-                                        if exiting {
-                                            stack.revive(handle);
-                                        } else {
-                                            stack.handle_mouse_enter(handle);
-                                        }
+                    let trigger = entry.child(
+                        div()
+                            .pointer_events_none()
+                            .child(svg(chevron).size(12.0, 12.0)),
+                    );
+                    let open = Arc::new(move |ctx: &blinc_layout::event_handler::EventContext| {
+                        // This menu is open already: revive an exit in
+                        // flight and cancel a pending close.
+                        if active_menu_for_hover.get() == Some(idx) {
+                            if let Some(handle_id) = overlay_handle_for_hover.get() {
+                                let handle = OverlayHandle::from_raw(handle_id);
+                                if let Ok(mut stack) = overlay_stack().lock() {
+                                    if stack.contains(handle) {
+                                        stack.revive(handle);
+                                        stack.handle_mouse_enter(handle);
+                                        return;
                                     }
                                 }
-                                return;
                             }
+                        }
 
-                            // One menu at a time: close the one open.
-                            if let Some(handle_id) = overlay_handle_for_hover.get() {
-                                OverlayHandle::from_raw(handle_id).close();
-                            }
+                        // One menu at a time: close the one open.
+                        if let Some(handle_id) = overlay_handle_for_hover.get() {
+                            OverlayHandle::from_raw(handle_id).close();
+                        }
 
-                            // Below the trigger.
-                            let x = ctx.bounds_x;
-                            let y = ctx.bounds_y + ctx.bounds_height + 4.0;
-                            let handle = show_navigation_dropdown(
-                                x,
-                                y,
-                                content.clone(),
-                                min_content_width,
-                                active_menu_for_hover,
-                                overlay_handle_for_hover,
-                                menu_key.clone(),
-                            );
-                            overlay_handle_for_hover.set(Some(handle.raw()));
-                            active_menu_for_hover.set(Some(idx));
-                        })
+                        // Below the trigger.
+                        let x = ctx.bounds_x;
+                        let y = ctx.bounds_y + ctx.bounds_height + 4.0;
+                        let handle = show_navigation_dropdown(
+                            x,
+                            y,
+                            content.clone(),
+                            min_content_width,
+                            active_menu_for_hover,
+                            overlay_handle_for_hover,
+                            menu_key.clone(),
+                        );
+                        overlay_handle_for_hover.set(Some(handle.raw()));
+                        active_menu_for_hover.set(Some(idx));
+                    });
+                    let open_hover = open.clone();
+                    entry = trigger
+                        .on_hover_enter(move |ctx| open_hover(ctx))
+                        .on_click(move |ctx| open(ctx))
                         .on_hover_leave(move |_| {
                             // Start the close delay on leaving the trigger.
                             if let Some(handle_id) = overlay_handle_for_leave.get() {
@@ -245,13 +244,10 @@ fn show_navigation_dropdown(
         .unwrap_or(0);
     let dropdown_handle = OverlayHandle::from_raw(next_handle_id);
 
-    // Mega-menu friendly cap — covers the documented
-    // `services_panel()` 3-4 column layout (~700 × 420). Tight
-    // nav-link lists stay smaller in practice; the size hint
-    // only feeds the viewport clamp, not the rendered size.
+    // Clamp against the configured panel width, rather than a maximum mega-menu size.
     let handle = OverlayBuilder::tooltip()
         .at(x, y)
-        .size(720.0, 480.0)
+        .size(min_width, 0.0)
         .anchor_direction(AnchorDirection::Bottom)
         // Tooltip's default mouse_leave_delay_ms is 0 — too tight for a
         // hover-anchored dropdown. Give the user ~300ms to cross from the
@@ -260,8 +256,10 @@ fn show_navigation_dropdown(
         .dismissable_by_mouse_leave(true, 300)
         .dismissable_by_escape(true)
         .on_close(move |_reason| {
-            active_menu_for_close.set(None);
-            overlay_handle_for_close.set(None);
+            if overlay_handle_for_close.get() == Some(next_handle_id) {
+                active_menu_for_close.set(None);
+                overlay_handle_for_close.set(None);
+            }
         })
         .content(move || {
             let user_content = content();

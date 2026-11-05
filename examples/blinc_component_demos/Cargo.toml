@@ -1,6 +1,6 @@
 [package]
 name = "blinc_component_demos"
-description = "Shared native recordings and worker-rendered CN catalog demos"
+description = "Shared native recordings and worker-rendered component demos"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -24,10 +24,13 @@ native = ["blinc_app/windowed"]
 capture = ["dep:blinc_recorder", "dep:gif"]
 
 [dependencies]
+blinc_animation = { path = "../../crates/blinc_animation" }
 blinc_app = { path = "../../crates/blinc_app", default-features = false }
 blinc_cn = { path = "../../crates/blinc_cn" }
+blinc_icons = { path = "../../crates/blinc_icons" }
 blinc_core = { path = "../../crates/blinc_core" }
-blinc_layout = { path = "../../crates/blinc_layout" }
+blinc_layout = { path = "../../crates/blinc_layout", features = ["media"] }
+blinc_media = { path = "../../crates/blinc_media" }
 blinc_theme = { path = "../../crates/blinc_theme" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

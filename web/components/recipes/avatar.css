@@ -1,0 +1,19 @@
+.cn-avatar {
+  border: 2px solid var(--surface);
+}
+
+.cn-avatar-placeholder {
+  background: var(--primary);
+  color: var(--text-inverse);
+  font-weight: 600;
+}
+
+.cn-avatar-status {
+  border: 2px solid var(--surface);
+  background: var(--success);
+}
+
+.cn-avatar-group__more {
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+}

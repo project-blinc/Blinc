@@ -18,7 +18,7 @@ export function highlight(source, language) {
   return hljs.highlight(name, source, true).value;
 }
 
-export function numbered(source, language) {
+export function numbered(source, language, separator = '\n') {
   const open = [], lines = [];
   let line = '';
   for (const token of highlight(source, language).match(/<span[^>]*>|<\/span>|\n|[^<\n]+/g) || []) {
@@ -32,5 +32,5 @@ export function numbered(source, language) {
     }
   }
   lines.push(line);
-  return lines.map(value => `<span class="code-line">${value}</span>`).join('\n');
+  return lines.map(value => `<span class="code-line">${value}</span>`).join(separator);
 }

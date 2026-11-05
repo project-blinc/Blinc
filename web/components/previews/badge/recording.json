@@ -1,0 +1,16 @@
+{
+  "animated": false,
+  "artifacts_sha256": {
+    "poster.png": "2a2e0845f999178d9f149d093aee91e0ff066301298bc9b740a0d9aa3c74c220"
+  },
+  "cursor": "none",
+  "delay_ms": 0,
+  "fixture_sha256": "2998c958ca2df20e3b6840baa99ca492da77d624eb65bc17dc84dc10e4590bad",
+  "frames": 1,
+  "logical_height": 360,
+  "logical_width": 560,
+  "pixel_height": 720,
+  "pixel_width": 1120,
+  "scheme": "dark",
+  "theme": "hybrid"
+}

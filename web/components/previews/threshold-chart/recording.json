@@ -4,9 +4,9 @@
     "poster.png": "0b820651afbfc7e9a13ce26bee6216c01cf793946cf81a655149927ddc0f29d1",
     "preview.gif": "6f2c49bde1ecf6ee68c755f4fb5f972c54c5ef23b9d0f007423e1d8d07389af7"
   },
-  "cursor": "curved pointer paths, hover drift and deliberate clicks",
+  "cursor": "interaction-specific pointer movement and deliberate actions",
   "delay_ms": 60,
-  "fixture_sha256": "ff126a92d2db50efc3e317e47f79c02e722570f320a3df9a4c271dbeebf5efcd",
+  "fixture_sha256": "35601b7dd9f7e0c65a4a52a98a70fcd479d1b3e6563f35164486aa895c0b9b6b",
   "frames": 48,
   "logical_height": 320,
   "logical_width": 560,

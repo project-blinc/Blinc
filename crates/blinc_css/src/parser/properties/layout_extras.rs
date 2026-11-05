@@ -17,6 +17,31 @@ pub(crate) fn apply_layout_extra(
         "min-height" => Some(set_size(&mut style.min_height, value)),
         "max-width" => Some(set_size(&mut style.max_width, value)),
         "max-height" => Some(set_size(&mut style.max_height, value)),
+        "aspect-ratio" => {
+            let ratio = if value.trim() == "auto" {
+                Some(0.0)
+            } else {
+                let mut parts = value.split('/').map(|v| v.trim().parse::<f32>().ok());
+                let numerator = parts.next().flatten();
+                let denominator = parts.next().unwrap_or(Some(1.0));
+                match (numerator, denominator, parts.next()) {
+                    (Some(a), Some(b), None)
+                        if a.is_finite()
+                            && b.is_finite()
+                            && a > 0.0
+                            && b > 0.0
+                            && (a / b).is_finite() =>
+                    {
+                        Some(a / b)
+                    }
+                    _ => None,
+                }
+            };
+            if let Some(ratio) = ratio {
+                style.aspect_ratio = Some(ratio);
+            }
+            Some(ratio.is_some())
+        }
         "flex-basis" => Some(set_size(&mut style.flex_basis, value)),
         "row-gap" => Some(set_px(&mut style.row_gap, value)),
         "column-gap" => Some(set_px(&mut style.column_gap, value)),
@@ -116,4 +141,29 @@ fn apply_margin_side(style: &mut ElementStyle, side: usize, value: &str) -> bool
     style.margin = Some(m);
     style.margin_auto[side] = auto;
     true
+}
+
+#[cfg(test)]
+mod aspect_tests {
+    use super::*;
+    #[test]
+    fn ratios_accept_numbers_fractions_and_auto_but_reject_invalid_sizes() {
+        for (value, expected) in [("16 / 9", 16.0 / 9.0), ("1.5", 1.5), ("auto", 0.0)] {
+            let mut style = ElementStyle::default();
+            assert_eq!(
+                apply_layout_extra(&mut style, "aspect-ratio", value),
+                Some(true)
+            );
+            assert_eq!(style.aspect_ratio, Some(expected));
+            assert!(style.has_layout_props());
+        }
+        for value in ["0", "-1", "4/0", "NaN", "1/2/3", "1e38/1e-38"] {
+            let mut style = ElementStyle::default();
+            assert_eq!(
+                apply_layout_extra(&mut style, "aspect-ratio", value),
+                Some(false),
+                "{value}"
+            );
+        }
+    }
 }

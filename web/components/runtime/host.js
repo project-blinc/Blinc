@@ -1,3 +1,4 @@
+import { MediaHost } from './media-host.js';
 import { WORKER_TYPES, envelope, valid } from './protocol.js';
 
 /** Own exactly one transferable canvas and worker per component page. */
@@ -13,6 +14,8 @@ export class LiveDemo {
     this.state = {};
     this.instance = crypto.randomUUID();
     this.listeners = new AbortController();
+    this.media = new MediaHost((...args) => this.send(...args), message => this.onStatus('media-error', { message }));
+    this.media.video = options.slug === 'video-player';
     this.start();
   }
   send(type, payload = {}, transfer = []) {
@@ -42,6 +45,7 @@ export class LiveDemo {
       this.worker.onmessage = ({ data }) => {
         if (this.stopped || !valid(data, this.instance, WORKER_TYPES) || data.seq <= this.lastSeq) return;
         this.lastSeq = data.seq;
+        if (data.type === 'media') { this.media.request(data.payload); return; }
         if (data.type === 'ready') { this.ready = true; clearTimeout(this.timeout); this.setVisible(this.visible); }
         if (data.type === 'ready' || data.type === 'state') {
           this.state = data.payload;
@@ -78,12 +82,14 @@ export class LiveDemo {
   }
   setVisible(visible) {
     this.visible = visible;
+    if (!visible || document.hidden) this.media.pause();
     this.send(visible && !document.hidden ? 'resume' : 'pause');
     if (this.ready && visible) this.resize();
   }
   input(event, source = {}) {
     if (!this.ready || !this.visible) return;
-    this.send('input', { event, timestamp: performance.now(), modifiers: {
+    const timestamp = Number.isFinite(source.timeStamp) ? source.timeStamp : performance.now();
+    this.send('input', { event, timestamp, modifiers: {
       shift: source.shiftKey, ctrl: source.ctrlKey, alt: source.altKey, meta: source.metaKey,
     }});
   }
@@ -93,6 +99,9 @@ export class LiveDemo {
       const rect = this.canvas.getBoundingClientRect();
       return { x: event.clientX - rect.left, y: event.clientY - rect.top };
     };
+    listen(this.container, 'contextmenu', e => e.preventDefault());
+    listen(this.canvas, 'dragstart', e => e.preventDefault());
+    listen(this.canvas, 'selectstart', e => e.preventDefault());
     listen(this.canvas, 'pointermove', e => this.input({ kind: 'pointer-move', ...position(e) }, e));
     listen(this.canvas, 'pointerdown', e => {
       e.preventDefault(); this.editor.focus({ preventScroll: true });
@@ -172,6 +181,7 @@ export class LiveDemo {
     this.resizeObserver?.disconnect();
     this.dprQuery?.removeEventListener('change', this.dprListener);
     this.listeners.abort();
+    this.media.stop();
     this.send('dispose');
     if (this.worker) { this.worker.onmessage = null; this.worker.onerror = null; this.worker.terminate(); }
     this.worker = null;

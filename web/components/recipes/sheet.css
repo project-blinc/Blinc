@@ -1,0 +1,26 @@
+/* A bottom sheet has an anchored footer and a flexible content area. */
+.cn-sheet {
+  background: var(--surface-elevated);
+}
+
+.cn-sheet-header {
+  padding: 20px;
+}
+
+.cn-sheet-title {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.cn-sheet-content {
+  padding: 16px 20px;
+}
+
+.cn-sheet-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.demo-share-permission {
+  gap: 16px;
+}

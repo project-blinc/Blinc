@@ -4,14 +4,16 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ## [Unreleased]
 
-### Added
-- CSS `:focus-visible` distinguishes keyboard focus from pointer focus.
-
 ### Fixed
+- Virtual List updates its mounted window as it scrolls, measures variable row heights and preserves its offset through fresh builds and CSS changes. A bounded window renders both ends of large datasets.
+- Textareas retain their revision source with their shared document, so typing repaints after a fresh tree build.
 - Text inputs retain their revision and focus sources across fresh tree builds, so typing after a viewport resize updates the visible field as well as callbacks.
 - Returning from a pressed scale to the identity transform does not restart hover colour transitions.
 - Repeated hover evaluation preserves settled transition targets instead of restarting them. Complex state selectors respect component layers and application specificity.
 - Overlay focus returns to stable trigger identities on dismissal, and nested scopes constrain Tab to the topmost active popup. Pointer focus persists without a keyboard ring. Menu roles support roving focus, submenu keys and keyboard context-menu activation.
+
+### Added
+- CSS `:focus-visible` distinguishes keyboard focus from pointer focus.
 
 ## [0.6.0] - 2026-11-04
 

@@ -7,6 +7,10 @@ use blinc_layout::{
 };
 
 pub fn annotation(x: f32, y: f32, pressed: bool, pulse: Option<f32>) -> Div {
+    annotation_in((560.0, 320.0), x, y, pressed, pulse)
+}
+
+pub fn annotation_in(size: (f32, f32), x: f32, y: f32, pressed: bool, pulse: Option<f32>) -> Div {
     let glow = canvas(move |ctx: &mut dyn DrawContext, _| {
         let cyan = Color::from_hex(0x22d3ee);
         for layer in 0..14 {
@@ -25,11 +29,11 @@ pub fn annotation(x: f32, y: f32, pressed: bool, pulse: Option<f32>) -> Div {
             );
         }
     })
-    .w(560.0)
-    .h(320.0)
+    .w(size.0)
+    .h(size.1)
     .absolute();
     let scale = if pressed { 0.94 } else { 1.0 };
-    div().w(560.0).h(320.0).child(glow).child(
+    div().w(size.0).h(size.1).child(glow).child(
         div()
             .absolute()
             .left(x - 5.0 * scale)

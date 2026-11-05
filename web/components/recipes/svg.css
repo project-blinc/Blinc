@@ -1,0 +1,16 @@
+/* One source vector can be retinted independently at each size. */
+.demo-svg-small {
+  color: var(--warning);
+}
+
+.demo-svg-medium {
+  color: var(--primary);
+}
+
+.demo-svg-large {
+  color: var(--text-primary);
+}
+
+.demo-svg-samples {
+  gap: 32px;
+}

@@ -45,6 +45,7 @@ use blinc_layout::widgets::overlay::EdgeSide;
 use blinc_layout::widgets::overlay_stack::{OverlayBuilder, OverlayHandle};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
+use super::button::{ButtonSize, ButtonVariant, button};
 use crate::reactive_props::clone_reactive;
 use blinc_layout::binding::{IntoReactive, Reactive};
 
@@ -266,7 +267,6 @@ impl DrawerBuilder {
                     &children,
                     &footer,
                     show_close,
-                    &on_close,
                     drawer_handle,
                 );
                 for c in &classes {
@@ -323,7 +323,6 @@ fn build_drawer_content(
     children: &[Arc<dyn Fn() -> Div + Send + Sync>],
     footer: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     show_close: bool,
-    on_close: &Option<Arc<dyn Fn() + Send + Sync>>,
     handle: OverlayHandle,
 ) -> Div {
     let theme = ThemeState::get();
@@ -380,24 +379,15 @@ fn build_drawer_content(
 
         // Close button
         if show_close {
-            let close_icon = r#"<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>"#;
-
-            let on_close_clone = on_close.clone();
             header_div = header_div.child(
-                div()
-                    .class("cn-drawer-close")
-                    .class("tabindex=0")
-                    .w(32.0)
-                    .h(32.0)
-                    .items_center()
-                    .cursor_pointer()
-                    .on_click(move |_| {
-                        if let Some(ref cb) = on_close_clone {
-                            cb();
-                        }
-                        handle.close();
-                    })
-                    .child(svg(close_icon).size(18.0, 18.0)),
+                button("")
+                    .variant(ButtonVariant::Ghost)
+                    .size(ButtonSize::Icon)
+                    .icon(blinc_icons::icons::X)
+                    .icon_size(16.0)
+                    .on_click(move |_| handle.close())
+                    .build_component()
+                    .class("cn-drawer-close"),
             );
         }
 

@@ -27,7 +27,8 @@ fn sidebar(catalog: &Catalog, selected: &str) -> String {
     );
     for c in &catalog.components {
         result.push_str(&format!(
-            "<a href=\"/components/cn/{}/\" {}>{}</a>",
+            "<a href=\"/components/{}/{}/\" {}>{}</a>",
+            esc(&c.library),
             esc(&c.slug),
             if selected == c.slug {
                 "aria-current=\"page\""
@@ -37,7 +38,7 @@ fn sidebar(catalog: &Catalog, selected: &str) -> String {
             esc(&c.title)
         ));
     }
-    result.push_str("<h2>Blocks</h2><small>Coming after the CN catalog.</small>");
+    result.push_str("<h2>Blocks</h2><small>Larger compositions, coming next.</small>");
     result
 }
 fn layout(
@@ -66,7 +67,16 @@ fn layout(
                 } else if selected == "installation" {
                     "https://blinc.rs/components/installation/".into()
                 } else {
-                    format!("https://blinc.rs/components/cn/{selected}/")
+                    format!(
+                        "https://blinc.rs/components/{}/{selected}/",
+                        catalog
+                            .components
+                            .iter()
+                            .find(|c| c.slug == selected
+                                || c.examples.iter().any(|e| e.slug == selected))
+                            .map(|c| c.library.as_str())
+                            .unwrap_or("cn")
+                    )
                 },
             ),
         ],
@@ -82,8 +92,8 @@ pub(super) fn index(catalog: &Catalog, build: &str) -> String {
         } else {
             "poster.png"
         };
-        cards.push_str(&format!(r#"<a class="component-card" data-component="{}" data-category="{}" data-search="{}" href="/components/cn/{}/"><div class="card-preview"><img data-grid-preview src="/components/previews/{}/poster.png" data-poster="/components/previews/{}/poster.png" data-animation="/components/previews/{}/{animation}" width="560" height="320" alt="{} interaction preview" loading="lazy"></div><div class="card-text"><div class="card-heading"><h2>{}</h2><span class="card-arrow" aria-hidden="true">↗</span></div><p>{}</p><div class="card-footer"><span class="badge">{}</span><span>View component</span></div></div></a>"#,
-            esc(&c.slug), esc(&c.category), esc(&format!("{} {} {} {}", c.title, c.category, c.description, c.tags.join(" ")).to_lowercase()), esc(&c.slug), esc(&c.slug), esc(&c.slug), esc(&c.slug), esc(&c.title), esc(&c.title), esc(&c.description), esc(&c.category)));
+        cards.push_str(&format!(r#"<a class="component-card" data-component="{}" data-category="{}" data-search="{}" href="/components/{}/{}/"><div class="card-preview"><img data-grid-preview src="/components/previews/{}/poster.png" data-poster="/components/previews/{}/poster.png" data-animation="/components/previews/{}/{animation}" width="{}" height="{}" alt="{} preview" loading="lazy"></div><div class="card-text"><div class="card-heading"><h2>{}</h2><span class="card-arrow" aria-hidden="true">↗</span></div><p>{}</p><div class="card-footer"><span class="badge">{}</span><span>View component</span></div></div></a>"#,
+            esc(&c.slug), esc(&c.category), esc(&format!("{} {} {} {}", c.title, c.category, c.description, c.tags.join(" ")).to_lowercase()), esc(&c.library), esc(&c.slug), esc(&c.slug), esc(&c.slug), esc(&c.slug), c.viewport.width, c.viewport.height, esc(&c.title), esc(&c.title), esc(&c.description), esc(&c.category)));
     }
     let cards = cards
         .replace("/poster.png\"", &format!("/poster.png?v={build}\""))
@@ -126,7 +136,7 @@ pub(super) fn installation(root: &Path, catalog: &Catalog, build: &str) -> Resul
         catalog,
         "installation",
         "Installation",
-        "Install Blinc CN and build your first reactive Rust interface.",
+        "Install Blinc and build your first reactive Rust interface.",
         body,
         &format!("/components/releases/{build}/code.js"),
         build,
@@ -135,16 +145,23 @@ pub(super) fn installation(root: &Path, catalog: &Catalog, build: &str) -> Resul
 
 pub(super) fn fixture_source(root: &Path, c: &Component) -> Result<String> {
     let source = fs::read_to_string(root.join(&c.source))?;
-    let shared = source
+    let common = fs::read_to_string(root.join("examples/blinc_component_demos/src/demos.rs"))?;
+    let shared = common
         .split("pub fn build(")
         .next()
         .ok_or("fixture setup missing")?;
     let rust = format!(
         "{shared}\n{}\n\n{}",
-        function(&source, &c.entry)?,
-        function(&source, "bound_text")?
+        if matches!(c.entry.as_str(), "notch_demo" | "canvas_demo") {
+            source
+                .replace("use crate::demos::DemoState;", "")
+                .replace("//!", "//")
+        } else {
+            function(&source, &c.entry)?
+        },
+        function(&common, "bound_text")?
     );
-    syn::parse_file(&rust)?;
+    syn::parse_file(&rust).map_err(|error| format!("{} fixture source: {error}", c.slug))?;
     Ok(rust)
 }
 
@@ -182,11 +199,46 @@ pub(super) fn detail(
         .replace(".md", ".html");
     let docs = docs(root, c)?;
     let actual_css = component_css(css, &c.classes);
-    let config = serde_json::json!({"slug":c.slug,"title":c.title,"width":c.viewport.width,"height":c.viewport.height,"build":build,"animated":c.animated_preview()});
+    let config = serde_json::json!({"customCss":c.custom_css.unwrap_or(true),"slug":c.slug,"title":c.title,"width":c.viewport.width,"height":c.viewport.height,"build":build,"animated":c.animated_preview(),"live":c.capabilities.iter().any(|v| v == "worker-canvas")});
     let body = template(
         include_str!("../../../../web/components/templates/detail.html"),
         &[
             ("SLUG", esc(&c.slug)),
+            (
+                "CSS_EDITOR_HIDDEN",
+                if c.custom_css == Some(false) {
+                    "hidden".into()
+                } else {
+                    String::new()
+                },
+            ),
+            ("WIDTH", c.viewport.width.to_string()),
+            (
+                "OPEN_TAB",
+                if c.capabilities.iter().any(|v| v == "worker-canvas") {
+                    "live"
+                } else {
+                    "preview"
+                }
+                .into(),
+            ),
+            (
+                "PLATFORM_SUPPORT",
+                if c.capabilities.iter().any(|v| v == "worker-canvas") {
+                    "The Live example runs in a dedicated worker and requires a compatible GPU surface. Preview and Code remain available when Live cannot start. The canvas has a descriptive label; a full screen-reader DOM mirror is not provided.".into()
+                } else {
+                    "This native media example needs the blinc_layout media feature. Live playback is not available in the gallery host. Preview, documentation, source and sample assets remain available.".into()
+                },
+            ),
+            ("HEIGHT", c.viewport.height.to_string()),
+            (
+                "SETUP",
+                if c.library == "cn" {
+                    "Use the <a href=\"/components/installation/\">installation guide</a> to add <code>blinc_cn</code> and its component stylesheet.".into()
+                } else {
+                    "Use the <a href=\"/components/installation/\">installation guide</a> to create a Blinc application. This widget is available from <code>blinc_layout</code>; the demo uses the same Hybrid theme as the component library.".into()
+                },
+            ),
             (
                 "ANIMATION",
                 if c.animated_preview() {
@@ -208,13 +260,14 @@ pub(super) fn detail(
             (
                 "EDITOR_PLACEHOLDER",
                 esc(&fs::read_to_string(
-                    root.join("web/components/recipes").join(
-                        if c.classes.iter().any(|class| class == ".cn-chart") {
-                            "charts.css".to_string()
-                        } else {
-                            format!("{}.css", c.slug)
-                        },
-                    ),
+                    root.join("web/components/recipes")
+                        .join(c.recipe.clone().unwrap_or_else(|| {
+                            if c.classes.iter().any(|class| class == ".cn-chart") {
+                                "charts.css".to_string()
+                            } else {
+                                format!("{}.css", c.slug)
+                            }
+                        })),
                 )?),
             ),
             ("RUST", esc(&rust)),
@@ -265,7 +318,7 @@ pub(super) fn detail(
             ),
             (
                 "DISABLED_HIDDEN",
-                if !c.capabilities.iter().any(|value| value == "keyboard") {
+                if !c.controls.iter().any(|value| value == "disabled") {
                     "hidden".into()
                 } else {
                     "".into()
@@ -311,11 +364,7 @@ pub(super) fn function(source: &str, name: &str) -> Result<String> {
 fn docs(root: &Path, c: &Component) -> Result<String> {
     let markdown = fs::read_to_string(root.join(&c.doc))?;
     let markdown = if let Some(section) = &c.doc_section {
-        let heading = format!("## {section}\n");
-        let (_, content) = markdown
-            .split_once(&heading)
-            .ok_or_else(|| format!("missing book section: {section}"))?;
-        content.split("\n## ").next().unwrap().to_string()
+        markdown_section(&markdown, section)?
     } else {
         markdown.lines().skip(1).collect::<Vec<_>>().join("\n")
     };
@@ -362,6 +411,38 @@ fn docs(root: &Path, c: &Component) -> Result<String> {
     html::push_html(&mut output, parser);
     Ok(output)
 }
+fn markdown_section(markdown: &str, section: &str) -> Result<String> {
+    use pulldown_cmark::TagEnd;
+    let mut heading = None;
+    let mut title = String::new();
+    let mut start = None;
+    let mut end = markdown.len();
+    for (event, range) in Parser::new(markdown).into_offset_iter() {
+        match event {
+            Event::Start(Tag::Heading { level, .. }) => {
+                if let Some((_, selected_level)) = start {
+                    if level <= selected_level {
+                        end = range.start;
+                        break;
+                    }
+                }
+                heading = Some(level);
+                title.clear();
+            }
+            Event::Text(text) | Event::Code(text) if heading.is_some() => title.push_str(&text),
+            Event::End(TagEnd::Heading(_)) => {
+                if title == section {
+                    start = Some((range.end, heading.unwrap()));
+                }
+                heading = None;
+            }
+            _ => {}
+        }
+    }
+    let (start, _) = start.ok_or_else(|| format!("missing book section: {section}"))?;
+    Ok(markdown[start..end].to_string())
+}
+
 fn component_css(css: &str, classes: &[String]) -> String {
     let css = css.strip_prefix("@layer components {\n").unwrap_or(css);
     let mut result = String::new();

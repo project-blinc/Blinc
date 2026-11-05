@@ -75,6 +75,13 @@ pre code { font:inherit; overflow-wrap:normal; }
 .hljs-macro { color:#ff2d9b; }
 .hljs-punctuation { color:rgba(244,238,248,.6); }
 .content-section { max-width:850px; margin:42px 0; scroll-margin-top:110px; }
+.content-nudge { position:fixed; z-index:8; left:calc(50% + 109px); bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%); display:flex; align-items:center; gap:10px; min-height:44px; padding:10px 17px; border:1px solid color-mix(in srgb,var(--purple) 40%,var(--line)); border-radius:16px; corner-shape:superellipse(1.72); background:color-mix(in srgb,var(--paper) 94%,transparent); color:var(--ink); box-shadow:0 8px 28px #0003,0 1px 4px #0002; backdrop-filter:blur(14px); text-decoration:none; font-size:13px; font-weight:500; white-space:nowrap; transition:background var(--duration-fast) var(--ease-state),border-color var(--duration-fast) var(--ease-state),box-shadow var(--duration-fast) var(--ease-state); }
+.content-nudge:hover { background:var(--hover); border-color:var(--purple); box-shadow:0 10px 30px #0004; }
+.content-nudge svg { width:16px; height:16px; color:var(--purple); transition:transform var(--duration-fast) var(--ease-state); }
+.content-nudge:hover svg { transform:translateY(2px); }
+@media(max-width:1100px) { .content-nudge { left:calc(50% + 95px); } }
+@media(max-width:760px) { .content-nudge { left:50%; bottom:calc(18px + env(safe-area-inset-bottom)); } }
+.standalone .content-nudge,.embedded .content-nudge { display:none; }
 h2 { font-size:23px; font-weight:500; letter-spacing:-.025em; margin:34px 0 14px; line-height:1.35; }
 h3 { font-size:16px; font-weight:500; margin:24px 0 10px; }
 p { margin:0 0 16px; }
@@ -111,16 +118,17 @@ kbd { color:#64718b; border:1px solid #2a3246; border-radius:4px; font:11px 'Jet
 .grid-heading h2 { margin:0; font-size:15px; letter-spacing:0; }
 #result-count { color:#64738f; font:11px 'JetBrains Mono',monospace; }
 .component-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px; }
-.component-card { display:block; border:1px solid var(--line); border-radius:13px; background:var(--demo-bg); overflow:hidden; text-decoration:none; transition:border-color .18s,box-shadow .18s; }
+.component-card { display:flex; flex-direction:column; border:1px solid var(--line); border-radius:13px; background:var(--demo-bg); overflow:hidden; text-decoration:none; transition:border-color .18s,box-shadow .18s; }
 .component-card:hover { border-color:#514269; box-shadow:0 8px 28px #0003; }
-.card-preview { background:var(--demo-bg); }
-.component-card img { display:block; width:100%; aspect-ratio:7/4; object-fit:contain; background:var(--demo-bg); }
-.card-text { padding:4px 22px 22px; }
+.card-preview { position:relative; aspect-ratio:7/4; flex-shrink:0; background:var(--demo-bg); }
+.component-card img { position:absolute; inset:0; display:block; width:100%; height:100%; object-fit:contain; background:var(--demo-bg); }
+.component-card[data-component="notch"] :is(.card-preview,img) { background:#fff; }
+.card-text { display:flex; flex-direction:column; flex:1; padding:4px 22px 22px; }
 .card-heading { display:flex; align-items:center; justify-content:space-between; }
 .card-text h2 { margin:0 0 8px; font-size:17px; }
 .card-arrow { color:#53627e; transition:color .15s,transform .15s; }
 .component-card:hover .card-arrow { color:#c2a6ff; transform:translate(2px,-2px); }
-.card-text p { font-size:12px; line-height:1.7; color:#8491ab; margin:0 0 20px; min-height:40px; }
+.card-text p { flex:1; font-size:12px; line-height:1.7; color:#8491ab; margin:0 0 20px; min-height:40px; }
 .card-footer { display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#687894; }
 .catalog-note { border-top:1px solid var(--line); padding-top:24px; margin-top:42px; }
 .catalog-note h2 { font-size:18px; }
@@ -161,9 +169,9 @@ footer a { color:#8592af; }
 .apply-button:hover { background:rgba(122,43,255,.35); }
 .apply-button:disabled { opacity:.4; cursor:default; }
 .editor-surface { position:relative; flex:1; min-height:180px; }
-.editor-surface pre,.editor-surface textarea { position:absolute; inset:0; width:100%; height:100%; margin:0; padding:16px; border:0; border-radius:0; background:transparent; font:12px/1.85 'JetBrains Mono',monospace; letter-spacing:normal; tab-size:2; white-space:pre; }
-.editor-surface pre { overflow:hidden; counter-reset:code-line; pointer-events:none; }
-.editor-surface textarea { padding-left:calc(34px + 2ch); resize:none; color:transparent; caret-color:#f4eef8; -webkit-text-fill-color:transparent; overflow:auto; outline:0; box-shadow:none; }
+.editor-surface pre,.editor-surface textarea { position:absolute; inset:0; width:100%; height:100%; margin:0; padding:16px; border:0; border-radius:0; background:transparent; font:12px/1.85 'JetBrains Mono',monospace; letter-spacing:normal; tab-size:2; white-space:pre-wrap; overflow-wrap:anywhere; word-break:normal; padding-left:calc(34px + 2ch); scrollbar-gutter:stable; }
+.editor-surface pre { overflow-x:hidden; overflow-y:scroll; counter-reset:code-line; pointer-events:none; }
+.editor-surface textarea { padding-left:calc(34px + 2ch); resize:none; color:transparent; caret-color:#f4eef8; -webkit-text-fill-color:transparent; overflow-x:hidden; overflow-y:scroll; outline:0; box-shadow:none; }
 .editor-surface textarea::selection { background:#7a2bff44; }
 .editor-surface textarea:focus-visible { outline:0; box-shadow:none; }
 .example :is(canvas,textarea,pre,code):focus-visible { outline:0; box-shadow:none; }
@@ -216,3 +224,17 @@ html[data-scheme=light] .card-text p,html[data-scheme=light] td { color:#5a4a5c;
 .embedded .example { margin:0; border:0; border-radius:0; }
 .embedded .example-toolbar { display:none; }
 .standalone .chart-section,.standalone .chart-heading { display:none; }
+
+/* Let each recording retain its own viewport ratio. */
+.recorded img { aspect-ratio:auto; }
+@media(max-width:760px) {
+  .sidebar nav { max-height:150px; overflow:auto; align-content:flex-start; }
+}
+.controls[hidden], .css-editor[hidden] { display:none; }
+.live-workbench:has(.css-editor[hidden]) { grid-template-columns:1fr; }
+
+.live-workbench .live-viewport { height:max(360px,var(--demo-height,360px)); }
+
+#css-highlight { white-space:normal; }
+#css-highlight .code-line { display:block; position:relative; min-height:1.85em; white-space:pre-wrap; overflow-wrap:anywhere; }
+#css-highlight .code-line::before { position:absolute; right:calc(100% + 18px); margin:0; }

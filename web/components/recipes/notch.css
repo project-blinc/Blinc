@@ -1,0 +1,5 @@
+/* Change the concave menu geometry and active navigation colour. */
+:root {
+  --gallery-notch-radius: 24px;
+  --gallery-notch-active: var(--success);
+}

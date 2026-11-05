@@ -1,0 +1,16 @@
+/* Icon buttons form a single alignment control. */
+.cn-toggle-group {
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-elevated);
+}
+
+.cn-toggle {
+  width: 36px;
+  height: 36px;
+}
+
+.cn-toggle:checked {
+  background: var(--surface-overlay);
+  color: var(--primary);
+}

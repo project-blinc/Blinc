@@ -1,0 +1,16 @@
+.cn-tree-row {
+  padding: 8px 12px;
+  gap: 8px;
+}
+
+.cn-tree-row:hover {
+  background: var(--surface-elevated);
+}
+
+.cn-tree-guide {
+  background: var(--border);
+}
+
+.cn-tree-icon, .cn-tree-chevron {
+  color: var(--primary);
+}

@@ -1,0 +1,8 @@
+.cn-alert, .cn-alert-box {
+  padding: 16px;
+  gap: 10px;
+}
+
+.cn-alert-box {
+  border-left-width: 3px;
+}

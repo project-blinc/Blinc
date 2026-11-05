@@ -1,0 +1,13 @@
+/* Markdown is laid out with the shared typography components. */
+.demo--markdown {
+  color: var(--text-primary);
+}
+
+.demo--markdown .blinc-list-marker {
+  color: var(--primary);
+}
+
+.demo--markdown .blinc-blockquote {
+  border-left: 3px solid var(--primary);
+  padding-left: 16px;
+}

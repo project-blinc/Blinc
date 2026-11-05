@@ -981,6 +981,9 @@ pub(crate) fn apply_extra_layout(
     if let Some(d) = es.max_height {
         style.max_size.height = limit(d);
     }
+    if let Some(ratio) = es.aspect_ratio {
+        style.aspect_ratio = (ratio > 0.0).then_some(ratio);
+    }
     if let Some(d) = es.flex_basis {
         style.flex_basis = size(d);
     }

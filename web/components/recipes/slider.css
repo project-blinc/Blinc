@@ -1,0 +1,22 @@
+/* Style the track segments and thumb rather than the outer text colour. */
+.cn-slider-fill {
+  background: var(--success);
+}
+
+.cn-slider-rest {
+  background: var(--border);
+}
+
+.cn-slider-thumb {
+  background: var(--surface-elevated);
+  border: 2px solid var(--success);
+}
+
+.cn-slider-header {
+  margin-bottom: 12px;
+}
+
+.cn-slider-field {
+  color: var(--success);
+  font-size: 14px;
+}

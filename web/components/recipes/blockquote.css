@@ -1,0 +1,5 @@
+.blinc-blockquote {
+  border-left: 3px solid var(--primary);
+  padding: 12px 18px;
+  background: var(--surface-elevated);
+}

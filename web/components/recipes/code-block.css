@@ -1,0 +1,13 @@
+.blinc-code {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+}
+
+.blinc-code-line-number {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.blinc-code-gutter {
+  background: var(--surface);
+}

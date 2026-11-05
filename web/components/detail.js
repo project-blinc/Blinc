@@ -1,12 +1,15 @@
 import { LiveDemo } from './runtime/host.js';
 import './code.js';
 import './chart-sections.js';
+import './content-nudge.js';
 import { numbered } from './syntax/format.js';
 
 const configNode = document.querySelector('#component-config');
 if (configNode) {
   const config = JSON.parse(configNode.textContent);
+  document.querySelector('.css-editor').hidden = config.customCss === false;
   const primary = document.querySelector('.example');
+  primary.style.setProperty('--demo-height', `${config.height}px`);
   const tabs = [...primary.querySelectorAll('[role="tab"]')];
   const panels = [...primary.querySelectorAll('[role="tabpanel"]')];
   const status = document.querySelector('#live-status');
@@ -28,7 +31,7 @@ if (configNode) {
   let appliedCss = '';
   let cssRequest = 0, pendingCss;
   const starterCss = cssEditor.value;
-  const renderCss = () => { cssHighlight.innerHTML = numbered(cssEditor.value, 'css'); };
+  const renderCss = () => { cssHighlight.innerHTML = numbered(cssEditor.value, 'css', ''); };
   renderCss();
   dark.checked = document.documentElement.dataset.scheme !== 'light';
   document.querySelector('#scheme-label').textContent = dark.checked ? 'Dark' : 'Light';
@@ -68,6 +71,14 @@ if (configNode) {
     });
   }
   function start() {
+    if (config.live === false) {
+      status.textContent = 'Live playback is not available here. Explore the native preview and source.';
+      stage.dataset.status = 'native';
+      stage.setAttribute('aria-busy', 'false');
+      primary.querySelector('.controls').hidden = true;
+      primary.querySelector('.css-editor').hidden = true;
+      return;
+    }
     runtime?.stop();
     error = false;
     retry.hidden = true; fallback.hidden = false;
@@ -103,6 +114,7 @@ if (configNode) {
         pendingCss = undefined;
         applyCss.disabled = cssEditor.value === appliedCss;
       }
+      if (type === 'media-error') { status.textContent = payload.message; return; }
       if (type === 'error') {
         error = true;
         status.textContent = 'Live preview is unavailable. Try again.';

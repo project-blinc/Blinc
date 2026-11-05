@@ -1,0 +1,15 @@
+.cn-toggle {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+}
+
+.cn-toggle:checked {
+  color: var(--primary);
+  background: var(--surface-elevated);
+  border-color: var(--primary);
+}
+
+.cn-toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}

@@ -1,0 +1,5 @@
+.blinc-waveform {
+  height: 96px;
+  background: var(--surface-elevated);
+  padding: 12px;
+}

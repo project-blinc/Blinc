@@ -89,6 +89,17 @@ aspect_ratio(16.0 / 9.0)
 Convenience builders include `aspect_ratio_16_9()`, `aspect_ratio_4_3()`,
 `aspect_ratio_square()`, `aspect_ratio_9_16()` and `aspect_ratio_21_9()`.
 
+CSS `aspect-ratio` changes the container's native layout constraint. Set one dimension and let the other follow it; setting both width and height explicitly fixes both dimensions.
+
+```css
+.cn-aspect-ratio {
+    width: 240px;
+    aspect-ratio: 4 / 3;
+}
+```
+
+The gallery compares all eight presets, including 3:2, 2:3 and 3:4. Values may be a positive number, a positive fraction such as `16 / 9`, or `auto` to clear the constraint.
+
 ## Scroll Area
 
 ```rust

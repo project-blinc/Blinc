@@ -97,6 +97,17 @@ impl WebApp {
         input: WebInput,
         modifiers: blinc_platform::Modifiers,
     ) -> bool {
+        self.dispatch_input_at(input, modifiers, now_ms() as f64)
+    }
+
+    /// Dispatch input using its source timestamp in monotonic milliseconds.
+    /// Wheel stroke boundaries remain ordered when worker rendering is busy.
+    pub fn dispatch_input_at(
+        &mut self,
+        input: WebInput,
+        modifiers: blinc_platform::Modifiers,
+        timestamp: f64,
+    ) -> bool {
         self.cached_modifiers = modifiers;
         let blinc_platform::Modifiers {
             shift,
@@ -118,14 +129,21 @@ impl WebApp {
                 Self::dispatch_mouse_up(self, x, y, button(b))
             }
             WebInput::PointerLeave => {
+                self.last_wheel_time_ms = None;
+                self.wheel_input.reset();
                 if let Some(tree) = self.current_tree.as_ref() {
+                    tree.on_scroll_gesture(blinc_layout::renderer::ScrollGesturePhase::MomentumEnd);
                     let pending = self.ctx.event_router.on_mouse_leave(tree);
                     Self::dispatch_pending(self, pending);
                 }
             }
             WebInput::Wheel { x, y } => {
-                self.pending_wheel_delta.0 += x;
-                self.pending_wheel_delta.1 += y;
+                let timestamp = if timestamp.is_finite() {
+                    timestamp
+                } else {
+                    now_ms() as f64
+                };
+                self.wheel_input.push(x, y, timestamp);
             }
             WebInput::KeyDown { code } => {
                 return Self::dispatch_key_down(self, code, shift, ctrl, alt, meta);

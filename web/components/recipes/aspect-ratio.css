@@ -1,0 +1,9 @@
+/* Try 1 / 1, 4 / 3 or 9 / 16. Height follows the width. */
+.cn-aspect-ratio {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+}
+
+.demo-ratio {
+  background: linear-gradient(135deg, var(--primary), var(--success));
+}

@@ -114,8 +114,15 @@ impl AudioPlayerWidget {
         }
 
         // Controls (via Player trait)
-        let controls = MediaControls::new(self.player).class("blinc-audio-controls");
-        container = container.child(controls.into_div());
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let controls = MediaControls::new(self.player).class("blinc-audio-controls");
+            container = container.child(controls.into_div());
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            container = container.child(VideoControlsBuilder::new(self.player.browser_backend()));
+        }
 
         container
     }

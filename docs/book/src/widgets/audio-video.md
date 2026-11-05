@@ -199,3 +199,20 @@ Desktop uses royalty-free codecs only — no ffmpeg, no patent fees:
 | OpenH264 | BSD, Cisco covers patents |
 
 Mobile uses OS-provided codecs (licensing handled by the OS).
+
+## Gallery samples
+
+The component gallery has separate Audio Player, Video Player and Waveform pages.
+Their native recordings use ashui’s original Night Drive soundtrack and outdoor
+handpan session. The waveform uses amplitude peaks from the same Night Drive
+excerpt. Source assets and conversion details live in
+`examples/blinc_component_demos/assets/README.md`.
+
+Native recordings start with audio paused and muted. Browser playback starts
+only after Play; the video sample is silent. Native playback needs the
+`blinc_layout` `media` feature.
+
+The gallery connects browser media decoding to the dedicated worker. Controls,
+time, volume, seek and decoded video frames use the real Blinc players. Hiding a
+Live demo pauses playback; disposing it releases its media elements and frame
+transport.

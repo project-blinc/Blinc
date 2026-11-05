@@ -109,27 +109,17 @@ struct BuiltAspectRatio {
 
 impl BuiltAspectRatio {
     fn from_config(config: AspectRatioConfig) -> Self {
-        // Calculate dimensions based on what's provided
-        let (final_width, final_height) = match (config.width, config.height) {
-            // Both provided - use width and ignore height (width takes priority)
-            (Some(w), Some(_)) => (w, w / config.ratio),
-            // Only width provided - calculate height
-            (Some(w), None) => (w, w / config.ratio),
-            // Only height provided - calculate width
-            (None, Some(h)) => (h * config.ratio, h),
-            // Neither provided - use default width
-            (None, None) => {
-                let default_width = 200.0;
-                (default_width, default_width / config.ratio)
-            }
-        };
-
-        // Build outer container with fixed dimensions
         let mut container = div()
             .class("cn-aspect-ratio")
-            .w(final_width)
-            .h(final_height)
-            .overflow_clip();
+            .align_self_start()
+            .overflow_clip()
+            .flex_shrink_0();
+        container.style_mut().aspect_ratio = Some(config.ratio);
+        container = match (config.width, config.height) {
+            (Some(width), _) => container.w(width),
+            (None, Some(height)) => container.h(height),
+            (None, None) => container.w(200.0),
+        };
 
         // Apply background if set
         if let Some(bg) = config.background {

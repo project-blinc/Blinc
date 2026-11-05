@@ -1,0 +1,23 @@
+/* The tab strip, selected tab and panel are separate surfaces. */
+.cn-tabs-list {
+  padding: 4px;
+  gap: 4px;
+  background: var(--surface-elevated);
+}
+
+.cn-tabs-trigger {
+  padding: 10px 18px;
+}
+
+.cn-tabs-trigger--active {
+  color: var(--primary);
+}
+
+.cn-tabs-indicator {
+  background: var(--surface-overlay);
+}
+
+.cn-tabs-panel {
+  width: 100%;
+  padding-top: 12px;
+}

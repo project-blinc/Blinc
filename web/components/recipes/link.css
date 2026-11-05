@@ -1,0 +1,13 @@
+.blinc-link {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.blinc-link:hover {
+  color: var(--success);
+}
+
+.blinc-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}

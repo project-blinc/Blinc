@@ -1,0 +1,9 @@
+.blinc-rich-text {
+  padding: 16px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+}
+
+.blinc-rich-text:focus-within {
+  border-color: var(--focus-ring);
+}

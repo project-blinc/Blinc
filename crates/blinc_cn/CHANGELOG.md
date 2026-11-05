@@ -5,6 +5,11 @@ All notable changes to `blinc_cn` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Sheet and Drawer close controls use the standard icon button with a centered SVG and invoke the dismissal callback once.
+- Aspect Ratio preserves its native ratio and accepts CSS overrides.
+- Card content contributes its intrinsic height while growing in fixed-height cards.
+- Sheet keeps its footer reachable; top/bottom slide animations use vertical transforms independent of Time Picker sizing.
+- Navigation menus use the configured panel width and reopen after dismissal.
 - Dropdown, context and menubar menus move actual keyboard focus, skip disabled rows, support submenu keys and restore trigger focus. Menus dismiss on Tab; pressable controls use `:focus-visible` rings.
 
 ## [0.6.0] - 2026-11-04

@@ -1,0 +1,12 @@
+.cn-kbd {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-bottom-width: 3px;
+  padding: 4px 8px;
+  color: var(--primary);
+  font-size: 13px;
+}
+
+.demo-shortcut-row {
+  gap: 24px;
+}

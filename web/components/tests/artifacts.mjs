@@ -57,11 +57,11 @@ assert.ok(installation.includes('WindowedApp::run_with_theme'));
 assert.equal(installation.includes('http-equiv="refresh"'), false);
 assert.equal(installation.includes('blinc-book'), false);
 const fixtures = manifest.components.flatMap(component => [
-  { ...component, route: `/components/cn/${component.slug}/` },
-  ...(component.examples || []).map(example => ({ ...component, ...example, examples: [], route: `/components/cn/${component.slug}/examples/${example.slug}/` })),
+  { ...component, route: `/components/${component.library}/${component.slug}/` },
+  ...(component.examples || []).map(example => ({ ...component, ...example, examples: [], route: `/components/${component.library}/${component.slug}/examples/${example.slug}/` })),
 ]);
 for (const component of fixtures) {
-  assert.equal(component.library, 'cn');
+  assert.ok(['cn', 'layout'].includes(component.library));
   const route = component.route;
   assert.ok(manifest.routes.includes(route));
   const relative = `${route.slice(1)}index.html`;
@@ -75,7 +75,7 @@ for (const component of fixtures) {
   assert.ok(html.includes(`/components/releases/${config.build}/detail.js`));
   assert.ok(html.includes(`pub fn ${component.entry}(`), 'Code contains the selected compiled fixture');
   const preview = manifest.previews[component.slug];
-  const animated = component.capabilities.some(capability => ['pointer', 'keyboard'].includes(capability));
+  const animated = component.capabilities.some(capability => ['pointer', 'keyboard', 'animation'].includes(capability));
   assert.equal(preview.animated, animated);
   assert.equal(config.animated, animated);
   assert.equal(preview.theme, 'hybrid');
@@ -90,7 +90,7 @@ for (const component of fixtures) {
   assert.equal(html.includes('CSS first'), false);
   if (animated) {
     const gif = gifInfo(await readFile(path.join(components, `previews/${component.slug}/preview.gif`)));
-    assert.equal(gif.width, 1120); assert.equal(gif.height, 640);
+    assert.equal(gif.width, component.viewport.width * component.viewport.scale); assert.equal(gif.height, component.viewport.height * component.viewport.scale);
     assert.equal(gif.frames, preview.frames); assert.ok(gif.frames > 1);
     assert.equal(gif.delays.length, gif.frames);
     assert.ok(gif.delays.every(delay => delay === preview.delay_ms));
@@ -101,7 +101,7 @@ for (const component of fixtures) {
     await assert.rejects(access(path.join(components, `previews/${component.slug}/preview.gif`)));
   }
   const png = await readFile(path.join(components, `previews/${component.slug}/poster.png`));
-  assert.equal(png.readUInt32BE(16), 1120); assert.equal(png.readUInt32BE(20), 640);
+  assert.equal(png.readUInt32BE(16), component.viewport.width * component.viewport.scale); assert.equal(png.readUInt32BE(20), component.viewport.height * component.viewport.scale);
 }
 for (const relative of pages) {
   const html = await readFile(path.join(site, relative), 'utf8');

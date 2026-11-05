@@ -1,0 +1,17 @@
+.cn-table-head {
+  padding: 12px 16px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.cn-table-cell {
+  padding: 14px 16px;
+}
+
+.cn-table-row {
+  border-bottom: 1px solid var(--border);
+}
+
+.cn-table-row:hover {
+  background: var(--surface-elevated);
+}

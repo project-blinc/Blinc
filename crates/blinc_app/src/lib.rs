@@ -204,6 +204,8 @@ pub use fuchsia::FuchsiaApp;
 
 #[cfg(all(feature = "web", target_arch = "wasm32"))]
 pub mod web;
+#[cfg(any(all(feature = "web", target_arch = "wasm32"), test))]
+mod web_wheel;
 #[cfg(all(feature = "web", target_arch = "wasm32"))]
 pub use web::WebApp;
 

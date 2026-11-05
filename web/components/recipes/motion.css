@@ -1,0 +1,15 @@
+/* Layout and presentation stay in CSS; motion owns entrance and exit. */
+.demo-activity-item {
+  padding: 10px 16px;
+  border-left: 3px solid var(--primary);
+  background: var(--surface-elevated);
+}
+
+.demo-activity-time {
+  color: var(--success);
+  font-size: 12px;
+}
+
+.demo-activity-heading {
+  gap: 12px;
+}

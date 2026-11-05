@@ -1,0 +1,13 @@
+/* Make the draggable divider legible without styling the panes. */
+.cn-resizable-handle {
+  width: 8px;
+}
+
+.cn-resizable-line {
+  width: 2px;
+  background: var(--primary);
+}
+
+.cn-resizable-handle:hover {
+  background: var(--surface-overlay);
+}

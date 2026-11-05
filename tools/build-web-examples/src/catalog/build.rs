@@ -78,19 +78,28 @@ pub(super) fn runtime_digest(root: &Path) -> Result<String> {
 }
 fn fixture_digest(root: &Path, component: &Component) -> Result<String> {
     let mut hash = Sha256::new();
-    let source = fs::read_to_string(root.join(&component.source))?;
+    let common = fs::read_to_string(root.join("examples/blinc_component_demos/src/demos.rs"))?;
     hash.update(
-        source
+        common
             .split("pub fn build(")
             .next()
             .ok_or("fixture setup missing")?,
     );
-    hash.update(super::pages::function(&source, &component.entry)?);
-    hash.update(super::pages::function(&source, "bound_text")?);
+    hash.update(serde_json::to_vec(component)?);
+    hash.update(super::pages::fixture_source(root, component)?);
+    hash.update(super::pages::function(&common, "bound_text")?);
     for file in [
         "examples/blinc_component_demos/src/capture.rs",
         "examples/blinc_component_demos/src/cursor.rs",
         "examples/blinc_component_demos/src/recording_motion.rs",
+        "examples/blinc_component_demos/src/recording_config.rs",
+        "examples/blinc_component_demos/assets/fennec-fox.svg",
+        "crates/blinc_layout/src/ua_styles.rs",
+        "examples/blinc_component_demos/assets/JetBrainsMono-Regular.ttf",
+        "examples/blinc_component_demos/assets/landscape.data-uri",
+        "examples/blinc_component_demos/assets/handpan.mp4",
+        "examples/blinc_component_demos/assets/night-drive.flac",
+        "examples/blinc_component_demos/assets/night-drive-waveform.json",
         "examples/blinc_component_demos/demo.css",
         "crates/blinc_cn/src/cn_styles.rs",
         "examples/blinc_component_demos/src/lib.rs",
@@ -176,7 +185,7 @@ pub(super) fn record(root: &Path, catalog: &Catalog, only: Option<&str>) -> Resu
         if !animated && destination.join("preview.gif").exists() {
             fs::remove_file(destination.join("preview.gif"))?;
         }
-        let metadata = serde_json::json!({"fixture_sha256": fixture, "logical_width":560, "logical_height":320, "pixel_width":1120, "pixel_height":640, "frames":if animated {48} else {1}, "animated":animated, "delay_ms":if animated {60} else {0}, "theme":"hybrid", "scheme":"dark", "cursor":if animated {"curved pointer paths, hover drift and deliberate clicks"} else {"none"}, "artifacts_sha256":hashes});
+        let metadata = serde_json::json!({"fixture_sha256": fixture, "logical_width":c.viewport.width, "logical_height":c.viewport.height, "pixel_width":c.viewport.width*c.viewport.scale, "pixel_height":c.viewport.height*c.viewport.scale, "frames":if animated {c.recording.as_ref().and_then(|v| v["frames"].as_u64()).unwrap_or(48)} else {1}, "animated":animated, "delay_ms":if animated {60} else {0}, "theme":"hybrid", "scheme":"dark", "cursor":if c.capabilities.iter().any(|s| s == "pointer" || s == "keyboard") {"interaction-specific pointer movement and deliberate actions"} else {"none"}, "artifacts_sha256":hashes});
         fs::write(
             destination.join("recording.json"),
             serde_json::to_string_pretty(&metadata)?,

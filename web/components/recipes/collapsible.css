@@ -1,0 +1,17 @@
+/* The disclosure stays compact; its content needs no enclosing card. */
+.cn-collapsible-trigger {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cn-collapsible-content {
+  border-radius: 0;
+}
+
+.cn-collapsible-content > * {
+  padding: 12px;
+}
+
+.cn-collapsible-trigger:hover {
+  color: var(--primary);
+}

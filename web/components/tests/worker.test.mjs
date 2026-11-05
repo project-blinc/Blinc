@@ -28,8 +28,9 @@ async function harness({ failBoot = false, gateWarm = false } = {}) {
   });
   const protocol = new vm.SourceTextModule(await readFile(new URL('../runtime/protocol.js', import.meta.url), 'utf8'), { context });
   await protocol.link(() => {}); await protocol.evaluate();
-  const fakeWasm = new vm.SyntheticModule(['default', 'create_runtime'], function () {
+  const fakeWasm = new vm.SyntheticModule(['default', 'create_runtime', 'set_media_bridge'], function () {
     this.setExport('default', async () => { if (failBoot) throw new Error('adapter unavailable'); });
+    this.setExport('set_media_bridge', callback => { scope.mediaBridge = callback; });
     this.setExport('create_runtime', async (...args) => { calls.push(['create', ...args]); return runtime; });
   }, { context });
   await fakeWasm.link(() => {}); await fakeWasm.evaluate();
@@ -41,7 +42,7 @@ async function harness({ failBoot = false, gateWarm = false } = {}) {
   await worker.link(() => protocol); await worker.evaluate();
   let seq = 0;
   const send = (type, payload = {}, extra = {}) => scope.onmessage({ data: { ...envelope('demo-1', seq++, type, payload), ...extra } });
-  return { messages, calls, pending, send, releaseWarm: () => releaseWarm?.(), get closed() { return closed; },
+  return { messages, calls, pending, send, scope, releaseWarm: () => releaseWarm?.(), get closed() { return closed; },
     draw() { const [id, callback] = pending.entries().next().value; pending.delete(id); callback(); },
   };
 }
@@ -138,4 +139,28 @@ test('CSS edits refresh the existing runtime and invalid edits remain recoverabl
   assert.equal(h.calls.filter(call => Array.isArray(call) && call[0] === 'create').length, 1);
   assert.equal(h.calls.includes('free'), false);
   assert.equal(h.messages.some(message => message.type === 'error'), false);
+});
+
+test('media transport serves the latest host state and consumes a transferred frame once', async () => {
+  const h = await harness(); await h.send('boot', boot);
+  h.scope.mediaBridge(3, 'create');
+  await h.send('media-state', { id: 3, position: 420, duration: 16000, buffered: 6000, paused: false, ended: false });
+  const pixels = new ArrayBuffer(16);
+  await h.send('media-frame', { id:3, width:2, height:2, pixels });
+  assert.equal(h.scope.mediaBridge(3, 'position'), 420);
+  assert.equal(h.scope.mediaBridge(3, 'duration'), 16000);
+  assert.equal(h.scope.mediaBridge(3, 'paused'), false);
+  assert.equal(h.scope.mediaBridge(3, 'frame').pixels, pixels);
+  assert.equal(h.scope.mediaBridge(3, 'frame'), null);
+  assert.equal(h.messages.at(-1).payload.operation, 'frame-consumed');
+});
+
+test('Wheel source timestamps reach the runtime unchanged and in order', async () => {
+  const h = await harness(); await h.send('boot', boot);
+  for (const timestamp of [100, 116, 172]) {
+    await h.send('input', { event: { kind: 'wheel', x: -12, y: 0 }, timestamp });
+  }
+  const inputs = h.calls.filter(c => Array.isArray(c) && c[0] === 'input');
+  assert.deepEqual(inputs.map(c => c[6]), [100, 116, 172]);
+  assert.deepEqual(inputs.map(c => JSON.parse(c[1])), Array(3).fill({ kind: 'wheel', x: -12, y: 0 }));
 });

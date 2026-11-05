@@ -466,21 +466,7 @@ impl BlincContextState {
         T: Clone + Send + 'static,
         F: FnOnce() -> T,
     {
-        let state_key = StateKey::from_string::<T>(key);
-        let mut hooks = self.hooks.lock().unwrap();
-
-        // Check if we have an existing signal with this key
-        let signal = if let Some(raw_id) = hooks.get(&state_key) {
-            // Reconstruct the signal from stored ID
-            let signal_id = SignalId::from_raw(raw_id);
-            Signal::from_id(signal_id)
-        } else {
-            // First time - create a new signal and store it
-            let signal = self.reactive.lock().unwrap().create_signal(init());
-            let raw_id = signal.id().to_raw();
-            hooks.insert(state_key, raw_id);
-            signal
-        };
+        let signal = self.use_signal_keyed(key, init);
 
         // Create State with or without stateful callback
         if let Some(ref callback) = self.stateful_callback {
@@ -509,17 +495,19 @@ impl BlincContextState {
         F: FnOnce() -> T,
     {
         let state_key = StateKey::from_string::<T>(key);
-        let mut hooks = self.hooks.lock().unwrap();
-
-        if let Some(raw_id) = hooks.get(&state_key) {
-            let signal_id = SignalId::from_raw(raw_id);
-            Signal::from_id(signal_id)
-        } else {
-            let signal = self.reactive.lock().unwrap().create_signal(init());
-            let raw_id = signal.id().to_raw();
-            hooks.insert(state_key, raw_id);
-            signal
+        if let Some(raw_id) = self.hooks.lock().unwrap().get(&state_key) {
+            return Signal::from_id(SignalId::from_raw(raw_id));
         }
+        // Initializers may create signals or keyed values of their own. Their values
+        // share the persistent key's lifetime, rather than the current build's.
+        let initial = crate::owner::Owner::detached(init);
+        let mut hooks = self.hooks.lock().unwrap();
+        if let Some(raw_id) = hooks.get(&state_key) {
+            return Signal::from_id(SignalId::from_raw(raw_id));
+        }
+        let signal = self.reactive.lock().unwrap().create_signal(initial);
+        hooks.insert(state_key, signal.id().to_raw());
+        signal
     }
 
     /// Create or retrieve a persistent reactive signal, auto-keyed

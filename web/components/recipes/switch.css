@@ -1,0 +1,17 @@
+/* The checked track and the moving thumb have separate hooks. */
+.cn-switch:checked {
+  background: var(--success);
+}
+
+.cn-switch-thumb {
+  background: var(--text-inverse);
+  box-shadow: var(--shadow-sm);
+}
+
+.cn-switch-row {
+  gap: 12px;
+}
+
+.cn-switch-label {
+  font-size: 14px;
+}

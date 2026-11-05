@@ -1,0 +1,6 @@
+/* CSS controls the frame; object-fit belongs to the image API. */
+.demo-image {
+  border: 4px solid var(--surface-elevated);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}

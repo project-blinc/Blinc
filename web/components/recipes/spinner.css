@@ -1,0 +1,11 @@
+/* The static track and rotating arc have independent colours and thickness. */
+.cn-spinner__track {
+  border-color: var(--border);
+  border-width: 3px;
+}
+
+.cn-spinner__arc {
+  border-color: var(--success);
+  border-width: 3px;
+  animation-duration: 1200ms;
+}

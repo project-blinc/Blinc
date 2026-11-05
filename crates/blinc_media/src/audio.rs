@@ -54,6 +54,8 @@ impl AudioSource {
 
 /// Cross-platform audio player
 pub struct AudioPlayer {
+    #[cfg(target_arch = "wasm32")]
+    browser: Rc<crate::VideoPlayer>,
     inner: Rc<RefCell<AudioPlayerInner>>,
 }
 
@@ -81,26 +83,10 @@ struct AudioPlayerInner {
 impl AudioPlayer {
     /// Create a new audio player
     pub fn new() -> Self {
-        #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
-        {
-            let stream = rodio::DeviceSinkBuilder::open_default_sink().ok();
-
-            Self {
-                inner: Rc::new(RefCell::new(AudioPlayerInner {
-                    state: PlaybackState::Stopped,
-                    volume: 1.0,
-                    looping: false,
-                    play_start: None,
-                    position_offset_ms: 0,
-                    sink: None,
-                    _stream: stream,
-                })),
-            }
-        }
-
-        #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+        #[cfg(target_arch = "wasm32")]
         {
             Self {
+                browser: Rc::new(crate::VideoPlayer::new()),
                 inner: Rc::new(RefCell::new(AudioPlayerInner {
                     state: PlaybackState::Stopped,
                     volume: 1.0,
@@ -110,124 +96,208 @@ impl AudioPlayer {
                 })),
             }
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+            {
+                let stream = rodio::DeviceSinkBuilder::open_default_sink().ok();
+
+                Self {
+                    inner: Rc::new(RefCell::new(AudioPlayerInner {
+                        state: PlaybackState::Stopped,
+                        volume: 1.0,
+                        looping: false,
+                        play_start: None,
+                        position_offset_ms: 0,
+                        sink: None,
+                        _stream: stream,
+                    })),
+                }
+            }
+
+            #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+            {
+                Self {
+                    inner: Rc::new(RefCell::new(AudioPlayerInner {
+                        state: PlaybackState::Stopped,
+                        volume: 1.0,
+                        looping: false,
+                        play_start: None,
+                        position_offset_ms: 0,
+                    })),
+                }
+            }
+        }
+    }
+
+    /// Browser transport shared with the reactive media controls.
+    #[cfg(target_arch = "wasm32")]
+    #[doc(hidden)]
+    pub fn browser_backend(&self) -> crate::VideoPlayer {
+        (*self.browser).clone()
+    }
+
+    /// Prepare a browser URL without starting playback.
+    #[cfg(target_arch = "wasm32")]
+    pub fn load_url(&self, url: &str) {
+        self.browser.load_url(url);
     }
 
     /// Play an audio source
     pub fn play(&self, source: AudioSource) {
-        let mut inner = self.inner.borrow_mut();
-
-        #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+        #[cfg(target_arch = "wasm32")]
         {
-            if let Some(ref stream) = inner._stream {
-                let sink = rodio::Player::connect_new(stream.mixer());
-                match &source {
-                    AudioSource::File(path) => {
-                        if let Ok(file) = std::fs::File::open(path) {
-                            let reader = std::io::BufReader::new(file);
-                            if let Ok(decoder) = rodio::Decoder::new(reader) {
-                                sink.append(decoder);
+            match source {
+                AudioSource::File(url) | AudioSource::Asset(url) => self.browser.load_url(&url),
+                AudioSource::Bytes(bytes) => self.browser.load_bytes(bytes.to_vec()),
+            };
+            self.browser.play();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut inner = self.inner.borrow_mut();
+
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+            {
+                if let Some(ref stream) = inner._stream {
+                    let sink = rodio::Player::connect_new(stream.mixer());
+                    match &source {
+                        AudioSource::File(path) => {
+                            if let Ok(file) = std::fs::File::open(path) {
+                                let reader = std::io::BufReader::new(file);
+                                if let Ok(decoder) = rodio::Decoder::new(reader) {
+                                    sink.append(decoder);
+                                }
                             }
                         }
-                    }
-                    AudioSource::Bytes(data) => {
-                        let cursor = std::io::Cursor::new(data.as_ref().clone());
-                        if let Ok(decoder) = rodio::Decoder::new(cursor) {
-                            sink.append(decoder);
-                        }
-                    }
-                    AudioSource::Asset(path) => {
-                        // Try loading via platform asset loader
-                        if let Ok(data) = blinc_platform::assets::load_asset(path) {
-                            let cursor = std::io::Cursor::new(data);
+                        AudioSource::Bytes(data) => {
+                            let cursor = std::io::Cursor::new(data.as_ref().clone());
                             if let Ok(decoder) = rodio::Decoder::new(cursor) {
                                 sink.append(decoder);
                             }
                         }
+                        AudioSource::Asset(path) => {
+                            // Try loading via platform asset loader
+                            if let Ok(data) = blinc_platform::assets::load_asset(path) {
+                                let cursor = std::io::Cursor::new(data);
+                                if let Ok(decoder) = rodio::Decoder::new(cursor) {
+                                    sink.append(decoder);
+                                }
+                            }
+                        }
+                    }
+                    sink.set_volume(inner.volume);
+                    inner.sink = Some(sink);
+                }
+            }
+
+            #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+            {
+                // Mobile: use native bridge
+                match &source {
+                    AudioSource::File(path) | AudioSource::Asset(path) => {
+                        let _ = blinc_core::native_bridge::native_call::<(), _>(
+                            "audio",
+                            "play",
+                            vec![blinc_core::native_bridge::NativeValue::String(path.clone())],
+                        );
+                    }
+                    AudioSource::Bytes(_) => {
+                        tracing::warn!("Bytes audio source not yet supported on mobile");
                     }
                 }
-                sink.set_volume(inner.volume);
-                inner.sink = Some(sink);
             }
-        }
 
-        #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
-        {
-            // Mobile: use native bridge
-            match &source {
-                AudioSource::File(path) | AudioSource::Asset(path) => {
-                    let _ = blinc_core::native_bridge::native_call::<(), _>(
-                        "audio",
-                        "play",
-                        vec![blinc_core::native_bridge::NativeValue::String(path.clone())],
-                    );
-                }
-                AudioSource::Bytes(_) => {
-                    tracing::warn!("Bytes audio source not yet supported on mobile");
-                }
-            }
+            inner.state = PlaybackState::Playing;
+            inner.play_start = Some(std::time::Instant::now());
         }
-
-        inner.state = PlaybackState::Playing;
-        inner.play_start = Some(std::time::Instant::now());
     }
 
     /// Pause playback
     pub fn pause(&self) {
-        let mut inner = self.inner.borrow_mut();
-        #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
-        if let Some(ref sink) = inner.sink {
-            sink.pause();
-        }
-        #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+        #[cfg(target_arch = "wasm32")]
         {
-            let _ = blinc_core::native_bridge::native_call::<(), _>("audio", "pause", ());
+            self.browser.pause();
         }
-        // Track elapsed position
-        if let Some(start) = inner.play_start.take() {
-            inner.position_offset_ms += start.elapsed().as_millis() as u64;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut inner = self.inner.borrow_mut();
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+            if let Some(ref sink) = inner.sink {
+                sink.pause();
+            }
+            #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+            {
+                let _ = blinc_core::native_bridge::native_call::<(), _>("audio", "pause", ());
+            }
+            // Track elapsed position
+            if let Some(start) = inner.play_start.take() {
+                inner.position_offset_ms += start.elapsed().as_millis() as u64;
+            }
+            inner.state = PlaybackState::Paused;
         }
-        inner.state = PlaybackState::Paused;
     }
 
     /// Resume playback
     pub fn resume(&self) {
-        let mut inner = self.inner.borrow_mut();
-        #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
-        if let Some(ref sink) = inner.sink {
-            sink.play();
-        }
-        #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+        #[cfg(target_arch = "wasm32")]
         {
-            let _ = blinc_core::native_bridge::native_call::<(), _>("audio", "resume", ());
+            self.browser.play();
         }
-        inner.state = PlaybackState::Playing;
-        inner.play_start = Some(std::time::Instant::now());
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut inner = self.inner.borrow_mut();
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+            if let Some(ref sink) = inner.sink {
+                sink.play();
+            }
+            #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+            {
+                let _ = blinc_core::native_bridge::native_call::<(), _>("audio", "resume", ());
+            }
+            inner.state = PlaybackState::Playing;
+            inner.play_start = Some(std::time::Instant::now());
+        }
     }
 
     /// Stop playback
     pub fn stop(&self) {
-        let mut inner = self.inner.borrow_mut();
-        #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+        #[cfg(target_arch = "wasm32")]
         {
-            inner.sink = None;
+            self.browser.stop();
         }
-        #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = blinc_core::native_bridge::native_call::<(), _>("audio", "stop", ());
+            let mut inner = self.inner.borrow_mut();
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+            {
+                inner.sink = None;
+            }
+            #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+            {
+                let _ = blinc_core::native_bridge::native_call::<(), _>("audio", "stop", ());
+            }
+            inner.state = PlaybackState::Stopped;
+            inner.play_start = None;
+            inner.position_offset_ms = 0;
         }
-        inner.state = PlaybackState::Stopped;
-        inner.play_start = None;
-        inner.position_offset_ms = 0;
     }
 
     /// Get current playback position in milliseconds
     pub fn position_ms(&self) -> u64 {
-        let inner = self.inner.borrow();
-        let elapsed = inner
-            .play_start
-            .map(|s| s.elapsed().as_millis() as u64)
-            .unwrap_or(0);
-        inner.position_offset_ms + elapsed
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.browser.position_ms()
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let inner = self.inner.borrow();
+            let elapsed = inner
+                .play_start
+                .map(|s| s.elapsed().as_millis() as u64)
+                .unwrap_or(0);
+            inner.position_offset_ms + elapsed
+        }
     }
 
     /// Seek to a position in milliseconds
@@ -235,74 +305,113 @@ impl AudioPlayer {
     /// Note: seeking restarts playback from the new position on desktop.
     /// On mobile, the platform player handles seeking natively.
     pub fn seek(&self, _position_ms: u64) {
-        let mut inner = self.inner.borrow_mut();
-        inner.position_offset_ms = _position_ms;
-        inner.play_start = if inner.state == PlaybackState::Playing {
-            Some(std::time::Instant::now())
-        } else {
-            None
-        };
-
-        #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+        #[cfg(target_arch = "wasm32")]
         {
-            let _ = blinc_core::native_bridge::native_call::<(), _>(
-                "audio",
-                "seek",
-                vec![blinc_core::native_bridge::NativeValue::Int64(
-                    _position_ms as i64,
-                )],
-            );
+            self.browser.seek(_position_ms);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.position_offset_ms = _position_ms;
+            inner.play_start = if inner.state == PlaybackState::Playing {
+                Some(std::time::Instant::now())
+            } else {
+                None
+            };
+
+            #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+            {
+                let _ = blinc_core::native_bridge::native_call::<(), _>(
+                    "audio",
+                    "seek",
+                    vec![blinc_core::native_bridge::NativeValue::Int64(
+                        _position_ms as i64,
+                    )],
+                );
+            }
         }
     }
 
     /// Set volume (0.0 = silent, 1.0 = full)
     pub fn set_volume(&self, volume: f32) {
-        let mut inner = self.inner.borrow_mut();
-        inner.volume = volume.clamp(0.0, 1.0);
-        #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
-        if let Some(ref sink) = inner.sink {
-            sink.set_volume(inner.volume);
-        }
-        #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+        #[cfg(target_arch = "wasm32")]
         {
-            let _ = blinc_core::native_bridge::native_call::<(), _>(
-                "audio",
-                "set_volume",
-                vec![blinc_core::native_bridge::NativeValue::Float32(
-                    inner.volume,
-                )],
-            );
+            self.browser.set_volume(volume);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.volume = volume.clamp(0.0, 1.0);
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+            if let Some(ref sink) = inner.sink {
+                sink.set_volume(inner.volume);
+            }
+            #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+            {
+                let _ = blinc_core::native_bridge::native_call::<(), _>(
+                    "audio",
+                    "set_volume",
+                    vec![blinc_core::native_bridge::NativeValue::Float32(
+                        inner.volume,
+                    )],
+                );
+            }
         }
     }
 
     /// Get current playback state
     pub fn state(&self) -> PlaybackState {
-        let inner = self.inner.borrow_mut();
-
-        #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+        #[cfg(target_arch = "wasm32")]
         {
-            if let Some(ref sink) = inner.sink {
-                if sink.empty() {
-                    return PlaybackState::Stopped;
-                }
-                if sink.is_paused() {
-                    return PlaybackState::Paused;
-                }
-                return PlaybackState::Playing;
+            match self.browser.playback_state() {
+                crate::VideoState::Playing => PlaybackState::Playing,
+                crate::VideoState::Paused => PlaybackState::Paused,
+                _ => PlaybackState::Stopped,
             }
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let inner = self.inner.borrow_mut();
 
-        inner.state
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+            {
+                if let Some(ref sink) = inner.sink {
+                    if sink.empty() {
+                        return PlaybackState::Stopped;
+                    }
+                    if sink.is_paused() {
+                        return PlaybackState::Paused;
+                    }
+                    return PlaybackState::Playing;
+                }
+            }
+
+            inner.state
+        }
     }
 
     /// Get current volume
     pub fn volume(&self) -> f32 {
-        self.inner.borrow_mut().volume
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.browser.volume()
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.inner.borrow_mut().volume
+        }
     }
 
     /// Check if currently playing
     pub fn is_playing(&self) -> bool {
-        self.state() == PlaybackState::Playing
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.browser.is_playing()
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.state() == PlaybackState::Playing
+        }
     }
 }
 
@@ -329,8 +438,15 @@ impl crate::player::Player for AudioPlayer {
         AudioPlayer::position_ms(self)
     }
     fn duration_ms(&self) -> u64 {
-        0
-    } // Duration requires decoder introspection
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.browser.duration_ms()
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            0
+        }
+    }
     fn volume(&self) -> f32 {
         AudioPlayer::volume(self)
     }

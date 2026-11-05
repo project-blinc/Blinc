@@ -22,7 +22,11 @@
 //! .h(400.0)
 //! ```
 
-use std::sync::Arc;
+use crate::{key::InstanceKey, selector::ScrollRef};
+use blinc_core::reactive::{computed, signal};
+use std::sync::{Arc, Mutex};
+mod heights;
+use heights::Heights;
 
 use crate::div::{Div, div};
 use crate::widgets::scroll::ScrollDirection;
@@ -38,6 +42,8 @@ pub type ItemBuilder = Arc<dyn Fn(usize) -> Div + Send + Sync>;
 pub struct VirtualList {
     /// Total number of items
     item_count: usize,
+    key: InstanceKey,
+    scroll_ref: Option<ScrollRef>,
     /// Function to build a Div for a given index
     item_builder: ItemBuilder,
     /// Inner div for layout props (width, height, bg, etc.)
@@ -60,12 +66,15 @@ pub struct VirtualList {
 ///
 /// Items can be any height. The layout system handles sizing via flexbox.
 /// Use `.estimated_item_height()` to improve scroll spacer accuracy.
+#[track_caller]
 pub fn virtual_list<F>(item_count: usize, builder: F) -> VirtualList
 where
     F: Fn(usize) -> Div + Send + Sync + 'static,
 {
     VirtualList {
         item_count,
+        key: InstanceKey::new("virtual-list"),
+        scroll_ref: None,
         item_builder: Arc::new(builder),
         inner: div().overflow_clip(),
         estimated_item_height: 40.0,
@@ -82,16 +91,24 @@ impl VirtualList {
     /// for items that haven't been rendered yet. It doesn't constrain
     /// actual item heights — items use flexbox sizing.
     pub fn estimated_item_height(mut self, height: f32) -> Self {
-        self.estimated_item_height = height;
+        self.estimated_item_height = if height.is_finite() && height > 0.0 {
+            height
+        } else {
+            40.0
+        };
         self
     }
 
-    /// Set the number of items to render in the visible window (default: 50).
-    ///
-    /// Larger values = smoother scrolling but more elements.
-    /// Smaller values = better performance but may show blank areas during fast scroll.
+    /// Target mounted row count, including overscan (default: 50).
+    /// The visible viewport is always included, even when it needs more rows.
     pub fn window_size(mut self, n: usize) -> Self {
-        self.window_size = n;
+        self.window_size = n.max(1);
+        self
+    }
+
+    /// Bind a reference for programmatic scrolling and observing the offset.
+    pub fn bind(mut self, reference: &ScrollRef) -> Self {
+        self.scroll_ref = Some(reference.clone());
         self
     }
 
@@ -153,53 +170,105 @@ impl VirtualList {
         self
     }
 
-    /// Build the virtual list into a Div.
-    ///
-    /// Renders the initial window of items with spacers for
-    /// items above and below the visible range.
+    /// Build a measured, reactive window with spacers for unmounted rows.
     pub fn into_div(self) -> Div {
-        let viewport_height = {
-            use crate::div::ElementBuilder as _;
-            self.inner
-                .layout_style()
-                .and_then(|s| match s.size.height.expand() {
-                    taffy::style::ExpandedDimension::Length(h) => Some(h),
-                    _ => None,
-                })
-                .unwrap_or(400.0)
+        use crate::div::ElementBuilder as _;
+        let initial_height = self
+            .inner
+            .layout_style()
+            .and_then(|s| match s.size.height.expand() {
+                taffy::style::ExpandedDimension::Length(h) => Some(h),
+                _ => None,
+            })
+            .unwrap_or(400.0);
+        let key = self.key.derive("window");
+        let count = self.item_count;
+        let estimate = self.estimated_item_height;
+        let create = || {
+            let reference = self.scroll_ref.unwrap_or_default();
+            let offset = reference.watch_y(0.0);
+            (
+                reference,
+                offset,
+                signal(initial_height),
+                signal(0u64),
+                Arc::new(Mutex::new(Heights::new(count, estimate))),
+            )
         };
-
-        // Render the first `window_size` items (or all if fewer)
-        let render_count = self.window_size.min(self.item_count);
-
-        // Build content column with flex layout (items size themselves)
-        let mut content = div().flex_col().w_full();
-        if let Some(ref cls) = self.content_class {
-            content = content.class(cls);
+        let (reference, offset, viewport, revision, heights) =
+            if let Some(ctx) = blinc_core::BlincContextState::try_get() {
+                ctx.use_signal_keyed(&key, create)
+                    .try_get()
+                    .expect("virtual list state")
+            } else {
+                create()
+            };
+        if heights.lock().unwrap().reconfigure(count, estimate) {
+            revision.set(revision.get().wrapping_add(1));
         }
-        for i in 0..render_count {
-            let mut item = (self.item_builder)(i);
-            if let Some(ref cls) = self.item_class {
-                item = item.class(cls);
-            }
-            content = content.child(item);
+        // Resizing or changing the dataset updates the window without resetting scroll.
+        let budget = self.window_size;
+        let measured = heights.clone();
+        let window = computed(move |g| {
+            let _ = g.get(revision);
+            measured.lock().unwrap().window(
+                g.get(offset).unwrap_or(0.0),
+                g.get(viewport).unwrap_or(initial_height),
+                budget,
+            )
+        });
+        let top_window = window.clone();
+        let bottom_window = window.clone();
+        let top = computed(move |_| top_window.try_get().map(|w| w.2).unwrap_or(0.0));
+        let bottom = computed(move |_| bottom_window.try_get().map(|w| w.3).unwrap_or(0.0));
+        let indices = computed(move |_| {
+            window
+                .try_get()
+                .map(|w| (w.0..w.1).collect::<Vec<_>>())
+                .unwrap_or_default()
+        });
+        let builder = self.item_builder;
+        let item_class = self.item_class;
+        let rows = div().flex_col().w_full().h_fit().for_each(
+            indices,
+            |i| *i,
+            move |i| {
+                let measured = heights.clone();
+                let mut row = builder(i).flex_shrink_0().on_resize(move |event| {
+                    let changed = measured.lock().unwrap().measure(i, event.bounds_height);
+                    if changed {
+                        revision.set(revision.get().wrapping_add(1));
+                    }
+                });
+                if let Some(class) = &item_class {
+                    row = row.class(class);
+                }
+                row
+            },
+        );
+        let mut content = div()
+            .flex_col()
+            .w_full()
+            .h_fit()
+            .child(div().w_full().h(top).flex_shrink_0())
+            .child(rows)
+            .child(div().w_full().h(bottom).flex_shrink_0());
+        if let Some(class) = self.content_class {
+            content = content.class(class);
         }
-
-        // Estimated spacer for remaining items below the window
-        if render_count < self.item_count {
-            let remaining = self.item_count - render_count;
-            let spacer_height = remaining as f32 * self.estimated_item_height;
-            content = content.child(div().h(spacer_height).w_full());
-        }
-
-        // Wrap in scroll container
         let scroll = crate::widgets::scroll::scroll()
             .direction(ScrollDirection::Vertical)
+            .bind(&reference)
             .w_full()
-            .h(viewport_height)
+            .h_full()
             .child(content);
-
-        self.inner.child(scroll)
+        self.inner
+            .on_resize(move |event| {
+                if (viewport.get() - event.bounds_height).abs() > 0.5 && event.bounds_height > 0.0 {
+                    viewport.set(event.bounds_height);
+                }
+            })
+            .child(scroll)
     }
 }
 

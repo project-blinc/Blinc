@@ -1,0 +1,8 @@
+.cn-skeleton {
+  background: var(--surface-elevated);
+  animation-duration: 1.8s;
+}
+
+.cn-skeleton--circle {
+  border: 1px solid var(--border);
+}

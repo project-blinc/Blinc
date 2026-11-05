@@ -41,15 +41,15 @@ pub(super) fn sections(root: &Path, parent: &Component, build: &str) -> Result<S
             (
                 "URL",
                 format!(
-                    "/components/cn/{}/examples/{}/?standalone=1&amp;embed=1&amp;tab=live",
-                    parent.slug, c.slug
+                    "/components/{}/{}/examples/{}/?standalone=1&amp;embed=1&amp;tab=live",
+                    parent.library, parent.slug, c.slug
                 ),
             ),
             (
                 "OPEN_URL",
                 format!(
-                    "/components/cn/{}/examples/{}/?standalone=1&amp;tab=live",
-                    parent.slug, c.slug
+                    "/components/{}/{}/examples/{}/?standalone=1&amp;tab=live",
+                    parent.library, parent.slug, c.slug
                 ),
             ),
         ] {
@@ -72,16 +72,22 @@ pub(super) fn stage(
 ) -> Result<()> {
     for example in &parent.examples {
         let c = component(parent, example);
-        let route = format!("/components/cn/{}/examples/{}/", parent.slug, c.slug);
+        let route = format!(
+            "/components/{}/{}/examples/{}/",
+            parent.library, parent.slug, c.slug
+        );
         let destination = dir
-            .join("cn")
+            .join(&parent.library)
             .join(&parent.slug)
             .join("examples")
             .join(&c.slug);
         fs::create_dir_all(&destination)?;
         let html = pages::detail(root, catalog, &c, revision, build, css)?.replace(
-            &format!("https://blinc.rs/components/cn/{}/", c.slug),
-            &format!("https://blinc.rs/components/cn/{}/#{}", parent.slug, c.slug),
+            &format!("https://blinc.rs/components/{}/{}/", c.library, c.slug),
+            &format!(
+                "https://blinc.rs/components/{}/{}/#{}",
+                parent.library, parent.slug, c.slug
+            ),
         );
         fs::write(destination.join("index.html"), html)?;
         routes.push(route);

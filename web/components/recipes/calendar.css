@@ -1,0 +1,22 @@
+/* Restyle the month header, weekday labels and selected date. */
+.cn-calendar-caption {
+  font-weight: 600;
+}
+
+.cn-calendar-weekday {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.cn-calendar-day {
+  border-radius: var(--radius-sm);
+}
+
+.cn-calendar-day[data-selected] {
+  background: var(--success);
+  color: var(--text-inverse);
+}
+
+.cn-calendar-day:hover {
+  border: 1px solid var(--primary);
+}

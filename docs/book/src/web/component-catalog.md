@@ -9,6 +9,9 @@ high-resolution native recording. Live renders the same Rust fixture in a worker
 Code contains that fixture's compiled source and actual CSS. Props, keyboard
 interaction, styling selectors, state attributes and theme variables accompany
 the example. The usage documentation comes from the existing CN book sources.
+When that content is below the viewport, a floating **Documentation** button
+scrolls to the usage section. It disappears as the content comes into view and
+uses an immediate jump when reduced motion is enabled.
 
 ## One fixture, two runners
 
@@ -37,7 +40,7 @@ clipboard events, ResizeObserver and DPR changes. It sends normalized `WebInput`
 events in order. The worker owns WASM, component state, theme, layout, GPU surface
 and frame scheduling. WebAssetLoader can fetch from either a Window or a worker.
 
-The catalog starts one selected runtime when the detail page is visited. It
+For supported Live demos, the catalog starts one selected runtime when the detail page is visited. It
 reports readiness after the first submitted GPU frame completes, preserves the
 selected tab and renders no continuous frames while Preview/Code or the document
 is hidden. Live resumes the worker. Reset creates a new worker and canvas. Applying custom
@@ -122,3 +125,15 @@ variables, including `--primary`, `--surface-elevated`, `--radius-lg`,
 `--shadow-md`, `--duration-fast` and `--ease-state`. Chart recipes show palette
 and grid variables as well as tooltip styling. Later `:root` declarations apply
 to earlier component rules; removing an override restores the selected theme.
+
+## Widget coverage
+
+The catalog includes all public component families and the built-in widgets that
+add distinct capabilities: editors, Markdown, Canvas, virtual lists, gestures,
+motion, content primitives, images, SVG, notched surfaces and media. Overlapping
+controls use the polished component-library version. Coverage mappings in
+`web/components/catalog.json` are checked against both public module inventories.
+
+Audio and Video use native recordings with ashui’s original media samples. Their
+Live playback uses the existing browser decoder through a host bridge, while Blinc renders the controls and video in its worker canvas. Waveform also renders live. Capture viewport dimensions come from each fixture’s
+metadata instead of a single fixed size.

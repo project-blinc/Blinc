@@ -14,4 +14,15 @@
 </head><body>
 <header class="site-header"><a class="brand" href="/" aria-label="Blinc home"><img src="/assets/blinc_logo.svg" width="105" height="30" alt="Blinc"><span class="version">{{VERSION}}</span></a><nav class="site-nav" aria-label="Main navigation"><a href="/components/" aria-current="page">Components</a><a href="/components/installation/">Docs</a><a href="https://github.com/project-blinc/Blinc">GitHub ↗</a><label class="scheme-toggle scheme-toggle-page"><input type="checkbox" role="switch" id="page-scheme" aria-label="Dark page colour scheme" checked><span class="scheme-track" aria-hidden="true"><span class="scheme-thumb"><svg class="scheme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg><svg class="scheme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.1A8.6 8.6 0 0 1 9.9 3.5 8.6 8.6 0 1 0 20.5 14.1Z"/></svg></span></span></label></nav></header>
 <div class="layout"><aside class="sidebar"><nav aria-label="Component navigation">{{SIDEBAR}}</nav></aside><main class="main" id="main-content">{{BODY}}<footer>Blinc · Built in Rust. Styled with CSS. <a href="/components/build-manifest.json">Build manifest</a></footer></main></div>
-</body></html>
+<script>
+(() => {
+  const nav = document.querySelector('.sidebar');
+  if (new URLSearchParams(location.search).has('embed') || !matchMedia('(min-width:761px)').matches) return;
+  const key = 'blinc-component-nav-scroll';
+  try { nav.scrollTop = Number(sessionStorage.getItem(key) || 0); } catch {}
+  const save = () => { try { sessionStorage.setItem(key, String(nav.scrollTop)); } catch {} };
+  nav.addEventListener('scroll', save, { passive: true });
+  nav.addEventListener('click', save);
+  addEventListener('pagehide', save);
+})();
+</script></body></html>

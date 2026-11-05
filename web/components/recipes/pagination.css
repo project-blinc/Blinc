@@ -1,0 +1,18 @@
+.cn-pagination {
+  gap: 6px;
+}
+
+.cn-pagination-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+}
+
+.cn-pagination-btn:hover {
+  color: var(--primary);
+  background: var(--surface-elevated);
+}
+
+.cn-pagination-ellipsis {
+  color: var(--text-secondary);
+}

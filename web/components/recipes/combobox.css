@@ -1,0 +1,23 @@
+/* Search and selected results are separate from the trigger. */
+.cn-combobox-search-row {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cn-combobox-search {
+  font-size: 14px;
+}
+
+.cn-combobox-item {
+  padding: 10px 12px;
+}
+
+.cn-combobox-item--selected {
+  color: var(--primary);
+  background: var(--surface-overlay);
+}
+
+.cn-combobox-empty {
+  padding: 20px;
+  color: var(--text-secondary);
+}

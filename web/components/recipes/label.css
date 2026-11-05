@@ -1,0 +1,12 @@
+.cn-label {
+  gap: 6px;
+}
+
+.cn-label-text {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cn-label-required {
+  color: var(--destructive);
+}

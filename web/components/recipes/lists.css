@@ -1,0 +1,11 @@
+.blinc-list-marker {
+  color: var(--primary);
+}
+
+.blinc-task-box {
+  border: 2px solid var(--primary);
+}
+
+.demo--lists {
+  gap: 16px;
+}

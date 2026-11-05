@@ -4,6 +4,11 @@ All notable changes to `blinc_app` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Web wheel input preserves source timestamps and successive finger-stroke boundaries, including Magic Mouse momentum tails and reversals, instead of combining them into one latched gesture.
+- Direct rendering paints foreground popup surfaces after ordinary text and SVGs, keeping background captions behind open controls.
+- Desktop and web runners reconcile overlay focus before styling and share navigation handling. Web consumes navigation keys without browser defaults or duplicate text input; desktop maps Shift+F10 for context menus.
+
 ### Added
 - Named CSS overrides through `WindowedContext::set_css` replace rules without resetting component state. Theme and root variables are shared across sources; invalid edits preserve the previous styles.
 - `WebApp::new_offscreen`, normalized `WebInput` dispatch and host-driven resize/frame APIs share the DOM runner’s rendering pipeline for dedicated workers.
@@ -11,10 +16,6 @@ All notable changes to `blinc_app` will be documented in this file.
 
 ### Changed
 - `BlincComponent` generates companion reactive props with `IntoReactive` setters, and ordinary field hooks return `Signal`. Props preserve Signal and Computed bindings.
-
-### Fixed
-- Direct rendering paints foreground popup surfaces after ordinary text and SVGs, keeping background captions behind open controls.
-- Desktop and web runners reconcile overlay focus before styling and share navigation handling. Web consumes navigation keys without browser defaults or duplicate text input; desktop maps Shift+F10 for context menus.
 
 ## [0.6.0] - 2026-11-04
 

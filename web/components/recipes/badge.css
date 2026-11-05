@@ -1,0 +1,16 @@
+/* Each semantic status keeps its meaning across all three treatments. */
+.cn-badge {
+  padding: 4px 10px;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.cn-badge--soft-success {
+  background: color-mix(in srgb, var(--success) 18%, var(--surface));
+  color: var(--success);
+}
+
+.cn-badge--outline-warning {
+  border: 1px dashed var(--warning);
+  color: var(--warning);
+}

@@ -1,0 +1,20 @@
+/* Swatch size, palette spacing and editable colour notation. */
+.cn-color-picker-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+}
+
+.cn-color-picker-swatches {
+  gap: 8px;
+}
+
+.cn-color-picker-preset {
+  width: 24px;
+  height: 24px;
+}
+
+.cn-color-picker-hex {
+  font-family: var(--font-mono);
+  color: var(--primary);
+}

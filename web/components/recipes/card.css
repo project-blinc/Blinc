@@ -1,0 +1,20 @@
+/* Header, body and footer are independent styling hooks. */
+.cn-card {
+  padding: 20px;
+  gap: 20px;
+  background: var(--surface-elevated);
+}
+
+.cn-card-title {
+  font-size: 22px;
+}
+
+.cn-card-description {
+  color: var(--text-secondary);
+}
+
+.cn-card-footer {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  justify-content: flex-start;
+}

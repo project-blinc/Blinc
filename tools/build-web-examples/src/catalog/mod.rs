@@ -17,6 +17,11 @@ pub(super) struct Catalog {
     schema_version: u32,
     pub api_version: String,
     pub components: Vec<Component>,
+    pub coverage: Coverage,
+}
+#[derive(Deserialize)]
+pub(super) struct Coverage {
+    widgets: std::collections::BTreeMap<String, Vec<String>>,
 }
 #[derive(Clone, Deserialize, Serialize)]
 pub(super) struct Component {
@@ -41,6 +46,18 @@ pub(super) struct Component {
     pub notes: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub examples: Vec<ChartExample>,
+    #[serde(default)]
+    pub module: String,
+    #[serde(default)]
+    pub implementation: Vec<String>,
+    #[serde(default)]
+    pub recipe: Option<String>,
+    #[serde(default)]
+    pub controls: Vec<String>,
+    #[serde(default)]
+    pub recording: Option<serde_json::Value>,
+    #[serde(default)]
+    pub custom_css: Option<bool>,
 }
 #[derive(Clone, Deserialize, Serialize)]
 pub(super) struct ChartExample {
@@ -55,7 +72,7 @@ impl Component {
     fn animated_preview(&self) -> bool {
         self.capabilities
             .iter()
-            .any(|c| matches!(c.as_str(), "pointer" | "keyboard"))
+            .any(|c| matches!(c.as_str(), "pointer" | "keyboard" | "animation"))
     }
 }
 impl Catalog {
@@ -177,6 +194,15 @@ pub(super) fn run() -> Result<()> {
         root.join("examples/blinc_component_demos/assets/NotoSans-OFL.txt"),
         source_dir.join("NotoSans-OFL.txt"),
     )?;
+    fs::copy(
+        root.join("examples/blinc_component_demos/assets/JetBrainsMono-OFL.txt"),
+        source_dir.join("JetBrainsMono-OFL.txt"),
+    )?;
+    build::copy_files(
+        &root.join("examples/blinc_component_demos/assets"),
+        &source_dir.join("assets"),
+        &[],
+    )?;
     fs::create_dir_all(dir.join("installation"))?;
     fs::write(
         dir.join("installation/index.html"),
@@ -257,10 +283,9 @@ fn validate(root: &Path, catalog: &Catalog) -> Result<()> {
         return Err("unsupported catalog schema".into());
     }
     let mut slugs = BTreeSet::new();
-    let source = fs::read_to_string(root.join("examples/blinc_component_demos/src/demos.rs"))?;
     let css = default_css(root)?;
     for c in &catalog.fixtures() {
-        if c.library != "cn"
+        if !matches!(c.library.as_str(), "cn" | "layout")
             || c.slug.is_empty()
             || !c
                 .slug
@@ -272,6 +297,7 @@ fn validate(root: &Path, catalog: &Catalog) -> Result<()> {
         if !slugs.insert(&c.slug) {
             return Err(format!("duplicate slug: {}", c.slug).into());
         }
+        let source = fs::read_to_string(root.join(&c.source))?;
         if !source.contains(&format!("pub fn {}(", c.entry)) {
             return Err(format!("missing fixture: {}", c.entry).into());
         }
@@ -279,17 +305,57 @@ fn validate(root: &Path, catalog: &Catalog) -> Result<()> {
             return Err(format!("missing source for {}", c.slug).into());
         }
         for class in &c.classes {
-            let part = class.trim_start_matches('.');
-            let module = if c.classes.iter().any(|class| class == ".cn-chart") {
-                "chart/view"
-            } else {
-                &c.slug
-            };
-            let implementation = fs::read_to_string(
-                root.join(format!("crates/blinc_cn/src/components/{module}.rs")),
-            )?;
-            if !css.contains(class) && !implementation.contains(part) {
+            let part = class.trim_start_matches(['.', '#']);
+            let mut implementation = String::new();
+            for path in &c.implementation {
+                implementation.push_str(&fs::read_to_string(root.join(path))?);
+            }
+            implementation.push_str(&fs::read_to_string(
+                root.join("examples/blinc_component_demos/demo.css"),
+            )?);
+            if !css.contains(class)
+                && !implementation.contains(part)
+                && class != &format!(".demo--{}", c.slug)
+            {
                 return Err(format!("{} documents an unknown CSS class: {}", c.slug, class).into());
+            }
+        }
+    }
+    let public = syn::parse_file(&fs::read_to_string(
+        root.join("crates/blinc_cn/src/components/mod.rs"),
+    )?)?;
+    for item in public.items {
+        if let syn::Item::Mod(module) = item {
+            if matches!(module.vis, syn::Visibility::Public(_))
+                && !catalog
+                    .components
+                    .iter()
+                    .any(|c| c.module == format!("cn::{}", module.ident))
+            {
+                return Err(format!("missing gallery family: cn::{}", module.ident).into());
+            }
+        }
+    }
+    let widgets = syn::parse_file(&fs::read_to_string(
+        root.join("crates/blinc_layout/src/widgets/mod.rs"),
+    )?)?;
+    for item in widgets.items {
+        if let syn::Item::Mod(module) = item {
+            if !matches!(module.vis, syn::Visibility::Public(_)) {
+                continue;
+            }
+            let name = module.ident.to_string();
+            let entries = catalog
+                .coverage
+                .widgets
+                .get(&name)
+                .ok_or_else(|| format!("missing built-in widget coverage: {name}"))?;
+            if entries.is_empty()
+                || entries
+                    .iter()
+                    .any(|slug| !catalog.components.iter().any(|c| c.slug == *slug))
+            {
+                return Err(format!("invalid widget coverage for {name}").into());
             }
         }
     }
@@ -297,12 +363,18 @@ fn validate(root: &Path, catalog: &Catalog) -> Result<()> {
 }
 
 fn default_css(root: &Path) -> Result<String> {
-    let source = fs::read_to_string(root.join("crates/blinc_cn/src/cn_styles.rs"))?;
-    let (_, body) = source
-        .split_once("    r#\"\n")
-        .ok_or("CN stylesheet literal missing")?;
-    let (body, _) = body
-        .rsplit_once("\"#,")
-        .ok_or("CN stylesheet end missing")?;
-    Ok(format!("@layer components {{\n{body}\n}}\n"))
+    let mut output = String::new();
+    for path in [
+        "crates/blinc_layout/src/ua_styles.rs",
+        "crates/blinc_cn/src/cn_styles.rs",
+    ] {
+        let source = fs::read_to_string(root.join(path))?;
+        let (_, body) = source
+            .split_once("    r#\"\n")
+            .ok_or("stylesheet literal missing")?;
+        let (body, _) = body.rsplit_once("\"#,").ok_or("stylesheet end missing")?;
+        output.push_str(body);
+        output.push('\n');
+    }
+    Ok(format!("@layer components {{\n{output}\n}}\n"))
 }

@@ -1,0 +1,16 @@
+/* Keep stepper targets distinct from the editable quantity. */
+.cn-number-input-field {
+  width: 72px;
+  font-size: 16px;
+  text-align: center;
+}
+
+.cn-number-input-step {
+  width: 36px;
+  background: var(--surface-elevated);
+  color: var(--primary);
+}
+
+.cn-number-input-step:hover {
+  background: var(--surface-overlay);
+}

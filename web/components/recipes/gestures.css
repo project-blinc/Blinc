@@ -1,0 +1,14 @@
+/* Hover, pressed and focus states make the interaction target clear. */
+.demo-gesture {
+  padding: 28px;
+  border: 1px dashed var(--primary);
+  background: var(--surface-elevated);
+}
+
+.demo-gesture:hover {
+  border-style: solid;
+}
+
+.demo-gesture:active {
+  background: var(--surface-overlay);
+}

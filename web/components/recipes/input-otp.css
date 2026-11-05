@@ -1,0 +1,21 @@
+/* Style the individual code slots and their focus state. */
+.cn-input-otp {
+  gap: 8px;
+}
+
+.cn-input-otp-slot {
+  width: 36px;
+  height: 44px;
+  background: var(--surface-elevated);
+  border-bottom: 2px solid var(--border);
+  font-size: 18px;
+}
+
+.cn-input-otp-slot:focus-visible {
+  border-color: var(--primary);
+  outline: 2px solid var(--focus-ring);
+}
+
+.cn-input-otp-separator {
+  color: var(--primary);
+}

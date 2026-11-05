@@ -1697,20 +1697,20 @@ pub const CN_STYLES: &str = concat!(
     to { transform: translateX(-100%); }
 }
 @keyframes cn-slide-from-bottom {
-    from { top: calc(var(--cn-time-picker-wheel-row-height, 32px) * 3); }
+    from { transform: translateY(100%); }
     to { transform: translateY(0); }
 }
 @keyframes cn-slide-to-bottom {
     from { transform: translateY(0); }
-    to { top: calc(var(--cn-time-picker-wheel-row-height, 32px) * 3); }
+    to { transform: translateY(100%); }
 }
 @keyframes cn-slide-from-top {
-    from { top: calc(var(--cn-time-picker-wheel-row-height, 32px) * 1); }
+    from { transform: translateY(-100%); }
     to { transform: translateY(0); }
 }
 @keyframes cn-slide-to-top {
     from { transform: translateY(0); }
-    to { top: calc(var(--cn-time-picker-wheel-row-height, 32px) * 1); }
+    to { transform: translateY(-100%); }
 }
 .cn-dialog-motion[data-motion="enter"] { animation: cn-rise-in var(--duration-normal) var(--ease-sheet); }
 .cn-dialog-motion[data-motion="exit"] { animation: cn-rise-out var(--duration-fast) var(--ease-in) forwards; }

@@ -1,0 +1,15 @@
+/* Change the hierarchy, not the palette of every component. */
+.cn-h2 {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.cn-p {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.cn-caption {
+  font-size: 12px;
+  color: var(--text-secondary);
+}

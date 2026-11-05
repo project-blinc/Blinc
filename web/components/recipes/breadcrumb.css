@@ -1,0 +1,15 @@
+.cn-breadcrumb {
+  gap: 10px;
+}
+
+.cn-breadcrumb-item {
+  font-size: 13px;
+}
+
+.cn-breadcrumb-item:hover {
+  color: var(--primary);
+}
+
+.cn-breadcrumb-separator {
+  color: var(--text-secondary);
+}

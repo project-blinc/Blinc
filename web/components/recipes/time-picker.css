@@ -1,0 +1,18 @@
+/* Keep the time segments readable and the wheel's selected row clear. */
+.cn-time-picker {
+  gap: 6px;
+  padding: 0 12px;
+}
+
+.cn-time-picker-segment {
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.cn-time-picker-separator {
+  color: var(--text-secondary);
+}
+
+.cn-time-picker-clock {
+  color: var(--primary);
+}

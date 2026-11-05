@@ -1,0 +1,11 @@
+.blinc-video-player {
+  height: 240px;
+  background: var(--background);
+  border: 1px solid var(--border);
+}
+
+.blinc-media-controls {
+  padding: 10px;
+  background: var(--surface-elevated);
+  gap: 10px;
+}

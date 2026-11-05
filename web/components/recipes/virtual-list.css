@@ -1,0 +1,15 @@
+/* Row density is measured again as CSS changes. Virtualisation is retained. */
+.demo-virtual-row {
+  min-height: 48px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.demo-virtual-row:hover {
+  background: var(--surface-elevated);
+  color: var(--primary);
+}
+
+.demo-virtual-list {
+  height: 216px;
+}

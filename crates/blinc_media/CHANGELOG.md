@@ -4,6 +4,9 @@ All notable changes to `blinc_media` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Browser media can use a host bridge when rendering in an OffscreenCanvas worker. Browser audio uses the same URL streaming engine; playback state, duration, buffering and decoded video frames follow the browser transport.
+
 ## [0.6.0] - 2026-11-04
 
 ### Changed

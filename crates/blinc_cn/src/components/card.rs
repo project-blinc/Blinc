@@ -312,7 +312,9 @@ impl CardContent {
     pub fn new() -> Self {
         let inner = div()
             .flex_col()
-            .flex_1() // Grow to fill available space
+            .h_fit()
+            .flex_grow()
+            .flex_shrink_0()
             .w_full();
 
         Self { inner }

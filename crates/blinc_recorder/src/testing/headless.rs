@@ -181,12 +181,18 @@ impl Headless {
         );
         ctx.animations = shared_scheduler();
         if !blinc_core::BlincContextState::is_initialized() {
-            blinc_core::BlincContextState::init(
+            blinc_core::BlincContextState::init_with_callback(
                 blinc_core::reactive::global_graph(),
                 Arc::new(Mutex::new(blinc_core::context_state::HookState::new())),
                 ctx.dirty_flag().clone(),
+                Arc::new(|ids| {
+                    blinc_layout::check_stateful_deps(ids);
+                }),
             );
         }
+        blinc_core::reactive::set_stateful_deps_notifier(|ids| {
+            blinc_layout::check_stateful_deps(ids);
+        });
         blinc_core::BlincContextState::get()
             .set_viewport_size(logical_width as f32, logical_height as f32);
         if !blinc_layout::overlay_state::OverlayContext::is_initialized() {
@@ -672,6 +678,39 @@ impl Headless {
         self
     }
 
+    /// Right-click the centre of `selector`, including pointer enter and release.
+    pub fn right_click(&mut self, selector: &str) -> &mut Self {
+        self.hover(selector);
+        let (x, y) = self.pointer;
+        for down in [true, false] {
+            let Some(tree) = self.tree.as_ref() else {
+                return self;
+            };
+            let events = if down {
+                self.ctx
+                    .event_router
+                    .on_mouse_down(tree, x, y, MouseButton::Right)
+            } else {
+                self.ctx
+                    .event_router
+                    .on_mouse_up(tree, x, y, MouseButton::Right)
+            };
+            self.deliver(events);
+        }
+        self
+    }
+
+    /// Type into the focused widget, applying focus changes between characters.
+    pub fn type_text(&mut self, text: &str) -> &mut Self {
+        for ch in text.chars() {
+            if let Some(tree) = self.tree.as_mut() {
+                tree.broadcast_text_input_event(ch, false, false, false, false);
+            }
+            self.frame(0);
+        }
+        self
+    }
+
     /// Move to the first element matching `selector`'s centre.
     pub fn hover(&mut self, selector: &str) -> &mut Self {
         let (x, y) = self.centre(selector);
@@ -704,6 +743,15 @@ impl Headless {
 
     /// [`Self::key`] with Shift held.
     pub fn key_with_shift(&mut self, key_code: u32, shift: bool) -> &mut Self {
+        if key_code == 27 {
+            let consumed = blinc_layout::overlay_state::overlay_stack()
+                .lock()
+                .is_ok_and(|mut stack| stack.handle_escape());
+            if consumed {
+                self.frame(0);
+                return self;
+            }
+        }
         let navigated = self
             .tree
             .as_mut()

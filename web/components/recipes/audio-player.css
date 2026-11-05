@@ -1,0 +1,10 @@
+.blinc-audio-player {
+  padding: 16px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+}
+
+.blinc-media-controls {
+  gap: 12px;
+  padding-top: 12px;
+}

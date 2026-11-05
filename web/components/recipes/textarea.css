@@ -1,0 +1,13 @@
+/* Field density and focus, without changing the entered text's colour. */
+.cn-textarea {
+  padding: 14px 16px;
+  min-height: 112px;
+  line-height: 1.6;
+  background: var(--surface-elevated);
+}
+
+.cn-textarea:focus-visible {
+  border-color: var(--primary);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}

@@ -1,0 +1,16 @@
+.cn-radio {
+  border-width: 2px;
+}
+
+.cn-radio:checked {
+  border-color: var(--success);
+}
+
+.cn-radio-dot {
+  background: var(--success);
+}
+
+.cn-radio:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}

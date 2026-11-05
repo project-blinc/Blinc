@@ -1,0 +1,14 @@
+.cn-dropdown-menu {
+  padding: 6px;
+  background: var(--surface-elevated);
+}
+
+.cn-dropdown-item {
+  padding: 10px 14px;
+  gap: 12px;
+}
+
+.cn-dropdown-item:hover {
+  background: var(--surface-overlay);
+  color: var(--primary);
+}

@@ -1,0 +1,17 @@
+.cn-accordion-trigger {
+  padding: 16px;
+  font-weight: 600;
+}
+
+.cn-accordion-content {
+  padding: 0 12px;
+  color: var(--text-secondary);
+}
+
+.cn-accordion-separator {
+  background: var(--border);
+}
+
+.cn-accordion-trigger:hover {
+  color: var(--primary);
+}

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 
-async function page() {
+async function page(options = {}) {
   class Element {
     constructor(data = {}) { this.dataset = data; this.events = {}; this.attributes = {}; this.value = ''; this.parentElement = {}; }
     addEventListener(name, callback) { (this.events[name] ||= []).push(callback); }
@@ -13,13 +13,14 @@ async function page() {
   }
   const nodes = Object.fromEntries(['component-config', 'live-status', 'live-fallback', 'retry-live', 'live-canvas', 'demo-dark', 'scheme-label', 'demo-disabled', 'demo-progress', 'toggle-animation', 'reset-demo', 'custom-css', 'css-highlight', 'css-status', 'apply-css', 'clear-css'].map(id => [`#${id}`, new Element()]));
   nodes['#custom-css'].value = '.cn-input { border-radius: 16px; }';
-  nodes['#component-config'].textContent = JSON.stringify({ slug: 'input', title: 'Input', build: 'test' });
+  nodes['#component-config'].textContent = JSON.stringify({ slug: 'input', title: 'Input', build: 'test', width: 560, height: 320, ...options });
   nodes['#demo-dark'].checked = true;
   nodes['#demo-progress'].value = '42';
   const tabs = ['preview', 'live', 'code'].map(tab => new Element({ tab }));
   const panels = ['preview', 'live', 'code'].map(tab => Object.assign(new Element(), { id: `panel-${tab}` }));
   const themes = ['hybrid', 'restrained', 'expressive'].map(themeFamily => new Element({ themeFamily }));
-  nodes['.example'] = { querySelectorAll: selector => ({ '[role="tab"]': tabs, '[role="tabpanel"]': panels, '[data-animation]': [] })[selector] || [] };
+  nodes['.controls'] = new Element(); nodes['.css-editor'] = new Element();
+  nodes['.example'] = { style: { setProperty() {} }, querySelector: selector => nodes[selector], querySelectorAll: selector => ({ '[role="tab"]': tabs, '[role="tabpanel"]': panels, '[data-animation]': [] })[selector] || [] };
   const sessions = [];
   class LiveDemo {
     constructor(stage, options, onStatus) { this.options = options; this.onStatus = onStatus; sessions.push(this); }
@@ -117,4 +118,16 @@ test('Theme choices made during warmup apply when the original worker becomes re
   sessions[0].onStatus('ready', { backend: 'worker-webgpu' });
   assert.equal(sessions.length, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(sessions[0].messages[0])), { type: 'theme', payload: { dark: false, family: 'restrained' } });
+});
+
+
+test('Native media pages retain the preview without starting a worker', async () => {
+  const { nodes, sessions, tabs } = await page({ slug: 'audio-player', live: false });
+  tabs[1].emit('click');
+  assert.equal(sessions.length, 0);
+  assert.equal(nodes['#live-canvas'].dataset.status, 'native');
+  assert.equal(nodes['#live-canvas'].attributes['aria-busy'], 'false');
+  assert.equal(nodes['.controls'].hidden, true);
+  assert.equal(nodes['.css-editor'].hidden, true);
+  assert.match(nodes['#live-status'].textContent, /Live playback is not available/);
 });

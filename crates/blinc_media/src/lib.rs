@@ -32,6 +32,9 @@ pub mod video;
 #[cfg(target_arch = "wasm32")]
 pub(crate) mod web_video;
 
+#[cfg(target_arch = "wasm32")]
+pub use web_video::set_web_media_bridge;
+
 pub use audio::{AudioPlayer, AudioSource, PlaybackState};
 pub use frame::{AudioSamples, Frame, PixelFormat, SampleFormat};
 pub use player::Player;

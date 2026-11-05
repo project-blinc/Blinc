@@ -195,6 +195,8 @@ pub struct ElementStyle {
     pub margin_auto: [bool; 4],
     /// Flex basis
     pub flex_basis: Option<StyleDimension>,
+    /// Width divided by height; zero clears the ratio (`auto`).
+    pub aspect_ratio: Option<f32>,
     /// Grid column tracks
     pub grid_template_columns: Option<Vec<StyleTrackItem>>,
     /// Grid row tracks

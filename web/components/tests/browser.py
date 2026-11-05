@@ -3,6 +3,18 @@ from PIL import Image, ImageChops
 from pathlib import Path
 import argparse, io
 
+def largest_blue(points):
+ remaining=set(points); largest=[]
+ while remaining:
+  seed=remaining.pop(); component=[seed]; pending=[seed]
+  while pending:
+   x,y=pending.pop()
+   for adjacent in [(x-1,y),(x+1,y),(x,y-1),(x,y+1)]:
+    if adjacent in remaining:
+     remaining.remove(adjacent); component.append(adjacent); pending.append(adjacent)
+  if len(component)>len(largest): largest=component
+ return largest
+
 parser=argparse.ArgumentParser(description="Verify the real Chrome worker UI using an isolated headless profile.")
 parser.add_argument("--url", default="http://127.0.0.1:8094")
 parser.add_argument("--dpr", type=int, choices=[1,2], default=2)
@@ -73,6 +85,7 @@ with sync_playwright() as p:
   for x in range(image.width):
    r,g,b=image.getpixel((x,y))
    if b>200 and g>80 and b>r*1.4: blue.append((x,y))
+ blue=largest_blue(blue)
  assert blue,'button pixels missing'
  left=min(x for x,y in blue);right=max(x for x,y in blue);top=min(y for x,y in blue);bottom=max(y for x,y in blue)
  b=canvas().bounding_box();x=(left+right)/2;y=(top+bottom)/2
@@ -120,6 +133,7 @@ with sync_playwright() as p:
  page.wait_for_timeout(450)
  im=picture('button-recipe')
  blue=[(x,y) for y in range(im.height) for x in range(im.width) if (lambda c:c[2]>200 and c[1]>80 and c[2]>c[0]*1.4)(im.getpixel((x,y)))]
+ blue=largest_blue(blue)
  assert blue, 'the starter recipe did not render a button'
  left=min(x for x,y in blue);right=max(x for x,y in blue);top=min(y for x,y in blue);bottom=max(y for x,y in blue)
  b=canvas().bounding_box();x=(left+right)/2;y=(top+bottom)/2

@@ -1,0 +1,29 @@
+/* File density and selected state, with a quiet persistent footer. */
+.cn-drawer {
+  background: var(--surface-elevated);
+}
+
+.cn-drawer-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cn-drawer-title {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.demo-project-tree .cn-tree-row {
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.demo-project-tree .cn-tree-row[data-selected] {
+  background: var(--surface-overlay);
+  color: var(--primary);
+}
+
+.cn-drawer-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+}
