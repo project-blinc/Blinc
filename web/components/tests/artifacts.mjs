@@ -75,6 +75,11 @@ for (const component of fixtures) {
   assert.ok(html.includes(`/components/releases/${config.build}/detail.js`));
   assert.ok(html.includes(`pub fn ${component.entry}(`), 'Code contains the selected compiled fixture');
   assert.equal(html.includes('DemoState'), false, 'Usage excludes the shared session harness');
+  assert.equal(html.includes('id="demo-css"'), false, 'Code must not expose gallery layout CSS');
+  for (const match of html.matchAll(/<code id="(?:component-css|[\w-]+-css)" class="language-css">([\s\S]*?)<\/code>/g)) {
+    assert.ok(match[1].includes('@layer components'), 'Default styles preserve their component layer');
+    assert.equal(/\.(?:demo-|catalog-demo)/.test(match[1]), false, 'Default styles exclude demo classes');
+  }
   assert.equal((html.match(/id="content-nudge"/g) || []).length, 1);
   assert.equal((html.match(/id="component-content"/g) || []).length, 1);
   const preview = manifest.previews[component.slug];

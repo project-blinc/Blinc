@@ -35,6 +35,12 @@ helpers. They omit the shared `DemoState` harness and unrelated bindings. Full
 compiled fixture sources remain downloadable; recording fingerprints still use
 those original fixtures.
 
+The CSS block comes from the component's UA and CN defaults, including underlying
+widget rules, states, variants and referenced keyframes. Shared selector lists
+are narrowed to the component. Demo layout CSS is excluded; components without
+stylesheet defaults show only their Rust usage. Each chart section includes its
+shared chart styles. CSS blocks use the same highlighting and copy controls as Rust.
+
 Native captures and WASM use the same explicit default Hybrid theme, CN styles,
 Noto Sans font bytes and fixtures. Dark mode is the default. They do not select a platform theme.
 The supplied rounded cursor SVG is coloured violet, outlined in white, and
@@ -117,6 +123,7 @@ node --experimental-vm-modules --test web/components/tests/*.test.mjs
 node web/components/tests/artifacts.mjs target/component-site
 python3 web/components/tests/browser.py --dpr 2
 python3 web/components/tests/selection_styles_browser.py --dpr 2
+python3 web/components/tests/component_styles_browser.py
 python3 web/components/tests/content_nudge_browser.py
 python3 web/components/tests/audio_waveform_browser.py
 python3 web/components/tests/charts_browser.py

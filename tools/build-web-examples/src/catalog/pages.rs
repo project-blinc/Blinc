@@ -198,7 +198,7 @@ pub(super) fn detail(
         .ok_or("doc path outside book")?
         .replace(".md", ".html");
     let docs = docs(root, c)?;
-    let actual_css = component_css(css, &c.classes);
+    let actual_css = super::styles::component_css(css, catalog, c);
     let config = serde_json::json!({"customCss":c.custom_css.unwrap_or(true),"slug":c.slug,"title":c.title,"width":c.viewport.width,"height":c.viewport.height,"build":build,"animated":c.animated_preview(),"live":c.capabilities.iter().any(|v| v == "worker-canvas")});
     let body = template(
         include_str!("../../../../web/components/templates/detail.html"),
@@ -271,7 +271,10 @@ pub(super) fn detail(
                 )?),
             ),
             ("RUST", esc(&rust)),
-            ("EXTRA_EXAMPLES", super::charts::sections(root, c, build)?),
+            (
+                "EXTRA_EXAMPLES",
+                super::charts::sections(root, catalog, c, build, css)?,
+            ),
             (
                 "PRIMARY_HEADING",
                 if c.examples.is_empty() {
@@ -281,10 +284,8 @@ pub(super) fn detail(
                 },
             ),
             (
-                "DEMO_CSS",
-                esc(&fs::read_to_string(
-                    root.join("examples/blinc_component_demos/demo.css"),
-                )?),
+                "COMPONENT_CSS",
+                css_code_block(&actual_css, "component-css"),
             ),
             (
                 "THEME_SOURCE",
@@ -293,7 +294,6 @@ pub(super) fn detail(
                     "theme_bundle_for",
                 )?),
             ),
-            ("DEFAULT_CSS", esc(&actual_css)),
             ("PROPS", props),
             ("CLASSES", classes),
             ("KEYBOARD", esc(&c.keyboard)),
@@ -443,29 +443,16 @@ fn markdown_section(markdown: &str, section: &str) -> Result<String> {
     Ok(markdown[start..end].to_string())
 }
 
-fn component_css(css: &str, classes: &[String]) -> String {
-    let css = css.strip_prefix("@layer components {\n").unwrap_or(css);
-    let mut result = String::new();
-    let mut start = 0;
-    let mut depth = 0;
-    for (index, ch) in css.char_indices() {
-        if ch == '{' {
-            depth += 1;
-        }
-        if ch == '}' {
-            depth -= 1;
-            if depth == 0 {
-                let block = &css[start..=index];
-                let header = block.split('{').next().unwrap_or("");
-                if classes.iter().any(|class| header.contains(class)) {
-                    result.push_str(block.trim());
-                    result.push_str("\n");
-                }
-                start = index + 1;
-            }
-        }
+pub(super) fn css_code_block(css: &str, id: &str) -> String {
+    if css.is_empty() {
+        return String::new();
     }
-    result
+    format!(
+        "<div class=\"code-header\"><span>Default component CSS</span><button class=\"quiet\" data-copy=\"{}\">Copy CSS</button></div><pre><code id=\"{}\" class=\"language-css\">{}</code></pre>",
+        esc(id),
+        esc(id),
+        esc(css)
+    )
 }
 pub(super) fn sitemap(catalog: &Catalog) -> String {
     let mut xml = String::from(
@@ -520,6 +507,25 @@ mod tests {
                 component.doc.strip_prefix("docs/book/src/").unwrap().replace(".md", ".html")
             )));
             assert!(!page.contains("{{"), "unexpanded page template");
+            let code = page
+                .split("id=\"panel-code\"")
+                .nth(1)
+                .unwrap()
+                .split("</section>")
+                .next()
+                .unwrap();
+            assert!(!code.contains("demo-css"));
+            assert!(!code.contains("catalog-demo {"));
+            assert!(!code.contains("demo-stack {"));
+            let styles = super::super::styles::component_css(
+                &super::super::default_css(root).unwrap(),
+                &catalog,
+                component,
+            );
+            assert_eq!(code.contains("id=\"component-css\""), !styles.is_empty());
+            if !styles.is_empty() {
+                assert!(code.contains(&esc(&styles)));
+            }
             let config_start = page.find("id=\"component-config\">").unwrap();
             let config = &page[config_start..];
             for other in &catalog.components {

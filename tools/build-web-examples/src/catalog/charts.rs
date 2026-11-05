@@ -13,8 +13,15 @@ pub(super) fn component(parent: &Component, example: &ChartExample) -> Component
     c
 }
 
-pub(super) fn sections(root: &Path, parent: &Component, build: &str) -> Result<String> {
+pub(super) fn sections(
+    root: &Path,
+    catalog: &Catalog,
+    parent: &Component,
+    build: &str,
+    css: &str,
+) -> Result<String> {
     let mut output = String::new();
+    let component_css = super::styles::component_css(css, catalog, parent);
     for example in &parent.examples {
         let c = component(parent, example);
         let mut html =
@@ -38,6 +45,10 @@ pub(super) fn sections(root: &Path, parent: &Component, build: &str) -> Result<S
                 if c.animated_preview() { "" } else { "hidden" }.into(),
             ),
             ("RUST", pages::esc(&super::usage::source(root, &c)?)),
+            (
+                "COMPONENT_CSS",
+                pages::css_code_block(&component_css, &format!("{}-css", c.slug)),
+            ),
             (
                 "URL",
                 format!(
