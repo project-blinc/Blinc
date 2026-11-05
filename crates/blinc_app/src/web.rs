@@ -32,6 +32,7 @@
 //! see no extra configuration — enabling the `web` feature is all
 //! that's required.
 
+mod wheel;
 mod worker;
 pub use worker::WebInput;
 
@@ -1247,6 +1248,11 @@ impl WebApp {
                     };
                     let raw_dx = -(evt.delta_x() as f32) * multiplier;
                     let raw_dy = -(evt.delta_y() as f32) * multiplier;
+                    Self::dispatch_mouse_move(
+                        &mut app,
+                        evt.offset_x() as f32,
+                        evt.offset_y() as f32,
+                    );
                     app.wheel_input.push(raw_dx, raw_dy, evt.time_stamp());
                 }
             });
@@ -1754,6 +1760,9 @@ impl WebApp {
     }
 
     fn dispatch_mouse_move(app: &mut Self, x: f32, y: f32) {
+        if app.ctx.event_router.mouse_position() != (x, y) {
+            app.drain_wheel_input(now_ms());
+        }
         let tree = match app.current_tree.as_ref() {
             Some(t) => t,
             None => return,
@@ -2447,81 +2456,8 @@ impl WebApp {
             }
         }
 
-        // ─── Phase 0b: drain accumulated wheel delta ─────────────
-        let had_scroll = !self.wheel_input.is_empty();
-        if had_scroll {
-            // Pass small (trackpad-sized) deltas straight through so
-            // trackpad scrolling feels native, and only compress the
-            // tail above a threshold so discrete mouse-wheel ticks
-            // don't blast the viewport. Previous behaviour applied a
-            // 0.7 exponent to ALL deltas, which made trackpad scroll
-            // feel noticeably dampier than the desktop runner.
-            const PASSTHROUGH_THRESHOLD: f32 = 40.0;
-            const TAIL_EXPONENT: f32 = 0.85;
-            let damp = |d: f32| -> f32 {
-                let mag = d.abs();
-                if mag <= PASSTHROUGH_THRESHOLD {
-                    d
-                } else {
-                    let tail = (mag - PASSTHROUGH_THRESHOLD).powf(TAIL_EXPONENT);
-                    d.signum() * (PASSTHROUGH_THRESHOLD + tail)
-                }
-            };
-            while let Some(delta) = self.wheel_input.pop() {
-                if delta.starts_gesture {
-                    if self.last_wheel_time_ms.is_some() {
-                        if let Some(tree) = self.current_tree.as_mut() {
-                            tree.on_scroll_end();
-                            tree.on_scroll_gesture(
-                                blinc_layout::renderer::ScrollGesturePhase::MomentumEnd,
-                            );
-                        }
-                    }
-                    self.last_wheel_time_ms = None;
-                }
-                Self::dispatch_scroll(self, damp(delta.x), damp(delta.y));
-            }
-            // Mirror windowed.rs:5099 — scroll updates `tree.scroll_offsets`
-            // and (when the scroll reaches a canvas-kit kit) the
-            // viewport pan/zoom matrix. Neither routes through the
-            // compositor's natural invalidation paths, so any
-            // motion-subtree / composite-layer texture baked before
-            // the scroll keeps blitting at pre-scroll coords. On web
-            // this manifested as SVG icons baked inside an overlay's
-            // composite scratch staying at their old content-space
-            // positions when the user zoomed the canvas after closing
-            // the overlay.
-            //
-            // BURST-EDGE GATING. Running invalidate_render_cache_tagged
-            // + drain_all_layer_textures every wheel-bearing rAF
-            // released composite / motion-subtree textures faster
-            // than the next paint could re-bake them, producing
-            // visible jank that scaled with overlay count (HUD
-            // composited texture in node_editor_demo + any
-            // motion containers near the viewport). The work
-            // belongs at burst edges only:
-            //   * first wheel after a gap > WHEEL_BURST_GAP_MS:
-            //     wipe + drain so stale-baked-position textures
-            //     don't persist into the new gesture.
-            //   * mid-burst frames: skip — content baked from
-            //     this burst's first frame is already at correct
-            //     content-space coords; invalidating it every
-            //     frame just churns.
-            //   * burst end (wheel-end debounce in Phase 1a below):
-            //     not strictly necessary because the next gesture
-            //     will re-fire the burst-start path, but cheap.
-            const WHEEL_BURST_GAP_MS: u64 = 100;
-            let is_burst_start = match self.last_scroll_invalidate_ms {
-                None => true,
-                Some(t) => now.saturating_sub(t) > WHEEL_BURST_GAP_MS,
-            };
-            if is_burst_start {
-                self.blinc_app
-                    .invalidate_render_cache_tagged("wheel_burst_start");
-                self.blinc_app.drain_all_layer_textures("wheel_burst_start");
-                self.last_scroll_invalidate_ms = Some(now);
-            }
-        }
+        // Keep frame-coalesced wheel input ordered with pointer events.
+        self.drain_wheel_input(now);
 
         // ─── Phase 1a: scroll physics + pending refs ─────────────
         if let Some(ref mut tree) = self.current_tree {

@@ -7,6 +7,10 @@ use blinc_app::web::{WebApp, WebInput};
 use blinc_platform::Modifiers;
 use wasm_bindgen::prelude::*;
 
+#[cfg(feature = "browser-tests")]
+#[path = "../tests/fixtures/calendar_pair.rs"]
+mod calendar_pair;
+
 #[wasm_bindgen]
 pub fn set_media_bridge(callback: js_sys::Function) {
     blinc_media::set_web_media_bridge(callback);
@@ -53,10 +57,20 @@ pub async fn create_runtime(
     }
     app.context_mut().add_css(blinc_cn::cn_styles::CN_STYLES);
     app.context_mut().add_css(DEMO_CSS);
+    #[cfg(feature = "browser-tests")]
+    if slug == "calendar" {
+        app.context_mut().add_css(calendar_pair::CSS);
+    }
     app.context_mut().set_css("preview", &css).map_err(error)?;
     let state = DemoState::default();
     let fixture = state.clone();
-    app.set_ui_builder(move |ctx| build(&slug, &fixture, (ctx.width, ctx.height)));
+    app.set_ui_builder(move |ctx| {
+        #[cfg(feature = "browser-tests")]
+        if slug == "calendar" {
+            return calendar_pair::build(ctx);
+        }
+        build(&slug, &fixture, (ctx.width, ctx.height))
+    });
     Ok(CatalogRuntime {
         app,
         state,

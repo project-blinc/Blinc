@@ -223,3 +223,22 @@ within equal-height areas and align their size labels.
 with Tesseract after successive Magic Mouse style wheel strokes, reversals and
 momentum tails, without screenshot pauses or outside clicks between strokes.
 The source event timestamp is retained through the worker protocol.
+
+The two-instance check uses the same host and worker with a test-only Calendar
+pair. Build its separate WASM bundle, then run both display densities:
+
+```sh
+CARGO_BUILD_JOBS=2 wasm-pack build examples/blinc_component_demos --target web \
+  --release --out-dir "$PWD/target/calendar-isolation-runtime" -- \
+  --locked --features browser-tests
+python3 web/components/tests/calendar_isolation_browser.py --dpr 1
+python3 web/components/tests/calendar_isolation_browser.py --dpr 2
+```
+
+Only the isolated browser substitutes the test bundle; the served gallery
+remains unchanged. The test pauses worker frames through the normal protocol to
+queue wheel input before moving between calendars, then checks actual month
+captions with Tesseract. It covers cancellation, completed-swipe ownership,
+fresh strokes on the other calendar and crossing back before a frame. Ordinary
+builds exclude the test fixture. DOM and worker input drain pending wheel deltas
+before a pointer move changes their hit-test position.

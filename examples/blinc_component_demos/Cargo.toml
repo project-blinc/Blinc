@@ -22,6 +22,8 @@ required-features = ["native"]
 default = []
 native = ["blinc_app/windowed"]
 capture = ["dep:blinc_recorder", "dep:gif"]
+# Same worker transport with deterministic multi-control browser fixtures.
+browser-tests = []
 
 [dependencies]
 blinc_animation = { path = "../../crates/blinc_animation" }
