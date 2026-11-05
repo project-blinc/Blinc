@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- `css-hot-reload` forwards opt-in debug desktop CSS file watching through `app::windowed::WindowedContext::watch_css`.
 - Unified `blinc` package with short module re-exports, application prelude and platform feature forwarding.
 - Optional `cn`, `svg`, `icons` and `media` modules, plus image clipboard, SVG raster-image and icon-registry feature forwarding.
 - Component derive and flow macros support facade-only and renamed dependencies.

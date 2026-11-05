@@ -63,6 +63,16 @@ pub(super) fn check_rebuild(
     // =========================================================
     let phase1_start = std::time::Instant::now();
 
+    #[cfg(all(
+        feature = "css-hot-reload",
+        debug_assertions,
+        any(target_os = "macos", target_os = "linux", target_os = "windows")
+    ))]
+    if windowed_ctx.reload_changed_css() {
+        ws.needs_rebuild = true;
+        blinc_app.invalidate_render_cache_tagged("css-reload");
+    }
+
     // Check if event handlers marked anything dirty (auto-rebuild).
     //
     // The `tracing::info!` calls below are diagnostic for the

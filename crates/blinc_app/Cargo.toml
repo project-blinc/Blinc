@@ -99,12 +99,8 @@ tungstenite = { version = "0.27", default-features = false, features = ["handsha
 # crate (~zero deps on native). Pinning to the same convention means
 # Blinc speaks dx's protocol without re-engineering the env layout.
 dioxus-cli-config = { version = "0.7", optional = true }
-# Filesystem watcher that drives the asset side of hot-reload. dx's
-# asset channel is gated on Dioxus's `asset!()` macro and never fires
-# for Blinc apps, so we run our own watcher: the user tells us which
-# directory to tail via `hot_reload::watch_dir(...)`, `notify` reports
-# changed paths, and we push them onto the same invalidation queue
-# the dx wire format would have populated.
+# Shared by asset and CSS file watching; browser builds do not compile notify.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 notify = { workspace = true, optional = true }
 
 # Desktop platform - exclude mobile/embedded targets
@@ -249,6 +245,8 @@ hotkeys = ["global-hotkey"]
 # release builds carry zero overhead even when this feature is
 # on. See `docs/book/src/advanced/hot-reload.md` for the workflow.
 hot-reload = ["subsecond", "tungstenite", "dioxus-cli-config", "notify"]
+# Watch named CSS files in debug desktop builds, without a Rust hot-patch server.
+css-hot-reload = ["notify"]
 # EXPERIMENTAL: hand-rolled Wayland `wl_surface::frame()` gate
 # (Linux only). Mirrors GPUI's pattern — Blinc registers its own
 # frame callbacks via `wayland-client` and only calls

@@ -13,6 +13,8 @@ use blinc_platform::{Window, WindowConfig};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "css-hot-reload")]
+mod css_reload;
 mod display;
 mod query;
 mod reactive;
@@ -89,6 +91,12 @@ pub struct WindowedContext {
     /// Each entry corresponds to one `add_css()` call, in order.
     pub(super) css_sources: Vec<String>,
     pub(super) css_overrides: Vec<(String, String)>,
+    #[cfg(all(
+        feature = "css-hot-reload",
+        debug_assertions,
+        any(target_os = "macos", target_os = "linux", target_os = "windows")
+    ))]
+    css_watches: std::collections::BTreeMap<String, css_reload::watcher::CssWatcher>,
     /// Continuous pointer query state (per-element pointer tracking)
     pub pointer_query: blinc_layout::pointer_query::PointerQueryState,
     /// Callback to request opening a new window (set by desktop runner)
@@ -157,6 +165,12 @@ impl WindowedContext {
             stylesheet: None,
             css_sources: Vec::new(),
             css_overrides: Vec::new(),
+            #[cfg(all(
+                feature = "css-hot-reload",
+                debug_assertions,
+                any(target_os = "macos", target_os = "linux", target_os = "windows")
+            ))]
+            css_watches: Default::default(),
             pointer_query: blinc_layout::pointer_query::PointerQueryState::new(),
             open_window_fn: None,
             close_fn: None,
@@ -209,6 +223,12 @@ impl WindowedContext {
             stylesheet: None,
             css_sources: Vec::new(),
             css_overrides: Vec::new(),
+            #[cfg(all(
+                feature = "css-hot-reload",
+                debug_assertions,
+                any(target_os = "macos", target_os = "linux", target_os = "windows")
+            ))]
+            css_watches: Default::default(),
             pointer_query: blinc_layout::pointer_query::PointerQueryState::new(),
             open_window_fn: None,
             close_fn: None,
@@ -261,6 +281,12 @@ impl WindowedContext {
             stylesheet: None,
             css_sources: Vec::new(),
             css_overrides: Vec::new(),
+            #[cfg(all(
+                feature = "css-hot-reload",
+                debug_assertions,
+                any(target_os = "macos", target_os = "linux", target_os = "windows")
+            ))]
+            css_watches: Default::default(),
             pointer_query: blinc_layout::pointer_query::PointerQueryState::new(),
             open_window_fn: None,
             close_fn: None,
@@ -322,6 +348,12 @@ impl WindowedContext {
             stylesheet: None,
             css_sources: Vec::new(),
             css_overrides: Vec::new(),
+            #[cfg(all(
+                feature = "css-hot-reload",
+                debug_assertions,
+                any(target_os = "macos", target_os = "linux", target_os = "windows")
+            ))]
+            css_watches: Default::default(),
             pointer_query: blinc_layout::pointer_query::PointerQueryState::new(),
             open_window_fn: None,
             close_fn: None,
@@ -371,6 +403,12 @@ impl WindowedContext {
             stylesheet: None,
             css_sources: Vec::new(),
             css_overrides: Vec::new(),
+            #[cfg(all(
+                feature = "css-hot-reload",
+                debug_assertions,
+                any(target_os = "macos", target_os = "linux", target_os = "windows")
+            ))]
+            css_watches: Default::default(),
             pointer_query: blinc_layout::pointer_query::PointerQueryState::new(),
             open_window_fn: None,
             close_fn: None,
@@ -421,6 +459,12 @@ impl WindowedContext {
             stylesheet: None,
             css_sources: Vec::new(),
             css_overrides: Vec::new(),
+            #[cfg(all(
+                feature = "css-hot-reload",
+                debug_assertions,
+                any(target_os = "macos", target_os = "linux", target_os = "windows")
+            ))]
+            css_watches: Default::default(),
             pointer_query: blinc_layout::pointer_query::PointerQueryState::new(),
             open_window_fn: None,
             close_fn: None,

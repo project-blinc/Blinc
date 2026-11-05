@@ -122,7 +122,8 @@ For headless use, set `default-features = false` without choosing a platform.
 | `theme-watcher` | System colour-scheme watcher |
 | `dialogs`, `tray`, `notifications`, `hotkeys` | Corresponding desktop integration |
 | `windowed-full` | Desktop runner plus dialogs, tray, notifications and hotkeys |
-| `hot-reload` | Application hot reload |
+| `css-hot-reload` | Opt-in CSS file watching in debug desktop builds |
+| `hot-reload` | Experimental Rust hot-patching |
 
 The `svg` flag exposes the SVG module; the application renderer also uses SVG
 internally. Components depend on icon data, while `icons` exposes that library

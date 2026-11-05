@@ -39,6 +39,12 @@ fn build_ui(_ctx: &WindowedContext) -> impl ElementBuilder {
 
 Rust code defines **structure**. CSS defines **style**.
 
+For replaceable sources, `ctx.set_css("app", css)` replaces one named
+stylesheet instead of appending rules. With the opt-in `css-hot-reload`
+feature, `ctx.watch_css("app", path)` reloads a file in debug desktop builds.
+See [CSS hot reloading](../advanced/hot-reload.md#css-files) for setup and
+embedded release styles.
+
 ---
 
 ## Table of Contents

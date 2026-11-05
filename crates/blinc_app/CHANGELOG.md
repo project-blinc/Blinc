@@ -12,6 +12,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - Desktop and web runners reconcile overlay focus before styling and share navigation handling. Web consumes navigation keys without browser defaults or duplicate text input; desktop maps Shift+F10 for context menus.
 
 ### Added
+- Opt-in `css-hot-reload` feature with `WindowedContext::watch_css` and `unwatch_css`. Debug desktop builds reload named CSS sources on save, wake idle windows, preserve component state and retain the last valid styles on errors. Watchers and file reads are excluded from release, web and mobile builds.
 - Named CSS overrides through `WindowedContext::set_css` replace rules without resetting component state. Theme and root variables are shared across sources; invalid edits preserve the previous styles.
 - `WebApp::new_offscreen`, normalized `WebInput` dispatch and host-driven resize/frame APIs share the DOM runner’s rendering pipeline for dedicated workers.
 - `WindowedContext::headless_with_scale` separates logical layout from capture pixel density.
