@@ -109,6 +109,7 @@
 - [Button](./cn/button.md)
 - [Card](./cn/card.md)
 - [Icons](./cn/icons.md)
+- [Typography](./cn/typography.md)
 - [Dialog](./cn/dialog.md)
 - [Form Components](./cn/form.md)
 - [Date, Time and Colour Pickers](./cn/pickers.md)

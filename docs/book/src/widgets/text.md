@@ -2,6 +2,9 @@
 
 Blinc provides two main elements for displaying text: `text()` for plain text and `rich_text()` for inline-formatted text with HTML-like markup.
 
+For headings, paragraphs, captions and inline composition, see the
+[Typography helpers](../cn/typography.md) guide.
+
 ## Plain Text
 
 The `text()` element is the simplest way to display text:

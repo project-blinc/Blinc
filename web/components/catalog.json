@@ -3606,7 +3606,7 @@
       "since": null,
       "maturity": "stable",
       "description": "Build a readable hierarchy with a shared type scale.",
-      "doc": "docs/book/src/widgets/text.md",
+      "doc": "docs/book/src/cn/typography.md",
       "doc_section": null,
       "entry": "typography_demo",
       "source": "examples/blinc_component_demos/src/gallery/display.rs",
@@ -3627,14 +3627,14 @@
         {
           "name": "content",
           "kind": "Construction",
-          "type": "text",
+          "type": "impl Into<String>",
           "example": "Heading, paragraph and muted text"
         },
         {
-          "name": "helper",
-          "kind": "Construction",
-          "type": "typography constructor",
-          "example": "h2 / p / muted"
+          "name": "heading(level, content)",
+          "kind": "Bound content; construction-time level",
+          "type": "u8, impl IntoReactive<String>",
+          "example": "heading(2, title_signal)"
         }
       ],
       "classes": [
@@ -3644,14 +3644,13 @@
         ".cn-h4",
         ".cn-h5",
         ".cn-h6",
-        ".cn-h{level}",
         ".cn-p",
         ".cn-muted",
         ".cn-caption"
       ],
       "keyboard": "Informational content; no activation or Tab stop is required.",
-      "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
-      "notes": "Build a readable hierarchy with a shared type scale. Apply CSS after the component layer to restyle the documented parts.",
+      "tokens": "--text-primary, --text-secondary, --text-tertiary, --text-base, --text-sm, --space-2",
+      "notes": "Use h1–h6 for the heading hierarchy, p for wrapping copy, and muted, caption or small for supporting text. Inline helpers and chained_text compose short fragments; the guide below documents every helper and its styling hooks.",
       "recipe": "typography.css"
     },
     {

@@ -149,5 +149,6 @@ use blinc_cn::prelude::*;
 
 - [Button](./button.md) - Learn about button variants and usage
 - [Card](./card.md) - Build card-based layouts
+- [Typography](./typography.md) - Headings, body copy and inline text
 - [Dialog](./dialog.md) - Create modal dialogs
 - [Form Components](./form.md) - Build forms with inputs
