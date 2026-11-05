@@ -5,6 +5,7 @@ All notable changes to `blinc_app` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Browser wheel input recognizes gradually accelerating strokes after a momentum tail, so Calendar swipes continue after a completed or cancelled gesture without an outside click.
 - Nested CSS transforms keep collected content in its parent's coordinate system, including rotated Tree chevrons inside sliding drawers.
 - Web wheel input preserves source timestamps and successive finger-stroke boundaries, including Magic Mouse momentum tails and reversals, instead of combining them into one latched gesture.
 - Direct rendering paints foreground popup surfaces after ordinary text and SVGs, keeping background captions behind open controls.

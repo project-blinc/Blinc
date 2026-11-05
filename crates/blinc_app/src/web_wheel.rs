@@ -15,7 +15,7 @@ pub(crate) struct WheelInput {
     last: Option<(f64, f32, f32)>,
     interval: Option<f64>,
     peak: f32,
-    decayed: bool,
+    tail_min: Option<f32>,
     pending: VecDeque<WheelDelta>,
 }
 
@@ -34,11 +34,13 @@ impl WheelInput {
             timestamp < at
                 || timestamp - at >= quiet_gap
                 || (magnitude >= 3.0 && x * dx + y * dy < 0.0)
-                || (self.decayed && magnitude >= 3.0 && magnitude >= dx.hypot(dy) * 2.0)
+                || self
+                    .tail_min
+                    .is_some_and(|minimum| magnitude >= 3.0 && magnitude >= minimum * 2.0)
         });
         if starts_gesture {
             self.peak = magnitude;
-            self.decayed = false;
+            self.tail_min = None;
         } else {
             if let Some((at, _, _)) = self.last {
                 let elapsed = timestamp - at;
@@ -50,7 +52,11 @@ impl WheelInput {
                 }
             }
             self.peak = self.peak.max(magnitude);
-            self.decayed |= magnitude < self.peak / 3.0;
+            if let Some(minimum) = &mut self.tail_min {
+                *minimum = minimum.min(magnitude);
+            } else if magnitude < self.peak / 3.0 {
+                self.tail_min = Some(magnitude);
+            }
         }
         self.last = Some((timestamp, x, y));
         if !starts_gesture && let Some(delta) = self.pending.back_mut() {
@@ -141,6 +147,27 @@ mod tests {
         assert!(next.starts_gesture);
         assert_eq!(next.x, 40.0);
         assert!(input.is_empty());
+    }
+
+    #[test]
+    fn gradual_strokes_after_a_tail_restart_without_a_click_or_idle_gap() {
+        let mut input = WheelInput::default();
+        let profile = [
+            1.0, 1.25, 1.6, 2.0, 2.5, 3.1, 3.8, 4.7, 5.7, 7.0, 8.6, 10.5, 12.8, 15.6, 19.0, 23.0,
+            28.0, 34.0, 28.0, 20.0, 14.0, 9.0, 6.0, 4.0, 3.0, 2.0, 1.0,
+        ];
+        let mut starts = 0;
+        for stroke in 0..4 {
+            for (i, dx) in profile.into_iter().enumerate() {
+                input.push(dx, 0.0, (stroke * profile.len() + i) as f64 * 16.0);
+                // Drain each event, as a responsive browser frame loop does.
+                starts += usize::from(input.pop().unwrap().starts_gesture);
+            }
+        }
+        assert_eq!(
+            starts, 4,
+            "each finger stroke starts a fresh calendar swipe"
+        );
     }
 
     #[test]

@@ -20,7 +20,10 @@ with sync_playwright() as p:
         return subprocess.check_output([ocr,str(filename),'stdout','--psm','7'],stderr=subprocess.DEVNULL,text=True).strip()
     tail=[3,8,16,25,35,28,20,14,9,6,4,3,2,1]
     short=[1,2,4,8,12,14,12,8,4,2,1]
+    ramp=[1,1.25,1.6,2,2.5,3.1,3.8,4.7,5.7,7,8.6,10.5,12.8,15.6,19,23,28,34,28,20,14,9,6,4,3,2,1]
     for name,profile,gap,directions,expected in [
+        ('gradual-strokes-during-tail',ramp,0,[1]*4,'March'),
+        ('cancelled-stroke-then-gradual-swipe',ramp,0,[1],'December'),
         ('flat-strokes',[20]*8,40,[1]*4,'March'),
         ('momentum-strokes',tail,40,[1]*4,'March'),
         ('new-strokes-during-tail',tail,0,[1]*4,'March'),
@@ -40,10 +43,29 @@ with sync_playwright() as p:
         page.mouse.move(b['x']+b['width']/2,b['y']+b['height']/2)
         # Scale injected wheel deltas to the logical viewport at each DPR.
         # No screenshots, OCR, clicks, pointer exits or long waits between strokes.
-        for direction in directions:
-            for delta in profile:
-                page.mouse.wheel(delta*direction*args.dpr,0);page.wait_for_timeout(16)
-            if gap:page.wait_for_timeout(gap)
+        # Dispatch through the real host's DOM listeners with browser timestamps.
+        # Keeping timing in the browser avoids automation round trips introducing
+        # idle gaps that accidentally reset a cancelled/consumed gesture.
+        page.evaluate('''async ({profile,gap,directions,dpr,cancel}) => {
+            const canvas=document.querySelector('#live-canvas canvas');
+            const b=canvas.getBoundingClientRect();
+            const center={clientX:b.x+b.width/2,clientY:b.y+b.height/2};
+            const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+            const move=position=>canvas.dispatchEvent(new PointerEvent('pointermove',position));
+            const wheel=delta=>canvas.dispatchEvent(new WheelEvent('wheel',{
+                ...center,deltaX:delta*dpr,deltaY:0,deltaMode:0,cancelable:true,
+            }));
+            if(cancel){
+                for(let i=0;i<3;i++){wheel(10);await wait(16);}
+                move({clientX:b.x+4,clientY:b.y+4});
+                await wait(16);
+                move(center);
+            }
+            for(const direction of directions){
+                for(const delta of profile){wheel(delta*direction);await wait(16);}
+                if(gap)await wait(gap);
+            }
+        }''',{'profile':profile,'gap':gap,'directions':directions,'dpr':args.dpr,'cancel':name.startswith('cancelled-')})
         page.wait_for_timeout(600)
         month=shown(name+'-end');assert expected in month,(name,expected,month)
         print('PASS',name,month,flush=True)
