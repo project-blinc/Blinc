@@ -98,6 +98,8 @@ td { color:var(--muted); }
 .table-scroll { overflow:auto; border:1px solid var(--line); border-radius:9px; }
 .note { border-left:2px solid var(--purple); padding:14px 18px; background:#a78bfa0a; color:#b9aad6; font-size:13px; }
 .catalog-tools { display:flex; align-items:center; flex-wrap:wrap; gap:14px; margin:36px 0 18px; }
+.catalog-title { font-size:30px; line-height:1.2; margin:0 0 24px; letter-spacing:-.03em; }
+.catalog-title + .catalog-tools { margin-top:0; }
 .search-field { position:relative; display:flex; align-items:center; gap:10px; flex:1; min-width:220px; max-width:440px; border:1px solid #2d3549; background:#111623; border-radius:9px; padding:10px 12px; box-shadow:inset 0 1px #ffffff03; }
 .search-field:focus-within { border-color:#9f7ee9; box-shadow:0 0 0 3px #a78bfa12; }
 .search-field svg { width:17px; height:17px; color:#7e8aa4; flex-shrink:0; }

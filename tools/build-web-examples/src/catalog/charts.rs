@@ -37,7 +37,7 @@ pub(super) fn sections(root: &Path, parent: &Component, build: &str) -> Result<S
                 "ANIMATION_HIDDEN",
                 if c.animated_preview() { "" } else { "hidden" }.into(),
             ),
-            ("RUST", pages::esc(&pages::fixture_source(root, &c)?)),
+            ("RUST", pages::esc(&super::usage::source(root, &c)?)),
             (
                 "URL",
                 format!(

@@ -415,38 +415,48 @@ fn overlay_close_buttons_center_their_icon_and_dismiss_once() {
 }
 
 #[test]
-fn collapsible_copy_matches_the_header_inset_and_folds_completely() {
+fn caller_disclosure_copy_matches_the_header_and_folds_completely() {
     if !Headless::available() {
         return;
     }
-    let mut ui = Headless::new(560, 320).unwrap();
-    ui.theme(theme_bundle(), ColorScheme::Dark).css(DEMO_CSS);
-    let fixture = DemoState::default();
-    ui.mount(move |ctx| build("collapsible", &fixture, (ctx.width, ctx.height)))
-        .settle()
-        .click(".cn-collapsible-trigger")
-        .advance(400)
-        .settle();
-    for recipe in [
-        "",
-        include_str!("../../../web/components/recipes/collapsible.css"),
+    for (slug, trigger, copy, body, css) in [
+        (
+            "collapsible",
+            ".cn-collapsible-trigger",
+            ".demo-collapsible-copy",
+            ".cn-collapsible-content",
+            include_str!("../../../web/components/recipes/collapsible.css"),
+        ),
+        (
+            "accordion",
+            ".cn-accordion-trigger",
+            ".demo-accordion-copy",
+            ".cn-accordion-content",
+            include_str!("../../../web/components/recipes/accordion.css"),
+        ),
     ] {
-        ui.context().set_css("preview", recipe).unwrap();
-        ui.settle();
-        let tree = ui.tree();
-        let first_child_x = |selector| {
-            let node = ui.find(selector).unwrap();
-            tree.get_absolute_bounds(tree.layout_tree.children(node)[0])
-                .unwrap()
-                .x
-        };
-        assert!(
-            (first_child_x(".demo-collapsible-copy") - first_child_x(".cn-collapsible-trigger"))
-                .abs()
-                < 0.5
-        );
+        let mut ui = Headless::new(560, 320).unwrap();
+        ui.theme(theme_bundle(), ColorScheme::Dark).css(DEMO_CSS);
+        let fixture = DemoState::default();
+        ui.mount(move |ctx| build(slug, &fixture, (ctx.width, ctx.height)))
+            .settle()
+            .click(trigger)
+            .advance(400)
+            .settle();
+        for recipe in ["", css] {
+            ui.context().set_css("preview", recipe).unwrap();
+            ui.settle();
+            let tree = ui.tree();
+            let first_child_x = |selector| {
+                let node = ui.find(selector).unwrap();
+                tree.get_absolute_bounds(tree.layout_tree.children(node)[0])
+                    .unwrap()
+                    .x
+            };
+            assert!((first_child_x(copy) - first_child_x(trigger)).abs() < 0.5);
+        }
+        ui.click(trigger).advance(400).settle();
+        let body = ui.find(body).unwrap();
+        assert!(ui.tree().get_absolute_bounds(body).unwrap().height < 0.5);
     }
-    ui.click(".cn-collapsible-trigger").advance(400).settle();
-    let body = ui.find(".cn-collapsible-content").unwrap();
-    assert!(ui.tree().get_absolute_bounds(body).unwrap().height < 0.5);
 }

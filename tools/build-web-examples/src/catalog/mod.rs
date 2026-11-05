@@ -2,6 +2,7 @@
 mod build;
 mod charts;
 mod pages;
+mod usage;
 
 use serde::{Deserialize, Serialize};
 use std::{

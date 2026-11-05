@@ -150,7 +150,7 @@ pub fn drawer_demo(values: &DemoState, _: (f32, f32)) -> Div {
                         .child(files)
                         .child(cn::separator())
                         .child(crate::demos::bound_text(computed(move |g| {
-                            match g.get(selected).as_deref() {
+                            let description = match g.get(selected).as_deref() {
                                 Some("main.rs") => "main.rs · Starts the application and creates its window.",
                                 Some("ui.rs") => "ui.rs · Composes reusable, reactive components.",
                                 Some("theme.css") => "theme.css · Defines the shared visual language.",
@@ -158,7 +158,8 @@ pub fn drawer_demo(values: &DemoState, _: (f32, f32)) -> Div {
                                 Some("src") => "src · Application code and reusable components.",
                                 Some("styles") => "styles · Shared styles for the whole interface.",
                                 _ => "Choose a file to inspect its role in this project.",
-                            }.to_string()
+                            };
+                            description.to_string()
                         })).class("demo-caption"))
                 })
                 .footer(|| div().class("demo-drawer-footer").child(text("4 files").class("demo-caption"))

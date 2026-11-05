@@ -343,10 +343,12 @@ pub fn accordion_demo(_: &DemoState, _: (f32, f32)) -> Div {
     div().class("demo-wide").child(
         cn::accordion()
             .item("start", "What is Blinc?", || {
-                div().child(text("A native UI framework built with Rust."))
+                div()
+                    .class("demo-accordion-copy")
+                    .child(text("A native UI framework built with Rust."))
             })
             .item("style", "Can I make it my own?", || {
-                div().child(text(
+                div().class("demo-accordion-copy").child(text(
                     "Use CSS classes and theme variables to restyle every part.",
                 ))
             }),

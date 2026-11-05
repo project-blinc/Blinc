@@ -313,9 +313,7 @@ impl AccordionBuilder {
                     is_open.set(opening);
                 });
 
-            // The content is always laid out, so the height animation clips
-            // it as it closes instead of it vanishing first. Its padding sits
-            // inside, so a closed section has none.
+            // Keep caller content laid out while the height animation clips it.
             let section_content = div()
                 .class("cn-accordion-content")
                 .attr_when("data-state", "open", &open)
@@ -329,14 +327,7 @@ impl AccordionBuilder {
                         .clip_to_animated()
                         .theme_timed(),
                 )
-                .child(
-                    div()
-                        .flex_col()
-                        .w_full()
-                        .py(2.0)
-                        .px(1.0)
-                        .child((item.content)()),
-                );
+                .child((item.content)());
 
             // Sections and separators below an opening one move with it.
             content = content.child(

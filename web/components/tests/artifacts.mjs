@@ -74,6 +74,9 @@ for (const component of fixtures) {
   assert.equal((html.match(/role="tab"/g) || []).length, 3 * (1 + (component.examples || []).length));
   assert.ok(html.includes(`/components/releases/${config.build}/detail.js`));
   assert.ok(html.includes(`pub fn ${component.entry}(`), 'Code contains the selected compiled fixture');
+  assert.equal(html.includes('DemoState'), false, 'Usage excludes the shared session harness');
+  assert.equal((html.match(/id="content-nudge"/g) || []).length, 1);
+  assert.equal((html.match(/id="component-content"/g) || []).length, 1);
   const preview = manifest.previews[component.slug];
   const animated = component.capabilities.some(capability => ['pointer', 'keyboard', 'animation'].includes(capability));
   assert.equal(preview.animated, animated);

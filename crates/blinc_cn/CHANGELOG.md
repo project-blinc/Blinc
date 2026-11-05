@@ -5,6 +5,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Accordion renders caller-supplied content directly. Body wrappers and spacing belong to the caller; the animated content container stays unpadded and folds to zero height.
 - Sheet and Drawer close controls use the standard icon button with a centered SVG and invoke the dismissal callback once.
 - Aspect Ratio preserves its native ratio and accepts CSS overrides.
 - Card content contributes its intrinsic height while growing in fixed-height cards.

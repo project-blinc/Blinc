@@ -173,7 +173,7 @@ pub(super) fn detail(
     build: &str,
     css: &str,
 ) -> Result<String> {
-    let rust = fixture_source(root, c)?;
+    let rust = super::usage::source(root, c)?;
     let props = c
         .props
         .iter()
@@ -488,7 +488,7 @@ mod tests {
         serde_json::from_str(include_str!("../../../../web/components/catalog.json")).unwrap()
     }
     #[test]
-    fn catalog_pages_have_one_selected_demo_and_exact_fixture_source() {
+    fn catalog_pages_show_one_selected_component_usage() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()

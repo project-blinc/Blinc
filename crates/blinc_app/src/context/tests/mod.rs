@@ -3,6 +3,7 @@ use super::*;
 
 mod cached_text_clip_tests;
 mod canvas_flow_tests;
+mod collected_transform_tests;
 mod composite_layers_tests;
 mod cross_stream_tests;
 mod css_lifecycle_tests;

@@ -191,6 +191,21 @@ accordion().item_with_state("help", "Help", open, || {
 
 Each section's trigger and body use `.cn-accordion-trigger` and
 `.cn-accordion-content`, with `data-state="open"` or `"closed"`.
+Content wrappers and spacing belong to the application. Accordion renders the
+body returned by the closure directly; add your own padded container when needed:
+
+```rust
+accordion().item("help", "Help", || {
+    div().class("help-copy").child(text("How can we help?"))
+})
+```
+
+```css
+.help-copy { padding: 12px; }
+```
+
+Keep padding on that caller-owned container so `.cn-accordion-content` can fold
+to zero height.
 Override those rules instead of selecting colours in the body builder.
 
 ## Resizable

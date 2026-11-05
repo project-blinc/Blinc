@@ -5,6 +5,7 @@ All notable changes to `blinc_app` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Nested CSS transforms keep collected content in its parent's coordinate system, including rotated Tree chevrons inside sliding drawers.
 - Web wheel input preserves source timestamps and successive finger-stroke boundaries, including Magic Mouse momentum tails and reversals, instead of combining them into one latched gesture.
 - Direct rendering paints foreground popup surfaces after ordinary text and SVGs, keeping background captions behind open controls.
 - Desktop and web runners reconcile overlay focus before styling and share navigation handling. Web consumes navigation keys without browser defaults or duplicate text input; desktop maps Shift+F10 for context menus.

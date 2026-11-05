@@ -14,11 +14,9 @@ name = "blinc-build-web-examples"
 path = "src/main.rs"
 
 [dependencies]
-# AST parse + traversal of example source files. We only read .rs,
-# we don't re-emit from the AST (we emit wrapper files from string
-# templates instead), so the minimal `parsing` + `full` feature set
-# is enough. No `printing` dependency, no `proc-macro2` span rewrites.
-syn = { version = "2", features = ["full", "parsing", "extra-traits"] }
+# Parse fixtures and expose their component inputs in usage examples.
+syn = { version = "2", features = ["full", "parsing", "extra-traits", "visit-mut"] }
+quote = "1"
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

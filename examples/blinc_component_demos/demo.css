@@ -73,6 +73,7 @@
 .demo-notch-icon:active .demo-notch-glyph { transform:scale(1.05); }
 
 .demo-collapsible-copy { padding:12px; color:var(--text-secondary); }
+.demo-accordion-copy { padding:12px; }
 .demo-canvas-examples { display:flex; flex-wrap:wrap; align-content:flex-start; justify-content:center; gap:16px; width:100%; height:100%; overflow-y:scroll; }
 .demo-canvas-sample { display:flex; flex-direction:column; align-items:center; gap:12px; width:280px; max-width:100%; padding:12px; border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--surface); flex-shrink:0; }
 .demo-canvas-artwork { display:flex; align-items:center; justify-content:center; height:120px; width:100%; }

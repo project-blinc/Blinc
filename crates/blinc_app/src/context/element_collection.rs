@@ -5,6 +5,7 @@ use super::{
     RenderLayer, RenderTree, SvgElement, TextElement, Transform3DLayerInfo, merge_scroll_clip,
     text_clip,
 };
+use blinc_core::Affine2D;
 
 impl RenderContext {
     /// Collect text, SVG, and image elements from the render tree
@@ -524,17 +525,13 @@ impl RenderContext {
                     cy * (1.0 - d) - cx * b + ty,
                 ];
                 match inherited_css_affine {
-                    Some(parent) => {
-                        let [pa, pb, pc, pd, ptx, pty] = parent;
-                        Some([
-                            a * pa + c * pb,
-                            b * pa + d * pb,
-                            a * pc + c * pd,
-                            b * pc + d * pd,
-                            a * ptx + c * pty + this_affine[4],
-                            b * ptx + d * pty + this_affine[5],
-                        ])
-                    }
+                    Some(parent) => Some(
+                        Affine2D { elements: parent }
+                            .then(&Affine2D {
+                                elements: this_affine,
+                            })
+                            .elements,
+                    ),
                     None => Some(this_affine),
                 }
             } else {

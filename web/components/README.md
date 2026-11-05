@@ -4,6 +4,7 @@ The catalog index links to one page per component at
 `/components/cn/<slug>/`. Each detail page has its own description,
 Preview | Live | Code tabs, props, keyboard guidance, CSS hooks and canonical
 book documentation. The index never starts a demo runtime.
+Its heading leads directly into search, category filters and the component grid.
 
 The gallery covers 71 component pages, with 82 individual demo fixtures,
 including every CN component module and the built-in widgets listed below.
@@ -29,6 +30,11 @@ Blocks stay marked as planned until their implementation is available.
 - `templates/`: static page templates consumed by the existing web build tool.
 - `runtime/`: the DOM host, versioned protocol and worker driver.
 
+Code tabs show the selected component body with its required inputs, imports and
+helpers. They omit the shared `DemoState` harness and unrelated bindings. Full
+compiled fixture sources remain downloadable; recording fingerprints still use
+those original fixtures.
+
 Native captures and WASM use the same explicit default Hybrid theme, CN styles,
 Noto Sans font bytes and fixtures. Dark mode is the default. They do not select a platform theme.
 The supplied rounded cursor SVG is coloured violet, outlined in white, and
@@ -37,6 +43,7 @@ annotation and never participates in component hit testing.
 
 ## Build and preview
 
+Install the Rust `rustfmt` component; the catalog uses it to format usage snippets.
 From the workspace root:
 
 ```sh
@@ -149,7 +156,7 @@ state; selecting a theme during warmup applies that choice once the demo is read
 
 `/components/cn/charts/` contains separate sections for line, area, stacked area,
 grouped bars, stacked bars, horizontal bars, pie, donut, sparkline, threshold,
-histogram and comparison charts. Each has its own Preview, Live and compiled Code.
+histogram and comparison charts. Each has its own Preview, Live and usage example.
 Chart sections load their live host on demand; switching sections releases the
 previous additional host. Inactive tabs and offscreen hosts pause their frames.
 Only the primary warmed demo and one additional chart host can exist together.

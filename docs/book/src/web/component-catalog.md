@@ -6,7 +6,9 @@ Blocks will join the same catalog as they are implemented.
 
 Each page puts **Preview | Live | Code** below its description. Preview is a
 high-resolution native recording. Live renders the same Rust fixture in a worker.
-Code contains that fixture's compiled source and actual CSS. Props, keyboard
+Code shows the component body with only its own inputs and supporting helpers,
+followed by its CSS. Shared recording and worker state stays out of the example;
+the complete compiled fixtures remain available in the source downloads. Props, keyboard
 interaction, styling selectors, state attributes and theme variables accompany
 the example. The usage documentation comes from the existing CN book sources.
 When that content is below the viewport, a floating **Documentation** button
@@ -106,7 +108,7 @@ state; selecting a theme during warmup applies that choice once the demo is read
 
 `/components/cn/charts/` contains separate sections for line, area, stacked area,
 grouped bars, stacked bars, horizontal bars, pie, donut, sparkline, threshold,
-histogram and comparison charts. Each has its own Preview, Live and compiled Code.
+histogram and comparison charts. Each has its own Preview, Live and usage example.
 Chart sections load their live host on demand; switching sections releases the
 previous additional host. Inactive tabs and offscreen hosts pause their frames.
 Only the primary warmed demo and one additional chart host can exist together.

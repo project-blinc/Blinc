@@ -192,8 +192,9 @@ uses `.cn-dialog-title` and `.cn-dialog-description`; sheets use
 `.cn-sheet-title` and `.cn-sheet-description`; drawers use `.cn-drawer-title`.
 Add a panel class with `.class("...")` and override it in application CSS.
 
-The overlay wrapper carries `data-motion="enter"` or `"exit"`. It remains
-mounted while its exit animation plays. The backdrop is `.overlay-backdrop`.
+The overlay wrapper carries `data-motion="enter"` or `"exit"` and remains
+mounted while its exit animation plays. Child transforms stay inside that
+motion, so rotated icons slide with the panel. The backdrop is `.overlay-backdrop`.
 
 | Overlay | Motion wrapper | Default motion |
 | --- | --- | --- |

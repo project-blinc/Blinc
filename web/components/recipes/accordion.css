@@ -4,8 +4,11 @@
 }
 
 .cn-accordion-content {
-  padding: 0 12px;
   color: var(--text-secondary);
+}
+
+.demo-accordion-copy {
+  padding: 16px;
 }
 
 .cn-accordion-separator {

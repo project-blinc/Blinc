@@ -1897,6 +1897,7 @@
         ".cn-accordion-trigger",
         ".cn-chevron",
         ".cn-accordion-content",
+        ".demo-accordion-copy",
         ".cn-accordion-separator"
       ],
       "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",

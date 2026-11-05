@@ -56,6 +56,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          components: rustfmt
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -222,7 +223,7 @@ jobs:
         env:
           CARGO_BUILD_JOBS: 2
         run: |
-          cargo test -p blinc-build-web-examples catalog::pages::tests
+          cargo test -p blinc-build-web-examples catalog::
           node --experimental-vm-modules --test web/components/tests/*.test.mjs
           node web/components/tests/artifacts.mjs target/site
 
