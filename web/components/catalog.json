@@ -711,7 +711,7 @@
       ],
       "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
-      "notes": "Show actions at the pointer or keyboard-focused target. Apply CSS after the component layer to restyle the documented parts.",
+      "notes": "Right-click the Website redesign project for icon-labelled actions. Add or remove it from favorites; the project details and next menu update in place.",
       "recipe": "context-menu.css",
       "recording": {
         "target": "#demo-action",

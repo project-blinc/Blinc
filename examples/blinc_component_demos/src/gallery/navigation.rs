@@ -83,33 +83,78 @@ pub fn dropdown_menu_demo(values: &DemoState, _: (f32, f32)) -> Div {
 
 pub fn context_menu_demo(values: &DemoState, _: (f32, f32)) -> Div {
     let choice = values.choice;
+    let favorite = values.confirmed;
     div()
         .class("demo-stack")
+        .id("demo-action")
+        .on_context_menu(move |event| {
+            use blinc_icons::{icons, to_svg};
+            let (label, icon) = if favorite.get() {
+                ("Remove from favorites", icons::STAR_OFF)
+            } else {
+                ("Add to favorites", icons::STAR)
+            };
+            cn::context_menu()
+                .at(event.mouse_x, event.mouse_y)
+                .item_with_icon("Duplicate", to_svg(icons::COPY, 16.0), move || {
+                    choice.set("duplicate".into())
+                })
+                .item_with_icon("Rename", to_svg(icons::PENCIL, 16.0), move || {
+                    choice.set("rename".into())
+                })
+                .item_with_icon("Share", to_svg(icons::SHARE_2, 16.0), move || {
+                    choice.set("share".into())
+                })
+                .separator()
+                .item_with_icon(label, to_svg(icon, 16.0), move || {
+                    let next = !favorite.get();
+                    favorite.set(next);
+                    choice.set(if next { "favorite" } else { "unfavorite" }.into());
+                })
+                .show();
+        })
         .child(
-            div()
-                .class("demo-context-target")
-                .id("demo-action")
-                .child(text("Right-click this project"))
-                .on_context_menu(move |event| {
-                    cn::context_menu()
-                        .at(event.mouse_x, event.mouse_y)
-                        .item("Duplicate", move || choice.set("Duplicated".into()))
-                        .item("Share", move || choice.set("Share selected".into()))
-                        .separator()
-                        .item("Rename", move || choice.set("Rename selected".into()))
-                        .show();
-                }),
-        )
-        .child(
-            bound_text(computed(move |g| {
-                let choice = g.get(choice).unwrap_or_default();
-                if choice == "rust" {
-                    "Choose an action".into()
-                } else {
-                    choice
-                }
-            }))
-            .class("demo-caption"),
+            cn::card()
+                .w_full()
+                .child(
+                    div()
+                        .class("demo-profile")
+                        .child(
+                            svg(blinc_icons::to_svg(blinc_icons::icons::FOLDER, 28.0))
+                                .size(28.0, 28.0)
+                                .class("demo-icons"),
+                        )
+                        .child(
+                            div()
+                                .class("demo-profile-copy")
+                                .child(text("Website redesign").class("demo-label"))
+                                .child(
+                                    bound_text(computed(move |g| {
+                                        if g.get(favorite).unwrap_or(false) {
+                                            "Team workspace · Favorite"
+                                        } else {
+                                            "Team workspace"
+                                        }
+                                        .into()
+                                    }))
+                                    .class("demo-caption"),
+                                ),
+                        ),
+                )
+                .child(
+                    bound_text(computed(move |g| {
+                        match g.get(choice).as_deref() {
+                            Some("duplicate") => "Duplicate selected",
+                            Some("rename") => "Rename selected",
+                            Some("share") => "Share selected",
+                            Some("favorite") => "Added to favorites",
+                            Some("unfavorite") => "Removed from favorites",
+                            _ => "Right-click for project actions",
+                        }
+                        .into()
+                    }))
+                    .class("demo-caption"),
+                ),
         )
 }
 

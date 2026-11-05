@@ -107,6 +107,15 @@ key opens at the focused target; right-click opens at the pointer. The menu shar
 the dropdown's arrow, activation and dismissal keys. The returned overlay
 handle can close the menu programmatically.
 
+Add SVG icons with `item_with_icon`; the menu aligns each icon with its label:
+
+```rust
+context_menu().at(x, y)
+    .item_with_icon("Duplicate", blinc_icons::to_svg(blinc_icons::icons::COPY, 16.0), || {})
+    .item_with_icon("Share", blinc_icons::to_svg(blinc_icons::icons::SHARE_2, 16.0), || {})
+    .show();
+```
+
 ## Menubar
 
 A menubar owns several menus. Each `.menu(label, configure)` receives a
