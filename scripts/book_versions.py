@@ -64,6 +64,21 @@ def set_config(text, section, key, value):
     return text[:start] + body + text[end:]
 
 
+def rebase_print_demos(output):
+    # mdBook leaves iframe paths chapter-relative in its combined print page.
+    page = output / "print.html"
+    if not page.is_file():
+        return
+    html = page.read_text()
+    rebased = re.sub(
+        r'''(<iframe\b[^>]*?\bsrc\s*=\s*)(["'])(?:\.\./)+(examples/[^"']*)\2''',
+        lambda match: match[1] + match[2] + match[3] + match[2],
+        html, flags=re.I,
+    )
+    if rebased != html:
+        page.write_text(rebased)
+
+
 def build(source, output, name, commit, source_ref="main"):
     name = edition(name)
     if not COMMIT.fullmatch(commit):
@@ -94,6 +109,7 @@ def build(source, output, name, commit, source_ref="main"):
         tomllib.loads(config)
         (book / "book.toml").write_text(config)
         subprocess.run(["mdbook", "build", str(book), "--dest-dir", str(output)], check=True)
+    rebase_print_demos(output)
     pages = sorted(p.relative_to(output).as_posix() for p in output.rglob("*.html"))
     metadata = {"schema": 1, "id": name, "commit": commit, "source_ref": source_ref, "pages": pages}
     (output / META).write_text(json.dumps(metadata, indent=2) + "\n")

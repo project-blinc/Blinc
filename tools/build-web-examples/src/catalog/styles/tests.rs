@@ -21,6 +21,31 @@ fn excerpt(slug: &str) -> String {
 }
 
 #[test]
+fn default_stylesheets_match_across_checkout_line_endings() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let checkout = std::env::temp_dir().join(format!("blinc-css-crlf-{}", std::process::id()));
+    for file in [
+        "crates/blinc_layout/src/ua_styles.rs",
+        "crates/blinc_cn/src/cn_styles.rs",
+    ] {
+        let source = std::fs::read_to_string(root.join(file))
+            .unwrap()
+            .replace("\r\n", "\n")
+            .replace('\n', "\r\n");
+        let path = checkout.join(file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, source).unwrap();
+    }
+    let extracted = super::super::default_css(&checkout);
+    std::fs::remove_dir_all(checkout).unwrap();
+    assert_eq!(extracted.unwrap(), super::super::default_css(root).unwrap());
+}
+
+#[test]
 fn cn_wrappers_include_their_underlying_widget_defaults() {
     let checkbox = excerpt("checkbox");
     assert!(checkbox.contains(".blinc-checkbox {"));

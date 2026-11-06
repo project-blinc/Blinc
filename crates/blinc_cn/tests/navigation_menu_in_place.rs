@@ -15,7 +15,8 @@ use blinc_theme::{ColorToken, ThemeState};
 use common::*;
 
 /// Marks an item the active class is on, hovered or not.
-const RULE: &str = ".cn-nav-link--active, .cn-nav-link--active:hover { background: #123456 }";
+const RULE: &str =
+    ".cn-nav-link--active, .cn-nav-link--active:hover { background: #123456 !important }";
 
 struct Scene {
     tree: RenderTree,
@@ -34,7 +35,10 @@ fn scene() -> Scene {
     // cn's rules give the links their colours; the test's rule marks the
     // active one.
     let vars = ThemeState::get().to_css_variable_map();
-    let css = format!("{}\n{RULE}", blinc_cn::cn_styles::CN_STYLES);
+    let css = format!(
+        "{}\n@layer components {{ {RULE} }}",
+        blinc_cn::cn_styles::CN_STYLES
+    );
     tree.set_stylesheet(Stylesheet::parse_with_variables(&css, &vars).expect("css"));
     tree.apply_stylesheet_layout_overrides();
     tree.apply_stylesheet_base_styles();

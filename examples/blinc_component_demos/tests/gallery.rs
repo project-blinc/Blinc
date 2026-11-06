@@ -86,24 +86,25 @@ fn virtual_list_replaces_its_window_and_reaches_both_ends() {
     let reference = ScrollRef::new();
     let mounted = reference.clone();
     let mut ui = Headless::new(560, 320).unwrap();
-    ui.mount(move |_| {
-        div().w(400.0).h(216.0).child(
-            blinc_layout::widgets::virtual_list::virtual_list(10_000, |i| {
-                div()
-                    .id(&format!("row-{i}"))
-                    .class("test-row")
-                    .h(if i % 2 == 0 { 40.0 } else { 52.0 })
-                    .child(text(format!("Message {}", i + 1)))
-            })
-            .estimated_item_height(46.0)
-            .window_size(24)
-            .w_full()
-            .h(216.0)
-            .bind(&mounted)
-            .into_div(),
-        )
-    })
-    .settle();
+    ui.theme(theme_bundle(), ColorScheme::Dark)
+        .mount(move |_| {
+            div().w(400.0).h(216.0).child(
+                blinc_layout::widgets::virtual_list::virtual_list(10_000, |i| {
+                    div()
+                        .id(&format!("row-{i}"))
+                        .class("test-row")
+                        .h(if i % 2 == 0 { 40.0 } else { 52.0 })
+                        .child(text(format!("Message {}", i + 1)))
+                })
+                .estimated_item_height(46.0)
+                .window_size(24)
+                .w_full()
+                .h(216.0)
+                .bind(&mounted)
+                .into_div(),
+            )
+        })
+        .settle();
     assert!(ui.find("#row-0").is_some());
     ui.move_to(100.0, 100.0)
         .scroll(0.0, -1600.0)

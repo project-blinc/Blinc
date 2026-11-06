@@ -89,6 +89,37 @@ class BookVersionsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Missing release demo"):
             books.freeze(book, examples, self.root / "release.tar.gz")
 
+    def test_print_demos_use_the_snapshot_root_and_remain_validated(self):
+        book = self.book("0.6.0", "Released")
+        chapter = book / "chapter.html"
+        chapter.write_text('<iframe src="examples/canvas/index.html?theme=dark#demo"></iframe>')
+        page = book / "print.html"
+        page.write_text('''<iframe\n src="../../examples/canvas/index.html?theme=dark#demo"></iframe>
+<iframe src='../examples/canvas/index.html'></iframe>
+<iframe src="https://example.com/demo"></iframe>
+<code>&lt;iframe src="../../examples/canvas/index.html"&gt;</code>''')
+        metadata = json.loads((book / books.META).read_text())
+        metadata["pages"].append("print.html")
+        (book / books.META).write_text(json.dumps(metadata))
+        examples = self.root / "examples"
+        demo = examples / "canvas/index.html"
+        demo.parent.mkdir(parents=True)
+        demo.write_text("Canvas demo")
+
+        books.rebase_print_demos(book)
+        self.assertIn('src="examples/canvas/index.html?theme=dark#demo"', page.read_text())
+        self.assertIn("src='examples/canvas/index.html'", page.read_text())
+        self.assertIn('src="https://example.com/demo"', page.read_text())
+        self.assertIn('&lt;iframe src="../../examples/canvas/index.html"', page.read_text())
+        self.assertEqual(chapter.read_text(), '<iframe src="examples/canvas/index.html?theme=dark#demo"></iframe>')
+        books.freeze(book, examples, self.root / "release.tar.gz")
+        self.assertIn("print.html", books.verify(book)["sha256"])
+
+        page.write_text('<iframe src="../../examples/missing/index.html"></iframe>')
+        books.rebase_print_demos(book)
+        with self.assertRaisesRegex(ValueError, "Missing release demo: print.html"):
+            books.freeze(book, examples, self.root / "missing.tar.gz")
+
     def test_failed_archive_creation_leaves_no_partial_release(self):
         book = self.book("0.6.0", "Released")
         examples = self.root / "examples"

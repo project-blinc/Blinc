@@ -370,7 +370,7 @@ fn default_css(root: &Path) -> Result<String> {
         "crates/blinc_layout/src/ua_styles.rs",
         "crates/blinc_cn/src/cn_styles.rs",
     ] {
-        let source = fs::read_to_string(root.join(path))?;
+        let source = fs::read_to_string(root.join(path))?.replace("\r\n", "\n");
         let (_, body) = source
             .split_once("    r#\"\n")
             .ok_or("stylesheet literal missing")?;

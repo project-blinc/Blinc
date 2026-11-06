@@ -10,13 +10,13 @@ use blinc_layout::div::div;
 use blinc_layout::renderer::RenderTree;
 use common::*;
 
-const RULE: &str = ".cn-checkbox--checked { background: #123456; border-color: #654321 }";
+const RULE: &str = ".cn-checkbox.cn-checkbox--checked { background: #123456 !important; border-color: #654321 !important }";
 
 /// The layout and cn stylesheets with `rules` after them, as an app adds its own.
 fn sheet(rules: &str) -> Stylesheet {
     let vars = blinc_theme::ThemeState::get().to_css_variable_map();
     let all = format!(
-        "{}\n{}\n{rules}",
+        "{}\n{}\n@layer components {{ {rules} }}",
         blinc_layout::ua_styles::UA_STYLES,
         blinc_cn::cn_styles::CN_STYLES
     );
@@ -136,7 +136,9 @@ fn the_checked_attribute_follows_the_state_for_a_checked_rule() {
             .h(200.0)
             .child(blinc_cn::checkbox(checked.signal()));
         let mut tree = RenderTree::from_element(&host);
-        tree.set_stylesheet(sheet(".cn-checkbox:checked { background: #123456; }"));
+        tree.set_stylesheet(sheet(
+            ".cn-checkbox:checked { background: #123456 !important; }",
+        ));
         tree.apply_stylesheet_layout_overrides();
         tree.apply_stylesheet_base_styles();
         tree.compute_layout(400.0, 200.0);

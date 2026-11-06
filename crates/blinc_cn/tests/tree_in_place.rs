@@ -11,8 +11,7 @@ use blinc_layout::renderer::RenderTree;
 use common::*;
 
 /// Marks the selected node, as the theme's rule would.
-const RULE: &str =
-    ".cn-tree-row[data-selected], .cn-tree-row[data-selected]:hover { background: #123456 }";
+const RULE: &str = ".cn-tree-row[data-selected], .cn-tree-row[data-selected]:hover { background: #123456 !important }";
 
 struct Scene {
     tree: RenderTree,
@@ -32,7 +31,10 @@ fn scene() -> Scene {
     // cn's rules close a shut node's children; the test's rule marks the
     // selected row.
     let vars = blinc_theme::ThemeState::get().to_css_variable_map();
-    let css = format!("{}\n{RULE}", blinc_cn::cn_styles::CN_STYLES);
+    let css = format!(
+        "{}\n@layer components {{ {RULE} }}",
+        blinc_cn::cn_styles::CN_STYLES
+    );
     tree.set_stylesheet(Stylesheet::parse_with_variables(&css, &vars).expect("css"));
     tree.apply_stylesheet_layout_overrides();
     tree.apply_stylesheet_base_styles();
