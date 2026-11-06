@@ -175,6 +175,13 @@ impl GlyphRasterizer {
         glyph_id: u16,
         font_size: f32,
     ) -> Result<RasterizedGlyph> {
+        #[cfg(target_os = "ios")]
+        if let Some(image) = crate::apple::rasterize(font, glyph_id, font_size) {
+            return Ok(image);
+        }
+        if let Some(image) = crate::colr::rasterize(font, glyph_id, font_size) {
+            return Ok(image);
+        }
         // Get the raw font data and create a swash FontRef with correct face index
         let font_data = font.data();
         let swash_font = swash::FontRef::from_index(font_data, font.face_index() as usize)

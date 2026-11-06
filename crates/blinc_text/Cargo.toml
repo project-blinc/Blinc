@@ -26,6 +26,7 @@ fontdb = { workspace = true }
 
 # Glyph rasterization (swash - high quality font rasterizer)
 swash = "0.1"
+tiny-skia = { version = "0.11.4", default-features = false, features = ["std", "simd"] }
 
 # Unicode handling
 unicode-bidi = { workspace = true }

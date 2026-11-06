@@ -362,6 +362,13 @@ impl FontRegistry {
             });
         }
 
+        #[cfg(target_os = "ios")]
+        if self.find_font_id(name, weight, italic).is_none()
+            && let Some(path) = crate::apple::font_path(name)
+        {
+            let _ = self.db.load_font_file(path);
+        }
+
         // Try to find the font (may need to load system fonts lazily)
         let id = self.find_font_id(name, weight, italic);
 
@@ -619,7 +626,16 @@ impl FontRegistry {
 
         // Platform-specific emoji and symbol font names to try
         // These fonts provide coverage for emoji and special Unicode symbols
-        let emoji_fonts = if cfg!(target_os = "macos") {
+        #[cfg(target_os = "android")]
+        {
+            // fontdb does not discover Android's system font directory.
+            let _ = self.db.load_font_file("/system/fonts/NotoColorEmoji.ttf");
+        }
+        #[cfg(target_os = "ios")]
+        if let Some(path) = crate::apple::font_path("AppleColorEmoji") {
+            let _ = self.db.load_font_file(path);
+        }
+        let emoji_fonts = if cfg!(any(target_os = "macos", target_os = "ios")) {
             vec![
                 "Apple Color Emoji", // Color emoji
                 "Apple Symbols",     // Unicode symbols (arrows, math, etc.)

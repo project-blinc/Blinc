@@ -2,6 +2,7 @@
 //! crate and its dependencies are linked once rather than once per file.
 
 mod cff_rasterize;
+mod colr;
 mod fallback_layout;
 mod subpixel_cost;
 mod variable_weight;

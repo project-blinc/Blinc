@@ -120,9 +120,9 @@ pub fn is_cjk(c: char) -> bool {
 /// as far as the text needs. The first candidate wins a contested codepoint,
 /// which for Han ideographs is a guess at the reader's locale: Simplified,
 /// Traditional, Japanese and Korean share codepoints and draw them
-/// differently. Of these lists only macOS has been exercised.
+/// differently.
 fn cjk_candidates() -> &'static [&'static str] {
-    if cfg!(target_os = "macos") {
+    if cfg!(any(target_os = "macos", target_os = "ios")) {
         // PingFang is the system's own choice where the registry can see it.
         &[
             "PingFang SC",

@@ -20,7 +20,11 @@
 //! let registry = global_font_registry();
 //! ```
 
+#[cfg(target_os = "ios")]
+mod apple;
 pub mod atlas;
+
+mod colr;
 pub mod emoji;
 pub mod fallback;
 pub mod font;
