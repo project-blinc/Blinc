@@ -624,9 +624,13 @@ where
             let rule = if selector.is_simple() {
                 let compound = &selector.segments[0].0;
                 if let Some(simple_key) = try_as_simple_selector(compound) {
+                    // A pointer or focus state rule is kept as a simple rule, for the state table
+                    // and its animations, and also as a complex rule, which orders it against
+                    // the other rules by specificity and position.
                     if compound
                         .parts
-                        .contains(&SelectorPart::State(ElementState::FocusVisible))
+                        .iter()
+                        .any(|part| matches!(part, SelectorPart::State(_)))
                     {
                         rules.push(ParsedRule::Complex(selector.clone(), style.clone()));
                     }
