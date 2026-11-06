@@ -55,8 +55,120 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The 48 example wrappers build one after another in about twenty minutes, so they are spread
+  # over runners. The shard count is the repository variable WRAPPER_SHARDS (default 6): raise
+  # it for a faster build, lower it to spend fewer runner minutes.
+  shards:
+    name: Plan wrapper shards
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.plan.outputs.list }}
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+      - id: plan
+        env:
+          REQUESTED: ${{ vars.WRAPPER_SHARDS }}
+        run: |
+          count="${REQUESTED:-6}"
+          if ! [[ "$count" =~ ^[0-9]+$ ]] || [ "$count" -lt 1 ] || [ "$count" -gt 24 ]; then
+            echo "WRAPPER_SHARDS must be a whole number from 1 to 24, got '$count'" >&2
+            exit 1
+          fi
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "list=$(python3 -c 'import json,sys; print(json.dumps(list(range(1, int(sys.argv[1]) + 1))))' "$count")" >> "$GITHUB_OUTPUT"
+
+  wrappers:
+    name: Build wrappers (${{ matrix.shard }}/${{ needs.shards.outputs.count }})
+    needs: shards
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_JOBS: 2
+    strategy:
+      matrix:
+        shard: ${{ fromJSON(needs.shards.outputs.list) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'release' && 'main' || '' }}
+      - name: Strip local-dev [patch] block (CI-only)
+        shell: bash
+        run: bash scripts/ci-strip-local-patch.sh
+
+      - name: Setup Rust + wasm32 target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt
+
+      # Every shard compiles the same dependencies, so one shard saves the cache for the rest.
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            examples/_generated
+          prefix-key: "docs-v1"
+          # The book job's cache, so the first sharded run does not start cold.
+          shared-key: build
+          save-if: ${{ matrix.shard == 1 }}
+
+      - name: Install wasm-pack
+        run: |
+          if ! command -v wasm-pack >/dev/null 2>&1; then
+            curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+          fi
+
+      # Same tool setup as the book job: see the notes there on why wasm-bindgen-cli is
+      # pre-installed and linked into wasm-pack's cache, and why binaryen comes from apt.
+      - name: Install wasm-bindgen-cli (matches workspace 0.2.106)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.106
+
+      - name: Pre-populate wasm-pack tool cache
+        run: |
+          set -euo pipefail
+          WASM_BINDGEN_VERSION=0.2.106
+          BIN=$(command -v wasm-bindgen)
+          test -n "$BIN"
+          CACHE="$HOME/.cache/.wasm-pack"
+          mkdir -p "$CACHE/wasm-bindgen-$WASM_BINDGEN_VERSION"
+          mkdir -p "$CACHE/wasm-bindgen-cargo-install-$WASM_BINDGEN_VERSION/bin"
+          ln -sf "$BIN" "$CACHE/wasm-bindgen-$WASM_BINDGEN_VERSION/wasm-bindgen"
+          ln -sf "$BIN" "$CACHE/wasm-bindgen-cargo-install-$WASM_BINDGEN_VERSION/bin/wasm-bindgen"
+
+      - name: Install fresh binaryen (wasm-opt)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binaryen
+          wasm-opt --version || true
+
+      - name: Build this shard of the example wrappers
+        run: |
+          cargo run -p blinc-build-web-examples -- --no-gallery --shard "${{ matrix.shard }}/${{ needs.shards.outputs.count }}"
+
+      - name: Collect the built wrappers
+        run: |
+          mkdir -p target/wrapper-shard
+          for dir in examples/_generated/*/; do
+            if [ -f "$dir/pkg/package.json" ]; then
+              name=$(basename "$dir")
+              mkdir -p "target/wrapper-shard/$name"
+              cp -R "$dir/pkg" "target/wrapper-shard/$name/pkg"
+            fi
+          done
+          ls target/wrapper-shard | wc -l
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wrappers-${{ matrix.shard }}
+          path: target/wrapper-shard
+          retention-days: 1
+          if-no-files-found: error
+
   build:
     name: Build Book
+    needs: wrappers
     runs-on: ubuntu-latest
     env:
       CARGO_BUILD_JOBS: 2
@@ -164,38 +276,24 @@ jobs:
           sudo apt-get install -y binaryen
           wasm-opt --version || true
 
-      # No separate cache for `examples/_generated/*/pkg/`. The
-      # `Swatinem/rust-cache` above already caches the cargo
-      # `target/` directory (the expensive part — full crate
-      # compilation). Each wasm-pack invocation on a warm cargo
-      # cache only runs wasm-bindgen + wasm-opt (~60-80s per
-      # example) — there's no compilation to redo. Caching the
-      # `pkg/` outputs separately created a fragile two-layer
-      # cache whose key (`Cargo.lock` + codegen tool source) was
-      # too narrow and didn't invalidate when crate sources
-      # changed, causing stale wasm artifacts to leak into the
-      # deployed pages. Rebuilding all wasm-pack outputs from
-      # scratch on every CI run is correct by construction and
-      # avoids that class of bug entirely. The `blinc-build-web-
-      # examples` incremental planner still works for local dev
-      # (where `.last-build-sha` persists across runs), but in CI
-      # the stamp doesn't exist → the planner falls back to
-      # "rebuild all" → predictable behavior.
-
-      # Regenerates `examples/_generated/<name>/` wrapper crates
-      # from the cross-target source in `examples/blinc_app_examples/examples/`,
-      # rewrites the gallery markdown + SUMMARY patch in
-      # `docs/book/src/web/`, and runs `wasm-pack build --target web
-      # --release` in each wrapper. The built wrappers land in
-      # `examples/_generated/<name>/pkg/` and stay there until the
-      # staging step below copies them into the book output.
+      # Regenerates `examples/_generated/<name>/` wrapper crates from the cross-target source in
+      # `examples/blinc_app_examples/examples/` and rewrites the gallery markdown + SUMMARY patch
+      # in `docs/book/src/web/`. The wasm builds ran in the `wrappers` shards; their `pkg/`
+      # directories are restored here and stay until the staging step below copies them into the
+      # book output. Nothing is cached between runs, so every build is made from this commit.
       #
       # `mdbook build` wipes and rewrites `target/book/`, so we
       # can't stage into `target/book/examples/` yet — staging
       # happens after mdBook runs.
-      - name: Generate + build web example wrappers
-        run: |
-          cargo run -p blinc-build-web-examples -- --build
+      - name: Generate example wrappers and book pages
+        run: cargo run -p blinc-build-web-examples
+
+      - name: Fetch the built example wrappers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wrappers-*
+          merge-multiple: true
+          path: examples/_generated
 
       - name: Check book application examples
         env:
@@ -225,6 +323,7 @@ jobs:
         run: |
           cargo run -p blinc-build-web-examples -- \
             --no-gallery \
+            --no-build \
             --stage-to target/book-dev/examples
 
       # Keep the landing page and book together. The following catalog step

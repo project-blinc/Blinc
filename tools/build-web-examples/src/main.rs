@@ -2162,6 +2162,7 @@ fn build_wrappers_with_wasm_pack(
     workspace_root: &Path,
     examples: &[ExampleMeta],
     force_rebuild: bool,
+    shard: Option<(usize, usize)>,
 ) -> Vec<String> {
     let plan = plan_builds(workspace_root, examples, force_rebuild);
     println!("  plan: {}", plan.reason);
@@ -2175,7 +2176,10 @@ fn build_wrappers_with_wasm_pack(
     let action_for: std::collections::HashMap<&str, BuildAction> =
         plan.actions.iter().map(|(n, a)| (n.as_str(), *a)).collect();
 
-    for meta in examples {
+    for (index, meta) in examples.iter().enumerate() {
+        if !in_shard(index, shard) {
+            continue;
+        }
         let wrapper_dir = workspace_root.join(GENERATED_DIR).join(&meta.name);
         let pkg_dir = wrapper_dir.join("pkg");
         let action = action_for
@@ -2238,12 +2242,37 @@ fn build_wrappers_with_wasm_pack(
 
     // Stamp the build SHA only if every wrapper succeeded. A
     // partial failure leaves the previous SHA in place so the next
-    // run still rebuilds whatever broke.
-    if failed.is_empty() {
+    // run still rebuilds whatever broke. A shard covers only some wrappers, so it never stamps.
+    if failed.is_empty() && shard.is_none() {
         write_last_build_sha(workspace_root);
     }
 
     failed
+}
+
+/// Whether the wrapper at `index` of the sorted list belongs to the 1-based shard `K/N`.
+fn in_shard(index: usize, shard: Option<(usize, usize)>) -> bool {
+    shard.is_none_or(|(k, n)| index % n == k - 1)
+}
+
+#[cfg(test)]
+mod shard_tests {
+    use super::in_shard;
+
+    #[test]
+    fn every_wrapper_is_in_exactly_one_shard() {
+        for n in 1..=7 {
+            for index in 0..50 {
+                let owners = (1..=n).filter(|k| in_shard(index, Some((*k, n)))).count();
+                assert_eq!(owners, 1, "index {index} of {n} shards");
+            }
+        }
+    }
+
+    #[test]
+    fn no_shard_builds_everything() {
+        assert!((0..10).all(|index| in_shard(index, None)));
+    }
 }
 
 /// Modules of the worker host that example pages import from `examples/_runtime/`.
@@ -2394,6 +2423,11 @@ struct Args {
     /// when the cache is suspected stale or when iterating on the
     /// codegen tool itself.
     force_rebuild: bool,
+    /// Build only wrappers `shard.0 - 1 (mod shard.1)` of the sorted list, so CI can spread
+    /// the wasm builds across runners. Every wrapper is still generated.
+    shard: Option<(usize, usize)>,
+    /// Do not build, even with `--stage-to`: stage what is already in each `pkg/`.
+    no_build: bool,
 }
 
 fn parse_args() -> Args {
@@ -2414,6 +2448,23 @@ fn parse_args() -> Args {
             }
             "--no-gallery" => args.no_gallery = true,
             "--force-rebuild" => args.force_rebuild = true,
+            "--no-build" => args.no_build = true,
+            "--shard" => {
+                let val = raw.get(i + 1).unwrap_or_else(|| {
+                    eprintln!("error: --shard requires K/N");
+                    std::process::exit(2);
+                });
+                let parsed = val.split_once('/').and_then(|(k, n)| {
+                    let (k, n) = (k.parse::<usize>().ok()?, n.parse::<usize>().ok()?);
+                    (n >= 1 && (1..=n).contains(&k)).then_some((k, n))
+                });
+                args.shard = Some(parsed.unwrap_or_else(|| {
+                    eprintln!("error: --shard takes K/N with 1 <= K <= N, got `{val}`");
+                    std::process::exit(2);
+                }));
+                args.build = true;
+                i += 1;
+            }
             "--help" | "-h" => {
                 println!(
                     "blinc-build-web-examples — codegen for cross-target example wrappers\n\n\
@@ -2433,6 +2484,11 @@ fn parse_args() -> Args {
                                           rebuild every wrapper. Use when the cache is\n    \
                                           suspected stale or when iterating on the codegen\n    \
                                           tool itself.\n    \
+                     --shard K/N          With --build, build only the wrappers in shard K of N\n    \
+                                          (every Nth example), so CI can spread the wasm builds\n    \
+                                          across runners. Does not stamp the build SHA.\n    \
+                     --no-build           Never build, even with --stage-to; stage what is\n    \
+                                          already in each `pkg/`.\n    \
                      --help, -h           Show this help and exit.\n"
                 );
                 std::process::exit(0);
@@ -2535,10 +2591,17 @@ fn main() {
     }
 
     let mut build_failures: Vec<String> = Vec::new();
-    if args.build {
+    if args.build && !args.no_build {
         println!();
-        println!("Running wasm-pack build on {} wrapper(s)…", found.len());
-        build_failures = build_wrappers_with_wasm_pack(&workspace_root, &found, args.force_rebuild);
+        match args.shard {
+            Some((k, n)) => println!(
+                "Running wasm-pack build on shard {k}/{n} of {} wrapper(s)…",
+                found.len()
+            ),
+            None => println!("Running wasm-pack build on {} wrapper(s)…", found.len()),
+        }
+        build_failures =
+            build_wrappers_with_wasm_pack(&workspace_root, &found, args.force_rebuild, args.shard);
     }
 
     if let Some(stage_dir) = args.stage_to.as_ref() {
