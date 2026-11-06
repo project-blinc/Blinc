@@ -8,6 +8,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 
 ### Fixed
+- A stylesheet rule on an id with `:checked` or `:disabled` (`#cb:checked`, `#btn:disabled`) applies. It was parsed as a pointer-state rule that nothing read, so the element kept the widget's own look. Such rules are now matched like any selector on the element's `checked` and `disabled` attributes: they outrank the widget's class rules and follow the attribute as it changes.
 - Native IME candidates update single-line, multiline, code and rich text documents without duplicate commits. Composition defers change callbacks, groups supported undo history, respects UTF-16 selection boundaries and rolls back invalid single-line commits.
 - Labelled checkboxes toggle once when a box click bubbles through the row, while label, keyboard and assistive activation keep their existing behavior.
 - Explicit CSS colour importance survives base, state and dynamic-selector passes while border transitions keep their interpolated colours.

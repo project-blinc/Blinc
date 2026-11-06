@@ -234,14 +234,14 @@ mod tests {
             ElementState::Hover,
             ElementState::Active,
             ElementState::Focus,
-            ElementState::Disabled,
         ] {
             assert!(
                 table.get_state(nid, state).is_some(),
                 "{state:?} entry must be present"
             );
         }
-        // Checked isn't in the stylesheet → no entry.
+        // `:disabled` and `:checked` rules are complex rules, not entries of the table.
+        assert!(table.get_state(nid, ElementState::Disabled).is_none());
         assert!(table.get_state(nid, ElementState::Checked).is_none());
     }
 

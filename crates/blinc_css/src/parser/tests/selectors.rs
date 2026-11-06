@@ -67,11 +67,21 @@ fn test_state_modifier_disabled() {
     "#;
     let result = Stylesheet::parse_with_errors(css);
 
-    let disabled = result
-        .stylesheet
-        .get_with_state("button", ElementState::Disabled)
-        .unwrap();
-    assert_eq!(disabled.opacity, Some(0.5));
+    // `:disabled` is an attribute of the element, so the rule is matched with the complex
+    // selectors, which order it against the widgets' own rules.
+    assert!(
+        result
+            .stylesheet
+            .get_with_state("button", ElementState::Disabled)
+            .is_none()
+    );
+    assert!(
+        result
+            .stylesheet
+            .complex_rules()
+            .iter()
+            .any(|(selector, style)| !selector.has_state() && style.opacity == Some(0.5))
+    );
 }
 
 #[test]
@@ -121,7 +131,10 @@ fn test_multiple_state_modifiers() {
     assert!(
         result
             .stylesheet
-            .contains_with_state("button", ElementState::Disabled)
+            .complex_rules()
+            .iter()
+            .any(|(selector, style)| !selector.has_state() && style.opacity == Some(0.4)),
+        "the :disabled rule is a complex rule"
     );
 
     // Verify state styles
@@ -143,12 +156,6 @@ fn test_multiple_state_modifiers() {
         .get_with_state("button", ElementState::Focus)
         .unwrap();
     assert!(focus.corner_radius.is_some());
-
-    let disabled = result
-        .stylesheet
-        .get_with_state("button", ElementState::Disabled)
-        .unwrap();
-    assert_eq!(disabled.opacity, Some(0.4));
 }
 
 #[test]

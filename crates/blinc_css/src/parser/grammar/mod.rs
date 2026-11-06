@@ -672,6 +672,12 @@ pub(crate) fn try_as_simple_selector(compound: &CompoundSelector) -> Option<Stri
                 if state.is_some() {
                     return None; // Multiple states
                 }
+                // `:checked` and `:disabled` are attributes of the element: the complex-selector
+                // rules match them, order them by specificity against the widgets' own rules, and
+                // follow them as they change.
+                if matches!(s, ElementState::Checked | ElementState::Disabled) {
+                    return None;
+                }
                 state = Some(s);
             }
             SelectorPart::PseudoElement(name) => {

@@ -89,6 +89,39 @@ label: text "Accept" color 0.451,0.478,0.549,1.000 size 13.0 | fill - | border -
 box: div | fill 0.075,0.090,0.165,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
 mark: -
 label: text "Accept" color 0.451,0.478,0.549,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+######## core disabled under an id rule
+== idle
+box: div | fill 0.133,0.533,0.267,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+mark: -
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+== hover
+box: div | fill 0.133,0.533,0.267,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+mark: -
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+== pressed
+box: div | fill 0.133,0.533,0.267,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+mark: -
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+== released
+box: div | fill 0.133,0.533,0.267,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+mark: -
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+== left
+box: div | fill 0.133,0.533,0.267,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+mark: -
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+== hover again
+box: div | fill 0.133,0.533,0.267,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+mark: -
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+== pressed again
+box: div | fill 0.133,0.533,0.267,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+mark: -
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+== released again
+box: div | fill 0.133,0.533,0.267,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+mark: -
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
 ######## core under hover and checked rules
 == idle
 box: div | fill 0.102,0.122,0.180,1.000 | border 1.000,1.000,1.000,0.100 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
@@ -103,11 +136,11 @@ box: div | fill 0.102,0.122,0.180,1.000 | border 1.000,1.000,1.000,0.180 w2.0 | 
 mark: -
 label: text "Accept" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
 == released
-box: div | fill 0.490,0.659,1.000,1.000 | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 20.0x20.0
+box: div | fill 0.133,0.533,0.267,1.000 | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 20.0x20.0
 mark: -
 label: text "Accept" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
 == left
-box: div | fill 0.490,0.659,1.000,1.000 | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill 0.133,0.533,0.267,1.000 | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: -
 label: text "Accept" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
 == hover again
@@ -115,7 +148,7 @@ box: div | fill 0.200,0.400,0.600,1.000 | border 1.000,0.533,0.000,1.000 w2.0 | 
 mark: -
 label: text "Accept" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
 == pressed again
-box: div | fill 0.490,0.659,1.000,1.000 | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 20.0x20.0
+box: div | fill 0.133,0.533,0.267,1.000 | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 20.0x20.0
 mark: -
 label: text "Accept" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
 == released again
