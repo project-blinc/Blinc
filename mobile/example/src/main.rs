@@ -110,7 +110,7 @@ fn keyboard_section(ctx: &WindowedContext) -> Div {
                 .color(Color::rgba(0.7, 0.7, 0.78, 1.0)),
         )
         .child(
-            div().w(300.0).child(
+            div().w_full().child(
                 text_input(&input_state.get())
                     .w_full()
                     .text_color(Color::WHITE)
