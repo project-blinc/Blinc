@@ -22,6 +22,7 @@
 
 use blinc_core::reactive::{Computed, ReactiveGraph, computed};
 use blinc_layout::InstanceKey;
+use blinc_layout::accessibility::{AccessibilityAction, AccessibilityBinding, AccessibilityValue};
 use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
@@ -185,6 +186,7 @@ impl Travel {
 /// Slider component. See the module docs.
 pub struct Slider {
     inner: Div,
+    accessibility: AccessibilityBinding,
 }
 
 impl Slider {
@@ -255,6 +257,30 @@ impl Slider {
                 }
             })
         };
+        let accessibility = {
+            let label = config.label.clone();
+            let disabled = disabled.clone();
+            let set = set.clone();
+            AccessibilityBinding {
+                read: Arc::new(move || AccessibilityValue {
+                    label: label.as_ref().and_then(|label| label.now()),
+                    value: travel.format(value.get()),
+                    ..Default::default()
+                }),
+                action: Arc::new(move |action| {
+                    if disabled.try_get().unwrap_or(true) {
+                        return false;
+                    }
+                    let next = match action {
+                        AccessibilityAction::Increment => value.get() + travel.nudge(),
+                        AccessibilityAction::Decrement => value.get() - travel.nudge(),
+                        _ => return false,
+                    };
+                    set(next);
+                    true
+                }),
+            }
+        };
         // How far from the thumb's centre a press on it landed, kept for the
         // drag so the thumb does not jump to the pointer.
         let grab = Arc::new(Mutex::new(0.0f32));
@@ -314,7 +340,7 @@ impl Slider {
             div()
                 .class("cn-slider-field")
                 .attr("data-size", size.attr())
-                .attr_when("data-disabled", "", disabled)
+                .attr_when("data-disabled", "", disabled.clone())
                 .flex_col()
                 .gap_px(size.gap())
                 .w(width)
@@ -323,9 +349,16 @@ impl Slider {
         } else {
             slider
         };
-        let inner = config.classes.iter().fold(inner, |d, c| d.class(c));
+        let inner = config
+            .classes
+            .iter()
+            .fold(inner, |d, c| d.class(c))
+            .attr_when("disabled", "", disabled);
 
-        Self { inner }
+        Self {
+            inner,
+            accessibility,
+        }
     }
 }
 
@@ -344,6 +377,14 @@ impl ElementBuilder for Slider {
 
     fn element_type_id(&self) -> ElementTypeId {
         self.inner.element_type_id()
+    }
+
+    fn semantic_type_name(&self) -> Option<&'static str> {
+        Some("slider")
+    }
+
+    fn accessibility_binding(&self) -> Option<AccessibilityBinding> {
+        Some(self.accessibility.clone())
     }
 
     fn layout_style(&self) -> Option<&taffy::Style> {
@@ -509,6 +550,14 @@ impl ElementBuilder for SliderBuilder {
 
     fn element_type_id(&self) -> ElementTypeId {
         self.get_or_build().element_type_id()
+    }
+
+    fn semantic_type_name(&self) -> Option<&'static str> {
+        self.get_or_build().semantic_type_name()
+    }
+
+    fn accessibility_binding(&self) -> Option<AccessibilityBinding> {
+        self.get_or_build().accessibility_binding()
     }
 
     fn layout_style(&self) -> Option<&taffy::Style> {

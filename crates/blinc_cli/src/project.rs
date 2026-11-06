@@ -1872,6 +1872,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 "#,
     )?;
 
+    fs::write(
+        app_path.join("BlincAccessibility.swift"),
+        include_str!("../templates/ios/BlincAccessibility.swift"),
+    )?;
+
     // BlincMetalView.swift
     fs::write(
         app_path.join("BlincMetalView.swift"),
@@ -1909,7 +1914,6 @@ class BlincMetalView: UIView {
         metalLayer.pixelFormat = .bgra8Unorm
         metalLayer.framebufferOnly = true
         metalLayer.contentsScale = UIScreen.main.scale
-        if #available(iOS 10.3, *) { metalLayer.displaySyncEnabled = true }
         isOpaque = true
         backgroundColor = .black
     }
@@ -1939,6 +1943,7 @@ class BlincViewController: UIViewController {
     private var displayLink: CADisplayLink?
     private var renderContext: OpaquePointer?
     private var gpuRenderer: OpaquePointer?
+    private var accessibilityBridge: BlincAccessibility?
     private var isVisible = false
     private var touchIds: [ObjectIdentifier: UInt64] = [:]
     private var nextTouchId: UInt64 = 1
@@ -1966,18 +1971,26 @@ class BlincViewController: UIViewController {
         if let ctx = renderContext { blinc_set_focused(ctx, false) }
     }
 
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if previousTraitCollection?.preferredContentSizeCategory != traitCollection.preferredContentSizeCategory {
+            view.setNeedsLayout()
+        }
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         let scale = UIScreen.main.scale
         let width = UInt32(view.bounds.width * scale)
         let height = UInt32(view.bounds.height * scale)
-        if let ctx = renderContext { blinc_update_size(ctx, width, height, Double(scale)) }
+        if let ctx = renderContext { blinc_update_size(ctx, width, height, Double(BlincContentSize.renderScale(in: view))) }
         if let gpu = gpuRenderer { blinc_gpu_resize(gpu, width, height) }
     }
 
     deinit {
         displayLink?.invalidate()
         if let gpu = gpuRenderer { blinc_destroy_gpu(gpu) }
+        accessibilityBridge?.disconnect()
         if let ctx = renderContext { blinc_destroy_context(ctx) }
     }
 
@@ -1985,11 +1998,12 @@ class BlincViewController: UIViewController {
         let scale = UIScreen.main.scale
         let width = UInt32(view.bounds.width * scale)
         let height = UInt32(view.bounds.height * scale)
-        guard let ctx = blinc_create_context(width, height, Double(scale)) else {
+        guard let ctx = blinc_create_context(width, height, Double(BlincContentSize.renderScale(in: view))) else {
             print("Error: Failed to create Blinc render context")
             return
         }
         renderContext = ctx
+        accessibilityBridge = BlincAccessibility(host: view, context: ctx)
         let metalLayer = metalView.metalLayer
         guard let gpu = blinc_init_gpu(ctx, Unmanaged.passUnretained(metalLayer).toOpaque(), width, height) else {
             print("Error: Failed to initialize Blinc GPU renderer")
@@ -2013,13 +2027,14 @@ class BlincViewController: UIViewController {
         guard isVisible, let ctx = renderContext, let gpu = gpuRenderer else { return }
         guard blinc_needs_render(ctx) else { return }
         blinc_build_frame(ctx)
+        accessibilityBridge?.synchronize()
         _ = blinc_render_frame(gpu)
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let ctx = renderContext else { return }
         for touch in touches {
-            let point = touch.location(in: view)
+            let point = BlincContentSize.logicalPoint(touch.location(in: view), in: view)
             blinc_handle_touch(ctx, getTouchId(for: touch), Float(point.x), Float(point.y), 0)
         }
     }
@@ -2027,7 +2042,7 @@ class BlincViewController: UIViewController {
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let ctx = renderContext else { return }
         for touch in touches {
-            let point = touch.location(in: view)
+            let point = BlincContentSize.logicalPoint(touch.location(in: view), in: view)
             blinc_handle_touch(ctx, getTouchId(for: touch), Float(point.x), Float(point.y), 1)
         }
     }
@@ -2035,7 +2050,7 @@ class BlincViewController: UIViewController {
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let ctx = renderContext else { return }
         for touch in touches {
-            let point = touch.location(in: view)
+            let point = BlincContentSize.logicalPoint(touch.location(in: view), in: view)
             blinc_handle_touch(ctx, getTouchId(for: touch), Float(point.x), Float(point.y), 2)
             removeTouchId(for: touch)
         }
@@ -2044,7 +2059,7 @@ class BlincViewController: UIViewController {
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let ctx = renderContext else { return }
         for touch in touches {
-            blinc_handle_touch(ctx, getTouchId(for: touch), Float(touch.location(in: view).x), Float(touch.location(in: view).y), 3)
+            blinc_handle_touch(ctx, getTouchId(for: touch), Float(BlincContentSize.logicalPoint(touch.location(in: view), in: view).x), Float(BlincContentSize.logicalPoint(touch.location(in: view), in: view).y), 3)
             removeTouchId(for: touch)
         }
     }
@@ -2086,6 +2101,13 @@ typedef void (*UIBuilderFn)(WindowedContext* ctx);
 // Context Lifecycle
 IOSRenderContext* blinc_create_context(uint32_t width, uint32_t height, double scale_factor);
 void blinc_destroy_context(IOSRenderContext* ctx);
+
+void blinc_ios_handle_key_down(IOSRenderContext* ctx, uint32_t key_code);
+
+// Accessibility snapshots and actions (main thread).
+char* blinc_accessibility_snapshot(const IOSRenderContext* ctx);
+void blinc_accessibility_free(char* snapshot);
+bool blinc_accessibility_action(IOSRenderContext* ctx, uint64_t id, uint32_t action, const char* value);
 
 // Rendering
 bool blinc_needs_render(IOSRenderContext* ctx);
@@ -2184,6 +2206,7 @@ void blinc_destroy_gpu(IOSGpuRenderer* gpu);
 	objects = {{
 
 /* Begin PBXBuildFile section */
+		A1000010 /* Accessibility */ = {{isa = PBXBuildFile; fileRef = A2000010; }};
 		A1000001 /* AppDelegate.swift in Sources */ = {{isa = PBXBuildFile; fileRef = A2000001; }};
 		A1000002 /* BlincViewController.swift in Sources */ = {{isa = PBXBuildFile; fileRef = A2000002; }};
 		A1000003 /* BlincMetalView.swift in Sources */ = {{isa = PBXBuildFile; fileRef = A2000003; }};
@@ -2194,6 +2217,7 @@ void blinc_destroy_gpu(IOSGpuRenderer* gpu);
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		A2000010 /* BlincAccessibility.swift */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlincAccessibility.swift; sourceTree = "<group>"; }};
 		A2000001 /* AppDelegate.swift */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; }};
 		A2000002 /* BlincViewController.swift */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlincViewController.swift; sourceTree = "<group>"; }};
 		A2000003 /* BlincMetalView.swift */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlincMetalView.swift; sourceTree = "<group>"; }};
@@ -2223,7 +2247,7 @@ void blinc_destroy_gpu(IOSGpuRenderer* gpu);
 		}};
 		A5000002 /* BlincApp */ = {{
 			isa = PBXGroup;
-			children = (A2000001, A2000002, A2000003, A2000008, A2000009);
+			children = (A2000001, A2000002, A2000003, A2000008, A2000009, A2000010);
 			path = BlincApp;
 			sourceTree = "<group>";
 		}};
@@ -2280,7 +2304,7 @@ void blinc_destroy_gpu(IOSGpuRenderer* gpu);
 		A6000002 /* Sources */ = {{
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (A1000001, A1000002, A1000003);
+			files = (A1000001, A1000002, A1000003, A1000010);
 			runOnlyForDeploymentPostprocessing = 0;
 		}};
 /* End PBXSourcesBuildPhase section */
@@ -2527,3 +2551,7 @@ open BlincApp.xcodeproj
 
     Ok(())
 }
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "project/tests/ios.rs"]
+mod ios_tests;

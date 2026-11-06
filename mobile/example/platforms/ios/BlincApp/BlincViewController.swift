@@ -24,6 +24,7 @@ class BlincViewController: UIViewController {
     private var displayLink: CADisplayLink?
 
     /// Blinc render context (manages UI state)
+    private var accessibilityBridge: BlincAccessibility?
     private var renderContext: OpaquePointer?
 
     /// Blinc GPU renderer (manages Metal rendering)
@@ -73,6 +74,13 @@ class BlincViewController: UIViewController {
         }
     }
 
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if previousTraitCollection?.preferredContentSizeCategory != traitCollection.preferredContentSizeCategory {
+            view.setNeedsLayout()
+        }
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
 
@@ -82,7 +90,7 @@ class BlincViewController: UIViewController {
         let height = UInt32(view.bounds.height * scale)
 
         if let ctx = renderContext {
-            blinc_update_size(ctx, width, height, Double(scale))
+            blinc_update_size(ctx, width, height, Double(BlincContentSize.renderScale(in: view)))
         }
 
         if let gpu = gpuRenderer {
@@ -106,6 +114,7 @@ class BlincViewController: UIViewController {
         if let gpu = gpuRenderer {
             blinc_destroy_gpu(gpu)
         }
+        accessibilityBridge?.disconnect()
         if let ctx = renderContext {
             blinc_destroy_context(ctx)
         }
@@ -126,11 +135,12 @@ class BlincViewController: UIViewController {
 
         // Create render context
         os_log(.info, log: log, "Calling blinc_create_context()")
-        guard let ctx = blinc_create_context(width, height, Double(scale)) else {
+        guard let ctx = blinc_create_context(width, height, Double(BlincContentSize.renderScale(in: view))) else {
             os_log(.error, log: log, "Failed to create Blinc render context")
             return
         }
         renderContext = ctx
+        accessibilityBridge = BlincAccessibility(host: view, context: ctx)
         os_log(.info, log: log, "Render context created")
 
         // Wire the active context into BlincKeyboardHelper so its
@@ -225,6 +235,7 @@ class BlincViewController: UIViewController {
             os_log(.debug, log: log, "Frame %d - calling blinc_build_frame", frameCount)
         }
         blinc_build_frame(ctx)
+        accessibilityBridge?.synchronize()
 
         // Render to Metal
         if frameCount < 3 {
@@ -250,7 +261,7 @@ class BlincViewController: UIViewController {
         }
 
         for touch in touches {
-            let point = touch.location(in: view)
+            let point = BlincContentSize.logicalPoint(touch.location(in: view), in: view)
             let touchId = getTouchId(for: touch)
             os_log(.info, log: log, "touchesBegan: calling blinc_handle_touch at (%.1f, %.1f)", point.x, point.y)
             blinc_handle_touch(ctx, touchId, Float(point.x), Float(point.y), 0) // 0 = began
@@ -261,7 +272,7 @@ class BlincViewController: UIViewController {
         guard let ctx = renderContext else { return }
 
         for touch in touches {
-            let point = touch.location(in: view)
+            let point = BlincContentSize.logicalPoint(touch.location(in: view), in: view)
             let touchId = getTouchId(for: touch)
             blinc_handle_touch(ctx, touchId, Float(point.x), Float(point.y), 1) // 1 = moved
         }
@@ -276,7 +287,7 @@ class BlincViewController: UIViewController {
         }
 
         for touch in touches {
-            let point = touch.location(in: view)
+            let point = BlincContentSize.logicalPoint(touch.location(in: view), in: view)
             let touchId = getTouchId(for: touch)
             os_log(.info, log: log, "touchesEnded: calling blinc_handle_touch at (%.1f, %.1f)", point.x, point.y)
             blinc_handle_touch(ctx, touchId, Float(point.x), Float(point.y), 2) // 2 = ended
@@ -288,7 +299,7 @@ class BlincViewController: UIViewController {
         guard let ctx = renderContext else { return }
 
         for touch in touches {
-            let point = touch.location(in: view)
+            let point = BlincContentSize.logicalPoint(touch.location(in: view), in: view)
             let touchId = getTouchId(for: touch)
             blinc_handle_touch(ctx, touchId, Float(point.x), Float(point.y), 3) // 3 = cancelled
             removeTouchId(for: touch)

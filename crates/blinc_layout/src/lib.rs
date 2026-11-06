@@ -29,6 +29,7 @@
 //! tree.compute_layout(800.0, 600.0);
 //! ```
 
+pub mod accessibility;
 pub mod animated;
 pub mod build_once;
 pub mod canvas;

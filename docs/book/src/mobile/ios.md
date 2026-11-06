@@ -4,6 +4,8 @@ This guide covers setting up an iOS Blinc project — toolchain, build commands,
 
 For the cross-platform Blinc API (native bridge, camera, deep linking, lifecycle, etc.), see the [Mobile Development overview](./overview.md).
 
+See [Accessibility](../core/accessibility.md) for native semantic elements, text-field editing and Simulator validation.
+
 ## Prerequisites
 
 ### 1. Xcode

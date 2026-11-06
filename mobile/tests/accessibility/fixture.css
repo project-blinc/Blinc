@@ -1,3 +1,7 @@
+:root {
+  --font-sans: Arial;
+}
+
 .a11y-fixture {
   width: 100%;
   height: 100%;
@@ -18,4 +22,20 @@
 
 .a11y-counter {
   font-size: 18px;
+}
+
+.a11y-fixture .cn-slider-field,
+.a11y-fixture .cn-slider {
+  width: 100%;
+}
+
+.a11y-fixture .cn-button,
+.a11y-fixture .cn-input,
+.a11y-fixture .cn-slider,
+.a11y-fixture .blinc-checkbox-row {
+  min-height: 44px;
+}
+
+.cn-input::placeholder {
+  color: var(--text-secondary);
 }

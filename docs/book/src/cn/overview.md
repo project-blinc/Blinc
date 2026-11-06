@@ -117,11 +117,11 @@ without a colour of its own takes the colour around it.
 
 ### Accessible
 
-Components include keyboard navigation and proper semantics:
+Components include keyboard navigation and focus management:
 
 - Focus management
 - Keyboard shortcuts
-- Screen reader support (planned)
+- Platform accessibility integration: see [Accessibility](../core/accessibility.md)
 
 ## Component Categories
 

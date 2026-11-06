@@ -118,6 +118,10 @@ impl Input {
             .class("cn-input")
             .class("tabindex=text")
             .class(size_class);
+        if let Some(label) = config.label.as_ref() {
+            text_input =
+                text_input.accessibility_label(crate::reactive_props::clone_reactive(label));
+        }
         // An error marks the box `data-invalid` while it is non-empty.
         if let Some(ref error) = config.error {
             text_input = text_input.invalid(crate::reactive_props::non_empty(error));
@@ -244,6 +248,10 @@ impl Input {
             });
         }
 
+        if let Some(callback) = config.on_submit.clone() {
+            input = input.on_submit(move |shift| callback(shift));
+        }
+
         input
     }
 
@@ -341,6 +349,7 @@ struct InputConfig {
     border_width: Option<f32>,
     corner_radius: Option<f32>,
     on_change: Option<OnChangeCallback>,
+    on_submit: Option<Arc<dyn Fn(bool) + Send + Sync>>,
 }
 
 impl Default for InputConfig {
@@ -368,6 +377,7 @@ impl Default for InputConfig {
             border_width: None,
             corner_radius: None,
             on_change: None,
+            on_submit: None,
         }
     }
 }
@@ -561,6 +571,12 @@ impl InputBuilder {
         F: Fn(&str) + Send + Sync + 'static,
     {
         self.config.on_change = Some(Arc::new(callback));
+        self
+    }
+
+    /// Run when Enter is pressed, receiving whether Shift was held.
+    pub fn on_submit(mut self, callback: impl Fn(bool) + Send + Sync + 'static) -> Self {
+        self.config.on_submit = Some(Arc::new(callback));
         self
     }
 

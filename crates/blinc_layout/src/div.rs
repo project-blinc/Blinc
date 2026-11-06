@@ -5329,6 +5329,11 @@ pub trait ElementBuilder {
         None
     }
 
+    /// Optional live semantic value and editing actions for a custom control.
+    fn accessibility_binding(&self) -> Option<crate::accessibility::AccessibilityBinding> {
+        None
+    }
+
     /// Semantic HTML-like tag name for CSS type selectors (e.g., "button", "a", "ul")
     ///
     /// Widgets override this to declare their semantic type, enabling global CSS
@@ -5510,6 +5515,9 @@ impl<T: ?Sized + ElementBuilder> ElementBuilder for Box<T> {
     }
     fn layout_bounds_callback(&self) -> Option<crate::renderer::LayoutBoundsCallback> {
         (**self).layout_bounds_callback()
+    }
+    fn accessibility_binding(&self) -> Option<crate::accessibility::AccessibilityBinding> {
+        (**self).accessibility_binding()
     }
     fn semantic_type_name(&self) -> Option<&'static str> {
         (**self).semantic_type_name()

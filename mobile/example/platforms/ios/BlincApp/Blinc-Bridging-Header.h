@@ -344,4 +344,10 @@ bool blinc_native_bridge_is_ready(void);
 /// @param data_len   Length of the buffer in bytes
 void blinc_dispatch_stream_data(uint64_t stream_id, const uint8_t* data_ptr, uint64_t data_len);
 
+
+// Accessibility snapshots and actions (main thread).
+char* blinc_accessibility_snapshot(const IOSRenderContext* ctx);
+void blinc_accessibility_free(char* snapshot);
+bool blinc_accessibility_action(IOSRenderContext* ctx, uint64_t id, uint32_t action, const char* value);
+
 #endif /* Blinc_Bridging_Header_h */

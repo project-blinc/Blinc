@@ -42,6 +42,7 @@ use crate::visual_animation::{AnimatedRenderBounds, VisualAnimation, VisualAnima
 // purely organisational — no public API changes — so external callers
 // are unaffected.
 
+mod accessibility;
 mod animation;
 pub use animation::css::css_animation_playing;
 mod build;
@@ -701,6 +702,7 @@ pub struct RenderTree {
     pub layout_tree: LayoutTree,
     /// Render data for each node (ordered by insertion/tree order)
     render_nodes: IndexMap<LayoutNodeId, RenderNode>,
+    accessibility_bindings: HashMap<LayoutNodeId, crate::accessibility::AccessibilityBinding>,
     /// Root node ID
     root: Option<LayoutNodeId>,
     /// Event handlers registry for dispatching events
@@ -1139,6 +1141,7 @@ impl RenderTree {
         Self {
             layout_tree: LayoutTree::new(),
             render_nodes: IndexMap::new(),
+            accessibility_bindings: HashMap::new(),
             root: None,
             handler_registry: crate::event_handler::HandlerRegistry::new(),
             property_write_logs: Vec::new(),

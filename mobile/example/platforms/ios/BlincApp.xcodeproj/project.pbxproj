@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B11CA11E0000000000000001 = {isa = PBXBuildFile; fileRef = B11CA11E0000000000000002; };
 		A1000001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001 /* AppDelegate.swift */; };
 		A1000002 /* BlincViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000002 /* BlincViewController.swift */; };
 		A1000003 /* BlincMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000003 /* BlincMetalView.swift */; };
@@ -20,6 +21,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		B11CA11E0000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BlincAccessibility.swift; path = "../../../../extensions/blinc_platform_ios/swift/BlincAccessibility.swift"; sourceTree = SOURCE_ROOT; };
 		A2000001 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A2000002 /* BlincViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlincViewController.swift; sourceTree = "<group>"; };
 		A2000003 /* BlincMetalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlincMetalView.swift; sourceTree = "<group>"; };
@@ -53,6 +55,7 @@
 		A5000001 = {
 			isa = PBXGroup;
 			children = (
+				B11CA11E0000000000000002,
 				A5000002 /* BlincApp */,
 				A5000003 /* Frameworks */,
 				A5000004 /* Products */,
@@ -170,6 +173,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B11CA11E0000000000000001,
 				A1000001 /* AppDelegate.swift in Sources */,
 				A1000012 /* SceneDelegate.swift in Sources */,
 				A1000002 /* BlincViewController.swift in Sources */,

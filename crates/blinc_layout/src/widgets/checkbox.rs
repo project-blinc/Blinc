@@ -20,7 +20,7 @@
 //! )
 //! ```
 
-use std::sync::Arc;
+use std::{cell::Cell, rc::Rc, sync::Arc};
 
 use blinc_core::reactive::Signal;
 use blinc_theme::ThemeState;
@@ -163,7 +163,13 @@ impl Checkbox {
 
         let inner = if let Some(label) = config.label {
             let row_toggle = toggle.clone();
-            let checkbox = checkbox.on_click(move |_| toggle());
+            let handled_in_box = Rc::new(Cell::new(false));
+            let box_handled = handled_in_box.clone();
+            let checkbox = checkbox.on_click(move |_| {
+                box_handled.set(true);
+                toggle();
+            });
+            let reset = handled_in_box.clone();
             // The row carries `disabled` too, so the label's colour is a rule.
             div()
                 .class("blinc-checkbox-row")
@@ -178,7 +184,13 @@ impl Checkbox {
                         .class("blinc-checkbox-label")
                         .size(config.label_font_size.unwrap_or(theme.typography().text_sm)),
                 )
-                .on_click(move |_| row_toggle())
+                .on_mouse_down(move |_| reset.set(false))
+                .on_click(move |_| {
+                    // The box's click also bubbles through this row.
+                    if !handled_in_box.replace(false) {
+                        row_toggle();
+                    }
+                })
         } else {
             let checkbox = checkbox.on_click(move |_| toggle());
             // A single box in a row, so it lays out as a unit.

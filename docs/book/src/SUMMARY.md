@@ -87,6 +87,7 @@
 - [CSS Styling](./core/css-styling.md)
 - [Theming](./core/theming.md)
 - [Event Handling](./core/events.md)
+- [Accessibility](./core/accessibility.md)
 - [State Management](./core/state.md)
 - [Lists & Conditional Content](./core/lists-branches.md)
 - [Element Refs](./core/refs.md)

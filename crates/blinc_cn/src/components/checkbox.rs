@@ -289,6 +289,14 @@ impl ElementBuilder for CheckboxBuilder {
         self.get_or_build().element_type_id()
     }
 
+    fn semantic_type_name(&self) -> Option<&'static str> {
+        self.get_or_build().semantic_type_name()
+    }
+
+    fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
+        self.get_or_build().event_handlers()
+    }
+
     fn layout_style(&self) -> Option<&taffy::Style> {
         self.get_or_build().layout_style()
     }

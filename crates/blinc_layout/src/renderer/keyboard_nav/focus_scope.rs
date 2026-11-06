@@ -48,7 +48,7 @@ impl RenderTree {
         nodes
     }
 
-    pub(super) fn active_focus_scopes(&self) -> Vec<(String, LayoutNodeId)> {
+    pub(crate) fn active_focus_scopes(&self) -> Vec<(String, LayoutNodeId)> {
         [
             crate::widgets::overlay::OVERLAY_LAYER_ID,
             crate::widgets::overlay_stack::OVERLAY_STACK_LAYER_ID,

@@ -4,6 +4,10 @@ All notable changes to `blinc_app` will be documented in this file.
 
 ## [Unreleased]
 
+### Accessibility
+- iOS accessibility snapshot/action FFI connects GPU-rendered controls to native UIKit accessibility elements and text-field editing. The host scales content and input coordinates with Dynamic Type.
+- The registered iOS Rust builder uses the complete UI build path, including queued core styles, overlays and build-scope cleanup.
+
 ### Fixed
 - Browser wheel input is dispatched before pointer movement changes its target, preserving swipe cancellation and preventing queued input from navigating another Calendar.
 - Browser wheel input recognizes gradually accelerating strokes after a momentum tail, so Calendar swipes continue after a completed or cancelled gesture without an outside click.

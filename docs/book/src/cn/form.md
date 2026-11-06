@@ -511,6 +511,10 @@ an arrow or wheel step moves a hundredth of the range. `.size(SliderSize::Small)
 sets the size, `.w(px)` the track's length (300px unless set), and
 `.disabled(..)` takes a bool, Signal or Computed and follows it in place.
 
+The label and live value form one adjustable element in the
+[accessibility snapshot](../core/accessibility.md). Assistive adjustment uses
+the same step, bounds and change callback; disabled sliders reject it.
+
 The slider is a `.cn-slider` row of `.cn-slider-fill`, `.cn-slider-thumb` and
 `.cn-slider-rest`, inside a `.cn-slider-field` with a `.cn-slider-header`
 (`.cn-slider-label`, `.cn-slider-value`) when it has a label or shows its value.

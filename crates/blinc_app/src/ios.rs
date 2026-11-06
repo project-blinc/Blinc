@@ -38,6 +38,9 @@
 // FFI library targeting Swift / Obj-C.
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
+#[path = "ios/accessibility.rs"]
+mod accessibility;
+
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -636,7 +639,10 @@ impl IOSRenderContext {
                 self.windowed_ctx.width,
                 self.windowed_ctx.height
             );
-            let mut tree = RenderTree::from_element(&element);
+            let mut tree = RenderTree::from_element_with_registry(
+                &element,
+                self.windowed_ctx.element_registry().clone(),
+            );
             tree.set_scale_factor(self.windowed_ctx.scale_factor as f32);
             if let Some(ref stylesheet) = self.windowed_ctx.stylesheet {
                 tree.set_stylesheet_arc(stylesheet.clone());
@@ -649,7 +655,10 @@ impl IOSRenderContext {
         } else if let Some(ref mut tree) = self.render_tree {
             // Full rebuild
             tree.clear_dirty();
-            *tree = RenderTree::from_element(&element);
+            *tree = RenderTree::from_element_with_registry(
+                &element,
+                self.windowed_ctx.element_registry().clone(),
+            );
             tree.set_scale_factor(self.windowed_ctx.scale_factor as f32);
             if let Some(ref stylesheet) = self.windowed_ctx.stylesheet {
                 tree.set_stylesheet_arc(stylesheet.clone());
@@ -693,6 +702,7 @@ impl IOSRenderContext {
 
         // Increment rebuild count
         self.rebuild_count += 1;
+        self.windowed_ctx.rebuild_count = self.windowed_ctx.rebuild_count.saturating_add(1);
 
         // Execute ready callbacks after first rebuild
         if self.rebuild_count == 1 {
@@ -1127,8 +1137,7 @@ impl IOSRenderContext {
 use std::sync::OnceLock;
 
 /// Type for Rust UI builder function that directly creates/updates the render tree
-type RustUIBuilder =
-    Box<dyn Fn(&mut WindowedContext, Option<&mut RenderTree>) -> RenderTree + Send + Sync>;
+type RustUIBuilder = Box<dyn Fn(&mut IOSRenderContext) + Send + Sync>;
 
 /// Global storage for Rust UI builder
 static RUST_UI_BUILDER: OnceLock<RustUIBuilder> = OnceLock::new();
@@ -1155,20 +1164,8 @@ where
     F: Fn(&mut WindowedContext) -> E + Send + Sync + 'static,
     E: ElementBuilder + 'static,
 {
-    let boxed_builder: RustUIBuilder = Box::new(move |ctx, _existing_tree| {
-        blinc_layout::clear_stateful_base_updaters();
-        blinc_layout::click_outside::clear_click_outside_handlers();
-        let element = builder(ctx);
-        let mut tree = RenderTree::from_element(&element);
-        tree.set_scale_factor(ctx.scale_factor as f32);
-        if let Some(ref stylesheet) = ctx.stylesheet {
-            tree.set_stylesheet_arc(stylesheet.clone());
-        }
-        tree.apply_all_stylesheet_styles();
-        tree.compute_layout(ctx.width, ctx.height);
-        tree.update_flip_bounds();
-        tree.start_all_css_animations();
-        tree
+    let boxed_builder: RustUIBuilder = Box::new(move |ctx| {
+        ctx.build_ui(|window| builder(window));
     });
     let _ = RUST_UI_BUILDER.set(boxed_builder);
 }
@@ -1389,9 +1386,7 @@ pub extern "C" fn blinc_build_frame(ctx: *mut IOSRenderContext) {
 
         // PHASE 3: Full rebuild using UI builder (required on first load or when dirty)
         if let Some(rust_builder) = get_rust_ui_builder() {
-            // The builder creates the RenderTree for us
-            let tree = rust_builder(&mut ctx.windowed_ctx, ctx.render_tree.as_mut());
-            ctx.render_tree = Some(tree);
+            rust_builder(ctx);
         } else if let Some(builder) = get_ui_builder() {
             builder(&mut ctx.windowed_ctx as *mut WindowedContext);
         }

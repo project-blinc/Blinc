@@ -2,7 +2,7 @@
 """Build a current-source Blinc fixture and audit it in one headless iOS Simulator.
 
 Uses the existing UIKit host, a separate bundle ID and generated Xcode project.
-Stops its own processes if memory becomes critical or swap grows by 256 MB.
+Memory use is recorded for diagnostics without imposing an execution limit.
 The dedicated simulator is shut down after the run, including failed tests.
 """
 
@@ -26,10 +26,6 @@ OUT = ROOT / "target/ios-accessibility"
 BUNDLE = "com.blinc.accessibility.fixture"
 SCHEME = "BlincAccessibility"
 DEVICE_NAME = "Blinc Accessibility QA"
-
-
-class ResourceLimitError(RuntimeError):
-    pass
 
 
 def output(*args):
@@ -78,6 +74,9 @@ def prepare():
                 settings["PRODUCT_BUNDLE_IDENTIFIER"] = BUNDLE
                 settings["ENABLE_TESTABILITY"] = "YES"
     for file in objects.values():
+        if file.get("name") == "BlincAccessibility.swift":
+            file["path"] = str(ROOT / "extensions/blinc_platform_ios/swift/BlincAccessibility.swift")
+            file["sourceTree"] = "<absolute>"
         if file.get("path") == "libs/simulator/libexample.a":
             file["path"] = str(OUT / "rust/aarch64-apple-ios-sim/debug/libexample.a")
             file["sourceTree"] = "<absolute>"
@@ -128,6 +127,34 @@ def prepare():
                  buildRules=[], dependencies=[dependency], productName="BlincAccessibilityUITests",
                  productReference=product, productType="com.apple.product-type.bundle.ui-testing")
     root["targets"].append(target)
+    unit_source_path = tests / "AccessibilityActions.swift"
+    shutil.copyfile(FIXTURE / "ios/AccessibilityActions.swift", unit_source_path)
+    unit_source = add("unit-source", isa="PBXFileReference", lastKnownFileType="sourcecode.swift",
+                      path="AccessibilityActions.swift", sourceTree="<group>")
+    objects[group]["children"].append(unit_source)
+    unit_build = add("unit-build", isa="PBXBuildFile", fileRef=unit_source)
+    unit_sources = add("unit-sources", isa="PBXSourcesBuildPhase", buildActionMask=2147483647,
+                       files=[unit_build], runOnlyForDeploymentPostprocessing=0)
+    unit_product = add("unit-product", isa="PBXFileReference", explicitFileType="wrapper.cfbundle",
+                      path="BlincAccessibilityActions.xctest", sourceTree="BUILT_PRODUCTS_DIR", includeInIndex=0)
+    objects[root["productRefGroup"]]["children"].append(unit_product)
+    unit_configs = []
+    for name in ["Debug", "Release"]:
+        unit_configs.append(add("unit-config-" + name, isa="XCBuildConfiguration", name=name, buildSettings={
+            "PRODUCT_NAME": "$(TARGET_NAME)", "PRODUCT_BUNDLE_IDENTIFIER": BUNDLE + ".actions",
+            "GENERATE_INFOPLIST_FILE": "YES", "SWIFT_VERSION": "5.0",
+            "IPHONEOS_DEPLOYMENT_TARGET": "17.0", "SUPPORTED_PLATFORMS": "iphonesimulator",
+            "SDKROOT": "iphonesimulator", "TARGETED_DEVICE_FAMILY": "1", "CODE_SIGNING_ALLOWED": "NO",
+            "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/BlincApp.app/BlincApp", "BUNDLE_LOADER": "$(TEST_HOST)",
+            "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks"],
+        }))
+    unit_config_list = add("unit-configs", isa="XCConfigurationList", buildConfigurations=unit_configs,
+                           defaultConfigurationIsVisible=0, defaultConfigurationName="Debug")
+    unit_target = add("unit-target", isa="PBXNativeTarget", name="BlincAccessibilityActions",
+                      buildConfigurationList=unit_config_list, buildPhases=[unit_sources], buildRules=[],
+                      dependencies=[dependency], productName="BlincAccessibilityActions",
+                      productReference=unit_product, productType="com.apple.product-type.bundle.unit-test")
+    root["targets"].append(unit_target)
     root.setdefault("attributes", {}).setdefault("TargetAttributes", {})[target] = {
         "CreatedOnToolsVersion": "26.4", "TestTargetID": main_id,
     }
@@ -143,13 +170,18 @@ def prepare():
                              BlueprintIdentifier=identifier, BuildableName=name,
                              BlueprintName=objects[identifier]["name"], ReferencedContainer="container:BlincApp.xcodeproj")
 
-    for identifier, name in [(main_id, "BlincApp.app"), (target, "BlincAccessibilityUITests.xctest")]:
+    for identifier, name in [(main_id, "BlincApp.app"), (target, "BlincAccessibilityUITests.xctest"), (unit_target, "BlincAccessibilityActions.xctest")]:
         entry = ET.SubElement(entries, "BuildActionEntry", buildForTesting="YES", buildForRunning="YES",
                               buildForProfiling="NO", buildForArchiving="NO", buildForAnalyzing="NO")
         reference(entry, identifier, name)
     test = ET.SubElement(scheme, "TestAction", buildConfiguration="Debug", shouldUseLaunchSchemeArgsEnv="YES")
     testable = ET.SubElement(ET.SubElement(test, "Testables"), "TestableReference", skipped="NO", parallelizable="NO")
     reference(testable, target, "BlincAccessibilityUITests.xctest")
+    testable = ET.SubElement(test.find("Testables"), "TestableReference", skipped="NO", parallelizable="NO")
+    reference(testable, unit_target, "BlincAccessibilityActions.xctest")
+    variables = ET.SubElement(test, "EnvironmentVariables")
+    for key in ["BLINC_GPU_MAX_PRIMITIVES", "BLINC_GPU_MAX_GLYPHS"]:
+        ET.SubElement(variables, "EnvironmentVariable", key=key, value="1024", isEnabled="YES")
     path = project / "BlincApp.xcodeproj/xcshareddata/xcschemes"
     path.mkdir(parents=True, exist_ok=True)
     ET.ElementTree(scheme).write(path / f"{SCHEME}.xcscheme", encoding="utf-8", xml_declaration=True)
@@ -159,10 +191,7 @@ def prepare():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prepare-only", action="store_true")
-    parser.add_argument("--max-swap-growth-mb", type=float, default=256)
     args = parser.parse_args()
-    if args.max_swap_growth_mb < 0:
-        parser.error("--max-swap-growth-mb must be nonnegative")
     OUT.mkdir(parents=True, exist_ok=True)
     lock = (OUT / ".runner.lock").open("a")
     try:
@@ -182,28 +211,30 @@ def main():
                CARGO_PROFILE_DEV_OPT_LEVEL="0", CARGO_PROFILE_DEV_CODEGEN_UNITS="1",
                CARGO_TARGET_DIR=str(OUT / "rust"), IPHONEOS_DEPLOYMENT_TARGET="17.0")
 
-    def check_memory(name):
+    def record_memory(name):
         nonlocal peak_swap
         sample = memory()
         peak_swap = max(peak_swap, sample["swap_used_mb"])
         events.append({"phase": name, **sample})
-        if sample["pressure"] >= 4 or sample["free_percent"] < 12 or sample["swap_used_mb"] - baseline["swap_used_mb"] > args.max_swap_growth_mb:
-            raise ResourceLimitError("Memory guard stopped the run; see memory.json. No other apps were stopped.")
 
     def run(name, command, *, timeout=900):
-        check_memory(name)
+        record_memory(name)
         print(name, flush=True)
         with (OUT / f"{name}.log").open("w") as log:
             process = subprocess.Popen(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, env=env, start_new_session=True)
             if name == "accessibility-tests":
                 report["tests_started"] = True
             started = time.monotonic()
+            sampled = started
             try:
                 while process.poll() is None:
-                    check_memory(name)
+                    if time.monotonic() - sampled >= 10:
+                        record_memory(name)
+                        sampled = time.monotonic()
                     if time.monotonic() - started > timeout:
                         raise RuntimeError(f"{name} exceeded {timeout}s")
                     time.sleep(1)
+                record_memory(name)
                 return process.returncode
             finally:
                 if process.poll() is None:
@@ -219,8 +250,6 @@ def main():
             raise RuntimeError(f"{name} failed; see {OUT / (name + '.log')}")
 
     try:
-        if baseline["pressure"] >= 4 or baseline["free_percent"] < 20:
-            raise ResourceLimitError("Insufficient memory for a simulator build; project prepared without booting a device.")
         require("rust-build", ["cargo", "build", "--offline", "--manifest-path", str(FIXTURE / "Cargo.toml"),
                                "--lib", "--target", "aarch64-apple-ios-sim"])
         base = ["xcodebuild", "-project", str(project), "-scheme", SCHEME, "-configuration", "Debug",
@@ -229,7 +258,7 @@ def main():
         require("xcode-build", base + ["build-for-testing", "-destination", "generic/platform=iOS Simulator"])
         devices = json.loads(output("xcrun", "simctl", "list", "devices", "available", "--json"))["devices"]
         if any(d["state"] != "Shutdown" for values in devices.values() for d in values):
-            raise ResourceLimitError("A simulator is already active; keeping this run from starting another.")
+            raise RuntimeError("A simulator is already active; keeping this run from starting another.")
         runtime = "com.apple.CoreSimulator.SimRuntime.iOS-17-5"
         if runtime not in devices:
             raise RuntimeError("Install an iOS17.5 runtime or select an installed runtime in this runner.")
@@ -253,10 +282,10 @@ def main():
         report["outcome"] = "tests-failed" if status else "passed"
         return status
     except RuntimeError as error:
-        report["outcome"] = "resource-stopped" if isinstance(error, ResourceLimitError) else "setup-failed"
+        report["outcome"] = "setup-failed"
         report["reason"] = str(error)
         print(error, file=sys.stderr)
-        return 75 if isinstance(error, ResourceLimitError) else 1
+        return 1
     finally:
         if device:
             shutdown = subprocess.run(["xcrun", "simctl", "shutdown", device], capture_output=True)

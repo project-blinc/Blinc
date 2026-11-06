@@ -45,6 +45,7 @@ class BlincViewController: UIViewController {
     // MARK: - Properties
 
     /// Opaque pointer to the Blinc render context
+    private var accessibilityBridge: BlincAccessibility?
     private var blincContext: OpaquePointer?
 
     /// CADisplayLink for frame updates
@@ -86,6 +87,7 @@ class BlincViewController: UIViewController {
     }
 
     deinit {
+        accessibilityBridge?.disconnect()
         stopDisplayLink()
         if let ctx = blincContext {
             blinc_destroy_context(ctx)
@@ -120,7 +122,9 @@ class BlincViewController: UIViewController {
         let width = UInt32(view.bounds.width * scale)
         let height = UInt32(view.bounds.height * scale)
 
-        blincContext = blinc_create_context(width, height, Double(scale))
+        blincContext = blinc_create_context(width, height, Double(BlincContentSize.renderScale(in: view)))
+
+        if let ctx = blincContext { accessibilityBridge = BlincAccessibility(host: view, context: ctx) }
 
         guard blincContext != nil else {
             fatalError("Failed to create Blinc render context")
@@ -149,6 +153,7 @@ class BlincViewController: UIViewController {
 
         // Build the frame (ticks animations, calls UI builder)
         blinc_build_frame(ctx)
+        accessibilityBridge?.synchronize()
 
         // Render to Metal
         renderFrame()
@@ -181,6 +186,13 @@ class BlincViewController: UIViewController {
 
     // MARK: - Resize
 
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if previousTraitCollection?.preferredContentSizeCategory != traitCollection.preferredContentSizeCategory {
+            view.setNeedsLayout()
+        }
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
 
@@ -195,7 +207,7 @@ class BlincViewController: UIViewController {
         metalLayer.drawableSize = CGSize(width: CGFloat(width), height: CGFloat(height))
 
         // Update Blinc context
-        blinc_update_size(ctx, width, height, Double(scale))
+        blinc_update_size(ctx, width, height, Double(BlincContentSize.renderScale(in: view)))
 
         // Mark for rebuild
         blinc_mark_dirty(ctx)
@@ -207,7 +219,7 @@ class BlincViewController: UIViewController {
         guard let ctx = blincContext else { return }
 
         for touch in touches {
-            let point = touch.location(in: view)
+            let point = BlincContentSize.logicalPoint(touch.location(in: view), in: view)
             let touchId = UInt64(bitPattern: Int64(touch.hash))
             blinc_handle_touch(ctx, touchId, Float(point.x), Float(point.y), 0)
         }
@@ -217,7 +229,7 @@ class BlincViewController: UIViewController {
         guard let ctx = blincContext else { return }
 
         for touch in touches {
-            let point = touch.location(in: view)
+            let point = BlincContentSize.logicalPoint(touch.location(in: view), in: view)
             let touchId = UInt64(bitPattern: Int64(touch.hash))
             blinc_handle_touch(ctx, touchId, Float(point.x), Float(point.y), 1)
         }
@@ -227,7 +239,7 @@ class BlincViewController: UIViewController {
         guard let ctx = blincContext else { return }
 
         for touch in touches {
-            let point = touch.location(in: view)
+            let point = BlincContentSize.logicalPoint(touch.location(in: view), in: view)
             let touchId = UInt64(bitPattern: Int64(touch.hash))
             blinc_handle_touch(ctx, touchId, Float(point.x), Float(point.y), 2)
         }
@@ -237,7 +249,7 @@ class BlincViewController: UIViewController {
         guard let ctx = blincContext else { return }
 
         for touch in touches {
-            let point = touch.location(in: view)
+            let point = BlincContentSize.logicalPoint(touch.location(in: view), in: view)
             let touchId = UInt64(bitPattern: Int64(touch.hash))
             blinc_handle_touch(ctx, touchId, Float(point.x), Float(point.y), 3)
         }

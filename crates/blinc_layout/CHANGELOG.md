@@ -4,7 +4,11 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ## [Unreleased]
 
+### Accessibility
+- Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
+
 ### Fixed
+- Labelled checkboxes toggle once when a box click bubbles through the row, while label, keyboard and assistive activation keep their existing behavior.
 - Explicit CSS colour importance survives base, state and dynamic-selector passes while border transitions keep their interpolated colours.
 - Audio waveforms read live playback progress instead of a fixed ratio, follow pause/seek, and request animation frames only during playback.
 - Virtual List updates its mounted window as it scrolls, measures variable row heights and preserves its offset through fresh builds and CSS changes. A bounded window renders both ends of large datasets.

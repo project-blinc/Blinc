@@ -6,6 +6,14 @@ use super::*;
 /// its default look.
 pub const DEFAULT_CLASS: &str = "blinc-input";
 
+struct AccessibleNameEffect(blinc_core::reactive::EffectId);
+
+impl Drop for AccessibleNameEffect {
+    fn drop(&mut self) {
+        blinc_core::reactive::dispose_host_effect(self.0);
+    }
+}
+
 /// A single-line text field.
 ///
 /// Built once. Its handlers edit the shared [`TextInputData`] and bump its
@@ -23,6 +31,7 @@ pub struct TextInput {
     on_change_callback: Option<OnChangeCallback>,
     /// Caller's handle onto this field, if bound.
     element_ref: Option<crate::selector::DivRef>,
+    accessibility_label: Option<crate::binding::Reactive<String>>,
 }
 
 impl TextInput {
@@ -66,6 +75,7 @@ impl TextInput {
             config,
             on_change_callback: None,
             element_ref: None,
+            accessibility_label: None,
         }
     }
 
@@ -77,6 +87,12 @@ impl TextInput {
             let cfg = self.config.lock().unwrap().clone();
             assemble(outer, &self.data, &cfg)
         })
+    }
+
+    /// Name announced by assistive technology, independent of the current value.
+    pub fn accessibility_label(mut self, label: impl crate::binding::IntoReactive<String>) -> Self {
+        self.accessibility_label = Some(label.into_reactive());
+        self
     }
 
     pub fn w(mut self, px: f32) -> Self {
@@ -445,6 +461,109 @@ impl ElementBuilder for TextInput {
 
     fn element_type_id(&self) -> crate::div::ElementTypeId {
         crate::div::ElementTypeId::Div
+    }
+
+    fn accessibility_binding(&self) -> Option<crate::accessibility::AccessibilityBinding> {
+        use crate::accessibility::{AccessibilityAction, AccessibilityBinding, AccessibilityValue};
+        let data = self.data.clone();
+        let label = self.accessibility_label.clone();
+        let name_effect = label.as_ref().and_then(|source| {
+            if matches!(source, crate::binding::Reactive::Const(_)) {
+                return None;
+            }
+            let source = source.clone();
+            let effect = blinc_core::reactive::effect(move |graph| {
+                match &source {
+                    crate::binding::Reactive::Bound(value) => {
+                        graph.get(value.signal());
+                    }
+                    crate::binding::Reactive::Computed(value) => {
+                        value.try_get();
+                    }
+                    crate::binding::Reactive::Const(_) => {}
+                }
+                crate::request_redraw();
+            });
+            Some(Arc::new(AccessibleNameEffect(effect.id())))
+        });
+        let edit_data = self.data.clone();
+        let input = crate::selector::InputRef::new();
+        input.bind_data(&self.data);
+        Some(AccessibilityBinding {
+            read: Arc::new(move || {
+                let _keep_alive = &name_effect;
+                let label = label.as_ref().and_then(|v| v.now());
+                let d = data.lock().unwrap();
+                AccessibilityValue {
+                    label,
+                    value: d.display_text(),
+                    placeholder: d.placeholder.clone(),
+                    secure: d.masked,
+                    focused: d.visual.is_focused(),
+                    selection: {
+                        let offset = |index| {
+                            if d.masked {
+                                index
+                            } else {
+                                d.value.chars().take(index).map(char::len_utf16).sum()
+                            }
+                        };
+                        let anchor = d.selection_start.unwrap_or(d.cursor);
+                        Some([offset(anchor.min(d.cursor)), offset(anchor.max(d.cursor))])
+                    },
+                }
+            }),
+            action: Arc::new(move |action| match action {
+                AccessibilityAction::Focus | AccessibilityAction::Activate => {
+                    input.focus();
+                    true
+                }
+                AccessibilityAction::SetValue(_) | AccessibilityAction::ReplaceText { .. } => {
+                    let (callback, value) = {
+                        let mut d = edit_data.lock().unwrap();
+                        if d.disabled {
+                            return false;
+                        }
+                        match action {
+                            AccessibilityAction::SetValue(value) => {
+                                d.select_all();
+                                d.insert(value);
+                            }
+                            AccessibilityAction::ReplaceText { start, end, text } => {
+                                let exposed = d.display_text();
+                                let index = |offset| {
+                                    let mut units = 0;
+                                    for (i, c) in exposed.chars().enumerate() {
+                                        if units == offset {
+                                            return Some(i);
+                                        }
+                                        units += c.len_utf16();
+                                    }
+                                    (units == offset).then_some(exposed.chars().count())
+                                };
+                                let (Some(start), Some(end)) = (index(*start), index(*end)) else {
+                                    return false;
+                                };
+                                if start > end {
+                                    return false;
+                                }
+                                d.cursor = end;
+                                d.selection_start = Some(start);
+                                d.insert(text);
+                            }
+                            _ => unreachable!(),
+                        }
+                        (d.on_change_callback.clone(), d.value.clone())
+                    };
+                    if let Some(callback) = callback {
+                        callback(&value);
+                    }
+                    super::focus::notify_text_input(&edit_data);
+                    true
+                }
+                _ => false,
+            }),
+        })
     }
 
     fn semantic_type_name(&self) -> Option<&'static str> {

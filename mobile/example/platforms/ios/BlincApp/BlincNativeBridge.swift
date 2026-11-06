@@ -865,11 +865,12 @@ class BlincKeyboardHelper: NSObject, UITextFieldDelegate {
         let insetPoints = intersection.isNull ? 0.0 : Double(intersection.height)
 
         if let ctx = BlincKeyboardHelper.blincContext {
-            blinc_ios_set_keyboard_inset(ctx, Float(insetPoints))
+            blinc_ios_set_keyboard_inset(ctx, Float(insetPoints * Double(UIScreen.main.scale) / blinc_get_scale_factor(ctx)))
         }
     }
 
     func showKeyboard() {
+        if BlincAccessibility.focusCurrentInput() { return }
         if hiddenTextField == nil {
             // Position the hidden text field off-screen at
             // (-1000, -1000). It exists only to host the soft
@@ -899,6 +900,7 @@ class BlincKeyboardHelper: NSObject, UITextFieldDelegate {
     }
 
     func hideKeyboard() {
+        BlincAccessibility.editingField?.resignFirstResponder()
         hiddenTextField?.resignFirstResponder()
     }
 

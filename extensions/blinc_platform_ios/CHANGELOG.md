@@ -4,6 +4,9 @@ All notable changes to `blinc_platform_ios` will be documented in this file.
 
 ## [Unreleased]
 
+### Accessibility
+- UIKit accessibility container and text-field proxies for GPU-rendered controls, with stable identities, semantic updates and assistive actions. Dynamic Type scales the UI and coordinates together.
+
 ### Changed
 - `lookup_extern_fn` (the `dlsym` helper for iOS template hooks) wraps its `extern "C"` import as `unsafe extern "C" { … }` and adds explicit `unsafe { }` blocks around the `dlsym` + `transmute` calls so the body satisfies edition 2024's `unsafe_op_in_unsafe_fn`. Per-export `#[unsafe(no_mangle)]` syntax applied to all iOS native-bridge symbols.
 

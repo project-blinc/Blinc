@@ -5,8 +5,9 @@ final class BlincAccessibilityTests: XCTestCase {
         continueAfterFailure = false
     }
 
-    private func launchFixture() -> XCUIApplication {
+    private func launchFixture(contentSize: String? = nil) -> XCUIApplication {
         let app = XCUIApplication(bundleIdentifier: "com.blinc.accessibility.fixture")
+        if let contentSize { app.launchArguments = ["-UIPreferredContentSizeCategoryName", contentSize] }
         app.launchEnvironment = [
             "BLINC_GPU_MAX_PRIMITIVES": "1024",
             "BLINC_GPU_MAX_GLYPHS": "1024"
@@ -40,17 +41,39 @@ final class BlincAccessibilityTests: XCTestCase {
         name.tap()
         name.typeText("Ada")
         XCTAssertEqual(name.value as? String, "Ada")
+        name.typeText("\n")
+        XCTAssertTrue(app.staticTexts["Count: 11"].waitForExistence(timeout: 3))
 
-        let checkbox = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == %@", "Enable notifications")).firstMatch
+        let checkbox = app.buttons["Enable notifications"]
         XCTAssertTrue(checkbox.exists)
         let previous = checkbox.value as? String
         XCTAssertNotNil(previous, "The selected state must be exposed.")
         checkbox.tap()
         XCTAssertNotEqual(checkbox.value as? String, previous)
+        checkbox.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5)).tap()
+        XCTAssertEqual(checkbox.value as? String, previous, "A box click must toggle exactly once.")
+        checkbox.tap()
+        XCTAssertNotEqual(checkbox.value as? String, previous)
+        let volume = app.otherElements["Volume"]
+        XCTAssertTrue(volume.exists, "The adjustable control must expose its name and value.")
+        XCTAssertEqual(volume.value as? String, "50")
         let unavailable = app.buttons["Unavailable"]
         XCTAssertTrue(unavailable.exists)
         XCTAssertFalse(unavailable.isEnabled)
+        let edited = XCTAttachment(screenshot: app.screenshot())
+        edited.name = "Edited fixture"
+        edited.lifetime = .keepAlways
+        add(edited)
+    }
+
+    func testLargeContentSizeChangesRenderedGeometry() {
+        let normal = launchFixture()
+        let original = normal.buttons["Increment"].frame.height
+        normal.terminate()
+        let larger = launchFixture(contentSize: "UICTContentSizeCategoryXXXL")
+        XCTAssertGreaterThan(larger.buttons["Increment"].frame.height, original * 1.2)
+        larger.buttons["Increment"].tap()
+        XCTAssertTrue(larger.staticTexts["Count: 1"].waitForExistence(timeout: 3))
     }
 
     func testSystemAccessibilityAudit() throws {
