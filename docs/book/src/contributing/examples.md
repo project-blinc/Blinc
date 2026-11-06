@@ -9,7 +9,7 @@ for all targets.
 
 The [Example Gallery](../web/example-gallery.md) is assembled from
 this same set, auto-discovered by `tools/build-web-examples` and
-published to GitHub Pages via CI. **Adding a new example requires
+published to the site via CI. **Adding a new example requires
 writing one file that follows the convention below. Nothing else.**
 No manifest entry. No wrapper crate. No CI change.
 

@@ -8,6 +8,7 @@ on:
     paths:
       - 'docs/book/**'
       - 'web/**'
+      - 'wrangler.jsonc'
       - '.github/workflows/docs.yml'
       - 'crates/*/src/**'
       - 'examples/blinc_app_examples/examples/**'
@@ -28,6 +29,7 @@ on:
     paths:
       - 'docs/book/**'
       - 'web/**'
+      - 'wrangler.jsonc'
       - '.github/workflows/docs.yml'
       - 'crates/*/src/**'
       - 'examples/blinc_app_examples/examples/**'
@@ -47,11 +49,9 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages"
+  group: "site"
   cancel-in-progress: false
 
 jobs:
@@ -250,11 +250,11 @@ jobs:
       - name: Assemble stable and versioned books
         run: python3 scripts/book_versions.py assemble --dev target/book-dev --archives target/book-releases --output target/site/docs
 
-      # GitHub Pages serves at most 1 GB, and the demo WASM modules and sample assets are about
-      # 700 MB per book edition. On a published build they move to the asset origin (repository
-      # variable ASSET_BASE_URL) as content-addressed, immutable objects, and are checked over
-      # HTTP before the pages that point at them are uploaded. Without the variable nothing is
-      # uploaded or deployed, and the live site stays as it was.
+      # The demo WASM modules and sample assets are about 700 MB per book edition, and the site
+      # worker takes at most 25 MiB per file. On a published build they move to the asset origin
+      # (repository variable ASSET_BASE_URL) as content-addressed, immutable objects, and are
+      # checked over HTTP before the pages that point at them are uploaded. Without the variable
+      # nothing is uploaded or deployed, and the live site stays as it was.
       - name: Move demo WASM and assets to the asset origin
         if: github.event_name != 'pull_request' && vars.ASSET_BASE_URL != ''
         run: python3 scripts/book_cdn.py externalize --docs target/site/docs --base "${{ vars.ASSET_BASE_URL }}" --objects target/asset-origin
@@ -280,22 +280,35 @@ jobs:
 
       - name: Upload artifact
         if: github.event_name != 'pull_request' && vars.ASSET_BASE_URL != ''
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          path: ./target/site
+          name: site
+          path: target/site
+          if-no-files-found: error
 
   deploy:
-    name: Deploy to GitHub Pages
+    name: Deploy to Cloudflare
     if: vars.ASSET_BASE_URL != '' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'release' && !github.event.release.prerelease))
     needs: build
     runs-on: ubuntu-latest
     environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      name: cloudflare
+      url: https://blinc.rs/
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: target/site
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Content-hashed files already on the worker are skipped, so only what changed is uploaded.
+      - name: Deploy the site worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+        run: npx --yes wrangler@4.158.0 deploy
 
   wiki:
     name: Sync to GitHub Wiki

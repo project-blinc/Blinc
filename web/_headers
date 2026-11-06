@@ -1,0 +1,11 @@
+/*
+  X-Content-Type-Options: nosniff
+
+/components/releases/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*
+  Cache-Control: public, max-age=86400
+
+/docs/FontAwesome/*
+  Cache-Control: public, max-age=31536000, immutable

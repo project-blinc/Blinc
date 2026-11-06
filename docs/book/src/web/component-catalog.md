@@ -85,7 +85,7 @@ CARGO_BUILD_JOBS=2 cargo run -p blinc-build-web-examples -- \
 
 Use `--record` to refresh GIFs and posters. `--only <slug>` selects one recording.
 Shared fixture changes invalidate affected recordings, and the build rejects stale
-previews. GitHub Pages stages the generated catalog beside the landing page and
+previews. The site build stages the generated catalog beside the landing page and
 mdBook. No WASM runtime starts on the catalog index.
 
 See `web/components/README.md` in the repository for scoped checks, preview
