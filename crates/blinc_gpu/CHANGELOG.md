@@ -7,6 +7,9 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ### Added
 - `GpuRenderer::with_offscreen_canvas` shares web surface/device setup with the DOM canvas constructor.
 
+### Fixed
+- Web renderer setup probes for a WebGPU adapter first and uses the WebGL2 backend when there is none. Browsers that expose `navigator.gpu` but return no adapter no longer fail with "No suitable GPU adapter found".
+
 ## [0.6.0] - 2026-11-04
 
 ### Added

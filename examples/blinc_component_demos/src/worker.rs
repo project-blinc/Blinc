@@ -94,6 +94,11 @@ impl CatalogRuntime {
     /// Resolve only after the first submitted GPU frame has completed.
     pub async fn warm_frame(&mut self) -> Result<String, JsValue> {
         let state = self.frame()?;
+        // On the WebGL2 backend the completion callback is not delivered; its commands are
+        // already issued once the frame returns.
+        if !self.app.blinc_app().has_storage_buffers() {
+            return Ok(state);
+        }
         let completed = js_sys::Promise::new(&mut |resolve, _| {
             self.app
                 .blinc_app()

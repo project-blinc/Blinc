@@ -2016,10 +2016,30 @@ impl GpuRenderer {
         target: wgpu::SurfaceTarget<'static>,
         config: RendererConfig,
     ) -> Result<(Self, wgpu::Surface<'static>), RendererError> {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: Self::preferred_backends(),
+        // Browsers can expose `navigator.gpu` and still return no adapter (a GPU outside the
+        // browser's WebGPU allowlist), and wgpu then never reaches WebGL2. Probe first, with no
+        // surface so the canvas stays free to take a WebGL2 context.
+        let webgpu = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::BROWSER_WEBGPU,
             ..Default::default()
         });
+        let has_webgpu = webgpu
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: None,
+                force_fallback_adapter: false,
+            })
+            .await
+            .is_ok();
+        let instance = if has_webgpu {
+            webgpu
+        } else {
+            tracing::info!("No WebGPU adapter; using the WebGL2 backend");
+            wgpu::Instance::new(&wgpu::InstanceDescriptor {
+                backends: wgpu::Backends::GL,
+                ..Default::default()
+            })
+        };
 
         let surface = instance
             .create_surface(target)
