@@ -12,7 +12,8 @@ SPEC = importlib.util.spec_from_file_location("book_cdn", Path(__file__).resolve
 cdn = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(cdn)
 
-PAGE = '<script type="module">const { default: init } = await import("./pkg/a_bg.js");\nawait init();\n</script>'
+PAGE = ('<script type="module">const wasmUrl = "pkg/a_bg.wasm";\n'
+        'const { default: init } = await import("./pkg/a_bg.js");\nawait init();\n</script>')
 BASE = "https://assets.example.org"
 
 
@@ -39,8 +40,15 @@ class ExternalizeTests(unittest.TestCase):
         self.assertEqual(manifest, {f"wasm/{digest}.wasm": {"sha256": digest, "bytes": 8}})
         self.assertEqual((self.objects / f"wasm/{digest}.wasm").read_bytes(), b"module a")
         self.assertIn(f'init({{ module_or_path: "{BASE}/wasm/{digest}.wasm" }})', (directory / "index.html").read_text())
+        self.assertIn(f'const wasmUrl = "{BASE}/wasm/{digest}.wasm";', (directory / "index.html").read_text())
         self.assertFalse((directory / "pkg" / "a_bg.wasm").exists())
         self.assertTrue((directory / "pkg" / "a.js").exists())
+
+    def test_a_page_without_the_worker_literal_still_gets_the_init_rewrite(self):
+        directory = self.demo("", "a", b"module a")
+        (directory / "index.html").write_text('<script type="module">await init();</script>')
+        cdn.externalize(self.docs, BASE, self.objects)
+        self.assertIn("module_or_path", (directory / "index.html").read_text())
 
     def test_identical_modules_in_two_editions_share_one_object(self):
         self.demo("", "a", b"same")
@@ -66,6 +74,7 @@ class ExternalizeTests(unittest.TestCase):
         self.assertIn(f'href="{url}"', text)
         self.assertIn(f'"{cdn.ASSETS}/3d/scene.bin": "{url}"', text)
         self.assertLess(text.index("window.fetch"), text.index("await init("))
+        self.assertIn("window.blincAssetRemap=", text)
         self.assertIn(f"asset/{digest}.bin", manifest)
         self.assertFalse((assets / "scene.bin").exists())
         self.assertTrue((assets / "small.txt").exists())

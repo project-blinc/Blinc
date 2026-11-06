@@ -390,9 +390,7 @@ fn discover_examples(workspace_root: &Path) -> Vec<ExampleMeta> {
         // by name (it usually does — but don't depend on it). Also
         // pull it in when only `theme_color_scheme()` is exported —
         // the generated wrapper still calls into `blinc_theme`.
-        if (has_theme_bundle || has_theme_color_scheme)
-            && !extra_deps.iter().any(|(p, _)| p == "blinc_theme")
-        {
+        if !extra_deps.iter().any(|(p, _)| p == "blinc_theme") {
             extra_deps.push((
                 "blinc_theme".to_string(),
                 r#"{ path = "../../../crates/blinc_theme" }"#.to_string(),
@@ -875,6 +873,9 @@ fn generate_wrapper(workspace_root: &Path, meta: &ExampleMeta) -> std::io::Resul
             &crate_name,
             meta.window_size,
             &meta.image_assets,
+            // Its async glTF loader spins in a worker until blinc_game_kit carries the fix, so
+            // those examples start on the page thread.
+            !meta.extra_deps.iter().any(|(p, _)| p == "blinc_game_kit"),
         ),
     )?;
 
@@ -977,7 +978,7 @@ blinc_core = {{ path = "../../../crates/blinc_core" }}
 {extra_deps}wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
-web-sys = {{ version = "0.3", features = ["console", "Window"] }}
+web-sys = {{ version = "0.3", features = ["console", "Window", "OffscreenCanvas"] }}
 console_error_panic_hook = "0.1"
 tracing = {{ workspace = true }}
 tracing-wasm = "0.2"
@@ -1143,9 +1144,10 @@ mod example {{
     include!(concat!(env!("OUT_DIR"), "/example.rs"));
 }}
 
-use blinc_app::web::WebApp;
+use blinc_app::web::{{WebApp, WorkerRuntime}};
 use example::build_ui;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 
 /// Bundled fonts from `assets/fonts/` at the workspace root.
 /// Browsers can't hand wgpu their system fonts, so font bytes are
@@ -1164,6 +1166,11 @@ pub fn _start() {{
             .set_max_level(tracing::Level::INFO)
             .build(),
     );
+
+    // The same module is instantiated inside the worker, which has no page to start.
+    if js_sys::global().dyn_ref::<web_sys::Window>().is_none() {{
+        return;
+    }}
 
 {theme_init_block}    wasm_bindgen_futures::spawn_local(async {{
         let result = WebApp::run_with_async_setup(
@@ -1191,9 +1198,95 @@ pub fn _start() {{
         }}
     }});
 }}
+
+/// Worker entry. The host transfers the canvas, calls this once, then drives frames, input and
+/// resizes. `base` is the page's URL: relative asset paths resolve against it, not the worker's.
+#[wasm_bindgen]
+pub struct ExampleRuntime(WorkerRuntime);
+
+#[wasm_bindgen]
+pub async fn create_runtime(
+    canvas: web_sys::OffscreenCanvas,
+    width: f32,
+    height: f32,
+    dpr: f64,
+    dark: bool,
+    base: String,
+) -> Result<ExampleRuntime, JsValue> {{
+    blinc_app::web::set_asset_base_url(&base);
+{worker_theme_block}    let mut app = WebApp::new_offscreen(canvas, width, height, dpr)
+        .await
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    app.load_font_data(ARIAL_TTF.to_vec());
+    app.load_font_data(FIRA_CODE_TTF.to_vec());
+    app.load_font_data(JETBRAINS_MONO_TTF.to_vec());
+{preload_block}    app.set_ui_builder(|ctx| build_ui(ctx));
+    Ok(ExampleRuntime(WorkerRuntime::new(app)))
+}}
+
+#[wasm_bindgen]
+impl ExampleRuntime {{
+    pub fn frame(&mut self) -> Result<String, JsValue> {{
+        self.0.frame().map_err(|e| JsValue::from_str(&e.to_string()))
+    }}
+
+    /// Resolve once the first submitted GPU frame has completed.
+    pub async fn warm_frame(&mut self) -> Result<String, JsValue> {{
+        let state = self.frame()?;
+        // On the WebGL2 backend the completion callback is not delivered; its commands are
+        // already issued once the frame returns.
+        if !self.0.app().blinc_app().has_storage_buffers() {{
+            return Ok(state);
+        }}
+        let completed = js_sys::Promise::new(&mut |resolve, _| {{
+            self.0.app().blinc_app().queue().on_submitted_work_done(move || {{
+                let _ = resolve.call0(&JsValue::NULL);
+            }});
+        }});
+        wasm_bindgen_futures::JsFuture::from(completed).await?;
+        Ok(state)
+    }}
+
+    pub fn input(
+        &mut self,
+        json: &str,
+        shift: bool,
+        ctrl: bool,
+        alt: bool,
+        meta: bool,
+        timestamp: Option<f64>,
+    ) -> Result<bool, JsValue> {{
+        self.0
+            .input(json, shift, ctrl, alt, meta, timestamp)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }}
+
+    pub fn resize(&mut self, width: f32, height: f32, dpr: f64) {{
+        self.0.resize(width, height, dpr);
+    }}
+}}
 "#,
         stem = stem,
         crate_name = crate_name,
+        worker_theme_block = {
+            let bundle = if has_theme_bundle {
+                "example::theme_bundle()"
+            } else {
+                "blinc_theme::platform_theme_bundle()"
+            };
+            let scheme = if has_theme_color_scheme {
+                "example::theme_color_scheme()"
+            } else {
+                "if dark { blinc_theme::ColorScheme::Dark } else { blinc_theme::ColorScheme::Light }"
+            };
+            // An example that pins its own scheme ignores the host's preference.
+            let unused = if has_theme_color_scheme {
+                "    let _ = dark;\n"
+            } else {
+                ""
+            };
+            format!("{unused}    blinc_theme::ThemeState::init({bundle}, {scheme});\n")
+        },
         theme_init_block = if has_theme_bundle {
             // Install the example's bundle before WebApp::new()'s
             // auto-init runs — its `try_get().is_none()` guard skips
@@ -1272,6 +1365,7 @@ fn render_index_html(
     crate_name: &str,
     window_size: Option<(u32, u32)>,
     image_assets: &[String],
+    worker_capable: bool,
 ) -> String {
     // Convert crate name back to the JS import shim filename. wasm-pack
     // emits `<package_name_with_underscores>.js`, not hyphens.
@@ -1286,6 +1380,12 @@ fn render_index_html(
         Some(_) => "display: block; /* fixed size via data- attrs */",
         None => "display: block; width: 100vw; height: 100vh;",
     };
+    let stage_css = match window_size {
+        Some((w, h)) => format!("width: {w}px; height: {h}px;"),
+        None => "width: 100vw; height: 100vh;".to_string(),
+    };
+    // Media streams through a DOM element, which a worker cannot own; those stay on the page.
+    let worker_ok = worker_capable && image_assets.iter().all(|p| !is_media_url(p));
 
     // `<link rel="preload" as="fetch" crossorigin>` lets the browser
     // begin downloading each asset URL in parallel with the wasm
@@ -1388,12 +1488,32 @@ fn render_index_html(
         padding: 24px;
       }}
       #unsupported a {{ color: #6db3ff; }}
-      .no-webgpu #blinc-canvas {{ display: none; }}
+      #stage {{
+        position: relative;
+        {stage_css}
+      }}
+      #stage canvas {{ display: block; width: 100%; height: 100%; touch-action: none; }}
+      .demo-input-bridge {{ position: absolute; left: 8px; top: 8px; width: 1px; height: 1px; padding: 0; opacity: 0; pointer-events: none; }}
+      #loading {{
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        color: #8d8da0;
+        pointer-events: none;
+      }}
+      #loading[hidden] {{ display: none; }}
+      .no-webgpu #stage {{ display: none; }}
       .no-webgpu #unsupported {{ display: flex; }}
     </style>
   </head>
   <body>
-    <canvas id="blinc-canvas"{canvas_attrs}></canvas>
+    <div id="stage">
+      <canvas id="blinc-canvas"{canvas_attrs}></canvas>
+      <div id="loading" role="status">Loading…</div>
+    </div>
 
     <div id="unsupported">
       <strong>WebGPU not available</strong>
@@ -1409,11 +1529,59 @@ fn render_index_html(
       const probeCanvas = document.createElement("canvas");
       const hasWebGL2 = !!probeCanvas.getContext("webgl2");
 
-      if (!hasWebGPU && !hasWebGL2) {{
-        document.body.classList.add("no-webgpu");
-      }} else {{
+      const stage = document.getElementById("stage");
+      const loading = document.getElementById("loading");
+      const template = document.getElementById("blinc-canvas").cloneNode(false);
+      const wasmUrl = "pkg/{js_name}_bg.wasm";
+      const canWorker = {worker_ok}
+        && !!HTMLCanvasElement.prototype.transferControlToOffscreen
+        && typeof Worker !== "undefined"
+        && new URLSearchParams(location.search).get("worker") !== "0";
+
+      // The page thread starts the app itself: used when a worker cannot, and for media examples.
+      async function startOnPage() {{
+        stage.replaceChildren(template.cloneNode(false), loading);
+        loading.hidden = true;
         const {{ default: init }} = await import("./pkg/{js_name}.js");
         await init();
+      }}
+
+      // The module compiles, decodes and renders in a worker, so the page stays responsive.
+      async function startInWorker() {{
+        const {{ LiveDemo }} = await import("../_runtime/host.js");
+        const base = document.baseURI;
+        const assets = Object.fromEntries(Object.entries(window.blincAssetRemap || {{}})
+          .map(([path, url]) => [new URL(path, base).href, url]));
+        const rect = stage.getBoundingClientRect();
+        const demo = new LiveDemo(stage, {{
+          kind: "example", title: document.title, build: "1",
+          module: new URL("./pkg/{js_name}.js", base).href,
+          wasm: new URL(wasmUrl, base).href,
+          base, assets,
+          dark: matchMedia("(prefers-color-scheme: dark)").matches,
+          width: rect.width, height: rect.height,
+        }}, (type, payload) => {{
+          if (type === "progress") loading.textContent = payload.message;
+          if (type === "ready") loading.hidden = true;
+          if (type === "error") {{
+            console.warn("Worker start failed, starting on the page:", payload.message);
+            demo.stop();
+            startOnPage();
+          }}
+        }});
+        stage.append(loading);
+        demo.setVisible(true);
+      }}
+
+      if (!hasWebGPU && !hasWebGL2) {{
+        document.body.classList.add("no-webgpu");
+      }} else if (canWorker) {{
+        await startInWorker().catch(error => {{
+          console.warn("Worker start failed, starting on the page:", error);
+          return startOnPage();
+        }});
+      }} else {{
+        await startOnPage();
       }}
     </script>
   </body>
@@ -1423,6 +1591,8 @@ fn render_index_html(
         js_name = js_name,
         canvas_css = canvas_css,
         canvas_attrs = canvas_attrs,
+        stage_css = stage_css,
+        worker_ok = worker_ok,
         preload_links = preload_links,
     )
 }
@@ -2080,6 +2250,9 @@ fn build_wrappers_with_wasm_pack(
     failed
 }
 
+/// Modules of the worker host that example pages import from `examples/_runtime/`.
+const WORKER_RUNTIME_FILES: [&str; 4] = ["host.js", "media-host.js", "protocol.js", "worker.js"];
+
 /// Copy each built wrapper's public-facing files (`index.html` +
 /// `pkg/`) into `stage_dir/<name>/`. CI uses this to drop the
 /// wasm artifacts into `target/book/examples/` so mdBook's iframe
@@ -2090,6 +2263,16 @@ fn stage_wrappers(
     stage_dir: &Path,
 ) -> std::io::Result<()> {
     fs::create_dir_all(stage_dir)?;
+    // The worker host the pages import is the one the component catalog runs, copied beside
+    // the examples so each book edition carries the version its pages were built against.
+    let runtime_dir = stage_dir.join("_runtime");
+    fs::create_dir_all(&runtime_dir)?;
+    for file in WORKER_RUNTIME_FILES {
+        fs::copy(
+            workspace_root.join("web/components/runtime").join(file),
+            runtime_dir.join(file),
+        )?;
+    }
     for meta in examples {
         let wrapper_dir = workspace_root.join(GENERATED_DIR).join(&meta.name);
         let pkg_dir = wrapper_dir.join("pkg");

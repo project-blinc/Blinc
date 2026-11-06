@@ -34,7 +34,7 @@
 
 mod wheel;
 mod worker;
-pub use worker::WebInput;
+pub use worker::{WebInput, WorkerRuntime, set_asset_base_url};
 
 use std::cell::RefCell;
 use std::rc::Rc;

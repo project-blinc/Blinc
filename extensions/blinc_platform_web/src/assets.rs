@@ -377,11 +377,41 @@ impl AssetLoader for WebAssetLoader {
 // =============================================================================
 
 #[cfg(target_arch = "wasm32")]
+thread_local! {
+    static BASE_URL: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Resolve relative asset URLs against `base` instead of the script's own URL.
+///
+/// A worker's base is its script, not the page that owns the canvas. Cache keys keep the
+/// path as written; only the request is resolved.
+#[cfg(target_arch = "wasm32")]
+pub fn set_base_url(base: &str) {
+    BASE_URL.with(|slot| *slot.borrow_mut() = Some(base.to_owned()));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_base_url(_base: &str) {}
+
+#[cfg(target_arch = "wasm32")]
+fn resolve(url: &str) -> String {
+    BASE_URL.with(|slot| match slot.borrow().as_deref() {
+        Some(base) => web_sys::Url::new_with_base(url, base)
+            .map(|resolved| resolved.href())
+            .unwrap_or_else(|_| url.to_owned()),
+        None => url.to_owned(),
+    })
+}
+
+#[cfg(target_arch = "wasm32")]
 async fn fetch_as_bytes(url: &str) -> Result<Vec<u8>> {
     use js_sys::Uint8Array;
     use wasm_bindgen::JsCast;
     use wasm_bindgen_futures::JsFuture;
     use web_sys::{Request, RequestCredentials, RequestInit, RequestMode, Response};
+
+    let url = resolve(url);
+    let url = url.as_str();
 
     let opts = RequestInit::new();
     opts.set_method("GET");

@@ -5,7 +5,8 @@
 an assembled docs tree, stores each once as <objects>/wasm/<sha256>.wasm or
 <objects>/asset/<sha256><extension>, and points the demo page at <base>/<key>. The page loads the
 module through init() and remaps the asset fetches and preload links, so frozen release builds
-need no change. Editions that ship the same bytes share one object. Media files stay with the
+need no change. A page that starts the module in a worker also names it in a `wasmUrl` literal,
+which is repointed, and receives the asset remap as `window.blincAssetRemap`. Editions that ship the same bytes share one object. Media files stay with the
 page, which streams them through the element. `verify` checks the uploaded objects over HTTP.
 """
 
@@ -24,7 +25,7 @@ ASSETS = "examples/blinc_app_examples/examples/assets"
 LARGE = 1024 * 1024
 MEDIA = {".mp4", ".webm", ".mov", ".mp3", ".wav", ".flac", ".ogg"}
 SHIM = (
-    "<script>(function(){var m=%s,b=document.baseURI,f=window.fetch,t={};"
+    "<script>(function(){var m=%s,b=document.baseURI,f=window.fetch,t={};window.blincAssetRemap=m;"
     "for(var k in m)t[new URL(k,b).href]=m[k];"
     "window.fetch=function(i,n){var u=typeof i==='string'?i:i instanceof URL?i.href:i&&i.url,"
     "r=u&&t[new URL(u,b).href];"
@@ -81,6 +82,8 @@ def externalize(docs, base, objects):
             text = text.replace(f'href="{path}"', f'href="{url}"')
         key = store(modules[0], "wasm", ".wasm", objects, stored)
         text = text.replace(INIT, f'await init({{ module_or_path: "{base}/{key}" }});')
+        # Pages built before the worker host have no such literal.
+        text = text.replace(f'"pkg/{modules[0].name}"', f'"{base}/{key}"')
         if remap:
             if "<script" not in text:
                 raise ValueError(f"{page}: no script to place the asset remap before")

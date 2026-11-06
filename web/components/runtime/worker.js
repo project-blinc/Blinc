@@ -27,6 +27,18 @@ function draw() {
   } catch (error) { fail(error); }
 }
 
+// The page's asset remap, applied to the worker's own fetch: the shim on the page cannot reach it.
+function remapAssets(map) {
+  const table = new Map(Object.entries(map || {}));
+  if (!table.size) return;
+  const native = self.fetch.bind(self);
+  self.fetch = (input, init) => {
+    const direct = typeof input === 'string' || input instanceof URL;
+    const target = table.get(direct ? String(input) : input?.url);
+    return native(target ? (direct ? target : new Request(target, input)) : input, init);
+  };
+}
+
 const media = new Map();
 function mediaBridge(id, operation, value) {
   const state = media.get(id) || { position: 0, duration: 0, buffered: 0, paused: true, ended: false };
@@ -52,16 +64,27 @@ self.onmessage = async ({ data }) => {
     switch (data.type) {
       case 'boot': {
         emit('progress', { message: 'Loading the Blinc runtime…' });
-        const moduleUrl = new URL('./pkg/blinc_component_demos.js', import.meta.url);
-        moduleUrl.searchParams.set('v', payload.build);
-        const wasm = await import(moduleUrl.href);
-        await wasm.default({ module_or_path: new URL(`./pkg/blinc_component_demos_bg.wasm?v=${encodeURIComponent(payload.build)}`, import.meta.url) });
-        wasm.set_media_bridge(mediaBridge);
-        emit('progress', { message: 'Creating a worker GPU surface…' });
-        const created = await wasm.create_runtime(payload.canvas, payload.width, payload.height, payload.dpr,
-          payload.slug, payload.dark, payload.family, payload.css || '');
+        let wasm, created;
+        if (payload.kind === 'example') {
+          // An example is its own module; the page supplies where it and its assets live.
+          remapAssets(payload.assets);
+          wasm = await import(payload.module);
+          await wasm.default({ module_or_path: payload.wasm });
+          emit('progress', { message: 'Creating a worker GPU surface…' });
+          created = await wasm.create_runtime(payload.canvas, payload.width, payload.height, payload.dpr,
+            !!payload.dark, payload.base);
+        } else {
+          const moduleUrl = new URL('./pkg/blinc_component_demos.js', import.meta.url);
+          moduleUrl.searchParams.set('v', payload.build);
+          wasm = await import(moduleUrl.href);
+          await wasm.default({ module_or_path: new URL(`./pkg/blinc_component_demos_bg.wasm?v=${encodeURIComponent(payload.build)}`, import.meta.url) });
+          wasm.set_media_bridge(mediaBridge);
+          emit('progress', { message: 'Creating a worker GPU surface…' });
+          created = await wasm.create_runtime(payload.canvas, payload.width, payload.height, payload.dpr,
+            payload.slug, payload.dark, payload.family, payload.css || '');
+        }
         if (disposed) { created.free(); return; }
-        created.control(payload.disabled, payload.progress);
+        if (payload.kind !== 'example') created.control(payload.disabled, payload.progress);
         // Warm a real, nonzero surface once even while Preview is selected.
         const state = JSON.parse(await created.warm_frame());
         if (disposed) { created.free(); return; }

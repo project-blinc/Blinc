@@ -170,3 +170,71 @@ impl WebApp {
         self.last_cursor
     }
 }
+
+/// A [`WebApp`] driven by a host that owns the worker: frames, input and resizes arrive as
+/// calls, and every call reports the state the host mirrors into the page.
+pub struct WorkerRuntime {
+    app: WebApp,
+    frames: u32,
+}
+
+impl WorkerRuntime {
+    pub fn new(app: WebApp) -> Self {
+        Self { app, frames: 0 }
+    }
+
+    pub fn app(&self) -> &WebApp {
+        &self.app
+    }
+
+    /// Run one frame and return the status JSON.
+    pub fn frame(&mut self) -> Result<String> {
+        self.app.run_one_frame()?;
+        self.frames += 1;
+        Ok(self.status())
+    }
+
+    /// Apply one input event given as the JSON form of [`WebInput`].
+    pub fn input(
+        &mut self,
+        json: &str,
+        shift: bool,
+        ctrl: bool,
+        alt: bool,
+        meta: bool,
+        timestamp: Option<f64>,
+    ) -> Result<bool> {
+        let event: WebInput = serde_json::from_str(json)
+            .map_err(|e| BlincError::Platform(format!("input event: {e}")))?;
+        let modifiers = blinc_platform::Modifiers {
+            shift,
+            ctrl,
+            alt,
+            meta,
+        };
+        Ok(self
+            .app
+            .dispatch_input_at(event, modifiers, timestamp.unwrap_or(f64::NAN)))
+    }
+
+    pub fn resize(&mut self, width: f32, height: f32, dpr: f64) {
+        self.app.resize(width, height, dpr);
+    }
+
+    /// Cursor, selection and editing state the host mirrors, as JSON.
+    pub fn status(&self) -> String {
+        serde_json::json!({
+            "frames": self.frames,
+            "cursor": self.app.cursor(),
+            "backend": if self.app.blinc_app().has_storage_buffers() { "worker-webgpu" } else { "worker-webgl2" },
+            "selection": blinc_layout::text_selection::get_selected_text(),
+            "editable": blinc_layout::widgets::text_input::has_focused_text_input(),
+        })
+        .to_string()
+    }
+}
+
+/// Resolve relative asset URLs against `base` (the page), not the worker script's own URL.
+pub fn set_asset_base_url(base: &str) {
+    blinc_platform_web::assets::set_base_url(base);
+}

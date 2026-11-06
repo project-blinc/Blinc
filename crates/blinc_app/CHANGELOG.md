@@ -19,6 +19,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - Desktop and web runners reconcile overlay focus before styling and share navigation handling. Web consumes navigation keys without browser defaults or duplicate text input; desktop maps Shift+F10 for context menus.
 
 ### Added
+- `blinc_app::web::WorkerRuntime` drives a worker-owned `WebApp` from a host (frames, JSON input, resize, status), and `set_asset_base_url` resolves relative asset paths against the page instead of the worker script.
 - Mobile IME connections retain UIKit marked text and Android composing spans, synchronize candidate replacements and selections, and reject edits from stale focus sessions. Generated mobile hosts include the native editing bridge.
 - Opt-in `css-hot-reload` feature with `WindowedContext::watch_css` and `unwatch_css`. Debug desktop builds reload named CSS sources on save, wake idle windows, preserve component state and retain the last valid styles on errors. Watchers and file reads are excluded from release, web and mobile builds.
 - Named CSS overrides through `WindowedContext::set_css` replace rules without resetting component state. Theme and root variables are shared across sources; invalid edits preserve the previous styles.
