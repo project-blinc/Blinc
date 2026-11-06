@@ -17,6 +17,8 @@ on:
       - 'assets/**'
       - 'Cargo.lock'
       - 'scripts/book_versions.py'
+      - 'scripts/book_cdn.py'
+      - 'scripts/tests/test_book_cdn.py'
       - 'scripts/tests/test_book_versions.py'
       - 'scripts/tests/test_book_release_restore.py'
       - 'scripts/check_book_examples.py'
@@ -35,6 +37,8 @@ on:
       - 'assets/**'
       - 'Cargo.lock'
       - 'scripts/book_versions.py'
+      - 'scripts/book_cdn.py'
+      - 'scripts/tests/test_book_cdn.py'
       - 'scripts/tests/test_book_versions.py'
       - 'scripts/tests/test_book_release_restore.py'
       - 'scripts/check_book_examples.py'
@@ -70,7 +74,7 @@ jobs:
           python-version: '3.12'
 
       - name: Test book edition assembly
-        run: python3 -m unittest scripts.tests.test_book_versions scripts.tests.test_book_release_restore
+        run: python3 -m unittest scripts.tests.test_book_versions scripts.tests.test_book_release_restore scripts.tests.test_book_cdn
 
       # The codegen tool + wasm-pack invocations need a working
       # Rust toolchain with the wasm32 target. Cached between runs
@@ -246,20 +250,43 @@ jobs:
       - name: Assemble stable and versioned books
         run: python3 scripts/book_versions.py assemble --dev target/book-dev --archives target/book-releases --output target/site/docs
 
-      # GitHub Pages serves at most 1 GB. The assembled site is 1.3 GB, because the stable
-      # book, its versioned copy and the development book each carry the example demos, so
-      # the upload and the deploy wait for the asset CDN plan. Everything above still builds
-      # and checks the site, and the live site stays as it was last deployed. Set the
-      # repository variable PAGES_DEPLOY to `true` to switch both steps back on.
+      # GitHub Pages serves at most 1 GB, and the demo WASM modules and sample assets are about
+      # 700 MB per book edition. On a published build they move to the asset origin (repository
+      # variable ASSET_BASE_URL) as content-addressed, immutable objects, and are checked over
+      # HTTP before the pages that point at them are uploaded. Without the variable nothing is
+      # uploaded or deployed, and the live site stays as it was.
+      - name: Move demo WASM and assets to the asset origin
+        if: github.event_name != 'pull_request' && vars.ASSET_BASE_URL != ''
+        run: python3 scripts/book_cdn.py externalize --docs target/site/docs --base "${{ vars.ASSET_BASE_URL }}" --objects target/asset-origin
+
+      # Objects are named by their hash, so an existing key is never given different content.
+      - name: Upload demo WASM and assets to the asset bucket
+        if: github.event_name != 'pull_request' && vars.ASSET_BASE_URL != ''
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          endpoint="https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          cache="public, max-age=31536000, immutable"
+          aws s3 sync target/asset-origin/wasm "s3://${{ vars.R2_BUCKET }}/wasm" \
+            --endpoint-url "$endpoint" --size-only --content-type application/wasm --cache-control "$cache"
+          aws s3 sync target/asset-origin/asset "s3://${{ vars.R2_BUCKET }}/asset" \
+            --endpoint-url "$endpoint" --size-only --cache-control "$cache"
+
+      - name: Verify the asset origin serves the demo objects
+        if: github.event_name != 'pull_request' && vars.ASSET_BASE_URL != ''
+        run: python3 scripts/book_cdn.py verify --base "${{ vars.ASSET_BASE_URL }}" --objects target/asset-origin --origin "https://$(tr -d '[:space:]' < web/CNAME)"
+
       - name: Upload artifact
-        if: vars.PAGES_DEPLOY == 'true'
+        if: github.event_name != 'pull_request' && vars.ASSET_BASE_URL != ''
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./target/site
 
   deploy:
     name: Deploy to GitHub Pages
-    if: vars.PAGES_DEPLOY == 'true' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'release' && !github.event.release.prerelease))
+    if: vars.ASSET_BASE_URL != '' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'release' && !github.event.release.prerelease))
     needs: build
     runs-on: ubuntu-latest
     environment:
