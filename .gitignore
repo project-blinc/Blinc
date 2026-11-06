@@ -121,3 +121,6 @@ vendor/
 # debugging UI issues — keep them local, never commit binary captures.
 Screen Recording *.mov
 *.mov
+
+# Local wrangler state
+.wrangler/
