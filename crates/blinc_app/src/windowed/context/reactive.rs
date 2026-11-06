@@ -17,6 +17,31 @@ impl WindowedContext {
     // Reactive Signal API
     // =========================================================================
 
+    /// The signal stored under `key`, created from `init` the first time.
+    ///
+    /// `init` runs with no lock held: it may create signals of its own or call another hook.
+    fn keyed_signal<T, F>(&self, key: &str, init: F) -> Signal<T>
+    where
+        T: Clone + Send + 'static,
+        F: FnOnce() -> T,
+    {
+        use blinc_core::reactive::SignalId;
+
+        let state_key = StateKey::from_string::<T>(key);
+        let existing = self.hooks.lock().unwrap().get(&state_key);
+        if let Some(raw_id) = existing {
+            return Signal::from_id(SignalId::from_raw(raw_id));
+        }
+        let value = init();
+        let mut hooks = self.hooks.lock().unwrap();
+        if let Some(raw_id) = hooks.get(&state_key) {
+            return Signal::from_id(SignalId::from_raw(raw_id));
+        }
+        let signal = self.reactive.lock().unwrap().create_signal(value);
+        hooks.insert(state_key, signal.id().to_raw());
+        signal
+    }
+
     /// Create a persistent state value that survives across UI rebuilds (keyed)
     ///
     /// This creates component-level state identified by a unique string key.
@@ -49,23 +74,7 @@ impl WindowedContext {
         T: Clone + Send + 'static,
         F: FnOnce() -> T,
     {
-        use blinc_core::reactive::SignalId;
-
-        let state_key = StateKey::from_string::<T>(key);
-        let mut hooks = self.hooks.lock().unwrap();
-
-        // Check if we have an existing signal with this key
-        let signal = if let Some(raw_id) = hooks.get(&state_key) {
-            // Reconstruct the signal from stored ID
-            let signal_id = SignalId::from_raw(raw_id);
-            Signal::from_id(signal_id)
-        } else {
-            // First time - create a new signal and store it
-            let signal = self.reactive.lock().unwrap().create_signal(init());
-            let raw_id = signal.id().to_raw();
-            hooks.insert(state_key, raw_id);
-            signal
-        };
+        let signal = self.keyed_signal(key, init);
 
         // Create callback for stateful deps notification
         let callback: StatefulDepsCallback = Arc::new(|signal_ids| {
@@ -104,23 +113,7 @@ impl WindowedContext {
         T: Clone + Send + 'static,
         F: FnOnce() -> T,
     {
-        use blinc_core::reactive::SignalId;
-
-        let state_key = StateKey::from_string::<T>(key);
-        let mut hooks = self.hooks.lock().unwrap();
-
-        // Check if we have an existing signal with this key
-        if let Some(raw_id) = hooks.get(&state_key) {
-            // Reconstruct the signal from stored ID
-            let signal_id = SignalId::from_raw(raw_id);
-            Signal::from_id(signal_id)
-        } else {
-            // First time - create a new signal and store it
-            let signal = self.reactive.lock().unwrap().create_signal(init());
-            let raw_id = signal.id().to_raw();
-            hooks.insert(state_key, raw_id);
-            signal
-        }
+        self.keyed_signal(key, init)
     }
 
     /// Bare auto-keyed [`ScrollRef`] — uses `#[track_caller]` to
@@ -553,5 +546,46 @@ impl WindowedContext {
     /// ```
     pub fn theme_radius(&self, token: blinc_theme::RadiusToken) -> f32 {
         blinc_theme::ThemeState::get().radius(token)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    /// Run `body` on its own thread so a deadlock fails the test instead of hanging it.
+    fn within_ten_seconds<R: Send + 'static>(body: impl FnOnce() -> R + Send + 'static) -> R {
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(body());
+        });
+        rx.recv_timeout(Duration::from_secs(10))
+            .expect("the hook deadlocked")
+    }
+
+    #[test]
+    fn an_initial_value_may_create_a_signal() {
+        within_ten_seconds(|| {
+            let ctx = WindowedContext::headless(100.0, 100.0);
+            let read_back = |seed: i32| blinc_core::reactive::signal(seed).get();
+            let state = ctx.use_state_keyed("holder", || read_back(7));
+            let again = ctx.use_state_keyed("holder", || read_back(0));
+            assert_eq!(state.get(), 7);
+            assert_eq!(again.get(), 7, "the second call reuses the first value");
+            let plain = ctx.use_signal_keyed("plain", || read_back(3));
+            assert_eq!(ctx.get(plain), Some(3));
+        });
+    }
+
+    #[test]
+    fn an_initial_value_may_call_another_hook() {
+        within_ten_seconds(|| {
+            let ctx = WindowedContext::headless(100.0, 100.0);
+            let outer =
+                ctx.use_state_keyed("outer", || ctx.use_state_keyed("inner", || 5_i32).get());
+            assert_eq!(outer.get(), 5);
+        });
     }
 }
