@@ -135,7 +135,7 @@
       "classes": [
         ".blinc-link"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab reaches a link; Enter or Space follows it. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Connect content with an accessible, theme-aware inline link. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
       "recipe": "link.css",
@@ -265,7 +265,8 @@
         ".cn-input--md",
         ".cn-input--lg",
         ".cn-label",
-        ".cn-label-text"
+        ".cn-label-text",
+        ".blinc-ime-composition"
       ],
       "keyboard": ":hover, :focus, :disabled, :focus-visible and [data-invalid]. Tab focuses the editor; ordinary editing keys, selection and clipboard shortcuts apply.",
       "tokens": "--input-bg, --input-bg-hover, --input-bg-focus, --input-bg-disabled, --border, --focus-ring, --text-primary",
@@ -340,9 +341,10 @@
         }
       ],
       "classes": [
-        ".cn-textarea"
+        ".cn-textarea",
+        ".blinc-ime-composition"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab focuses the field and the next Tab leaves it. Typing, arrow keys, selection and clipboard shortcuts apply; Enter inserts a new line. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Write a message with a themed multiline field. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "textarea.css",
@@ -638,7 +640,7 @@
         ".cn-dropdown-item",
         ".cn-dropdown-item--has-submenu"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab reaches the trigger; Down or Up opens it at the first or last row. In the open menu Up and Down wrap through enabled rows, Home and End jump to the ends, Enter or Space activates, Right opens a submenu and Left returns. Escape closes and restores focus; Tab closes and moves on.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Group actions in a compact menu. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "dropdown-menu.css",
@@ -709,7 +711,7 @@
         ".cn-context-menu-item",
         ".cn-context-menu-item--has-submenu"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "While the menu is open Up and Down wrap through enabled rows, Home and End jump to the ends, Enter or Space activates, Right opens a submenu and Left returns. Escape closes and restores focus; Tab closes and moves on.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Right-click the Website redesign project for icon-labelled actions. Add or remove it from favorites; the project details and next menu update in place.",
       "recipe": "context-menu.css",
@@ -768,7 +770,7 @@
         ".cn-menubar-item",
         ".cn-menubar-item--has-submenu"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "The menubar is one Tab stop. Left and Right, Home and End move between triggers; Down or Up opens the selected menu. Inside an open menu Left and Right switch to the adjacent menu, and submenus use Right to enter and Left to return.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Organise application commands in adjacent menus. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "menubar.css",
@@ -896,7 +898,7 @@
       "classes": [
         ".cn-checkbox"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab reaches the checkbox; Space or Enter toggles it. :focus-visible marks keyboard focus.",
       "tokens": "--cn-checkbox-checked-bg, --cn-checkbox-checked-border, --cn-checkbox-checked-color, --primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Make a choice that can be checked, cleared and bound to application data. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "checkbox.css",
@@ -964,7 +966,7 @@
         ".cn-radio",
         ".cn-radio-dot"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab reaches each radio; Enter or Space selects it. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Choose one option from a labelled group. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "radio-group.css",
@@ -1034,7 +1036,7 @@
         ".cn-switch-row",
         ".cn-switch-label"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab reaches the control; Enter or Space activates it. :focus-visible marks keyboard focus.",
       "tokens": "--cn-switch-checked-thumb, --primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Turn a setting on or off with clear, theme-aware feedback. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "switch.css",
@@ -1095,7 +1097,7 @@
       "classes": [
         ".cn-toggle"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab reaches the control; Enter or Space activates it. :focus-visible marks keyboard focus.",
       "tokens": "--cn-toggle-selected-bg, --cn-toggle-selected-hover-bg, --cn-toggle-selected-color, --primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Keep an independent action selected or unselected. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "toggle.css",
@@ -1163,7 +1165,7 @@
         ".cn-toggle-group",
         ".cn-toggle"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab reaches each toggle; Enter or Space selects it. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Choose one item in a compact group of toggle buttons. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "toggle-group.css",
@@ -1233,7 +1235,7 @@
         ".cn-number-input-field",
         ".cn-number-input-step"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab focuses the field. Typing, the up and down arrows, the stepper buttons and the mouse wheel all clamp to the minimum and maximum. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Edit a bounded number with typing, step controls or the mouse wheel. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "number-input.css",
@@ -1311,7 +1313,7 @@
         ".cn-slider-rest",
         ".cn-slider-thumb"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab focuses the slider. Arrow keys, Page Up and Page Down, Home and End move it; values snap to the step. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Adjust a value along a track, with a bound label and readout. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "slider.css",
@@ -1374,7 +1376,7 @@
         ".cn-number-gauge-rest",
         ".cn-number-gauge-value"
       ],
-      "keyboard": "Use the pointer to explore the control.",
+      "keyboard": "Tab focuses the gauge. Arrow keys, Page Up and Page Down, Home and End move it; values snap to the step. The wheel also steps it. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Scrub a number directly with a compact, draggable gauge. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "number-gauge.css",
@@ -1437,7 +1439,7 @@
         ".cn-number-gauge-thumb",
         ".cn-number-gauge-value"
       ],
-      "keyboard": "Use the pointer to explore the control.",
+      "keyboard": "Tab focuses the gauge. Arrow keys, Page Up and Page Down, Home and End move it; the ends never cross. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Choose a lower and upper bound together. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "number-range-gauge.css",
@@ -1517,7 +1519,7 @@
         ".cn-calendar-event",
         ".cn-calendar-event--icon"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab to the day grid, or click a day. Arrows move by a day or a week, Page Up and Page Down by a month, Home and End to the ends of the week; Enter or Space chooses. :focus-visible marks keyboard focus.",
       "tokens": "--cn-calendar-selected-bg, --cn-calendar-selected-color, --primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Browse months, select a date and mark events in an inline calendar. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "calendar.css",
@@ -1590,7 +1592,7 @@
         ".cn-date-picker-footer",
         ".cn-date-picker-clear"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab reaches the trigger; Enter or Space opens the calendar, which has its own keyboard navigation. Escape or an outside click closes it. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Choose a calendar date in a compact popover. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "date-picker.css",
@@ -1670,7 +1672,7 @@
         ".cn-time-picker-segment",
         ".cn-time-picker-part"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab moves between the fields and the AM/PM period; Enter or Space toggles the period. In the popup Tab reaches each column and the footer; Up and Down step a column, Page Up and Page Down step five times, Home and End jump to the first and last value. Escape cancels the draft. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Time Picker built with Blinc. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "time-picker.css",
@@ -1754,7 +1756,7 @@
         ".cn-color-picker-hex",
         ".cn-color-picker-hex-wrap"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab moves between the coordinate fields, the hex editor and the presets. Arrow keys adjust saturation, brightness, hue or opacity by 1 (Shift: 10); Home and End jump to the ends. Hex entry is a draft until Enter. Enter or Space opens the trigger or selects a preset. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Choose a colour with a saturation field, hue, opacity and saved swatches. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "color-picker.css",
@@ -1835,7 +1837,7 @@
         ".cn-tabs-panel",
         ".cn-tabs-trigger--active"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab reaches each tab trigger; Enter or Space selects it. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Switch between related views in the same space. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "tabs.css",
@@ -1900,7 +1902,7 @@
         ".demo-accordion-copy",
         ".cn-accordion-separator"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab reaches each trigger; Enter or Space opens or closes its section. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Organise related questions into expandable sections. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "accordion.css",
@@ -1964,7 +1966,7 @@
         ".cn-collapsible-section",
         ".demo-collapsible-copy"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab reaches the trigger; Enter or Space opens or closes the content. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Reveal supporting details without leaving the page. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "collapsible.css",
@@ -2025,7 +2027,7 @@
         ".cn-breadcrumb-item",
         ".cn-breadcrumb-separator"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab reaches each linked item; Enter or Space follows it. The current page is not a stop. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Keep the current location visible in a navigation trail. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "breadcrumb.css",
@@ -2086,7 +2088,7 @@
         ".cn-pagination-ellipsis",
         ".cn-pagination-btn"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab reaches each page button and the previous and next buttons; Enter or Space selects. Unavailable buttons are skipped. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Browse a larger collection a page at a time. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "pagination.css",
@@ -2155,7 +2157,7 @@
         ".cn-sidebar-icon",
         ".cn-sidebar-label"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab reaches each item; Enter or Space activates it. :focus-visible marks keyboard focus.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Keep the main sections of a workspace in a collapsible rail. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "sidebar.css",
@@ -2324,7 +2326,7 @@
       "classes": [
         ".cn-popover-content"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab stays inside the open popover and Escape or an outside click closes it. Focus returns to the trigger.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Keep a small set of preferences close to the control. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "popover.css",
@@ -2472,7 +2474,7 @@
         ".demo-share-done",
         ".demo-share-permission-copy"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab stays inside the open sheet and Escape closes it. Focus returns to the trigger.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Open supporting content in a panel at the edge of the view. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "sheet.css",
@@ -2536,7 +2538,7 @@
         ".cn-tree-icon",
         ".cn-tree-group"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Tab stays inside the open drawer and Escape closes it. Focus returns to the trigger.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "The project browser reuses Tree View for expandable folders, keyboard navigation and file selection; a bound details panel follows the selected node.",
       "recipe": "drawer.css",
@@ -3404,7 +3406,7 @@
         ".cn-tree-group",
         ".cn-tree-guide"
       ],
-      "keyboard": "Use the control\u2019s documented keyboard commands; Tab reaches enabled controls and :focus-visible marks keyboard focus.",
+      "keyboard": "Click a row, then Up and Down walk the shown rows, Right opens a row or enters its children, Left closes it or goes to its parent, Home and End jump to the ends, and Enter or Space selects.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Browse hierarchical content with expansion and selection. Apply CSS after the component layer to restyle the documented parts.",
       "recipe": "tree.css",
