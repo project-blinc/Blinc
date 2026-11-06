@@ -246,14 +246,20 @@ jobs:
       - name: Assemble stable and versioned books
         run: python3 scripts/book_versions.py assemble --dev target/book-dev --archives target/book-releases --output target/site/docs
 
+      # GitHub Pages serves at most 1 GB. The assembled site is 1.3 GB, because the stable
+      # book, its versioned copy and the development book each carry the example demos, so
+      # the upload and the deploy wait for the asset CDN plan. Everything above still builds
+      # and checks the site, and the live site stays as it was last deployed. Set the
+      # repository variable PAGES_DEPLOY to `true` to switch both steps back on.
       - name: Upload artifact
+        if: vars.PAGES_DEPLOY == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./target/site
 
   deploy:
     name: Deploy to GitHub Pages
-    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'release' && !github.event.release.prerelease)
+    if: vars.PAGES_DEPLOY == 'true' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'release' && !github.event.release.prerelease))
     needs: build
     runs-on: ubuntu-latest
     environment:
