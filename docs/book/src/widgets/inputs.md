@@ -261,6 +261,33 @@ refresh_text_input(&state);
 
 ---
 
+### Mobile input methods
+
+The iOS and Android hosts connect the focused editable widget to the system
+keyboard. Input methods can keep provisional text, move the selection, and
+replace that text with a candidate. Provisional text is visible while composing;
+`on_change` fires when it commits. A composition is one undo step in single-line,
+code and rich text editors. Text areas also retain multiline candidate edits.
+
+Single-line constraints are checked on the complete commit. A rejected candidate
+restores the previous value and selection. Moving focus commits the current
+composition; disabling a field cancels its provisional edit. Replacing the
+document from application code cancels its old native
+editing session, so a delayed candidate cannot overwrite the new value.
+
+The input and text area's provisional text uses `.blinc-ime-composition`, whose
+default style is `text-decoration: underline`. Include fonts that cover the
+scripts your application accepts. Android and iOS load their system colour-emoji
+fonts when needed.
+
+New CLI-generated mobile projects include the keyboard connection. When updating
+an existing iOS host, update `BlincAccessibility.swift` and its bridging header
+together and keep calling `synchronize()` after building a frame. On Android,
+include both `BlincNativeBridge.kt` and `BlincIme.kt`, register the bridge with the
+Activity, and initialize the Rust native bridge before running the app. The GPU
+continues to draw the controls; the native editor owns the keyboard's marked text
+and candidate geometry.
+
 ## OTP Input
 
 `input_otp` renders linked single-character text input slots for

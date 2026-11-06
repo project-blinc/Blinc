@@ -53,12 +53,15 @@ updates their names, values, states and bounds after UI changes, and dispatches
 activation through the widget's existing handlers. Native text-field proxies
 provide editing to UIKit while Blinc continues to draw the field. Return uses
 the existing key handler, including `cn::input(...).on_submit(|shift| ...)`.
-Editing uses the widget's document, constraints and change callback. Password
-snapshots contain masked text rather than the password.
+Editing uses the widget's document, constraints and change callback, including
+native marked-text and candidate replacement. Accessibility snapshots contain
+masked password values; the keyboard connection receives the private document
+separately. See [mobile input methods](../widgets/inputs.md#mobile-input-methods)
+for the editing and commit behavior.
 
 New CLI-generated iOS projects include this adapter. Existing hosts must add
 `BlincAccessibility.swift` from `extensions/blinc_platform_ios/swift/`, include
-the accessibility declarations from its bridging header, and retain a
+the accessibility and IME declarations from its bridging header, and retain a
 `BlincAccessibility(host: view, context: ctx)` instance. Call `synchronize()` after
 `blinc_build_frame(ctx)` and `disconnect()` before destroying the context.
 Update the native keyboard bridge alongside the host so it reuses an accessible
