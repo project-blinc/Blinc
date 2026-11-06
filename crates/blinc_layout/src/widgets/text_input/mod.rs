@@ -23,6 +23,7 @@ mod data;
 mod edit;
 mod focus;
 mod handlers;
+mod ime;
 mod long_press;
 mod runtime;
 mod widget;

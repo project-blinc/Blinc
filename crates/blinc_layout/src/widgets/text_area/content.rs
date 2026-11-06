@@ -26,7 +26,7 @@ pub(super) fn row_text(d: &TextAreaState, base: &TextAreaConfig, row: usize) -> 
 /// and width, `(0, 0)` where the line has none. Shown while focused.
 pub(super) fn selection_span(d: &TextAreaState, row: usize) -> (f32, f32) {
     let none = (0.0, 0.0);
-    if !d.visual.is_focused() {
+    if !d.visual.is_focused() || d.ime.composing.is_some() {
         return none;
     }
     let Some(sel_start) = d.selection_start else {
@@ -286,12 +286,22 @@ pub(super) fn text_row(
     use crate::binding::IntoReactive;
     use blinc_core::reactive::{ReactiveGraph, computed};
 
-    let text = {
+    let run = |part: usize| {
         let (state, base) = (Arc::clone(state), base.clone());
-        computed(move |g: &ReactiveGraph| {
+        let text = computed(move |g: &ReactiveGraph| {
             g.get(revision);
-            row_text(&state.lock().unwrap(), &base, index)
-        })
+            super::ime::row_run(&state.lock().unwrap(), &base, index, part)
+        });
+        let text = crate::text::Text::bound(text.into_reactive())
+            .size(font_size)
+            .color(color)
+            .text_left()
+            .no_wrap();
+        if part == 1 {
+            text.class("blinc-ime-composition")
+        } else {
+            text
+        }
     };
     let highlight_at = {
         let state = Arc::clone(state);
@@ -331,13 +341,9 @@ pub(super) fn text_row(
                 .bg(selection_color)
                 .rounded(2.0),
         )
-        .child(
-            crate::text::Text::bound(text.into_reactive())
-                .size(font_size)
-                .color(color)
-                .text_left()
-                .no_wrap(),
-        );
+        .child(run(0))
+        .child(run(1))
+        .child(run(2));
     match width {
         Some(width) => row.w(width),
         None => row,

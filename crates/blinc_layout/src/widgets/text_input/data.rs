@@ -61,6 +61,7 @@ pub type SharedTextInputData = Arc<Mutex<TextInputData>>;
 /// The state the field shows, its visual state (hover/focus) included.
 #[derive(Clone)]
 pub struct TextInputData {
+    pub(crate) ime: crate::ime::ImeSession<UndoEntry>,
     pub value: String,
     pub cursor: usize,
     pub selection_start: Option<usize>,

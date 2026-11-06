@@ -67,6 +67,7 @@ use crate::widgets::text_input::{
     decrement_focus_count, increment_focus_count, request_continuous_redraw_pub,
 };
 
+mod ime;
 mod search;
 
 use search::*;
@@ -194,6 +195,7 @@ pub struct CodeEditorData {
     pub undo_stack: Vec<UndoEntry>,
     /// Redo stack
     pub redo_stack: Vec<UndoEntry>,
+    ime: crate::ime::ImeSession<UndoEntry>,
     /// Cached monospace character width for current font_size.
     /// Avoids calling measure_text() for every cursor/selection calculation.
     mono_char_width: f32,
@@ -290,6 +292,7 @@ pub fn code_editor_state(content: impl Into<String>) -> SharedCodeEditorState {
         config: CodeConfig::default(),
         undo_stack: Vec::new(),
         redo_stack: Vec::new(),
+        ime: Default::default(),
         mono_char_width: 0.0,
         mono_char_width_font_size: 0.0,
         highlight_cache: vec![None; num_lines],
@@ -1530,6 +1533,7 @@ impl CodeEditor {
 
         let mut inner = Stateful::with_shared_state(Arc::clone(&shared_state))
             .on_mouse_down(move |ctx| {
+                ime::commit(&data_for_click);
                 let click_x = ctx.local_x;
                 let click_y = ctx.local_y;
 
@@ -1808,6 +1812,15 @@ impl CodeEditor {
                 crate::stateful::refresh_stateful(&shared_for_drag);
             })
             .on_event(event_types::TEXT_INPUT, move |ctx| {
+                if ctx.ctrl
+                    || ctx.meta
+                    || !ctx
+                        .key_char
+                        .is_some_and(|ch| !ch.is_control() || ch == '\t')
+                {
+                    return;
+                }
+                ime::commit(&data_for_text);
                 let needs_refresh = {
                     let mut d = match data_for_text.lock() {
                         Ok(d) => d,
@@ -1845,6 +1858,12 @@ impl CodeEditor {
                 }
             })
             .on_key_down(move |ctx| {
+                if matches!(ctx.key_code, 8 | 13 | 27 | 35..=40 | 46)
+                    || ((ctx.ctrl || ctx.meta)
+                        && matches!(ctx.key_code, 65 | 67 | 86 | 88 | 89 | 90))
+                {
+                    ime::commit(&data_for_key);
+                }
                 let needs_refresh = {
                     let mut d = match data_for_key.lock() {
                         Ok(d) => d,
@@ -2284,6 +2303,9 @@ impl CodeEditor {
 }
 
 impl ElementBuilder for CodeEditor {
+    fn ime_binding(&self) -> Option<crate::ime::ImeBinding> {
+        Some(ime::binding(&self.state))
+    }
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
         {
             let shared_state = self.inner.shared_state();

@@ -39,6 +39,7 @@ pub struct VisualLine {
 /// TextArea widget state
 #[derive(Clone)]
 pub struct TextAreaState {
+    pub(crate) ime: crate::ime::ImeSession<super::ime::ImeEntry>,
     /// Lines of text
     pub lines: Vec<String>,
     /// Cursor position
@@ -132,6 +133,7 @@ impl std::fmt::Debug for TextAreaState {
 impl Default for TextAreaState {
     fn default() -> Self {
         Self {
+            ime: Default::default(),
             lines: vec![String::new()],
             cursor: TextPosition::default(),
             selection_start: None,

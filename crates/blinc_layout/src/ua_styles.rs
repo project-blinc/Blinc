@@ -165,6 +165,8 @@ pub const UA_STYLES: &str = concat!(
    router's focus, `disabled` and `data-invalid` are attributes the widget
    keeps in step with its data. An invalid value keeps its error border while
    hovered or focused. */
+.blinc-ime-composition { text-decoration: underline; }
+
 .blinc-input {
     background: var(--input-bg);
     border-color: var(--border-secondary);

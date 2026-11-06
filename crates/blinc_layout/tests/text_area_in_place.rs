@@ -85,17 +85,22 @@ impl Scene {
         found
     }
 
-    /// The text each row shows, in order.
+    /// The text each row shows, in order. A row is several runs (before the
+    /// composition, the composition, after it) that sit side by side.
     fn rows(&self) -> Vec<String> {
-        self.nodes()
-            .into_iter()
-            .filter_map(
-                |n| match self.tree.get_render_node(n).map(|r| &r.element_type) {
-                    Some(ElementType::Text(t)) => Some(t.content.clone()),
-                    _ => None,
-                },
-            )
-            .collect()
+        let mut rows: Vec<(Option<LayoutNodeId>, String)> = Vec::new();
+        for n in self.nodes() {
+            let Some(ElementType::Text(t)) = self.tree.get_render_node(n).map(|r| &r.element_type)
+            else {
+                continue;
+            };
+            let parent = self.tree.layout_tree.ancestors(n).first().copied();
+            match rows.last_mut() {
+                Some((last, text)) if *last == parent => text.push_str(&t.content),
+                _ => rows.push((parent, t.content.clone())),
+            }
+        }
+        rows.into_iter().map(|(_, text)| text).collect()
     }
 
     /// The width of each selection highlight, row by row.

@@ -222,6 +222,11 @@ impl RenderTree {
         }
 
         // Register semantic element type for CSS type selector matching
+        if let Some(binding) = element.ime_binding() {
+            self.ime_bindings.insert(node_id, binding);
+        } else {
+            self.ime_bindings.remove(&node_id);
+        }
         if let Some(binding) = element.accessibility_binding() {
             self.accessibility_bindings.insert(node_id, binding);
         } else {
@@ -468,6 +473,11 @@ impl RenderTree {
         }
 
         // Register semantic element type for CSS type selector matching
+        if let Some(binding) = element.ime_binding() {
+            self.ime_bindings.insert(node_id, binding);
+        } else {
+            self.ime_bindings.remove(&node_id);
+        }
         if let Some(binding) = element.accessibility_binding() {
             self.accessibility_bindings.insert(node_id, binding);
         } else {
@@ -778,6 +788,11 @@ impl RenderTree {
         }
 
         // Register semantic element type for CSS type selector matching
+        if let Some(binding) = element.ime_binding() {
+            self.ime_bindings.insert(node_id, binding);
+        } else {
+            self.ime_bindings.remove(&node_id);
+        }
         if let Some(binding) = element.accessibility_binding() {
             self.accessibility_bindings.insert(node_id, binding);
         } else {

@@ -463,6 +463,10 @@ impl ElementBuilder for TextInput {
         crate::div::ElementTypeId::Div
     }
 
+    fn ime_binding(&self) -> Option<crate::ime::ImeBinding> {
+        Some(super::ime::binding(&self.data))
+    }
+
     fn accessibility_binding(&self) -> Option<crate::accessibility::AccessibilityBinding> {
         use crate::accessibility::{AccessibilityAction, AccessibilityBinding, AccessibilityValue};
         let data = self.data.clone();
@@ -635,6 +639,9 @@ fn set_disabled(data: &SharedTextInputData, on: bool) {
         Ok(mut d) if d.disabled != on => {
             d.disabled = on;
             if on {
+                if d.visual.is_focused() {
+                    decrement_focus_count();
+                }
                 d.visual = TextFieldState::Disabled;
             } else if d.visual == TextFieldState::Disabled {
                 d.visual = TextFieldState::Idle;

@@ -21,11 +21,22 @@ pub(super) fn shown_text(d: &TextInputData, cfg: &TextInputConfig) -> String {
 pub(super) enum Run {
     Before,
     Selected,
+    Composing,
     After,
 }
 
 pub(super) fn text_run(d: &TextInputData, cfg: &TextInputConfig, run: Run) -> String {
     let shown = shown_text(d, cfg);
+    if let Some([start, end]) = d.ime.composing {
+        let start = crate::ime::char_offset(&d.value, start).unwrap_or(0);
+        let end = crate::ime::char_offset(&d.value, end).unwrap_or(start);
+        return match run {
+            Run::Before => shown.chars().take(start).collect(),
+            Run::Composing => shown.chars().skip(start).take(end - start).collect(),
+            Run::After => shown.chars().skip(end).collect(),
+            Run::Selected => String::new(),
+        };
+    }
     let selection = if d.value.is_empty() {
         None
     } else {
@@ -40,6 +51,7 @@ pub(super) fn text_run(d: &TextInputData, cfg: &TextInputConfig, run: Run) -> St
             shown.chars().skip(start).take(end - start).collect()
         }
         (Some((_, end)), Run::After) => shown.chars().skip(end).collect(),
+        (_, Run::Composing) => String::new(),
     }
 }
 
@@ -134,12 +146,17 @@ pub(super) fn content(
         })
     };
     let run = |run: Run| {
-        crate::text::Text::bound(run_text(run).into_reactive())
+        let text = crate::text::Text::bound(run_text(run).into_reactive())
             .size(cfg.font_size)
             .color(&text_color)
             .text_left()
             .no_wrap()
-            .v_center()
+            .v_center();
+        if matches!(run, Run::Composing) {
+            text.class("blinc-ime-composition")
+        } else {
+            text
+        }
     };
 
     let runs = div()
@@ -152,6 +169,7 @@ pub(super) fn content(
                 .rounded(cfg.corner_radius)
                 .child(run(Run::Selected)),
         )
+        .child(run(Run::Composing))
         .child(run(Run::After));
 
     // Centred text (number, OTP and code cells) fills the clip area and is

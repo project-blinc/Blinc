@@ -621,6 +621,9 @@ pub fn text_area(state: &SharedTextAreaState) -> TextArea {
 }
 
 impl ElementBuilder for TextArea {
+    fn ime_binding(&self) -> Option<crate::ime::ImeBinding> {
+        Some(super::ime::binding(&self.state))
+    }
     fn bound_element_ref(&self) -> Option<&crate::selector::DivRef> {
         self.element_ref.as_ref()
     }
@@ -721,6 +724,9 @@ fn set_disabled(state: &SharedTextAreaState, config: &Mutex<TextAreaConfig>, on:
         Ok(mut s) if s.disabled != on => {
             s.disabled = on;
             if on {
+                if s.visual.is_focused() {
+                    crate::widgets::text_input::decrement_focus_count();
+                }
                 s.visual = TextFieldState::Disabled;
             } else if s.visual == TextFieldState::Disabled {
                 s.visual = TextFieldState::Idle;

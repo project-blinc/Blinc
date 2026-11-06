@@ -67,6 +67,7 @@ pub fn text_input_focused(data: &SharedTextInputData) -> blinc_core::reactive::C
 /// The field's data changed: have what it shows follow. Called with the data
 /// unlocked, since what follows reads it.
 pub(crate) fn notify_text_input(state: &SharedTextInputData) {
+    super::ime::finish_on_blur(state);
     let (revision, focus) = state
         .lock()
         .ok()
@@ -222,18 +223,16 @@ pub fn focus_text_input(state: &SharedTextInputData) {
 }
 
 pub(crate) fn set_focused_text_input(state: &SharedTextInputData) {
-    let mut focused = FOCUSED_TEXT_INPUT.lock().unwrap();
-
-    if let Some(weak) = focused.take() {
-        if let Some(prev_state) = weak.upgrade() {
-            if !Arc::ptr_eq(&prev_state, state) {
-                blur_text_input_state(&prev_state);
-            }
+    let previous = FOCUSED_TEXT_INPUT
+        .lock()
+        .unwrap()
+        .replace(Arc::downgrade(state));
+    if let Some(previous) = previous.and_then(|weak| weak.upgrade()) {
+        if !Arc::ptr_eq(&previous, state) {
+            blur_text_input_state(&previous);
         }
     }
-
     blur_focused_text_area();
-    *focused = Some(Arc::downgrade(state));
 }
 
 pub(super) fn blur_text_input_state(state: &SharedTextInputData) {
@@ -274,25 +273,18 @@ pub fn blur_text_input(state: &SharedTextInputData) {
 }
 
 pub(crate) fn set_focused_text_area(state: &crate::widgets::text_area::SharedTextAreaState) {
-    {
-        let mut focused = FOCUSED_TEXT_INPUT.lock().unwrap();
-        if let Some(weak) = focused.take() {
-            if let Some(prev_state) = weak.upgrade() {
-                blur_text_input_state(&prev_state);
-            }
-        }
+    let input = FOCUSED_TEXT_INPUT.lock().unwrap().take();
+    if let Some(input) = input.and_then(|weak| weak.upgrade()) {
+        blur_text_input_state(&input);
     }
-
-    {
-        let mut focused = FOCUSED_TEXT_AREA.lock().unwrap();
-        if let Some(weak) = focused.take() {
-            if let Some(prev_state) = weak.upgrade() {
-                if !Arc::ptr_eq(&prev_state, state) {
-                    blur_text_area_state(&prev_state);
-                }
-            }
+    let previous = FOCUSED_TEXT_AREA
+        .lock()
+        .unwrap()
+        .replace(Arc::downgrade(state));
+    if let Some(previous) = previous.and_then(|weak| weak.upgrade()) {
+        if !Arc::ptr_eq(&previous, state) {
+            blur_text_area_state(&previous);
         }
-        *focused = Some(Arc::downgrade(state));
     }
 }
 
@@ -316,19 +308,15 @@ pub(super) fn blur_text_area_state(state: &crate::widgets::text_area::SharedText
 }
 
 pub(super) fn blur_focused_text_area() {
-    let mut focused = FOCUSED_TEXT_AREA.lock().unwrap();
-    if let Some(weak) = focused.take() {
-        if let Some(prev_state) = weak.upgrade() {
-            blur_text_area_state(&prev_state);
-        }
+    let previous = FOCUSED_TEXT_AREA.lock().unwrap().take();
+    if let Some(previous) = previous.and_then(|weak| weak.upgrade()) {
+        blur_text_area_state(&previous);
     }
 }
 
 /// Blur all focused text inputs and text areas.
 /// Called when clicking outside any text element.
 pub fn blur_all_text_inputs() {
-    use blinc_core::events::event_types;
-
     // Invalidate any not-yet-drained deferred focus request.
     PENDING_FOCUS_GENERATION.fetch_add(1, Ordering::Relaxed);
 
@@ -353,51 +341,13 @@ pub fn blur_all_text_inputs() {
     }
     clear_focused_editable_node();
 
-    // Blur focused TextInput
-    {
-        let mut focused = FOCUSED_TEXT_INPUT.lock().unwrap();
-        if let Some(weak) = focused.take() {
-            if let Some(state) = weak.upgrade() {
-                let blurred = if let Ok(mut s) = state.lock() {
-                    if s.visual.is_focused() {
-                        if let Some(new_state) = s.visual.on_event(event_types::BLUR) {
-                            s.visual = new_state;
-                            decrement_focus_count();
-                        }
-                        true
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                };
-                if blurred {
-                    notify_text_input(&state);
-                }
-            }
-        }
+    let input = FOCUSED_TEXT_INPUT.lock().unwrap().take();
+    let area = FOCUSED_TEXT_AREA.lock().unwrap().take();
+    if let Some(input) = input.and_then(|weak| weak.upgrade()) {
+        blur_text_input_state(&input);
     }
-
-    // Blur focused TextArea
-    {
-        let mut focused = FOCUSED_TEXT_AREA.lock().unwrap();
-        if let Some(weak) = focused.take() {
-            if let Some(state) = weak.upgrade() {
-                let blurred = match state.lock() {
-                    Ok(mut s) if s.visual.is_focused() => {
-                        if let Some(new_state) = s.visual.on_event(event_types::BLUR) {
-                            s.visual = new_state;
-                            decrement_focus_count();
-                        }
-                        true
-                    }
-                    _ => false,
-                };
-                if blurred {
-                    crate::widgets::text_area::notify_text_area(&state);
-                }
-            }
-        }
+    if let Some(area) = area.and_then(|weak| weak.upgrade()) {
+        blur_text_area_state(&area);
     }
 }
 

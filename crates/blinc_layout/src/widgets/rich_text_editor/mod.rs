@@ -31,6 +31,7 @@ pub mod edit;
 pub mod editor;
 pub mod format;
 mod geometry;
+mod ime;
 pub mod markdown;
 pub mod render;
 pub mod state;

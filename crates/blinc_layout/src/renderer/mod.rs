@@ -44,6 +44,7 @@ use crate::visual_animation::{AnimatedRenderBounds, VisualAnimation, VisualAnima
 
 mod accessibility;
 mod animation;
+mod ime;
 pub use animation::css::css_animation_playing;
 mod build;
 mod cursor;
@@ -702,6 +703,7 @@ pub struct RenderTree {
     pub layout_tree: LayoutTree,
     /// Render data for each node (ordered by insertion/tree order)
     render_nodes: IndexMap<LayoutNodeId, RenderNode>,
+    ime_bindings: HashMap<LayoutNodeId, crate::ime::ImeBinding>,
     accessibility_bindings: HashMap<LayoutNodeId, crate::accessibility::AccessibilityBinding>,
     /// Root node ID
     root: Option<LayoutNodeId>,
@@ -1141,6 +1143,7 @@ impl RenderTree {
         Self {
             layout_tree: LayoutTree::new(),
             render_nodes: IndexMap::new(),
+            ime_bindings: HashMap::new(),
             accessibility_bindings: HashMap::new(),
             root: None,
             handler_registry: crate::event_handler::HandlerRegistry::new(),

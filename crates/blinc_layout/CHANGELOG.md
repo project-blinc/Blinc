@@ -8,6 +8,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 
 ### Fixed
+- Native IME candidates update single-line, multiline, code and rich text documents without duplicate commits. Composition defers change callbacks, groups supported undo history, respects UTF-16 selection boundaries and rolls back invalid single-line commits.
 - Labelled checkboxes toggle once when a box click bubbles through the row, while label, keyboard and assistive activation keep their existing behavior.
 - Explicit CSS colour importance survives base, state and dynamic-selector passes while border transitions keep their interpolated colours.
 - Audio waveforms read live playback progress instead of a fixed ratio, follow pause/seek, and request animation frames only during playback.

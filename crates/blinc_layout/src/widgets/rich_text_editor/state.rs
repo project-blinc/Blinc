@@ -151,6 +151,9 @@ pub struct RichTextData {
     pub active_format: ActiveFormat,
     /// Focus flag — set on first mouse-down inside the editor.
     pub focused: bool,
+    pub(super) ime: crate::ime::ImeSession<UndoEntry>,
+    pub(super) link_ime: crate::ime::ImeSession<String>,
+    pub(super) link_ime_selection: Option<[usize; 2]>,
     /// Visual line geometry index, kept current by the editor as the
     /// document changes.
     pub line_index: Vec<LineGeometry>,
@@ -227,6 +230,9 @@ impl RichTextData {
             selection: None,
             active_format: ActiveFormat::default(),
             focused: false,
+            ime: Default::default(),
+            link_ime: Default::default(),
+            link_ime_selection: None,
             line_index: Vec::new(),
             geometry_stamp: None,
             cursor_state: cursor_state(),
@@ -334,6 +340,12 @@ impl RichTextData {
             return;
         }
         self.focused = focused;
+        if !focused {
+            self.finish_ime();
+            self.ime.blur();
+            self.link_ime.blur();
+            self.link_ime.composing = None;
+        }
         self.set_cursor_visible(focused);
         if focused {
             crate::widgets::text_input::increment_focus_count();

@@ -71,8 +71,13 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
 
     div()
         .w_full()
+        .ime(super::ime::binding(state, version))
         .on_mouse_down(move |ctx| {
             let mut data = state_for_click.lock().unwrap();
+            if data.ime.original.is_some() {
+                data.finish_ime();
+                data.ime.blur();
+            }
             data.set_focus(true);
             data.editor_bounds = (
                 ctx.bounds_x,
@@ -287,6 +292,14 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                 return;
             }
             let mut data = state_for_text.lock().unwrap();
+            if data.ime.original.is_some()
+                && (matches!(ctx.key_code, 8 | 13 | 27 | 35..=40 | 46)
+                    || ((ctx.ctrl || ctx.meta)
+                        && matches!(ctx.key_code, 65 | 67 | 86 | 88 | 89 | 90)))
+            {
+                data.finish_ime();
+                data.ime.blur();
+            }
             if !data.focused {
                 return;
             }
@@ -312,6 +325,10 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
         })
         .on_key_down(move |ctx| {
             let mut data = state_for_key.lock().unwrap();
+            if data.ime.original.is_some() {
+                data.finish_ime();
+                data.ime.blur();
+            }
             if !data.focused {
                 return;
             }

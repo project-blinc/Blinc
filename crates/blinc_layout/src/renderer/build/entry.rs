@@ -97,6 +97,7 @@ impl RenderTree {
         //   replaces the destructive wipe that used to churn
         //   closures on every rebuild.
         self.render_nodes.clear();
+        self.ime_bindings.clear();
         self.accessibility_bindings.clear();
         self.element_registry.clear();
         // Clear scroll_refs HashMap (node_id keyed) - it will be repopulated during rebuild

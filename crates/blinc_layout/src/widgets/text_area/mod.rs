@@ -14,6 +14,7 @@ mod css;
 mod edit;
 mod focus;
 mod handlers;
+mod ime;
 mod lines;
 mod state;
 mod widget;

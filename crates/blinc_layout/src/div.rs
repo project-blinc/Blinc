@@ -377,6 +377,7 @@ pub type DivRef = ElementRef<Div>;
 
 /// A div element builder with GPUI/Tailwind-style methods
 pub struct Div {
+    ime_binding: Option<crate::ime::ImeBinding>,
     pub(crate) style: Style,
     /// `align_self` came from `w_fit`/`h_fit` as an anti-stretch
     /// default, not from an author naming an alignment. A parent that
@@ -529,9 +530,16 @@ impl Default for Div {
 }
 
 impl Div {
+    /// Connect a custom editor to the platform native input method.
+    pub fn ime(mut self, binding: crate::ime::ImeBinding) -> Self {
+        self.ime_binding = Some(binding);
+        self
+    }
+
     /// Create a new div element
     pub fn new() -> Self {
         Self {
+            ime_binding: None,
             style: Style::default(),
             incidental_align_self: false,
             children: Vec::new(),
@@ -599,6 +607,7 @@ impl Div {
     /// when rebuilding subtrees in Stateful elements.
     pub fn with_style(style: Style) -> Self {
         Self {
+            ime_binding: None,
             style,
             incidental_align_self: false,
             children: Vec::new(),
@@ -5329,6 +5338,11 @@ pub trait ElementBuilder {
         None
     }
 
+    /// Native keyboard editing for this element.
+    fn ime_binding(&self) -> Option<crate::ime::ImeBinding> {
+        None
+    }
+
     /// Optional live semantic value and editing actions for a custom control.
     fn accessibility_binding(&self) -> Option<crate::accessibility::AccessibilityBinding> {
         None
@@ -5516,6 +5530,10 @@ impl<T: ?Sized + ElementBuilder> ElementBuilder for Box<T> {
     fn layout_bounds_callback(&self) -> Option<crate::renderer::LayoutBoundsCallback> {
         (**self).layout_bounds_callback()
     }
+    fn ime_binding(&self) -> Option<crate::ime::ImeBinding> {
+        (**self).ime_binding()
+    }
+
     fn accessibility_binding(&self) -> Option<crate::accessibility::AccessibilityBinding> {
         (**self).accessibility_binding()
     }
@@ -5631,6 +5649,9 @@ impl Div {
 }
 
 impl ElementBuilder for Div {
+    fn ime_binding(&self) -> Option<crate::ime::ImeBinding> {
+        self.ime_binding.clone()
+    }
     fn bound_scroll_ref(&self) -> Option<&crate::selector::ScrollRef> {
         self.scroll_ref.as_ref()
     }

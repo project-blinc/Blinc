@@ -43,6 +43,7 @@ impl TextInput {
             .on_hover_leave(move |_| pointer_crossed(&data_for_leave, event_types::POINTER_LEAVE))
             // Handle mouse down to focus and position cursor
             .on_mouse_down(move |ctx| {
+                super::ime::commit(&data_for_click);
                 let needs_refresh = {
                     let mut d = match data_for_click.lock() {
                         Ok(d) => d,
@@ -364,6 +365,10 @@ impl TextInput {
             })
             // Handle text input
             .on_event(event_types::TEXT_INPUT, move |ctx| {
+                if ctx.ctrl || ctx.meta || !ctx.key_char.is_some_and(|ch| !ch.is_control()) {
+                    return;
+                }
+                super::ime::commit(&data_for_text);
                 let (needs_refresh, callback_info) = {
                     let mut d = match data_for_text.lock() {
                         Ok(d) => d,
@@ -414,6 +419,12 @@ impl TextInput {
             })
             // Handle key down for navigation and deletion
             .on_key_down(move |ctx| {
+                if matches!(ctx.key_code, 8 | 13 | 27 | 35..=40 | 46)
+                    || ((ctx.ctrl || ctx.meta)
+                        && matches!(ctx.key_code, 65 | 67 | 86 | 88 | 89 | 90))
+                {
+                    super::ime::commit(&data_for_key);
+                }
                 let (needs_refresh, callback_info) = {
                     let mut d = match data_for_key.lock() {
                         Ok(d) => d,

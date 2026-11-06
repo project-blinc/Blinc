@@ -54,6 +54,7 @@ pub fn focus_text_area(state: &SharedTextAreaState) {
 /// Lay the lines out again and repaint the field: everything it shows is
 /// bound to the revision. Called after any change to the state.
 pub(crate) fn notify_text_area(state: &SharedTextAreaState) {
+    super::ime::finish_on_blur(state);
     // The config is copied out first: a layout callback locks the config
     // and then the state.
     let base = state

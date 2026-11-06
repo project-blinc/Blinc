@@ -5,6 +5,7 @@ use super::*;
 impl TextInputData {
     pub fn new() -> Self {
         Self {
+            ime: Default::default(),
             value: String::new(),
             cursor: 0,
             selection_start: None,

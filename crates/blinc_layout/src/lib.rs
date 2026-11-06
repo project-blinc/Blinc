@@ -38,6 +38,7 @@ pub mod div;
 pub mod dynamic_style;
 pub mod element;
 pub mod flow_clock;
+pub mod ime;
 pub mod notch;
 
 // Layout animation systems
