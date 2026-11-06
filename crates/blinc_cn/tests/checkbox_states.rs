@@ -89,6 +89,8 @@ fn a_checkbox_looks_the_same_in_every_state() {
                     .disabled(true),
             )
         });
+        // The `#cb:checked` rule does not apply to the checked box yet (git-bug a5de3bd); the
+        // record shows what is drawn today, and is blessed again when that is fixed.
         out += &scenario(
             "core under hover and checked rules",
             "#cb:hover { background: #336699; border-color: #ff8800 } #cb:checked { background: #228844; accent-color: #ff0000 }",
