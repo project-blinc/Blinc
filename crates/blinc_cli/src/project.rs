@@ -1501,6 +1501,7 @@ fn android_main(app: AndroidApp) {{
 
     log::info!("Starting {name} on Android");
 
+    blinc_platform_android::init_android_native_bridge(&app).expect("Failed to initialize native bridge");
     blinc_app::AndroidApp::run(app, |ctx| app_ui(ctx)).expect("Failed to run Android app");
 }}
 
@@ -1812,6 +1813,7 @@ tasks.named("preBuild") {{
 
 import android.app.NativeActivity
 import android.os.Bundle
+import com.blinc.BlincNativeBridge
 
 class MainActivity : NativeActivity() {{
     companion object {{
@@ -1821,11 +1823,21 @@ class MainActivity : NativeActivity() {{
     }}
 
     override fun onCreate(savedInstanceState: Bundle?) {{
+        BlincNativeBridge.registerDefaults(this)
         super.onCreate(savedInstanceState)
     }}
 }}
 "#
         ),
+    )?;
+
+    fs::write(
+        kotlin_path.join("BlincNativeBridge.kt"),
+        include_str!("../templates/android/BlincNativeBridge.kt"),
+    )?;
+    fs::write(
+        kotlin_path.join("BlincIme.kt"),
+        include_str!("../templates/android/BlincIme.kt"),
     )?;
 
     // gradle.properties
@@ -2105,6 +2117,10 @@ void blinc_destroy_context(IOSRenderContext* ctx);
 void blinc_ios_handle_key_down(IOSRenderContext* ctx, uint32_t key_code);
 
 // Accessibility snapshots and actions (main thread).
+char* blinc_ime_snapshot(const IOSRenderContext* ctx);
+void blinc_ime_free(char* snapshot);
+bool blinc_ime_edit(IOSRenderContext* ctx, const char* json);
+
 char* blinc_accessibility_snapshot(const IOSRenderContext* ctx);
 void blinc_accessibility_free(char* snapshot);
 bool blinc_accessibility_action(IOSRenderContext* ctx, uint64_t id, uint32_t action, const char* value);
@@ -2555,3 +2571,7 @@ open BlincApp.xcodeproj
 #[cfg(all(test, target_os = "macos"))]
 #[path = "project/tests/ios.rs"]
 mod ios_tests;
+
+#[cfg(test)]
+#[path = "project/tests/android.rs"]
+mod android_tests;

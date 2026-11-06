@@ -9,6 +9,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - The registered iOS Rust builder uses the complete UI build path, including queued core styles, overlays and build-scope cleanup.
 
 ### Fixed
+- iOS text measurement shares the renderer’s font registry, keeping carets aligned with fallback glyphs.
 - Browser wheel input is dispatched before pointer movement changes its target, preserving swipe cancellation and preventing queued input from navigating another Calendar.
 - Browser wheel input recognizes gradually accelerating strokes after a momentum tail, so Calendar swipes continue after a completed or cancelled gesture without an outside click.
 - Nested CSS transforms keep collected content in its parent's coordinate system, including rotated Tree chevrons inside sliding drawers.
@@ -17,6 +18,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - Desktop and web runners reconcile overlay focus before styling and share navigation handling. Web consumes navigation keys without browser defaults or duplicate text input; desktop maps Shift+F10 for context menus.
 
 ### Added
+- Mobile IME connections retain UIKit marked text and Android composing spans, synchronize candidate replacements and selections, and reject edits from stale focus sessions. Generated mobile hosts include the native editing bridge.
 - Opt-in `css-hot-reload` feature with `WindowedContext::watch_css` and `unwatch_css`. Debug desktop builds reload named CSS sources on save, wake idle windows, preserve component state and retain the last valid styles on errors. Watchers and file reads are excluded from release, web and mobile builds.
 - Named CSS overrides through `WindowedContext::set_css` replace rules without resetting component state. Theme and root variables are shared across sources; invalid edits preserve the previous styles.
 - `WebApp::new_offscreen`, normalized `WebInput` dispatch and host-driven resize/frame APIs share the DOM runner’s rendering pipeline for dedicated workers.

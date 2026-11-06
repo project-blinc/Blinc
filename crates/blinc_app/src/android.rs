@@ -24,6 +24,8 @@ use std::sync::{
     atomic::{AtomicBool, AtomicI32, Ordering},
 };
 
+mod ime;
+
 /// Latest soft-keyboard inset reported by the JVM in **logical pixels**.
 ///
 /// Set from Kotlin via the JNI export
@@ -441,6 +443,7 @@ impl AndroidApp {
         let mut surface_config: Option<wgpu::SurfaceConfiguration> = None;
         let mut ctx: Option<WindowedContext> = None;
         let mut render_tree: Option<RenderTree> = None;
+        let mut native_ime_snapshot = None;
         // The scope each build runs in; see `blinc_core::owner::BuildScope`.
         let mut build_scope = blinc_core::owner::BuildScope::new();
         let mut render_state: Option<blinc_layout::RenderState> = None;
@@ -1222,6 +1225,12 @@ impl AndroidApp {
                     }
                 }
             }
+
+            blinc_layout::widgets::text_input::process_pending_input_focus();
+            if let Some(tree) = render_tree.as_mut() {
+                needs_redraw_next_frame |= ime::drain(tree);
+            }
+            ime::synchronize(render_tree.as_ref(), &mut native_ime_snapshot);
 
             // Grab-to-stop, TAP ONLY: a no-move release on a coasting list
             // halts it (native "tap to stop"). A swipe deliberately does not

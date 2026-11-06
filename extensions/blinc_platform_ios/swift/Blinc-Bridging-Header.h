@@ -161,6 +161,10 @@ void blinc_free_string(char* ptr);
 void blinc_ios_handle_key_down(IOSRenderContext* ctx, uint32_t key_code);
 
 // Accessibility snapshots and actions (main thread).
+char* blinc_ime_snapshot(const IOSRenderContext* ctx);
+void blinc_ime_free(char* snapshot);
+bool blinc_ime_edit(IOSRenderContext* ctx, const char* json);
+
 char* blinc_accessibility_snapshot(const IOSRenderContext* ctx);
 void blinc_accessibility_free(char* snapshot);
 bool blinc_accessibility_action(IOSRenderContext* ctx, uint64_t id, uint32_t action, const char* value);

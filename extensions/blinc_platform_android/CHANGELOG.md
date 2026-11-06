@@ -4,6 +4,9 @@ All notable changes to `blinc_platform_android` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `BlincIme.kt` connects a native editor to the focused GPU document, preserving composing spans, candidate replacement, selection and input-connection batch edits.
+
 ### Changed
 - FFI declaration block for `ANativeWindow_*` (NDK) wrapped as `unsafe extern "C" { … }` to satisfy edition 2024's required-unsafe-on-extern rule. Per-export `#[unsafe(no_mangle)]` syntax applied to every JNI native function in the bridge.
 

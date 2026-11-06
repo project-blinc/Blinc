@@ -40,6 +40,8 @@
 
 #[path = "ios/accessibility.rs"]
 mod accessibility;
+#[path = "ios/ime.rs"]
+mod ime;
 
 use std::sync::{
     Arc, Mutex,
@@ -2007,6 +2009,7 @@ pub extern "C" fn blinc_init_gpu(
     let render_context =
         crate::context::RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
     let app = BlincApp::from_context(render_context, config);
+    blinc_layout::init_text_measurer_with_registry(app.font_registry());
 
     // Configure surface with the format the renderer selected
     let format = app.texture_format();

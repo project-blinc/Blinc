@@ -123,6 +123,9 @@ pub fn system_font_paths() -> &'static [&'static str] {
     }
 }
 
+#[cfg(any(target_os = "ios", target_os = "android"))]
+mod ime;
+
 mod app;
 mod context;
 mod error;

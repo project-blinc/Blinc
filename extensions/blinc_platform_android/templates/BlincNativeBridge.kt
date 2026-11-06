@@ -442,6 +442,14 @@ object BlincNativeBridge {
         // Keyboard namespace
         // =====================================================================
 
+        register("keyboard", "sync") { args ->
+            val json = args.getString(0)
+            currentActivity()?.let { activity ->
+                activity.runOnUiThread { BlincIme.synchronize(activity, json) }
+            }
+            null
+        }
+
         register("keyboard", "show") { _ ->
             // The Application context cannot show the soft keyboard — we
             // need an Activity for the decor view + input method service.
@@ -450,6 +458,7 @@ object BlincNativeBridge {
             // WeakReference so we don't leak it.
             val activity = currentActivity()
             activity?.runOnUiThread {
+                if (BlincIme.show()) return@runOnUiThread
                 val imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE)
                     as? InputMethodManager
                 val view = activity.window?.decorView
@@ -471,6 +480,7 @@ object BlincNativeBridge {
             activity?.runOnUiThread {
                 val imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE)
                     as? InputMethodManager
+                BlincIme.hide()
                 val token = activity.window?.decorView?.windowToken
                 imm?.hideSoftInputFromWindow(token, 0)
             }
@@ -763,6 +773,9 @@ object BlincNativeBridge {
     // to `WindowedContext.height`.
     @JvmStatic
     external fun nativeDispatchKeyboardInset(insetLogicalPx: Int)
+
+    @JvmStatic
+    external fun nativeDispatchImeEdit(json: String): Boolean
 
     // JNI bridge for system-bar safe-area inset updates.
     //

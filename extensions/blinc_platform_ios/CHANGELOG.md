@@ -4,6 +4,9 @@ All notable changes to `blinc_platform_ios` will be documented in this file.
 
 ## [Unreleased]
 
+### Input
+- Native marked-text composition, candidate replacement and UTF-16 selection synchronize with Blinc editable widgets through the UIKit keyboard connection.
+
 ### Accessibility
 - UIKit accessibility container and text-field proxies for GPU-rendered controls, with stable identities, semantic updates and assistive actions. Dynamic Type scales the UI and coordinates together.
 
