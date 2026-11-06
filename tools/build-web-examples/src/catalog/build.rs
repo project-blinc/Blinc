@@ -110,6 +110,14 @@ fn fixture_digest(root: &Path, component: &Component) -> Result<String> {
         hash.update(fs::read(root.join(file))?);
         hash.update([0]);
     }
+    // Fixture-specific pictures are fingerprinted here, so the shared list above stays stable
+    // and only the fixture that shows one needs re-recording.
+    if component.slug == "image" {
+        hash.update(fs::read(
+            root.join("examples/blinc_component_demos/assets/avatar.data-uri"),
+        )?);
+        hash.update([0]);
+    }
     Ok(format!("{:x}", hash.finalize()))
 }
 pub(super) fn compile(root: &Path, input: &str) -> Result<()> {

@@ -17,8 +17,12 @@ JetBrains Mono Regular is copied unchanged from the repository's `assets/fonts`
 and loaded alongside Noto Sans for code widgets. Its upstream license is
 `JetBrainsMono-OFL.txt` (https://github.com/JetBrains/JetBrainsMono).
 
-`landscape.data-uri` embeds a JPEG conversion of the existing Stockcake landscape from
-`examples/blinc_app_examples/examples/assets/stormy-plains-illuminated-stockcake.webp`.
+`avatar.data-uri` embeds an 840 px JPEG downscale of
+`examples/blinc_app_examples/examples/assets/avatar.jpg`; the Image fixture shows it.
+`landscape.data-uri` (a JPEG conversion of the Stockcake landscape from
+`examples/blinc_app_examples/examples/assets/stormy-plains-illuminated-stockcake.webp`) is no
+longer shown. It stays only because every recording's fingerprint lists it; dropping it means
+re-recording all previews.
 The image and media fixtures do not fetch remote assets.
 
 `handpan.mp4` is a 960 × 540 H.264 conversion of ashui's

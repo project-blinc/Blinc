@@ -4,7 +4,7 @@ use blinc_layout::prelude::*;
 pub fn image_demo(_: &DemoState, viewport: (f32, f32)) -> Div {
     div().class("demo-wide").child(
         div().class("demo-image").child(
-            img(include_str!("../../assets/landscape.data-uri"))
+            img(include_str!("../../assets/avatar.data-uri"))
                 .w((viewport.0 - 64.0).clamp(1.0, 420.0))
                 .h(216.0)
                 .cover()
