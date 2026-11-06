@@ -40,7 +40,8 @@ final class BlincAccessibilityTests: XCTestCase {
         XCTAssertTrue(name.exists, "The input needs its visible label and editable role.")
         name.tap()
         name.typeText("Ada")
-        XCTAssertEqual(name.value as? String, "Ada")
+        let textUpdated = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Ada"), object: name)
+        XCTAssertEqual(XCTWaiter.wait(for: [textUpdated], timeout: 3), .completed)
         name.typeText("\n")
         XCTAssertTrue(app.staticTexts["Count: 11"].waitForExistence(timeout: 3))
 

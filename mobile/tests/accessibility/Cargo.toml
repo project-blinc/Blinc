@@ -8,10 +8,20 @@ publish = false
 
 [lib]
 name = "example"
-crate-type = ["staticlib"]
+crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
-blinc = { path = "../../../crates/blinc", default-features = false, features = ["ios", "cn"] }
+blinc = { path = "../../../crates/blinc", default-features = false, features = ["cn"] }
+tracing = "0.1"
+
+[target.'cfg(target_os = "ios")'.dependencies]
+blinc = { path = "../../../crates/blinc", default-features = false, features = ["ios"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+blinc = { path = "../../../crates/blinc", default-features = false, features = ["android"] }
+blinc_platform_android = { path = "../../../extensions/blinc_platform_android" }
+android-activity = { version = "0.6.1", features = ["native-activity"] }
+jni = "0.21"
 
 [profile.dev]
 opt-level = 0
