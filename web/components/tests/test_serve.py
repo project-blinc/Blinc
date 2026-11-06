@@ -1,6 +1,8 @@
 """Exercise the preview server's HTTP contract, including browser seek ranges."""
 import functools
 import http.client
+import json
+import os
 import importlib.util
 from pathlib import Path
 import tempfile
@@ -47,5 +49,50 @@ class MediaRanges(unittest.TestCase):
         self.assertEqual((status,body),(206,self.data[:4]))
         status,_,body=self.request(Range='bytes=0-3',**{'If-Range':'Sun, 06 Nov 1994 08:49:37 GMT'})
         self.assertEqual((status,body),(200,self.data))
+
+class SourceOverlay(unittest.TestCase):
+    """Edited source files show at once, and open pages reload when one changes."""
+    @classmethod
+    def setUpClass(cls):
+        cls.root=tempfile.TemporaryDirectory()
+        cls.staged=Path(cls.root.name,'staged'); cls.source=Path(cls.root.name,'web')
+        for folder in (cls.staged,cls.source,cls.staged/'components'): folder.mkdir(parents=True,exist_ok=True)
+        (cls.staged/'index.html').write_text('<html><body>staged</body></html>')
+        (cls.staged/'components'/'index.html').write_text('<html><body>catalog</body></html>')
+        (cls.staged/'only-staged.txt').write_text('staged only')
+        (cls.source/'index.html').write_text('<html><body>edited</body></html>')
+        class Live(QuietHandler): pass
+        Live.source=str(cls.source); Live.live=True
+        cls.handler=Live
+        cls.server=module.http.server.ThreadingHTTPServer(('127.0.0.1',0),functools.partial(Live,directory=str(cls.staged)))
+        cls.thread=threading.Thread(target=cls.server.serve_forever,daemon=True);cls.thread.start()
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown();cls.server.server_close();cls.thread.join();cls.root.cleanup()
+    def get(self,path):
+        connection=http.client.HTTPConnection(*self.server.server_address)
+        connection.request('GET',path);response=connection.getresponse()
+        result=(response.status,dict(response.getheaders()),response.read());connection.close();return result
+    def test_a_source_file_is_served_in_front_of_the_staged_copy(self):
+        status,headers,body=self.get('/')
+        self.assertEqual(status,200);self.assertIn(b'edited',body);self.assertNotIn(b'staged',body)
+        status,_,body=self.get('/only-staged.txt')
+        self.assertEqual((status,body),(200,b'staged only'))
+    def test_a_directory_comes_from_the_staged_copy(self):
+        status,_,body=self.get('/components/')
+        self.assertEqual(status,200);self.assertIn(b'catalog',body)
+    def test_responses_ask_browsers_to_revalidate(self):
+        for path in ('/','/only-staged.txt'):
+            self.assertEqual(self.get(path)[1]['Cache-Control'],'no-cache')
+    def test_pages_carry_the_reload_script_and_the_stamp_follows_edits(self):
+        _,headers,body=self.get('/')
+        self.assertIn(b'/__live',body);self.assertEqual(int(headers['Content-Length']),len(body))
+        before=json.loads(self.get('/__live')[2])['stamp']
+        page=self.source/'index.html'; page.write_text('<html><body>edited again</body></html>')
+        os.utime(page,(before+10,before+10)); module.GalleryHandler._stamp=(0.0,0.0)
+        self.assertGreater(json.loads(self.get('/__live')[2])['stamp'],before)
+    def test_files_outside_the_source_are_not_reached(self):
+        status,_,body=self.get('/..%2f..%2fetc/hosts')
+        self.assertNotEqual((status,body[:1]),(200,b'1'))
 
 if __name__=='__main__':unittest.main()
