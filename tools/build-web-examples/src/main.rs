@@ -217,7 +217,7 @@ const INFERABLE_DEPS: &[(&str, &str, &str)] = &[
         // Same API behind the `gltf::` / `skeleton::` sub-modules.
         // Features flow through from the example crate's `gltf`
         // feature: platform-assets + bc-encode.
-        r#"{ git = "https://github.com/project-blinc/blinc_game_kit.git", rev = "2db35f96ec552f39dec85d4f63914dfb70f5aa82", features = ["platform-assets", "bc-encode"] }"#,
+        r#"{ git = "https://github.com/project-blinc/blinc_game_kit.git", rev = "521fff1cc13ba51df80c20a3cc78f85e11670775", features = ["platform-assets", "bc-encode"] }"#,
     ),
     (
         "blinc_node_editor::",
@@ -873,9 +873,6 @@ fn generate_wrapper(workspace_root: &Path, meta: &ExampleMeta) -> std::io::Resul
             &crate_name,
             meta.window_size,
             &meta.image_assets,
-            // Its async glTF loader spins in a worker until blinc_game_kit carries the fix, so
-            // those examples start on the page thread.
-            !meta.extra_deps.iter().any(|(p, _)| p == "blinc_game_kit"),
         ),
     )?;
 
@@ -1365,7 +1362,6 @@ fn render_index_html(
     crate_name: &str,
     window_size: Option<(u32, u32)>,
     image_assets: &[String],
-    worker_capable: bool,
 ) -> String {
     // Convert crate name back to the JS import shim filename. wasm-pack
     // emits `<package_name_with_underscores>.js`, not hyphens.
@@ -1385,7 +1381,7 @@ fn render_index_html(
         None => "width: 100vw; height: 100vh;".to_string(),
     };
     // Media streams through a DOM element, which a worker cannot own; those stay on the page.
-    let worker_ok = worker_capable && image_assets.iter().all(|p| !is_media_url(p));
+    let worker_ok = image_assets.iter().all(|p| !is_media_url(p));
 
     // `<link rel="preload" as="fetch" crossorigin>` lets the browser
     // begin downloading each asset URL in parallel with the wasm

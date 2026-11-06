@@ -1012,7 +1012,7 @@ dependencies = [
 [[package]]
 name = "blinc_game_kit"
 version = "0.1.0"
-source = "git+https://github.com/project-blinc/blinc_game_kit.git?rev=2db35f96ec552f39dec85d4f63914dfb70f5aa82#2db35f96ec552f39dec85d4f63914dfb70f5aa82"
+source = "git+https://github.com/project-blinc/blinc_game_kit.git?rev=521fff1cc13ba51df80c20a3cc78f85e11670775#521fff1cc13ba51df80c20a3cc78f85e11670775"
 dependencies = [
  "base64 0.22.1",
  "blinc_canvas_kit",
