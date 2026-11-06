@@ -30,7 +30,12 @@ impl Record<'_> {
                 .ok_or(Unsupported::ClipShape)?;
             let end = start.checked_add(len).ok_or(Unsupported::ClipShape)?;
             let data = list.get(start..end).ok_or(Unsupported::ClipShape)?;
-            points.extend(data.chunks_exact(4).map(|v| [v[0], v[1], v[2], v[3]]));
+            points.extend(
+                data.as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|v| [v[0], v[1], v[2], v[3]]),
+            );
             // Relative to this header, so a run's points need no separate rebasing.
             shape[0] = 3.0;
         }

@@ -60,29 +60,29 @@ impl GpuRenderer {
         if self.has_storage_buffers {
             self.queue
                 .write_buffer(&self.buffers.glyphs, 0, bytemuck::cast_slice(glyphs));
-        } else if let Some(ref tex) = self.buffers.glyph_data_texture {
-            if !glyphs.is_empty() {
-                let bytes = bytemuck::cast_slice(glyphs);
-                self.queue.write_texture(
-                    wgpu::TexelCopyTextureInfo {
-                        texture: tex,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d::ZERO,
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    bytes,
-                    wgpu::TexelCopyBufferLayout {
-                        offset: 0,
-                        bytes_per_row: Some(6 * 16), // 6 texels × 16 bytes per Rgba32Float = 96 bytes = sizeof(GpuGlyph)
-                        rows_per_image: None,
-                    },
-                    wgpu::Extent3d {
-                        width: 6,
-                        height: glyphs.len() as u32,
-                        depth_or_array_layers: 1,
-                    },
-                );
-            }
+        } else if let Some(ref tex) = self.buffers.glyph_data_texture
+            && !glyphs.is_empty()
+        {
+            let bytes = bytemuck::cast_slice(glyphs);
+            self.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: tex,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                bytes,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(6 * 16), // 6 texels × 16 bytes per Rgba32Float = 96 bytes = sizeof(GpuGlyph)
+                    rows_per_image: None,
+                },
+                wgpu::Extent3d {
+                    width: 6,
+                    height: glyphs.len() as u32,
+                    depth_or_array_layers: 1,
+                },
+            );
         }
 
         // Atlas views, samplers and auxiliary allocations can change between draws.

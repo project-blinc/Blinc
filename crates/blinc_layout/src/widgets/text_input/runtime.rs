@@ -146,10 +146,10 @@ where
 
 /// Internal function to notify animation scheduler about cursor animation needs
 pub(super) fn notify_continuous_redraw(enabled: bool) {
-    if let Ok(guard) = CONTINUOUS_REDRAW_CALLBACK.lock() {
-        if let Some(ref callback) = *guard {
-            callback(enabled);
-        }
+    if let Ok(guard) = CONTINUOUS_REDRAW_CALLBACK.lock()
+        && let Some(ref callback) = *guard
+    {
+        callback(enabled);
     }
 }
 
@@ -356,10 +356,10 @@ pub fn decrement_focus_count() {
     });
     // If no more focused text widgets, disable continuous redraw
     // and hide the soft keyboard on mobile platforms
-    if let Ok(prev_val) = prev {
-        if prev_val == 1 {
-            notify_continuous_redraw(false);
-            notify_keyboard_visibility(false);
-        }
+    if let Ok(prev_val) = prev
+        && prev_val == 1
+    {
+        notify_continuous_redraw(false);
+        notify_keyboard_visibility(false);
     }
 }

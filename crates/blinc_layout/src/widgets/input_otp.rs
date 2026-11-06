@@ -144,15 +144,15 @@ pub fn wire_otp_slot(
         let on_complete = on_complete.clone();
         field = field.on_change(move |text| {
             // `InputType::Integer` admits `-`; OTP numeric mode does not.
-            if let Some(c) = text.chars().next() {
-                if !filter_char(c, numeric_only) {
-                    if let Ok(mut d) = slots[index].lock() {
-                        d.value.clear();
-                        d.cursor = 0;
-                        d.selection_start = None;
-                    }
-                    return;
+            if let Some(c) = text.chars().next()
+                && !filter_char(c, numeric_only)
+            {
+                if let Ok(mut d) = slots[index].lock() {
+                    d.value.clear();
+                    d.cursor = 0;
+                    d.selection_start = None;
                 }
+                return;
             }
             let joined = joined_value(&slots);
             let previous = value_state.try_get().unwrap_or_default();
@@ -165,10 +165,11 @@ pub fn wire_otp_slot(
                 if let Some(ref cb) = on_change {
                     cb(&joined);
                 }
-                if !was_complete && joined.chars().count() == length {
-                    if let Some(ref cb) = on_complete {
-                        cb(&joined);
-                    }
+                if !was_complete
+                    && joined.chars().count() == length
+                    && let Some(ref cb) = on_complete
+                {
+                    cb(&joined);
                 }
             }
             if value_changed && !text.is_empty() {
@@ -231,10 +232,11 @@ pub fn wire_otp_slot(
                 if let Some(ref cb) = on_change {
                     cb(&joined);
                 }
-                if !was_complete && joined.chars().count() == length {
-                    if let Some(ref cb) = on_complete {
-                        cb(&joined);
-                    }
+                if !was_complete
+                    && joined.chars().count() == length
+                    && let Some(ref cb) = on_complete
+                {
+                    cb(&joined);
                 }
             }
             let next = first_empty_slot(&slots).min(length - 1);

@@ -459,21 +459,19 @@ impl<'a> RenderState<'a> {
                             _ => {}
                         }
                     }
-                } else if is_task_item {
-                    if let Some(StackItem::TaskItem(item)) = self.stack.pop() {
-                        // Add content to task item
-                        let item = if let Some(content) = content {
-                            item.child_box(Box::new(content))
-                        } else {
-                            item
-                        };
+                } else if is_task_item && let Some(StackItem::TaskItem(item)) = self.stack.pop() {
+                    // Add content to task item
+                    let item = if let Some(content) = content {
+                        item.child_box(Box::new(content))
+                    } else {
+                        item
+                    };
 
-                        // Add task item to parent list
-                        if let Some(StackItem::UnorderedList(list)) = self.stack.last_mut() {
-                            let new_list = std::mem::replace(list, ul_with_config(list_config));
-                            *list = new_list.child_element(item);
-                            self.list_item_index += 1;
-                        }
+                    // Add task item to parent list
+                    if let Some(StackItem::UnorderedList(list)) = self.stack.last_mut() {
+                        let new_list = std::mem::replace(list, ul_with_config(list_config));
+                        *list = new_list.child_element(item);
+                        self.list_item_index += 1;
                     }
                 }
             }
@@ -500,10 +498,10 @@ impl<'a> RenderState<'a> {
             }
             TagEnd::Table => {
                 // Close tbody if it's on the stack
-                if let Some(StackItem::TableBody(body)) = self.stack.pop() {
-                    if let Some(StackItem::Table(tbl)) = self.stack.last_mut() {
-                        *tbl = std::mem::replace(tbl, div()).child(body);
-                    }
+                if let Some(StackItem::TableBody(body)) = self.stack.pop()
+                    && let Some(StackItem::Table(tbl)) = self.stack.last_mut()
+                {
+                    *tbl = std::mem::replace(tbl, div()).child(body);
                 }
                 // Now pop the table
                 if let Some(StackItem::Table(tbl)) = self.stack.pop() {
@@ -520,10 +518,10 @@ impl<'a> RenderState<'a> {
                     }
                 }
                 // Now pop the thead and add to table
-                if let Some(StackItem::TableHead(head)) = self.stack.pop() {
-                    if let Some(StackItem::Table(tbl)) = self.stack.last_mut() {
-                        *tbl = std::mem::replace(tbl, div()).child(head);
-                    }
+                if let Some(StackItem::TableHead(head)) = self.stack.pop()
+                    && let Some(StackItem::Table(tbl)) = self.stack.last_mut()
+                {
+                    *tbl = std::mem::replace(tbl, div()).child(head);
                 }
                 // Start tbody for remaining rows
                 self.stack.push(StackItem::TableBody(tbody()));

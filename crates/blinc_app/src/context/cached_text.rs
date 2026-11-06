@@ -80,17 +80,16 @@ impl RenderContext {
             return;
         }
         self.renderer.update_aux_data_slice(&batch.aux_data);
-        if !batch.primitives.is_empty() {
-            if let (Some(atlas), Some(color)) =
+        if !batch.primitives.is_empty()
+            && let (Some(atlas), Some(color)) =
                 (self.text_ctx.atlas_view(), self.text_ctx.color_atlas_view())
-            {
-                self.renderer.render_primitives_overlay_with_glyphs(
-                    target,
-                    &batch.primitives,
-                    atlas,
-                    color,
-                );
-            }
+        {
+            self.renderer.render_primitives_overlay_with_glyphs(
+                target,
+                &batch.primitives,
+                atlas,
+                color,
+            );
         }
         self.render_legacy_text(target, &batch.glyphs);
     }

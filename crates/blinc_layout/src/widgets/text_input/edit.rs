@@ -174,10 +174,10 @@ impl TextInputData {
         }
 
         // Check max length
-        if let Some(max) = self.constraints.max_length {
-            if self.value.chars().count() + filtered.chars().count() > max {
-                return;
-            }
+        if let Some(max) = self.constraints.max_length
+            && self.value.chars().count() + filtered.chars().count() > max
+        {
+            return;
         }
 
         // Insert at cursor
@@ -432,10 +432,10 @@ impl TextInputData {
             self.is_valid = false;
         }
 
-        if let Some(min) = self.constraints.min_length {
-            if self.value.len() < min {
-                self.is_valid = false;
-            }
+        if let Some(min) = self.constraints.min_length
+            && self.value.len() < min
+        {
+            self.is_valid = false;
         }
     }
 

@@ -360,11 +360,11 @@ fn tokenize_path(d: &str) -> Vec<PathToken> {
         }
 
         // Check if next char is a command letter
-        if let Some(&c) = chars.peek() {
-            if c.is_ascii_alphabetic() {
-                current_cmd = c;
-                chars.next();
-            }
+        if let Some(&c) = chars.peek()
+            && c.is_ascii_alphabetic()
+        {
+            current_cmd = c;
+            chars.next();
         }
 
         // Parse numbers for this command
@@ -409,11 +409,11 @@ fn parse_number(chars: &mut std::iter::Peekable<std::str::Chars>) -> f32 {
     let mut has_e = false;
 
     // Optional sign
-    if let Some(&c) = chars.peek() {
-        if c == '-' || c == '+' {
-            s.push(c);
-            chars.next();
-        }
+    if let Some(&c) = chars.peek()
+        && (c == '-' || c == '+')
+    {
+        s.push(c);
+        chars.next();
     }
 
     while let Some(&c) = chars.peek() {
@@ -429,11 +429,11 @@ fn parse_number(chars: &mut std::iter::Peekable<std::str::Chars>) -> f32 {
             s.push(c);
             chars.next();
             // Optional sign after exponent
-            if let Some(&ec) = chars.peek() {
-                if ec == '-' || ec == '+' {
-                    s.push(ec);
-                    chars.next();
-                }
+            if let Some(&ec) = chars.peek()
+                && (ec == '-' || ec == '+')
+            {
+                s.push(ec);
+                chars.next();
             }
         } else {
             break;

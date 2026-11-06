@@ -1571,18 +1571,18 @@ impl RenderTree {
         // same stable id would corrupt the map (a `child_a` lookup
         // would return `child_b`'s layout id). Log and skip the second
         // insert — caller's tree shape is degenerate.
-        if let Some(prev) = self.stable_to_layout.get(&stable) {
-            if *prev != layout {
-                tracing::warn!(
-                    "StableNodeId collision: {:?} maps to {:?} and {:?}; \
+        if let Some(prev) = self.stable_to_layout.get(&stable)
+            && *prev != layout
+        {
+            tracing::warn!(
+                "StableNodeId collision: {:?} maps to {:?} and {:?}; \
                      second registration dropped (rebuild stability for the \
                      second node may suffer)",
-                    stable,
-                    prev,
-                    layout,
-                );
-                return;
-            }
+                stable,
+                prev,
+                layout,
+            );
+            return;
         }
         self.stable_to_layout.insert(stable, layout);
         self.layout_to_stable.insert(layout, stable);
@@ -2331,12 +2331,12 @@ impl RenderTree {
     /// Fast path that avoids full tree rebuild — only updates the root layout
     /// node's width/height so taffy recomputes flex/block metrics with new dims.
     pub fn resize_root(&mut self, width: f32, height: f32) {
-        if let Some(root_id) = self.root {
-            if let Some(mut style) = self.layout_tree.get_style(root_id) {
-                style.size.width = Dimension::length(width);
-                style.size.height = Dimension::length(height);
-                self.layout_tree.set_style(root_id, style);
-            }
+        if let Some(root_id) = self.root
+            && let Some(mut style) = self.layout_tree.get_style(root_id)
+        {
+            style.size.width = Dimension::length(width);
+            style.size.height = Dimension::length(height);
+            self.layout_tree.set_style(root_id, style);
         }
     }
 
@@ -2632,13 +2632,13 @@ impl RenderTree {
 
         // Iterate through all render nodes and cache bounds for those with string IDs
         for (node_id, _render_node) in &self.render_nodes {
-            if let Some(string_id) = self.element_registry.get_id(*node_id) {
-                if let Some(bounds) = self.get_bounds(*node_id) {
-                    self.element_registry.update_bounds(
-                        &string_id,
-                        blinc_core::Bounds::new(bounds.x, bounds.y, bounds.width, bounds.height),
-                    );
-                }
+            if let Some(string_id) = self.element_registry.get_id(*node_id)
+                && let Some(bounds) = self.get_bounds(*node_id)
+            {
+                self.element_registry.update_bounds(
+                    &string_id,
+                    blinc_core::Bounds::new(bounds.x, bounds.y, bounds.width, bounds.height),
+                );
             }
         }
     }
@@ -2792,10 +2792,10 @@ impl RenderTree {
                         new_bounds
                     );
                     self.layout_animations.insert(node_id, anim_state);
-                } else if let Some(existing) = self.layout_animations.get(&node_id) {
-                    if !existing.is_animating() {
-                        self.layout_animations.remove(&node_id);
-                    }
+                } else if let Some(existing) = self.layout_animations.get(&node_id)
+                    && !existing.is_animating()
+                {
+                    self.layout_animations.remove(&node_id);
                 }
             }
         }
@@ -2967,16 +2967,16 @@ impl RenderTree {
                         // Register on_ready callback if provided and motion was created/reset
                         // This will fire once the element is laid out, allowing
                         // the callback to trigger the suspended animation start
-                        if needs_on_ready {
-                            if let Some(ref callback) = render_node.props.motion_on_ready_callback {
-                                // Clear any previous triggered state so the callback can fire again
-                                self.element_registry.clear_on_ready_triggered(stable_key);
-                                // Register the stable_key with the node_id so that
-                                // process_on_ready_callbacks can look up bounds
-                                self.element_registry.register(stable_key, node_id);
-                                self.element_registry
-                                    .register_on_ready_for_id(stable_key, callback.clone());
-                            }
+                        if needs_on_ready
+                            && let Some(ref callback) = render_node.props.motion_on_ready_callback
+                        {
+                            // Clear any previous triggered state so the callback can fire again
+                            self.element_registry.clear_on_ready_triggered(stable_key);
+                            // Register the stable_key with the node_id so that
+                            // process_on_ready_callbacks can look up bounds
+                            self.element_registry.register(stable_key, node_id);
+                            self.element_registry
+                                .register_on_ready_for_id(stable_key, callback.clone());
                         }
                     } else {
                         // Start or replay stable motion based on replay flag
@@ -3202,10 +3202,10 @@ impl RenderTree {
             if let Some(content) = update.text_content {
                 self.set_text_content(update.node_id, content);
             }
-            if let Some(region) = update.region_update {
-                if regions_seen.insert((update.node_id, region)) {
-                    self.reconcile_region(update.node_id, region);
-                }
+            if let Some(region) = update.region_update
+                && regions_seen.insert((update.node_id, region))
+            {
+                self.reconcile_region(update.node_id, region);
             }
         }
         crate::stateful::requeue_partial_updates(foreign);
@@ -3361,10 +3361,10 @@ impl RenderTree {
         let Some(stylesheet) = self.stylesheet() else {
             return false;
         };
-        if let Some(id) = self.element_registry.get_id(node_id) {
-            if stylesheet.participates_in_hover(&id) {
-                return true;
-            }
+        if let Some(id) = self.element_registry.get_id(node_id)
+            && stylesheet.participates_in_hover(&id)
+        {
+            return true;
         }
         if let Some(classes) = self.element_registry.get_classes(node_id) {
             for class in classes {

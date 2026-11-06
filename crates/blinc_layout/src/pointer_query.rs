@@ -182,10 +182,10 @@ impl PointerQueryState {
             if id.contains(':') {
                 continue;
             }
-            if let Some(style) = stylesheet.get(id) {
-                if let Some(ref config) = style.pointer_space {
-                    new_configs.insert(id.to_string(), config.clone());
-                }
+            if let Some(style) = stylesheet.get(id)
+                && let Some(ref config) = style.pointer_space
+            {
+                new_configs.insert(id.to_string(), config.clone());
             }
         }
 

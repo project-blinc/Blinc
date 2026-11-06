@@ -110,10 +110,10 @@ impl ElementRegistry {
 
         #[cfg(debug_assertions)]
         {
-            if let Ok(ids) = self.ids.read() {
-                if ids.contains_key(&id) {
-                    tracing::warn!("Duplicate element ID registered: {}", id);
-                }
+            if let Ok(ids) = self.ids.read()
+                && ids.contains_key(&id)
+            {
+                tracing::warn!("Duplicate element ID registered: {}", id);
             }
         }
 
@@ -138,10 +138,10 @@ impl ElementRegistry {
     /// Register CSS classes for a node. Classes are interned
     /// `Arc<str>` so repeated names share one heap allocation.
     pub fn register_classes(&self, node_id: LayoutNodeId, classes: Vec<Arc<str>>) {
-        if !classes.is_empty() {
-            if let Ok(mut map) = self.classes.write() {
-                map.insert(node_id, classes);
-            }
+        if !classes.is_empty()
+            && let Ok(mut map) = self.classes.write()
+        {
+            map.insert(node_id, classes);
         }
     }
 
@@ -487,10 +487,10 @@ impl ElementRegistry {
         }
 
         // Remove from ID map
-        if let Some(id) = id {
-            if let Ok(mut ids) = self.ids.write() {
-                ids.remove(&id);
-            }
+        if let Some(id) = id
+            && let Ok(mut ids) = self.ids.write()
+        {
+            ids.remove(&id);
         }
 
         // Remove from parents map
@@ -523,14 +523,14 @@ impl ElementRegistry {
         // Look up the string ID for this node
         if let Some(string_id) = self.get_id(node_id) {
             // Check if already triggered (skip if so)
-            if let Ok(triggered) = self.triggered_on_ready_ids.lock() {
-                if triggered.contains(&string_id) {
-                    tracing::trace!(
-                        "on_ready callback for '{}' already triggered, skipping",
-                        string_id
-                    );
-                    return;
-                }
+            if let Ok(triggered) = self.triggered_on_ready_ids.lock()
+                && triggered.contains(&string_id)
+            {
+                tracing::trace!(
+                    "on_ready callback for '{}' already triggered, skipping",
+                    string_id
+                );
+                return;
             }
 
             if let Ok(mut pending) = self.pending_on_ready.lock() {
@@ -600,14 +600,14 @@ impl ElementRegistry {
     /// This allows callbacks to be registered before the element exists in the tree.
     pub fn register_on_ready_for_id(&self, string_id: &str, callback: OnReadyCallback) {
         // Check if already triggered (skip if so)
-        if let Ok(triggered) = self.triggered_on_ready_ids.lock() {
-            if triggered.contains(string_id) {
-                tracing::trace!(
-                    "on_ready callback for '{}' already triggered, skipping",
-                    string_id
-                );
-                return;
-            }
+        if let Ok(triggered) = self.triggered_on_ready_ids.lock()
+            && triggered.contains(string_id)
+        {
+            tracing::trace!(
+                "on_ready callback for '{}' already triggered, skipping",
+                string_id
+            );
+            return;
         }
 
         if let Ok(mut pending) = self.pending_on_ready.lock() {

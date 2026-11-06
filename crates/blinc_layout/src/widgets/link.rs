@@ -251,10 +251,10 @@ impl Link {
     fn extract_label(&self) -> String {
         // The first child should be the text element
         // We can get its content via text_render_info
-        if let Some(child) = self.inner.children_builders().first() {
-            if let Some(info) = child.text_render_info() {
-                return info.content;
-            }
+        if let Some(child) = self.inner.children_builders().first()
+            && let Some(info) = child.text_render_info()
+        {
+            return info.content;
         }
         String::new()
     }

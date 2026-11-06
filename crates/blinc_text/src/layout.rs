@@ -248,16 +248,17 @@ impl TextLayoutEngine {
             let width = line.width;
 
             // Apply alignment if max_width is set
-            if let Some(max_width) = options.max_width {
-                if options.alignment != TextAlignment::Left && width < max_width {
-                    let offset = match options.alignment {
-                        TextAlignment::Center => (max_width - width) / 2.0,
-                        TextAlignment::Right => max_width - width,
-                        TextAlignment::Left => 0.0,
-                    };
-                    for glyph in &mut line.glyphs {
-                        glyph.x += offset;
-                    }
+            if let Some(max_width) = options.max_width
+                && options.alignment != TextAlignment::Left
+                && width < max_width
+            {
+                let offset = match options.alignment {
+                    TextAlignment::Center => (max_width - width) / 2.0,
+                    TextAlignment::Right => max_width - width,
+                    TextAlignment::Left => 0.0,
+                };
+                for glyph in &mut line.glyphs {
+                    glyph.x += offset;
                 }
             }
 
@@ -387,18 +388,18 @@ impl TextLayoutEngine {
         }
 
         // Apply alignment if max_width is set
-        if let Some(max_width) = options.max_width {
-            if options.alignment != TextAlignment::Left {
-                for line in &mut positioned_lines {
-                    if line.width < max_width {
-                        let offset = match options.alignment {
-                            TextAlignment::Center => (max_width - line.width) / 2.0,
-                            TextAlignment::Right => max_width - line.width,
-                            TextAlignment::Left => 0.0,
-                        };
-                        for glyph in &mut line.glyphs {
-                            glyph.x += offset;
-                        }
+        if let Some(max_width) = options.max_width
+            && options.alignment != TextAlignment::Left
+        {
+            for line in &mut positioned_lines {
+                if line.width < max_width {
+                    let offset = match options.alignment {
+                        TextAlignment::Center => (max_width - line.width) / 2.0,
+                        TextAlignment::Right => max_width - line.width,
+                        TextAlignment::Left => 0.0,
+                    };
+                    for glyph in &mut line.glyphs {
+                        glyph.x += offset;
                     }
                 }
             }

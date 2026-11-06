@@ -1,4 +1,6 @@
 //! Images share their shape stream's active batch and paint cursor.
+// wgpu handles are !Send on wasm32, which has no other threads to send to.
+#![cfg_attr(target_arch = "wasm32", allow(clippy::arc_with_non_send_sync))]
 use super::{ClipData, GpuPaintContext};
 use crate::primitives::{ClipType, DynamicImage, ImagePaintOrder, RetainedImage};
 use blinc_core::{DrawContext, Rect};

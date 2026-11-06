@@ -315,21 +315,21 @@ impl RenderContext {
                                 }
                             }
                         }
-                        if let Some(fg_glyphs) = self.cached_fg_glyphs.clone() {
-                            if !fg_glyphs.is_empty() {
-                                self.render_text(&static_view, &fg_glyphs);
-                            }
+                        if let Some(fg_glyphs) = self.cached_fg_glyphs.clone()
+                            && !fg_glyphs.is_empty()
+                        {
+                            self.render_text(&static_view, &fg_glyphs);
                         }
-                        if let Some(svgs) = self.cached_svgs.clone() {
-                            if !svgs.is_empty() {
-                                self.render_rasterized_svgs(&static_view, &svgs, scale_factor);
-                            }
+                        if let Some(svgs) = self.cached_svgs.clone()
+                            && !svgs.is_empty()
+                        {
+                            self.render_rasterized_svgs(&static_view, &svgs, scale_factor);
                         }
-                        if let Some(images) = self.cached_images.clone() {
-                            if !images.is_empty() {
-                                let refs: Vec<&ImageElement> = images.iter().collect();
-                                self.render_images_ref(&static_view, &refs);
-                            }
+                        if let Some(images) = self.cached_images.clone()
+                            && !images.is_empty()
+                        {
+                            let refs: Vec<&ImageElement> = images.iter().collect();
+                            self.render_images_ref(&static_view, &refs);
                         }
                     }
                 }

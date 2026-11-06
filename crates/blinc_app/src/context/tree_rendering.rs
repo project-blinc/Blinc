@@ -125,10 +125,10 @@ impl RenderContext {
         decorations_by_layer: &std::collections::HashMap<u32, Vec<GpuPrimitive>>,
         z_layer: u32,
     ) {
-        if let Some(primitives) = decorations_by_layer.get(&z_layer) {
-            if !primitives.is_empty() {
-                self.renderer.render_primitives_overlay(target, primitives);
-            }
+        if let Some(primitives) = decorations_by_layer.get(&z_layer)
+            && !primitives.is_empty()
+        {
+            self.renderer.render_primitives_overlay(target, primitives);
         }
     }
 

@@ -419,7 +419,7 @@ pub fn cell() -> TableCell {
 ///     .child(striped_tr(2).child(td("Row 2")))
 /// ```
 pub fn striped_tr(index: usize) -> Div {
-    if index % 2 == 0 {
+    if index.is_multiple_of(2) {
         tr()
     } else {
         tr().class("blinc-tr-alt")

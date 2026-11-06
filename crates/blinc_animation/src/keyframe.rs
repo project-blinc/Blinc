@@ -611,10 +611,10 @@ impl KeyframeProperties {
         // slow-path output at that point (zero rotation = identity),
         // so there's no visible discontinuity.
         // promotable.
-        if let Some(r) = self.rotate {
-            if r.abs() > 1e-3 {
-                return false;
-            }
+        if let Some(r) = self.rotate
+            && r.abs() > 1e-3
+        {
+            return false;
         }
         // At least one promotable property must be Some — an empty
         // properties block means "no animation tick", not "promote

@@ -40,59 +40,59 @@ impl RenderTree {
         };
 
         // text-decoration (CSS spec: not inherited, but decorations paint across inline content)
-        if props.text_decoration.is_none() {
-            if let Some(td) = parent_props.text_decoration {
-                props.text_decoration = Some(td);
-            }
+        if props.text_decoration.is_none()
+            && let Some(td) = parent_props.text_decoration
+        {
+            props.text_decoration = Some(td);
         }
-        if props.text_decoration_color.is_none() {
-            if let Some(c) = parent_props.text_decoration_color {
-                props.text_decoration_color = Some(c);
-            }
+        if props.text_decoration_color.is_none()
+            && let Some(c) = parent_props.text_decoration_color
+        {
+            props.text_decoration_color = Some(c);
         }
-        if props.text_decoration_thickness.is_none() {
-            if let Some(t) = parent_props.text_decoration_thickness {
-                props.text_decoration_thickness = Some(t);
-            }
+        if props.text_decoration_thickness.is_none()
+            && let Some(t) = parent_props.text_decoration_thickness
+        {
+            props.text_decoration_thickness = Some(t);
         }
         // white-space (CSS spec: inherited)
-        if props.white_space.is_none() {
-            if let Some(ws) = parent_props.white_space {
-                props.white_space = Some(ws);
-            }
+        if props.white_space.is_none()
+            && let Some(ws) = parent_props.white_space
+        {
+            props.white_space = Some(ws);
         }
         // text-overflow (CSS spec: not inherited, but child text must know)
-        if props.text_overflow.is_none() {
-            if let Some(to) = parent_props.text_overflow {
-                props.text_overflow = Some(to);
-            }
+        if props.text_overflow.is_none()
+            && let Some(to) = parent_props.text_overflow
+        {
+            props.text_overflow = Some(to);
         }
         // color (CSS spec: inherited) is NOT copied: the paint walk
         // resolves it as it descends, so `props.text_color` stays what this
         // node set for itself and an ancestor's later change is picked up.
         // text-align (CSS spec: inherited)
-        if props.text_align.is_none() {
-            if let Some(ta) = parent_props.text_align {
-                props.text_align = Some(ta);
-            }
+        if props.text_align.is_none()
+            && let Some(ta) = parent_props.text_align
+        {
+            props.text_align = Some(ta);
         }
         // SVG fill (CSS spec: inherited in SVG)
-        if props.fill.is_none() {
-            if let Some(f) = parent_props.fill {
-                props.fill = Some(f);
-            }
+        if props.fill.is_none()
+            && let Some(f) = parent_props.fill
+        {
+            props.fill = Some(f);
         }
         // SVG stroke (CSS spec: inherited in SVG)
-        if props.stroke.is_none() {
-            if let Some(s) = parent_props.stroke {
-                props.stroke = Some(s);
-            }
+        if props.stroke.is_none()
+            && let Some(s) = parent_props.stroke
+        {
+            props.stroke = Some(s);
         }
         // SVG stroke-width (CSS spec: inherited in SVG)
-        if props.stroke_width.is_none() {
-            if let Some(sw) = parent_props.stroke_width {
-                props.stroke_width = Some(sw);
-            }
+        if props.stroke_width.is_none()
+            && let Some(sw) = parent_props.stroke_width
+        {
+            props.stroke_width = Some(sw);
         }
     }
 

@@ -58,12 +58,11 @@ impl RenderTree {
 
         // Check stable key based animations
         // Look up if this node has a config with a stable key
-        if let Some(config) = self.layout_animation_configs.get(&node_id) {
-            if let Some(ref stable_key) = config.stable_key {
-                if let Some(state) = self.layout_animations_by_key.get(stable_key) {
-                    return Some(state.current_bounds());
-                }
-            }
+        if let Some(config) = self.layout_animation_configs.get(&node_id)
+            && let Some(ref stable_key) = config.stable_key
+            && let Some(state) = self.layout_animations_by_key.get(stable_key)
+        {
+            return Some(state.current_bounds());
         }
 
         None
@@ -85,20 +84,18 @@ impl RenderTree {
             .iter()
             .find(|&(_, &n)| n == node_id)
             .map(|(k, _)| k.clone())
+            && let Some(anim) = self.visual_animations.get(&key)
+            && anim.is_animating()
         {
-            if let Some(anim) = self.visual_animations.get(&key) {
-                if anim.is_animating() {
-                    // Get layout bounds (relative to parent)
-                    let layout = self.layout_tree.get_bounds(node_id, parent_offset)?;
-                    // Apply animation offsets to layout bounds
-                    return Some(ElementBounds {
-                        x: layout.x + anim.offset.get_x(),
-                        y: layout.y + anim.offset.get_y(),
-                        width: (layout.width + anim.size_delta.get_width()).max(0.0),
-                        height: (layout.height + anim.size_delta.get_height()).max(0.0),
-                    });
-                }
-            }
+            // Get layout bounds (relative to parent)
+            let layout = self.layout_tree.get_bounds(node_id, parent_offset)?;
+            // Apply animation offsets to layout bounds
+            return Some(ElementBounds {
+                x: layout.x + anim.offset.get_x(),
+                y: layout.y + anim.offset.get_y(),
+                width: (layout.width + anim.size_delta.get_width()).max(0.0),
+                height: (layout.height + anim.size_delta.get_height()).max(0.0),
+            });
         }
 
         // Then try old layout animations (node ID based) - deprecated
@@ -113,18 +110,17 @@ impl RenderTree {
         }
 
         // Try stable key based animations - deprecated
-        if let Some(config) = self.layout_animation_configs.get(&node_id) {
-            if let Some(ref stable_key) = config.stable_key {
-                if let Some(anim_state) = self.layout_animations_by_key.get(stable_key) {
-                    let current = anim_state.current_bounds();
-                    return Some(ElementBounds {
-                        x: current.x + parent_offset.0,
-                        y: current.y + parent_offset.1,
-                        width: current.width,
-                        height: current.height,
-                    });
-                }
-            }
+        if let Some(config) = self.layout_animation_configs.get(&node_id)
+            && let Some(ref stable_key) = config.stable_key
+            && let Some(anim_state) = self.layout_animations_by_key.get(stable_key)
+        {
+            let current = anim_state.current_bounds();
+            return Some(ElementBounds {
+                x: current.x + parent_offset.0,
+                y: current.y + parent_offset.1,
+                width: current.width,
+                height: current.height,
+            });
         }
 
         // Fall back to layout bounds
@@ -144,17 +140,15 @@ impl RenderTree {
         }
 
         // Check stable key based
-        if let Some(config) = self.layout_animation_configs.get(&node_id) {
-            if let Some(ref stable_key) = config.stable_key {
-                if self
-                    .layout_animations_by_key
-                    .get(stable_key)
-                    .map(|s| s.is_animating())
-                    .unwrap_or(false)
-                {
-                    return true;
-                }
-            }
+        if let Some(config) = self.layout_animation_configs.get(&node_id)
+            && let Some(ref stable_key) = config.stable_key
+            && self
+                .layout_animations_by_key
+                .get(stable_key)
+                .map(|s| s.is_animating())
+                .unwrap_or(false)
+        {
+            return true;
         }
 
         false
@@ -517,10 +511,10 @@ impl RenderTree {
             return true;
         }
         // CSS keyframe animations + CSS property transitions.
-        if let Ok(store) = self.css_anim_store.lock() {
-            if store.has_active_animations() || store.has_active_transitions() {
-                return true;
-            }
+        if let Ok(store) = self.css_anim_store.lock()
+            && (store.has_active_animations() || store.has_active_transitions())
+        {
+            return true;
         }
         false
     }
@@ -550,7 +544,9 @@ impl RenderTree {
         // 60x/s and inflated the very measurement it was taking.
         {
             static TICK: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-            if TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 120 == 0
+            if TICK
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                .is_multiple_of(120)
                 && tracing::enabled!(tracing::Level::DEBUG)
             {
                 let animating = self
@@ -628,10 +624,10 @@ impl RenderTree {
         if self.has_active_visible_flip_animations(painted) {
             return true;
         }
-        if let Ok(store) = self.css_anim_store.lock() {
-            if store.has_visible_active(painted_stable) {
-                return true;
-            }
+        if let Ok(store) = self.css_anim_store.lock()
+            && store.has_visible_active(painted_stable)
+        {
+            return true;
         }
         false
     }

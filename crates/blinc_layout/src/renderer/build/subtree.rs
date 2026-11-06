@@ -421,15 +421,15 @@ impl RenderTree {
             // outlet replacement in the same event turn. Processing descendant
             // updates first is wasted work, and on slower Linux machines that can
             // make a simple route change feel sticky.
-            if let Some(&structural_idx) = structural_rebuilds_by_node.get(&rebuild.parent_id) {
-                if idx < structural_idx {
-                    tracing::debug!(
-                        "Subtree rebuild: node {:?} superseded by later structural rebuild",
-                        rebuild.parent_id
-                    );
-                    superseded_rebuilds += 1;
-                    continue;
-                }
+            if let Some(&structural_idx) = structural_rebuilds_by_node.get(&rebuild.parent_id)
+                && idx < structural_idx
+            {
+                tracing::debug!(
+                    "Subtree rebuild: node {:?} superseded by later structural rebuild",
+                    rebuild.parent_id
+                );
+                superseded_rebuilds += 1;
+                continue;
             }
             if self
                 .layout_tree

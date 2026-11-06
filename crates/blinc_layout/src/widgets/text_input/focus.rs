@@ -78,10 +78,10 @@ pub(crate) fn notify_text_input(state: &SharedTextInputData) {
             )
         })
         .unwrap_or_default();
-    if let Some((signal, focused)) = focus {
-        if signal.try_get() != Some(focused) {
-            signal.set(focused);
-        }
+    if let Some((signal, focused)) = focus
+        && signal.try_get() != Some(focused)
+    {
+        signal.set(focused);
     }
     if let Some(revision) = revision {
         revision.update(|n| n.wrapping_add(1));
@@ -227,10 +227,10 @@ pub(crate) fn set_focused_text_input(state: &SharedTextInputData) {
         .lock()
         .unwrap()
         .replace(Arc::downgrade(state));
-    if let Some(previous) = previous.and_then(|weak| weak.upgrade()) {
-        if !Arc::ptr_eq(&previous, state) {
-            blur_text_input_state(&previous);
-        }
+    if let Some(previous) = previous.and_then(|weak| weak.upgrade())
+        && !Arc::ptr_eq(&previous, state)
+    {
+        blur_text_input_state(&previous);
     }
     blur_focused_text_area();
 }
@@ -256,12 +256,11 @@ pub(super) fn blur_text_input_state(state: &SharedTextInputData) {
 
 pub(crate) fn clear_focused_text_input(state: &SharedTextInputData) {
     let mut focused = FOCUSED_TEXT_INPUT.lock().unwrap();
-    if let Some(weak) = focused.as_ref() {
-        if let Some(prev_state) = weak.upgrade() {
-            if Arc::ptr_eq(&prev_state, state) {
-                *focused = None;
-            }
-        }
+    if let Some(weak) = focused.as_ref()
+        && let Some(prev_state) = weak.upgrade()
+        && Arc::ptr_eq(&prev_state, state)
+    {
+        *focused = None;
     }
 }
 
@@ -281,10 +280,10 @@ pub(crate) fn set_focused_text_area(state: &crate::widgets::text_area::SharedTex
         .lock()
         .unwrap()
         .replace(Arc::downgrade(state));
-    if let Some(previous) = previous.and_then(|weak| weak.upgrade()) {
-        if !Arc::ptr_eq(&previous, state) {
-            blur_text_area_state(&previous);
-        }
+    if let Some(previous) = previous.and_then(|weak| weak.upgrade())
+        && !Arc::ptr_eq(&previous, state)
+    {
+        blur_text_area_state(&previous);
     }
 }
 

@@ -104,10 +104,8 @@ impl RenderTree {
                 };
 
                 // Invoke callback if bounds changed and callback exists
-                if should_notify {
-                    if let Some(ref callback) = entry.on_change {
-                        callback(bounds);
-                    }
+                if should_notify && let Some(ref callback) = entry.on_change {
+                    callback(bounds);
                 }
             }
         }

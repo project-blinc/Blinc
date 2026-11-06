@@ -454,10 +454,10 @@ impl RenderTree {
 
         for &node_id in &prev_affected {
             self.state_layers.remove(&node_id);
-            if let Some(base) = self.base_styles.get(&node_id) {
-                if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
-                    render_node.props = base.clone();
-                }
+            if let Some(base) = self.base_styles.get(&node_id)
+                && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+            {
+                render_node.props = base.clone();
             }
             // Reset taffy layout to base for nodes leaving state
             if let Some(base_taffy) = self.base_taffy_styles.get(&node_id) {
@@ -483,10 +483,9 @@ impl RenderTree {
                         &hovered_nodes,
                         &pressed_nodes,
                         focused_node,
-                    ) {
-                        if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
-                            Self::apply_element_style_to_props(&mut render_node.props, style);
-                        }
+                    ) && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+                    {
+                        Self::apply_element_style_to_props(&mut render_node.props, style);
                     }
                 }
             }
@@ -496,12 +495,11 @@ impl RenderTree {
         if let Some(stylesheet) = &self.stylesheet {
             let stylesheet = stylesheet.clone();
             for &node_id in &prev_affected {
-                if let Some(element_id) = self.element_registry.get_id(node_id) {
-                    if let Some(base_style) = stylesheet.get(&element_id) {
-                        if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
-                            Self::apply_element_style_to_props(&mut render_node.props, base_style);
-                        }
-                    }
+                if let Some(element_id) = self.element_registry.get_id(node_id)
+                    && let Some(base_style) = stylesheet.get(&element_id)
+                    && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+                {
+                    Self::apply_element_style_to_props(&mut render_node.props, base_style);
                 }
             }
         }
@@ -534,15 +532,15 @@ impl RenderTree {
                 ) {
                     // Save base styles for nodes affected by state rules (for future reset)
                     if is_state_rule {
-                        if !self.base_styles.contains_key(&node_id) {
-                            if let Some(render_node) = self.render_nodes.get(&node_id) {
-                                self.base_styles.insert(node_id, render_node.props.clone());
-                            }
+                        if !self.base_styles.contains_key(&node_id)
+                            && let Some(render_node) = self.render_nodes.get(&node_id)
+                        {
+                            self.base_styles.insert(node_id, render_node.props.clone());
                         }
-                        if !self.base_taffy_styles.contains_key(&node_id) {
-                            if let Some(taffy_style) = self.layout_tree.get_style(node_id) {
-                                self.base_taffy_styles.insert(node_id, taffy_style);
-                            }
+                        if !self.base_taffy_styles.contains_key(&node_id)
+                            && let Some(taffy_style) = self.layout_tree.get_style(node_id)
+                        {
+                            self.base_taffy_styles.insert(node_id, taffy_style);
                         }
                         self.complex_state_affected.insert(node_id);
                     }
@@ -595,23 +593,23 @@ impl RenderTree {
                         any_applied = true;
                     }
                     // Apply layout changes from complex selector styles
-                    if style.has_layout_props() {
-                        if let Some(mut taffy_style) = self.layout_tree.get_style(node_id) {
-                            Self::apply_element_style_to_taffy(&mut taffy_style, style);
-                            self.layout_tree.set_style(node_id, taffy_style);
-                        }
+                    if style.has_layout_props()
+                        && let Some(mut taffy_style) = self.layout_tree.get_style(node_id)
+                    {
+                        Self::apply_element_style_to_taffy(&mut taffy_style, style);
+                        self.layout_tree.set_style(node_id, taffy_style);
                     }
 
                     // Detect transitions only for newly entering state (not sustaining)
-                    if let (Some(before_kp), Some(transition_set)) = (before_kp, transition_set) {
-                        if let Some(after_kp) = self.snapshot_keyframe_properties(node_id) {
-                            self.detect_and_start_transitions(
-                                node_id,
-                                &before_kp,
-                                &after_kp,
-                                &transition_set,
-                            );
-                        }
+                    if let (Some(before_kp), Some(transition_set)) = (before_kp, transition_set)
+                        && let Some(after_kp) = self.snapshot_keyframe_properties(node_id)
+                    {
+                        self.detect_and_start_transitions(
+                            node_id,
+                            &before_kp,
+                            &after_kp,
+                            &transition_set,
+                        );
                     }
                 }
             }
@@ -635,15 +633,10 @@ impl RenderTree {
             ) else {
                 continue;
             };
-            if let Some(before_kp) = pre_reset_snapshots.get(&node_id) {
-                if let Some(after_kp) = self.snapshot_keyframe_properties(node_id) {
-                    self.detect_and_start_transitions(
-                        node_id,
-                        before_kp,
-                        &after_kp,
-                        &transition_set,
-                    );
-                }
+            if let Some(before_kp) = pre_reset_snapshots.get(&node_id)
+                && let Some(after_kp) = self.snapshot_keyframe_properties(node_id)
+            {
+                self.detect_and_start_transitions(node_id, before_kp, &after_kp, &transition_set);
             }
         }
 
@@ -664,15 +657,10 @@ impl RenderTree {
             ) else {
                 continue;
             };
-            if let Some(before_kp) = pre_reset_snapshots.get(&node_id) {
-                if let Some(after_kp) = self.snapshot_keyframe_properties(node_id) {
-                    self.detect_and_start_transitions(
-                        node_id,
-                        before_kp,
-                        &after_kp,
-                        &transition_set,
-                    );
-                }
+            if let Some(before_kp) = pre_reset_snapshots.get(&node_id)
+                && let Some(after_kp) = self.snapshot_keyframe_properties(node_id)
+            {
+                self.detect_and_start_transitions(node_id, before_kp, &after_kp, &transition_set);
             }
         }
 
@@ -779,15 +767,15 @@ impl RenderTree {
                 // Save base so Phase 4's reset path (which keys on
                 // `complex_state_affected`) returns to the correct
                 // baseline when the state later clears.
-                if !self.base_styles.contains_key(&node_id) {
-                    if let Some(render_node) = self.render_nodes.get(&node_id) {
-                        self.base_styles.insert(node_id, render_node.props.clone());
-                    }
+                if !self.base_styles.contains_key(&node_id)
+                    && let Some(render_node) = self.render_nodes.get(&node_id)
+                {
+                    self.base_styles.insert(node_id, render_node.props.clone());
                 }
-                if !self.base_taffy_styles.contains_key(&node_id) {
-                    if let Some(taffy_style) = self.layout_tree.get_style(node_id) {
-                        self.base_taffy_styles.insert(node_id, taffy_style);
-                    }
+                if !self.base_taffy_styles.contains_key(&node_id)
+                    && let Some(taffy_style) = self.layout_tree.get_style(node_id)
+                {
+                    self.base_taffy_styles.insert(node_id, taffy_style);
                 }
                 self.complex_state_affected.insert(node_id);
                 if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
@@ -835,11 +823,11 @@ impl RenderTree {
         let focused_node: Option<LayoutNodeId> = {
             let mut focused = None;
             for id in self.element_registry.all_ids() {
-                if let Some(nid) = self.element_registry.get(&id) {
-                    if router.is_focused(nid) {
-                        focused = Some(nid);
-                        break;
-                    }
+                if let Some(nid) = self.element_registry.get(&id)
+                    && router.is_focused(nid)
+                {
+                    focused = Some(nid);
+                    break;
                 }
             }
             focused
@@ -970,17 +958,17 @@ impl RenderTree {
 
             // Apply tag styles to render props
             if !tag_styles.is_empty() {
-                if let Some(render_node) = self.render_nodes.get_mut(&svg_node) {
-                    if render_node.props.svg_tag_styles != tag_styles {
-                        render_node.props.svg_tag_styles = tag_styles;
-                        any_changed = true;
-                    }
-                }
-            } else if let Some(render_node) = self.render_nodes.get_mut(&svg_node) {
-                if !render_node.props.svg_tag_styles.is_empty() {
-                    render_node.props.svg_tag_styles.clear();
+                if let Some(render_node) = self.render_nodes.get_mut(&svg_node)
+                    && render_node.props.svg_tag_styles != tag_styles
+                {
+                    render_node.props.svg_tag_styles = tag_styles;
                     any_changed = true;
                 }
+            } else if let Some(render_node) = self.render_nodes.get_mut(&svg_node)
+                && !render_node.props.svg_tag_styles.is_empty()
+            {
+                render_node.props.svg_tag_styles.clear();
+                any_changed = true;
             }
         }
 

@@ -197,16 +197,16 @@ impl InteractiveContext {
     /// Returns true if the FSM transitioned to a new state.
     pub fn send_event(&mut self, id: LayoutNodeId, event_type: EventId) -> bool {
         let key = Self::key(id);
-        if let Some(data) = self.nodes.get_mut(&key) {
-            if let Some(ref mut fsm) = data.fsm {
-                let old_state = fsm.current_state();
-                fsm.send(event_type);
-                let new_state = fsm.current_state();
+        if let Some(data) = self.nodes.get_mut(&key)
+            && let Some(ref mut fsm) = data.fsm
+        {
+            let old_state = fsm.current_state();
+            fsm.send(event_type);
+            let new_state = fsm.current_state();
 
-                if old_state != new_state {
-                    self.dirty.mark(id);
-                    return true;
-                }
+            if old_state != new_state {
+                self.dirty.mark(id);
+                return true;
             }
         }
         false

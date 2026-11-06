@@ -286,12 +286,12 @@ fn collect_root_variables(mut css: &str, variables: &mut HashMap<String, String>
             css = &comment[end + 2..];
             continue;
         }
-        if css.starts_with("@layer") {
-            if let Some((inner, rest)) = layer_block(css) {
-                collect_root_variables(inner, variables);
-                css = rest;
-                continue;
-            }
+        if css.starts_with("@layer")
+            && let Some((inner, rest)) = layer_block(css)
+        {
+            collect_root_variables(inner, variables);
+            css = rest;
+            continue;
         }
         if css.starts_with(":root") {
             variables.extend(
@@ -359,26 +359,26 @@ fn parse_stylesheet_resolved<'a>(
 
         // `@layer name { ... }`: the rules inside are a component's own and
         // sit below every unlayered rule, whatever their specificity.
-        if trimmed.starts_with("@layer") {
-            if let Some((inner, rest)) = layer_block(trimmed) {
-                if let Ok((_, mut layered)) = parse_stylesheet_resolved(inner, errors, variables) {
-                    let offset = rules.len() + complex_rules.len();
-                    for (_, style) in &mut layered.complex_rules {
-                        style.mark_component();
-                        style.offset_important_order(offset);
-                    }
-                    for (_, style) in &mut layered.rules {
-                        style.mark_important_component();
-                        style.offset_important_order(offset);
-                    }
-                    rules.extend(layered.rules);
-                    complex_rules.extend(layered.complex_rules);
-                    parsed_variables.extend(layered.variables);
-                    parsed_keyframes.extend(layered.keyframes);
+        if trimmed.starts_with("@layer")
+            && let Some((inner, rest)) = layer_block(trimmed)
+        {
+            if let Ok((_, mut layered)) = parse_stylesheet_resolved(inner, errors, variables) {
+                let offset = rules.len() + complex_rules.len();
+                for (_, style) in &mut layered.complex_rules {
+                    style.mark_component();
+                    style.offset_important_order(offset);
                 }
-                remaining = rest;
-                continue;
+                for (_, style) in &mut layered.rules {
+                    style.mark_important_component();
+                    style.offset_important_order(offset);
+                }
+                rules.extend(layered.rules);
+                complex_rules.extend(layered.complex_rules);
+                parsed_variables.extend(layered.variables);
+                parsed_keyframes.extend(layered.keyframes);
             }
+            remaining = rest;
+            continue;
         }
 
         // Try to parse @keyframes block
@@ -473,10 +473,10 @@ fn parse_stylesheet_resolved<'a>(
 fn layer_block(input: &str) -> Option<(&str, &str)> {
     let open = input.find('{');
     let semi = input.find(';');
-    if let Some(semi) = semi {
-        if open.is_none_or(|open| semi < open) {
-            return Some(("", &input[semi + 1..]));
-        }
+    if let Some(semi) = semi
+        && open.is_none_or(|open| semi < open)
+    {
+        return Some(("", &input[semi + 1..]));
     }
     let open = open?;
     let mut depth = 0usize;

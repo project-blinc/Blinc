@@ -407,10 +407,10 @@ impl MotionBindings {
     /// Checks timeline-based rotation first, then spring-based.
     pub fn get_rotation(&self) -> Option<f32> {
         // Timeline rotation takes precedence (for continuous spinning)
-        if let Some(ref tl_rot) = self.rotation_timeline {
-            if let Ok(timeline) = tl_rot.timeline.lock() {
-                return timeline.get(tl_rot.entry_id);
-            }
+        if let Some(ref tl_rot) = self.rotation_timeline
+            && let Ok(timeline) = tl_rot.timeline.lock()
+        {
+            return timeline.get(tl_rot.entry_id);
         }
         // Fall back to spring-based rotation
         self.rotation.as_ref().map(|v| v.lock().unwrap().get())

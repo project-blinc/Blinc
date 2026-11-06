@@ -75,25 +75,24 @@ impl RenderContext {
         // Use get() instead of contains() so cached placeholders are promoted to
         // MRU and survive eviction pressure from the main image puts below.
         for image in images {
-            if image.placeholder_type == 2 {
-                if let Some(ref placeholder_src) = image.placeholder_image {
-                    if self.image_cache.get(placeholder_src).is_none() {
-                        let source = blinc_image::ImageSource::from_uri(placeholder_src);
-                        if let Ok(data) = blinc_image::ImageData::load(source) {
-                            // Keep the image pipeline's linear-byte sampling convention.
-                            let has_bc = self.renderer.has_texture_compression_bc()
-                                && bc_eligible(placeholder_src, data.width(), data.height());
-                            let gpu_image = self.image_ctx.create_image_maybe_compressed(
-                                data.pixels(),
-                                data.width(),
-                                data.height(),
-                                false,
-                                has_bc,
-                                placeholder_src,
-                            );
-                            self.image_cache.put(placeholder_src.clone(), gpu_image);
-                        }
-                    }
+            if image.placeholder_type == 2
+                && let Some(ref placeholder_src) = image.placeholder_image
+                && self.image_cache.get(placeholder_src).is_none()
+            {
+                let source = blinc_image::ImageSource::from_uri(placeholder_src);
+                if let Ok(data) = blinc_image::ImageData::load(source) {
+                    // Keep the image pipeline's linear-byte sampling convention.
+                    let has_bc = self.renderer.has_texture_compression_bc()
+                        && bc_eligible(placeholder_src, data.width(), data.height());
+                    let gpu_image = self.image_ctx.create_image_maybe_compressed(
+                        data.pixels(),
+                        data.width(),
+                        data.height(),
+                        false,
+                        has_bc,
+                        placeholder_src,
+                    );
+                    self.image_cache.put(placeholder_src.clone(), gpu_image);
                 }
             }
         }
@@ -173,13 +172,13 @@ impl RenderContext {
             let now = web_time::Instant::now();
             self.image_load_times.insert(image.source.clone(), now);
             // Store the fade deadline so redraw stops when the fade completes.
-            if image.fade_duration_ms > 0 {
-                if let Some(deadline) = now.checked_add(std::time::Duration::from_millis(
+            if image.fade_duration_ms > 0
+                && let Some(deadline) = now.checked_add(std::time::Duration::from_millis(
                     image.fade_duration_ms as u64,
-                )) {
-                    self.image_fade_deadlines
-                        .insert(image.source.clone(), deadline);
-                }
+                ))
+            {
+                self.image_fade_deadlines
+                    .insert(image.source.clone(), deadline);
             }
         }
     }
@@ -379,36 +378,36 @@ impl RenderContext {
                     }
                     // Type 2: Image placeholder (e.g., low-res thumbnail or blur hash)
                     2 => {
-                        if let Some(ref placeholder_src) = image.placeholder_image {
-                            if let Some(placeholder_gpu) = self.image_cache.get(placeholder_src) {
-                                let (src_rect, dst_rect) = calculate_fit_rects(
-                                    placeholder_gpu.width(),
-                                    placeholder_gpu.height(),
-                                    image.width,
-                                    image.height,
-                                    ObjectFit::Cover,
-                                    ObjectPosition::new(0.5, 0.5),
-                                );
-                                let src_uv = src_rect_to_uv(
-                                    src_rect,
-                                    placeholder_gpu.width(),
-                                    placeholder_gpu.height(),
-                                );
-                                let instance = GpuImageInstance::new(
-                                    image.x + dst_rect[0],
-                                    image.y + dst_rect[1],
-                                    dst_rect[2],
-                                    dst_rect[3],
-                                )
-                                .with_src_uv(src_uv[0], src_uv[1], src_uv[2], src_uv[3])
-                                .with_border_radius(image.border_radius)
-                                .with_opacity(image.opacity);
-                                self.renderer.render_images(
-                                    target,
-                                    placeholder_gpu.view(),
-                                    &[instance],
-                                );
-                            }
+                        if let Some(ref placeholder_src) = image.placeholder_image
+                            && let Some(placeholder_gpu) = self.image_cache.get(placeholder_src)
+                        {
+                            let (src_rect, dst_rect) = calculate_fit_rects(
+                                placeholder_gpu.width(),
+                                placeholder_gpu.height(),
+                                image.width,
+                                image.height,
+                                ObjectFit::Cover,
+                                ObjectPosition::new(0.5, 0.5),
+                            );
+                            let src_uv = src_rect_to_uv(
+                                src_rect,
+                                placeholder_gpu.width(),
+                                placeholder_gpu.height(),
+                            );
+                            let instance = GpuImageInstance::new(
+                                image.x + dst_rect[0],
+                                image.y + dst_rect[1],
+                                dst_rect[2],
+                                dst_rect[3],
+                            )
+                            .with_src_uv(src_uv[0], src_uv[1], src_uv[2], src_uv[3])
+                            .with_border_radius(image.border_radius)
+                            .with_opacity(image.opacity);
+                            self.renderer.render_images(
+                                target,
+                                placeholder_gpu.view(),
+                                &[instance],
+                            );
                         }
                     }
                     // Type 3: Skeleton shimmer (animated gradient sweep)

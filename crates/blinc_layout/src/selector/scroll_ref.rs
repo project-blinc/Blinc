@@ -196,10 +196,10 @@ impl ScrollRef {
             inner.watch_y
         });
         // Set outside the lock: what follows the signal may read this ref.
-        if let Some(watch) = watch {
-            if watch.try_get().is_none_or(|y| (y - offset.1).abs() > 0.5) {
-                watch.set(offset.1);
-            }
+        if let Some(watch) = watch
+            && watch.try_get().is_none_or(|y| (y - offset.1).abs() > 0.5)
+        {
+            watch.set(offset.1);
         }
     }
 

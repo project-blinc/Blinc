@@ -14,10 +14,10 @@ pub(crate) fn parse_brush(value: &str) -> Option<Brush> {
     let trimmed = value.trim();
 
     // Try url() for background images
-    if trimmed.starts_with("url(") {
-        if let Some(source) = parse_url_value(trimmed) {
-            return Some(Brush::Image(ImageBrush::new(source)));
-        }
+    if trimmed.starts_with("url(")
+        && let Some(source) = parse_url_value(trimmed)
+    {
+        return Some(Brush::Image(ImageBrush::new(source)));
     }
 
     // Try linear-gradient()

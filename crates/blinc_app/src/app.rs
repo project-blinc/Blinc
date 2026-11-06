@@ -97,11 +97,11 @@ impl BlincApp {
         // Load system default font
         for font_path in crate::system_font_paths() {
             let path = std::path::Path::new(font_path);
-            if path.exists() {
-                if let Ok(data) = std::fs::read(path) {
-                    let _ = text_ctx.load_font_data(data);
-                    break;
-                }
+            if path.exists()
+                && let Ok(data) = std::fs::read(path)
+            {
+                let _ = text_ctx.load_font_data(data);
+                break;
             }
         }
 
@@ -440,7 +440,7 @@ impl BlincApp {
             let row_start = y * padded_bpr as usize;
             let row = &data[row_start..row_start + unpadded_bpr as usize];
             if swizzle_bgra {
-                for chunk in row.chunks_exact(4) {
+                for chunk in row.as_chunks::<4>().0 {
                     out.push(chunk[2]);
                     out.push(chunk[1]);
                     out.push(chunk[0]);

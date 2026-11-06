@@ -539,11 +539,11 @@ impl NativeBridgeState {
         // First check Rust-registered handlers
         {
             let handlers = self.handlers.read().unwrap();
-            if let Some(ns_handlers) = handlers.get(namespace) {
-                if let Some(handler) = ns_handlers.get(name) {
-                    let result = handler(native_args.clone())?;
-                    return R::from_native_value(result);
-                }
+            if let Some(ns_handlers) = handlers.get(namespace)
+                && let Some(handler) = ns_handlers.get(name)
+            {
+                let result = handler(native_args.clone())?;
+                return R::from_native_value(result);
             }
         }
 
@@ -563,10 +563,10 @@ impl NativeBridgeState {
     pub fn has_handler(&self, namespace: &str, name: &str) -> bool {
         // Check Rust handlers
         let handlers = self.handlers.read().unwrap();
-        if let Some(ns_handlers) = handlers.get(namespace) {
-            if ns_handlers.contains_key(name) {
-                return true;
-            }
+        if let Some(ns_handlers) = handlers.get(namespace)
+            && ns_handlers.contains_key(name)
+        {
+            return true;
         }
 
         // Platform adapter existence (can't check specific functions)

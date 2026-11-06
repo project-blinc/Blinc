@@ -52,28 +52,28 @@ impl RenderTree {
             return;
         };
 
-        if let Some(render_node) = self.render_nodes.get(&node) {
-            if let Some(glass) = render_node.props.glass_style(0) {
-                panels.push(GlassPanel {
-                    bounds,
-                    corner_radius: render_node.props.border_radius,
-                    material: render_node
-                        .props
-                        .glass_material()
-                        .cloned()
-                        .unwrap_or_else(|| crate::GlassMaterial {
-                            blur: glass.blur,
-                            tint: glass.tint,
-                            saturation: glass.saturation,
-                            brightness: glass.brightness,
-                            noise: glass.noise,
-                            border_thickness: glass.border_thickness,
-                            simple: glass.simple,
-                            shadow: glass.shadow.map(Into::into),
-                        }),
-                    node_id: node,
-                });
-            }
+        if let Some(render_node) = self.render_nodes.get(&node)
+            && let Some(glass) = render_node.props.glass_style(0)
+        {
+            panels.push(GlassPanel {
+                bounds,
+                corner_radius: render_node.props.border_radius,
+                material: render_node
+                    .props
+                    .glass_material()
+                    .cloned()
+                    .unwrap_or_else(|| crate::GlassMaterial {
+                        blur: glass.blur,
+                        tint: glass.tint,
+                        saturation: glass.saturation,
+                        brightness: glass.brightness,
+                        noise: glass.noise,
+                        border_thickness: glass.border_thickness,
+                        simple: glass.simple,
+                        shadow: glass.shadow.map(Into::into),
+                    }),
+                node_id: node,
+            });
         }
 
         // Traverse children
@@ -117,16 +117,16 @@ impl RenderTree {
             return;
         };
 
-        if let Some(render_node) = self.render_nodes.get(&node) {
-            if let ElementType::Text(text_data) = &render_node.element_type {
-                let abs_bounds = ElementBounds {
-                    x: parent_offset.0 + bounds.x,
-                    y: parent_offset.1 + bounds.y,
-                    width: bounds.width,
-                    height: bounds.height,
-                };
-                result.push((text_data.clone(), abs_bounds));
-            }
+        if let Some(render_node) = self.render_nodes.get(&node)
+            && let ElementType::Text(text_data) = &render_node.element_type
+        {
+            let abs_bounds = ElementBounds {
+                x: parent_offset.0 + bounds.x,
+                y: parent_offset.1 + bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+            };
+            result.push((text_data.clone(), abs_bounds));
         }
 
         // Include scroll offset when calculating child positions
@@ -158,13 +158,13 @@ impl RenderTree {
                 child_offset.1 -= new_cumulative_scroll.1;
                 (0.0, 0.0)
             } else if child_is_sticky {
-                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top) {
-                    if let Some(cb) = self.layout_tree.get_bounds(child_id, (0.0, 0.0)) {
-                        let visual_y = cb.y + new_cumulative_scroll.1;
-                        if visual_y < threshold {
-                            let correction = threshold - visual_y;
-                            child_offset.1 += correction;
-                        }
+                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top)
+                    && let Some(cb) = self.layout_tree.get_bounds(child_id, (0.0, 0.0))
+                {
+                    let visual_y = cb.y + new_cumulative_scroll.1;
+                    if visual_y < threshold {
+                        let correction = threshold - visual_y;
+                        child_offset.1 += correction;
                     }
                 }
                 new_cumulative_scroll
@@ -206,16 +206,16 @@ impl RenderTree {
             return;
         };
 
-        if let Some(render_node) = self.render_nodes.get(&node) {
-            if let ElementType::Svg(svg_data) = &render_node.element_type {
-                let abs_bounds = ElementBounds {
-                    x: parent_offset.0 + bounds.x,
-                    y: parent_offset.1 + bounds.y,
-                    width: bounds.width,
-                    height: bounds.height,
-                };
-                result.push((svg_data.clone(), abs_bounds));
-            }
+        if let Some(render_node) = self.render_nodes.get(&node)
+            && let ElementType::Svg(svg_data) = &render_node.element_type
+        {
+            let abs_bounds = ElementBounds {
+                x: parent_offset.0 + bounds.x,
+                y: parent_offset.1 + bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+            };
+            result.push((svg_data.clone(), abs_bounds));
         }
 
         // Include scroll offset when calculating child positions
@@ -247,13 +247,13 @@ impl RenderTree {
                 child_offset.1 -= new_cumulative_scroll.1;
                 (0.0, 0.0)
             } else if child_is_sticky {
-                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top) {
-                    if let Some(cb) = self.layout_tree.get_bounds(child_id, (0.0, 0.0)) {
-                        let visual_y = cb.y + new_cumulative_scroll.1;
-                        if visual_y < threshold {
-                            let correction = threshold - visual_y;
-                            child_offset.1 += correction;
-                        }
+                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top)
+                    && let Some(cb) = self.layout_tree.get_bounds(child_id, (0.0, 0.0))
+                {
+                    let visual_y = cb.y + new_cumulative_scroll.1;
+                    if visual_y < threshold {
+                        let correction = threshold - visual_y;
+                        child_offset.1 += correction;
                     }
                 }
                 new_cumulative_scroll

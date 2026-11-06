@@ -80,13 +80,13 @@ pub(crate) fn parse_explicit_shadow(input: &str) -> Option<(Shadow, bool)> {
         let offset_y = parse_length_value(&parts[1])?;
         let blur = parse_length_value(&parts[2])?;
         // Try the 5-part form: offset-x offset-y blur spread color
-        if parts.len() >= 5 {
-            if let Some(spread) = parse_length_value(&parts[3]) {
-                let color = parse_color(&parts[4])?;
-                let mut shadow = Shadow::new(offset_x, offset_y, blur, color);
-                shadow.spread = spread;
-                return Some((shadow, inset));
-            }
+        if parts.len() >= 5
+            && let Some(spread) = parse_length_value(&parts[3])
+        {
+            let color = parse_color(&parts[4])?;
+            let mut shadow = Shadow::new(offset_x, offset_y, blur, color);
+            shadow.spread = spread;
+            return Some((shadow, inset));
         }
         // 4-part form: offset-x offset-y blur color
         let color = parse_color(&parts[3])?;

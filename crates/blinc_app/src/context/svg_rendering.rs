@@ -260,10 +260,8 @@ impl RenderContext {
 
             // For tintable SVGs, apply color via shader tint multiplication
             // (white texture * tint = correctly colored output)
-            if is_tintable {
-                if let Some(tint) = svg.tint {
-                    instance = instance.with_tint(tint.r, tint.g, tint.b, tint.a);
-                }
+            if is_tintable && let Some(tint) = svg.tint {
+                instance = instance.with_tint(tint.r, tint.g, tint.b, tint.a);
             }
 
             // Apply clip bounds if specified

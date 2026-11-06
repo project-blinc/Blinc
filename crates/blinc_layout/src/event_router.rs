@@ -597,10 +597,10 @@ impl EventRouter {
         }
 
         // Send FOCUS to new focused element
-        if let Some(new_focused) = node {
-            if self.focused != Some(new_focused) {
-                self.emit_event(new_focused, event_types::FOCUS);
-            }
+        if let Some(new_focused) = node
+            && self.focused != Some(new_focused)
+        {
+            self.emit_event(new_focused, event_types::FOCUS);
         }
 
         // Record focus change event if focus actually changed (only if recording is enabled)
@@ -711,13 +711,12 @@ impl EventRouter {
         // Filtered to nodes with handlers so the common no-subscriber
         // case stays cheap.
         let registry = tree.handler_registry();
-        if let Some(target) = tree.layout_id(stable_target) {
-            if let Some(stable) = tree.stable_id(target) {
-                if registry.has_handler(stable, event_types::POINTER_MOVE) {
-                    self.emit_event(target, event_types::POINTER_MOVE);
-                    events.push((target, event_types::POINTER_MOVE));
-                }
-            }
+        if let Some(target) = tree.layout_id(stable_target)
+            && let Some(stable) = tree.stable_id(target)
+            && registry.has_handler(stable, event_types::POINTER_MOVE)
+        {
+            self.emit_event(target, event_types::POINTER_MOVE);
+            events.push((target, event_types::POINTER_MOVE));
         }
         let ancestors: Vec<_> = self
             .pressed_ancestors
@@ -727,11 +726,11 @@ impl EventRouter {
             .copied()
             .collect();
         for stable_ancestor in ancestors {
-            if registry.has_handler(stable_ancestor, event_types::POINTER_MOVE) {
-                if let Some(ancestor) = tree.layout_id(stable_ancestor) {
-                    self.emit_event(ancestor, event_types::POINTER_MOVE);
-                    events.push((ancestor, event_types::POINTER_MOVE));
-                }
+            if registry.has_handler(stable_ancestor, event_types::POINTER_MOVE)
+                && let Some(ancestor) = tree.layout_id(stable_ancestor)
+            {
+                self.emit_event(ancestor, event_types::POINTER_MOVE);
+                events.push((ancestor, event_types::POINTER_MOVE));
             }
         }
         events
@@ -938,11 +937,11 @@ impl EventRouter {
         // hover chain to compute the set.
         let registry = tree.handler_registry();
         for node in &current_hovered {
-            if let Some(stable) = tree.stable_id(*node) {
-                if registry.has_handler(stable, event_types::POINTER_MOVE) {
-                    self.emit_event(*node, event_types::POINTER_MOVE);
-                    events.push((*node, event_types::POINTER_MOVE));
-                }
+            if let Some(stable) = tree.stable_id(*node)
+                && registry.has_handler(stable, event_types::POINTER_MOVE)
+            {
+                self.emit_event(*node, event_types::POINTER_MOVE);
+                events.push((*node, event_types::POINTER_MOVE));
             }
         }
 
@@ -1771,13 +1770,13 @@ impl EventRouter {
                 child_offset.1 -= new_cumulative_scroll.1;
                 (0.0, 0.0)
             } else if child_is_sticky {
-                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top) {
-                    if let Some(cb) = tree.layout().get_bounds(child, (0.0, 0.0)) {
-                        let visual_y = cb.y + new_cumulative_scroll.1;
-                        if visual_y < threshold {
-                            let correction = threshold - visual_y;
-                            child_offset.1 += correction;
-                        }
+                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top)
+                    && let Some(cb) = tree.layout().get_bounds(child, (0.0, 0.0))
+                {
+                    let visual_y = cb.y + new_cumulative_scroll.1;
+                    if visual_y < threshold {
+                        let correction = threshold - visual_y;
+                        child_offset.1 += correction;
                     }
                 }
                 new_cumulative_scroll
@@ -1789,17 +1788,18 @@ impl EventRouter {
             // a culling scroll is active, ordinary off-viewport child subtrees
             // are neither painted nor hit-testable. Visible nested scrolls are
             // still walked and remain the first scroll target in the hit chain.
-            if let Some((cx, cy, cw, ch)) = cull_viewport {
-                if !child_is_fixed && !child_is_sticky && !child_is_fg {
-                    if let Some(cb) = tree.layout().get_bounds(child, child_offset) {
-                        let intersects = cb.x + cb.width > cx
-                            && cb.x < cx + cw
-                            && cb.y + cb.height > cy
-                            && cb.y < cy + ch;
-                        if !intersects {
-                            continue;
-                        }
-                    }
+            if let Some((cx, cy, cw, ch)) = cull_viewport
+                && !child_is_fixed
+                && !child_is_sticky
+                && !child_is_fg
+                && let Some(cb) = tree.layout().get_bounds(child, child_offset)
+            {
+                let intersects = cb.x + cb.width > cx
+                    && cb.x < cx + cw
+                    && cb.y + cb.height > cy
+                    && cb.y < cy + ch;
+                if !intersects {
+                    continue;
                 }
             }
 
@@ -2009,13 +2009,13 @@ impl EventRouter {
                 child_offset.1 -= new_cumulative_scroll.1;
                 (0.0, 0.0)
             } else if child_is_sticky {
-                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top) {
-                    if let Some(cb) = tree.layout().get_bounds(child, (0.0, 0.0)) {
-                        let visual_y = cb.y + new_cumulative_scroll.1;
-                        if visual_y < threshold {
-                            let correction = threshold - visual_y;
-                            child_offset.1 += correction;
-                        }
+                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top)
+                    && let Some(cb) = tree.layout().get_bounds(child, (0.0, 0.0))
+                {
+                    let visual_y = cb.y + new_cumulative_scroll.1;
+                    if visual_y < threshold {
+                        let correction = threshold - visual_y;
+                        child_offset.1 += correction;
                     }
                 }
                 new_cumulative_scroll
@@ -2027,15 +2027,17 @@ impl EventRouter {
                 let child_is_fg = child_render
                     .map(|n| n.props.layer == crate::element::RenderLayer::Foreground)
                     .unwrap_or(false);
-                if !child_is_fixed && !child_is_sticky && !child_is_fg {
-                    if let Some(cb) = tree.layout().get_bounds(child, child_offset) {
-                        let intersects = cb.x + cb.width > cx
-                            && cb.x < cx + cw
-                            && cb.y + cb.height > cy
-                            && cb.y < cy + ch;
-                        if !intersects {
-                            continue;
-                        }
+                if !child_is_fixed
+                    && !child_is_sticky
+                    && !child_is_fg
+                    && let Some(cb) = tree.layout().get_bounds(child, child_offset)
+                {
+                    let intersects = cb.x + cb.width > cx
+                        && cb.x < cx + cw
+                        && cb.y + cb.height > cy
+                        && cb.y < cy + ch;
+                    if !intersects {
+                        continue;
                     }
                 }
             }
@@ -2164,18 +2166,18 @@ impl EventRouter {
                     }
                     // Keep foreground elements (e.g., absolutely positioned dropdowns
                     // rendered in foreground pass)
-                    if let Some(render_node) = tree.get_render_node(hit.node) {
-                        if render_node.props.layer == crate::element::RenderLayer::Foreground {
-                            return true;
-                        }
+                    if let Some(render_node) = tree.get_render_node(hit.node)
+                        && render_node.props.layer == crate::element::RenderLayer::Foreground
+                    {
+                        return true;
                     }
                     // Also keep nodes whose ancestors include a foreground element
                     // (children of foreground containers like dropdown items)
                     for &ancestor in &hit.ancestors {
-                        if let Some(render_node) = tree.get_render_node(ancestor) {
-                            if render_node.props.layer == crate::element::RenderLayer::Foreground {
-                                return true;
-                            }
+                        if let Some(render_node) = tree.get_render_node(ancestor)
+                            && render_node.props.layer == crate::element::RenderLayer::Foreground
+                        {
+                            return true;
                         }
                     }
                     false

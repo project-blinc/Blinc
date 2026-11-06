@@ -176,12 +176,11 @@ impl RenderContext {
                     {
                         return true;
                     }
-                    if let Some(ref v) = b.opacity {
-                        if let Ok(g) = v.lock() {
-                            if (g.get() - meta.last_opacity).abs() > 0.01 {
-                                return true;
-                            }
-                        }
+                    if let Some(ref v) = b.opacity
+                        && let Ok(g) = v.lock()
+                        && (g.get() - meta.last_opacity).abs() > 0.01
+                    {
+                        return true;
                     }
                     false
                 })

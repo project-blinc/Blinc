@@ -693,10 +693,10 @@ impl ElementBuilder for TextArea {
                     cfg.height = bounds.height;
                     let viewport_height =
                         bounds.height - cfg.padding_y * 2.0 - cfg.border_width * 2.0;
-                    if let Ok(data) = state.lock() {
-                        if let Ok(mut p) = data.scroll_physics.lock() {
-                            p.viewport_height = viewport_height;
-                        }
+                    if let Ok(data) = state.lock()
+                        && let Ok(mut p) = data.scroll_physics.lock()
+                    {
+                        p.viewport_height = viewport_height;
                     }
                 }
                 changed = width_changed || height_changed;

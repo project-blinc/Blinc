@@ -72,7 +72,7 @@ fn bc_eligible(source_uri: &str, width: u32, height: u32) -> bool {
         return false;
     }
     // BC textures require dimensions divisible by four.
-    if width % 4 != 0 || height % 4 != 0 {
+    if !width.is_multiple_of(4) || !height.is_multiple_of(4) {
         return false;
     }
     width >= MIN_DIM && height >= MIN_DIM

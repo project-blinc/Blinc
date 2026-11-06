@@ -84,11 +84,9 @@ impl RenderContext {
                     && other_meta.primitive_range.end >= meta.primitive_range.end
                     && (other_meta.primitive_range.start < meta.primitive_range.start
                         || other_meta.primitive_range.end > meta.primitive_range.end);
-                if contains {
-                    if let Some(&(dx, dy)) = raw_translate_deltas.get(other_node) {
-                        shift.0 += dx;
-                        shift.1 += dy;
-                    }
+                if contains && let Some(&(dx, dy)) = raw_translate_deltas.get(other_node) {
+                    shift.0 += dx;
+                    shift.1 += dy;
                 }
             }
             inherited_shifts.insert(*node, shift);
@@ -208,11 +206,11 @@ impl RenderContext {
                 .unwrap_or(1.0);
             // Persist inherited translation on every frame so later scale changes use the
             // current pivot.
-            if let Some(&(sx_shift, sy_shift)) = inherited_shifts.get(node) {
-                if sx_shift.abs() > f32::EPSILON || sy_shift.abs() > f32::EPSILON {
-                    meta.centre.0 += sx_shift;
-                    meta.centre.1 += sy_shift;
-                }
+            if let Some(&(sx_shift, sy_shift)) = inherited_shifts.get(node)
+                && (sx_shift.abs() > f32::EPSILON || sy_shift.abs() > f32::EPSILON)
+            {
+                meta.centre.0 += sx_shift;
+                meta.centre.1 += sy_shift;
             }
             let new_sx = binding_scale_x * binding_scale;
             let new_sy = binding_scale_y * binding_scale;

@@ -263,51 +263,51 @@ impl RenderTree {
                                 if has_radius {
                                     ctx.push_clip(ClipShape::rounded_rect(rect, radius));
                                 }
-                                if let Some(ref b) = sides.left {
-                                    if b.is_visible() {
-                                        ctx.fill_rect(
-                                            Rect::new(0.0, 0.0, b.width, rect.height()),
-                                            CornerRadius::default(),
-                                            Brush::Solid(b.color),
-                                        );
-                                    }
+                                if let Some(ref b) = sides.left
+                                    && b.is_visible()
+                                {
+                                    ctx.fill_rect(
+                                        Rect::new(0.0, 0.0, b.width, rect.height()),
+                                        CornerRadius::default(),
+                                        Brush::Solid(b.color),
+                                    );
                                 }
-                                if let Some(ref b) = sides.right {
-                                    if b.is_visible() {
-                                        ctx.fill_rect(
-                                            Rect::new(
-                                                rect.width() - b.width,
-                                                0.0,
-                                                b.width,
-                                                rect.height(),
-                                            ),
-                                            CornerRadius::default(),
-                                            Brush::Solid(b.color),
-                                        );
-                                    }
+                                if let Some(ref b) = sides.right
+                                    && b.is_visible()
+                                {
+                                    ctx.fill_rect(
+                                        Rect::new(
+                                            rect.width() - b.width,
+                                            0.0,
+                                            b.width,
+                                            rect.height(),
+                                        ),
+                                        CornerRadius::default(),
+                                        Brush::Solid(b.color),
+                                    );
                                 }
-                                if let Some(ref b) = sides.top {
-                                    if b.is_visible() {
-                                        ctx.fill_rect(
-                                            Rect::new(0.0, 0.0, rect.width(), b.width),
-                                            CornerRadius::default(),
-                                            Brush::Solid(b.color),
-                                        );
-                                    }
+                                if let Some(ref b) = sides.top
+                                    && b.is_visible()
+                                {
+                                    ctx.fill_rect(
+                                        Rect::new(0.0, 0.0, rect.width(), b.width),
+                                        CornerRadius::default(),
+                                        Brush::Solid(b.color),
+                                    );
                                 }
-                                if let Some(ref b) = sides.bottom {
-                                    if b.is_visible() {
-                                        ctx.fill_rect(
-                                            Rect::new(
-                                                0.0,
-                                                rect.height() - b.width,
-                                                rect.width(),
-                                                b.width,
-                                            ),
-                                            CornerRadius::default(),
-                                            Brush::Solid(b.color),
-                                        );
-                                    }
+                                if let Some(ref b) = sides.bottom
+                                    && b.is_visible()
+                                {
+                                    ctx.fill_rect(
+                                        Rect::new(
+                                            0.0,
+                                            rect.height() - b.width,
+                                            rect.width(),
+                                            b.width,
+                                        ),
+                                        CornerRadius::default(),
+                                        Brush::Solid(b.color),
+                                    );
                                 }
                                 if has_radius {
                                     ctx.pop_clip();
@@ -340,31 +340,31 @@ impl RenderTree {
                     }
 
                     // Draw outline
-                    if render_node.props.outline_width > 0.0 {
-                        if let Some(ref outline_color) = render_node.props.outline_color {
-                            let ow = render_node.props.outline_width;
-                            let offset = render_node.props.outline_offset;
-                            let expand = offset + ow / 2.0;
-                            let outline_rect = Rect::new(
-                                -expand,
-                                -expand,
-                                bounds.width + expand * 2.0,
-                                bounds.height + expand * 2.0,
-                            );
-                            let outline_radius = CornerRadius {
-                                top_left: (radius.top_left + expand).max(0.0),
-                                top_right: (radius.top_right + expand).max(0.0),
-                                bottom_right: (radius.bottom_right + expand).max(0.0),
-                                bottom_left: (radius.bottom_left + expand).max(0.0),
-                            };
-                            let stroke = Stroke::new(ow);
-                            ctx.stroke_rect(
-                                outline_rect,
-                                outline_radius,
-                                &stroke,
-                                Brush::Solid(*outline_color),
-                            );
-                        }
+                    if render_node.props.outline_width > 0.0
+                        && let Some(ref outline_color) = render_node.props.outline_color
+                    {
+                        let ow = render_node.props.outline_width;
+                        let offset = render_node.props.outline_offset;
+                        let expand = offset + ow / 2.0;
+                        let outline_rect = Rect::new(
+                            -expand,
+                            -expand,
+                            bounds.width + expand * 2.0,
+                            bounds.height + expand * 2.0,
+                        );
+                        let outline_radius = CornerRadius {
+                            top_left: (radius.top_left + expand).max(0.0),
+                            top_right: (radius.top_right + expand).max(0.0),
+                            bottom_right: (radius.bottom_right + expand).max(0.0),
+                            bottom_left: (radius.bottom_left + expand).max(0.0),
+                        };
+                        let stroke = Stroke::new(ow);
+                        ctx.stroke_rect(
+                            outline_rect,
+                            outline_radius,
+                            &stroke,
+                            Brush::Solid(*outline_color),
+                        );
                     }
 
                     // Restore foreground layer state after border/outline rendering
@@ -437,16 +437,15 @@ impl RenderTree {
 
             // Sticky: compute corrective offset when element would scroll past threshold
             let mut has_sticky_correction = false;
-            if child_is_sticky {
-                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top) {
-                    if let Some(cb) = self.layout_tree.get_bounds(child_id, (0.0, 0.0)) {
-                        let visual_y = cb.y + new_cumulative_scroll.1;
-                        if visual_y < threshold {
-                            let correction = threshold - visual_y;
-                            ctx.push_transform(Transform::translate(0.0, correction));
-                            has_sticky_correction = true;
-                        }
-                    }
+            if child_is_sticky
+                && let Some(threshold) = child_render.and_then(|n| n.props.sticky_top)
+                && let Some(cb) = self.layout_tree.get_bounds(child_id, (0.0, 0.0))
+            {
+                let visual_y = cb.y + new_cumulative_scroll.1;
+                if visual_y < threshold {
+                    let correction = threshold - visual_y;
+                    ctx.push_transform(Transform::translate(0.0, correction));
+                    has_sticky_correction = true;
                 }
             }
 
@@ -641,13 +640,13 @@ impl RenderTree {
                 child_offset.1 -= new_cumulative_scroll.1;
                 (0.0, 0.0)
             } else if child_is_sticky {
-                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top) {
-                    if let Some(cb) = self.layout_tree.get_bounds(child_id, (0.0, 0.0)) {
-                        let visual_y = cb.y + new_cumulative_scroll.1;
-                        if visual_y < threshold {
-                            let correction = threshold - visual_y;
-                            child_offset.1 += correction;
-                        }
+                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top)
+                    && let Some(cb) = self.layout_tree.get_bounds(child_id, (0.0, 0.0))
+                {
+                    let visual_y = cb.y + new_cumulative_scroll.1;
+                    if visual_y < threshold {
+                        let correction = threshold - visual_y;
+                        child_offset.1 += correction;
                     }
                 }
                 new_cumulative_scroll
@@ -779,13 +778,13 @@ impl RenderTree {
                 child_offset.1 -= new_cumulative_scroll.1;
                 (0.0, 0.0)
             } else if child_is_sticky {
-                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top) {
-                    if let Some(cb) = self.layout_tree.get_bounds(child_id, (0.0, 0.0)) {
-                        let visual_y = cb.y + new_cumulative_scroll.1;
-                        if visual_y < threshold {
-                            let correction = threshold - visual_y;
-                            child_offset.1 += correction;
-                        }
+                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top)
+                    && let Some(cb) = self.layout_tree.get_bounds(child_id, (0.0, 0.0))
+                {
+                    let visual_y = cb.y + new_cumulative_scroll.1;
+                    if visual_y < threshold {
+                        let correction = threshold - visual_y;
+                        child_offset.1 += correction;
                     }
                 }
                 new_cumulative_scroll

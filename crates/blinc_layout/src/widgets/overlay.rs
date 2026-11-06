@@ -961,12 +961,11 @@ impl OverlayManagerInner {
                 }
                 OverlayState::Open => {
                     // Check for auto-dismiss (toasts)
-                    if let Some(duration_ms) = overlay.config.auto_dismiss_ms {
-                        if let Some(opened_at) = overlay.opened_at_ms {
-                            if current_time_ms >= opened_at + duration_ms as u64 {
-                                to_close.push(*handle);
-                            }
-                        }
+                    if let Some(duration_ms) = overlay.config.auto_dismiss_ms
+                        && let Some(opened_at) = overlay.opened_at_ms
+                        && current_time_ms >= opened_at + duration_ms as u64
+                    {
+                        to_close.push(*handle);
                     }
                 }
                 OverlayState::PendingClose => {
@@ -1099,11 +1098,11 @@ impl OverlayManagerInner {
 
     /// Close an overlay by handle
     pub fn close(&mut self, handle: OverlayHandle) {
-        if let Some(overlay) = self.overlays.get_mut(&handle) {
-            if overlay.transition(overlay_events::CLOSE) {
-                // Starting close animation - animation dirty, not content
-                self.mark_animation_dirty();
-            }
+        if let Some(overlay) = self.overlays.get_mut(&handle)
+            && overlay.transition(overlay_events::CLOSE)
+        {
+            // Starting close animation - animation dirty, not content
+            self.mark_animation_dirty();
         }
     }
 
@@ -1130,11 +1129,11 @@ impl OverlayManagerInner {
     /// Used when mouse re-enters a hover card during exit animation.
     /// This interrupts the exit animation and keeps the overlay visible.
     pub fn cancel_close(&mut self, handle: OverlayHandle) {
-        if let Some(overlay) = self.overlays.get_mut(&handle) {
-            if overlay.transition(overlay_events::CANCEL_CLOSE) {
-                // Canceled close - need to reset motion animation state
-                self.mark_animation_dirty();
-            }
+        if let Some(overlay) = self.overlays.get_mut(&handle)
+            && overlay.transition(overlay_events::CANCEL_CLOSE)
+        {
+            // Canceled close - need to reset motion animation state
+            self.mark_animation_dirty();
         }
     }
 
@@ -1408,16 +1407,14 @@ impl OverlayManagerInner {
             .filter(|o| o.state.is_open() && o.config.dismiss_on_escape)
             .max_by_key(|o| o.config.z_priority)
             .map(|o| o.handle)
+            && let Some(overlay) = self.overlays.get_mut(&handle)
+            && overlay.transition(overlay_events::ESCAPE)
         {
-            if let Some(overlay) = self.overlays.get_mut(&handle) {
-                if overlay.transition(overlay_events::ESCAPE) {
-                    // Starting close animation - animation dirty, not content
-                    // Using mark_dirty() here would cause content rebuild which restarts motion animations
-                    // Note: on_close callback is deferred until overlay is fully removed in update()
-                    self.mark_animation_dirty();
-                    return true;
-                }
-            }
+            // Starting close animation - animation dirty, not content
+            // Using mark_dirty() here would cause content rebuild which restarts motion animations
+            // Note: on_close callback is deferred until overlay is fully removed in update()
+            self.mark_animation_dirty();
+            return true;
         }
         false
     }
@@ -1467,16 +1464,14 @@ impl OverlayManagerInner {
             })
             .max_by_key(|o| o.config.z_priority)
             .map(|o| o.handle)
+            && let Some(overlay) = self.overlays.get_mut(&handle)
+            && overlay.transition(overlay_events::BACKDROP_CLICK)
         {
-            if let Some(overlay) = self.overlays.get_mut(&handle) {
-                if overlay.transition(overlay_events::BACKDROP_CLICK) {
-                    // Starting close animation - animation dirty, not content
-                    // Using mark_dirty() here would cause content rebuild which restarts motion animations
-                    // Note: on_close callback is deferred until overlay is fully removed in update()
-                    self.mark_animation_dirty();
-                    return true;
-                }
-            }
+            // Starting close animation - animation dirty, not content
+            // Using mark_dirty() here would cause content rebuild which restarts motion animations
+            // Note: on_close callback is deferred until overlay is fully removed in update()
+            self.mark_animation_dirty();
+            return true;
         }
         false
     }

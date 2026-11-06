@@ -145,10 +145,10 @@ impl DecoderRegistry {
         // Preferred pass: decoders that advertise the detected format
         if let Some(fmt) = format {
             for decoder in &self.decoders {
-                if decoder.formats().contains(&fmt) {
-                    if let Ok(decoded) = decoder.decode(bytes) {
-                        return Ok(decoded);
-                    }
+                if decoder.formats().contains(&fmt)
+                    && let Ok(decoded) = decoder.decode(bytes)
+                {
+                    return Ok(decoded);
                 }
             }
         }

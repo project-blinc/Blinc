@@ -51,6 +51,8 @@
 //! dispatch.execute(device, queue);
 //! ```
 
+// wgpu handles are !Send on wasm32, which has no other threads to send to.
+#![cfg_attr(target_arch = "wasm32", allow(clippy::arc_with_non_send_sync))]
 use wgpu::util::DeviceExt;
 
 /// Stage in the rendering pipeline where a custom pass executes

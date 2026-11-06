@@ -327,11 +327,11 @@ impl NumberInput {
                 // otherwise the cursor jumps every keystroke. The
                 // text_input's data is already in sync with what the
                 // user typed.
-                if (clamped - parsed).abs() > f64::EPSILON {
-                    if let Ok(mut d) = data_for_change.lock() {
-                        d.value = format_value(clamped, precision);
-                        d.cursor = d.value.chars().count();
-                    }
+                if (clamped - parsed).abs() > f64::EPSILON
+                    && let Ok(mut d) = data_for_change.lock()
+                {
+                    d.value = format_value(clamped, precision);
+                    d.cursor = d.value.chars().count();
                 }
             }
         });

@@ -58,18 +58,18 @@ impl<'a> Parser<'a> {
 
     fn parse(&mut self) {
         while self.pos < self.input.len() {
-            if self.peek() == Some('<') {
-                if let Some(tag) = self.try_parse_tag() {
-                    self.handle_tag(tag);
-                    continue;
-                }
+            if self.peek() == Some('<')
+                && let Some(tag) = self.try_parse_tag()
+            {
+                self.handle_tag(tag);
+                continue;
             }
 
-            if self.peek() == Some('&') {
-                if let Some(decoded) = self.try_parse_entity() {
-                    self.output.push_str(&decoded);
-                    continue;
-                }
+            if self.peek() == Some('&')
+                && let Some(decoded) = self.try_parse_entity()
+            {
+                self.output.push_str(&decoded);
+                continue;
             }
 
             // Regular character
@@ -358,10 +358,10 @@ impl<'a> Parser<'a> {
                 }
             }
             "span" => {
-                if let Some((_, color_str)) = attrs.iter().find(|(k, _)| k == "color") {
-                    if let Some(color) = parse_color(color_str) {
-                        self.current_style.color = Some(color);
-                    }
+                if let Some((_, color_str)) = attrs.iter().find(|(k, _)| k == "color")
+                    && let Some(color) = parse_color(color_str)
+                {
+                    self.current_style.color = Some(color);
                 }
             }
             _ => {

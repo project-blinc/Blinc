@@ -2545,11 +2545,10 @@ impl GpuRenderer {
         if let (Some(cache), Some(path)) = (
             pipeline_cache.as_ref(),
             config.pipeline_cache_path.as_deref(),
-        ) {
-            if let Some(data) = cache.get_data() {
-                tracing::info!("Pipeline cache: saving {} bytes", data.len());
-                save_pipeline_cache_data(path, &adapter_info, &data);
-            }
+        ) && let Some(data) = cache.get_data()
+        {
+            tracing::info!("Pipeline cache: saving {} bytes", data.len());
+            save_pipeline_cache_data(path, &adapter_info, &data);
         }
 
         // Create buffers (storage buffers always created; DT textures added when needed)
@@ -4924,35 +4923,35 @@ impl GpuRenderer {
         }
 
         // Copy current render target → scene copy texture (single copy per frame)
-        if let Some((scene_tex, _, _, _)) = &self.scene_copy_texture {
-            if let Some(tex_ptr) = self.blend_target_ptr {
-                let src_tex = unsafe { &*tex_ptr };
-                let mut copy_encoder =
-                    self.device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("Flow Scene Copy Encoder"),
-                        });
-                copy_encoder.copy_texture_to_texture(
-                    wgpu::TexelCopyTextureInfo {
-                        texture: src_tex,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d::ZERO,
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    wgpu::TexelCopyTextureInfo {
-                        texture: scene_tex,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d::ZERO,
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    wgpu::Extent3d {
-                        width: tw,
-                        height: th,
-                        depth_or_array_layers: 1,
-                    },
-                );
-                self.queue.submit(std::iter::once(copy_encoder.finish()));
-            }
+        if let Some((scene_tex, _, _, _)) = &self.scene_copy_texture
+            && let Some(tex_ptr) = self.blend_target_ptr
+        {
+            let src_tex = unsafe { &*tex_ptr };
+            let mut copy_encoder =
+                self.device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("Flow Scene Copy Encoder"),
+                    });
+            copy_encoder.copy_texture_to_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: src_tex,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::TexelCopyTextureInfo {
+                    texture: scene_tex,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::Extent3d {
+                    width: tw,
+                    height: th,
+                    depth_or_array_layers: 1,
+                },
+            );
+            self.queue.submit(std::iter::once(copy_encoder.finish()));
         }
 
         self.scene_copy_texture.as_ref().map(|(_, v, _, _)| v)
@@ -5078,10 +5077,11 @@ impl GpuRenderer {
     /// texture invalid so the next `render_with_clear` knows it has
     /// to repaint the cache from scratch.
     pub fn ensure_static_layer(&mut self, width: u32, height: u32) {
-        if let Some(layer) = &self.static_layer {
-            if layer.width == width && layer.height == height {
-                return;
-            }
+        if let Some(layer) = &self.static_layer
+            && layer.width == width
+            && layer.height == height
+        {
+            return;
         }
         if width == 0 || height == 0 {
             return;
@@ -5954,16 +5954,15 @@ impl GpuRenderer {
             // as a new primitive type so the existing submission-order
             // dispatch handles them the same way it handles text — see
             // BACKLOG.md for the plan.
-            if has_paths {
-                if let (Some(vb), Some(ib)) =
+            if has_paths
+                && let (Some(vb), Some(ib)) =
                     (&self.buffers.path_vertices, &self.buffers.path_indices)
-                {
-                    render_pass.set_pipeline(&self.pipelines.path);
-                    render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
-                    render_pass.set_vertex_buffer(0, vb.slice(..));
-                    render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
-                    render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
-                }
+            {
+                render_pass.set_pipeline(&self.pipelines.path);
+                render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
+                render_pass.set_vertex_buffer(0, vb.slice(..));
+                render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
             }
         }
 
@@ -6393,25 +6392,24 @@ impl GpuRenderer {
             // to translucent / effect layers (those are composited
             // offscreen in the second pass). Paths in non-effect
             // ranges still render here directly to the target.
-            if has_paths {
-                if let (Some(vb), Some(ib)) =
+            if has_paths
+                && let (Some(vb), Some(ib)) =
                     (&self.buffers.path_vertices, &self.buffers.path_indices)
-                {
-                    render_pass.set_pipeline(&self.pipelines.path);
-                    render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
-                    render_pass.set_vertex_buffer(0, vb.slice(..));
-                    render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
-                    let total = batch.paths.indices.len() as u32;
-                    let mut cursor = 0u32;
-                    for &(skip_start, skip_end) in path_skip_ranges {
-                        if skip_start > cursor {
-                            render_pass.draw_indexed(cursor..skip_start, 0, 0..1);
-                        }
-                        cursor = cursor.max(skip_end);
+            {
+                render_pass.set_pipeline(&self.pipelines.path);
+                render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
+                render_pass.set_vertex_buffer(0, vb.slice(..));
+                render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
+                let total = batch.paths.indices.len() as u32;
+                let mut cursor = 0u32;
+                for &(skip_start, skip_end) in path_skip_ranges {
+                    if skip_start > cursor {
+                        render_pass.draw_indexed(cursor..skip_start, 0, 0..1);
                     }
-                    if cursor < total {
-                        render_pass.draw_indexed(cursor..total, 0, 0..1);
-                    }
+                    cursor = cursor.max(skip_end);
+                }
+                if cursor < total {
+                    render_pass.draw_indexed(cursor..total, 0, 0..1);
                 }
             }
         }
@@ -6682,14 +6680,14 @@ impl GpuRenderer {
     /// Update path vertex and index buffers
     fn update_path_buffers(&mut self, batch: &PrimitiveBatch) {
         // Upload gradient texture if needed for multi-stop gradients
-        if batch.paths.use_gradient_texture {
-            if let Some(ref stops) = batch.paths.gradient_stops {
-                self.gradient_texture_cache.upload_stops(
-                    &self.queue,
-                    stops,
-                    crate::gradient_texture::SpreadMode::Pad,
-                );
-            }
+        if batch.paths.use_gradient_texture
+            && let Some(ref stops) = batch.paths.gradient_stops
+        {
+            self.gradient_texture_cache.upload_stops(
+                &self.queue,
+                stops,
+                crate::gradient_texture::SpreadMode::Pad,
+            );
         }
 
         // Update path uniforms with clip data and brush metadata from batch
@@ -6845,16 +6843,15 @@ impl GpuRenderer {
             }
 
             // Render paths
-            if has_paths {
-                if let (Some(vb), Some(ib)) =
+            if has_paths
+                && let (Some(vb), Some(ib)) =
                     (&self.buffers.path_vertices, &self.buffers.path_indices)
-                {
-                    render_pass.set_pipeline(&self.pipelines.path);
-                    render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
-                    render_pass.set_vertex_buffer(0, vb.slice(..));
-                    render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
-                    render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
-                }
+            {
+                render_pass.set_pipeline(&self.pipelines.path);
+                render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
+                render_pass.set_vertex_buffer(0, vb.slice(..));
+                render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
             }
         }
 
@@ -7471,16 +7468,15 @@ impl GpuRenderer {
             });
 
             // Render paths first (they're typically backgrounds)
-            if has_paths {
-                if let (Some(vb), Some(ib)) =
+            if has_paths
+                && let (Some(vb), Some(ib)) =
                     (&self.buffers.path_vertices, &self.buffers.path_indices)
-                {
-                    render_pass.set_pipeline(&self.pipelines.path_overlay);
-                    render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
-                    render_pass.set_vertex_buffer(0, vb.slice(..));
-                    render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
-                    render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
-                }
+            {
+                render_pass.set_pipeline(&self.pipelines.path_overlay);
+                render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
+                render_pass.set_vertex_buffer(0, vb.slice(..));
+                render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
             }
 
             // Render SDF primitives using split overlay pipelines
@@ -7737,16 +7733,15 @@ impl GpuRenderer {
             });
 
             // Render paths first
-            if has_paths {
-                if let (Some(vb), Some(ib)) =
+            if has_paths
+                && let (Some(vb), Some(ib)) =
                     (&self.buffers.path_vertices, &self.buffers.path_indices)
-                {
-                    render_pass.set_pipeline(&self.pipelines.path_overlay);
-                    render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
-                    render_pass.set_vertex_buffer(0, vb.slice(..));
-                    render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
-                    render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
-                }
+            {
+                render_pass.set_pipeline(&self.pipelines.path_overlay);
+                render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
+                render_pass.set_vertex_buffer(0, vb.slice(..));
+                render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
             }
 
             // Render filtered SDF primitives via split overlay pipelines
@@ -7812,16 +7807,15 @@ impl GpuRenderer {
             });
 
             // Render paths first
-            if has_paths {
-                if let (Some(vb), Some(ib)) =
+            if has_paths
+                && let (Some(vb), Some(ib)) =
                     (&self.buffers.path_vertices, &self.buffers.path_indices)
-                {
-                    render_pass.set_pipeline(&self.pipelines.path_overlay);
-                    render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
-                    render_pass.set_vertex_buffer(0, vb.slice(..));
-                    render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
-                    render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
-                }
+            {
+                render_pass.set_pipeline(&self.pipelines.path_overlay);
+                render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
+                render_pass.set_vertex_buffer(0, vb.slice(..));
+                render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
             }
 
             // Render SDF primitives via split overlay pipelines
@@ -8247,16 +8241,15 @@ impl GpuRenderer {
             };
 
             // Render paths using MSAA pipeline
-            if has_paths {
-                if let (Some(vb), Some(ib)) =
+            if has_paths
+                && let (Some(vb), Some(ib)) =
                     (&self.buffers.path_vertices, &self.buffers.path_indices)
-                {
-                    render_pass.set_pipeline(path_pipeline);
-                    render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
-                    render_pass.set_vertex_buffer(0, vb.slice(..));
-                    render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
-                    render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
-                }
+            {
+                render_pass.set_pipeline(path_pipeline);
+                render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
+                render_pass.set_vertex_buffer(0, vb.slice(..));
+                render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
             }
 
             // Render SDF primitives using split MSAA pipelines
@@ -10532,8 +10525,8 @@ impl GpuRenderer {
         // validation), and sub-256 masks produce visible block
         // banding in alpha ramps.
         let bc_ok = self.has_texture_compression_bc
-            && width % 4 == 0
-            && height % 4 == 0
+            && width.is_multiple_of(4)
+            && height.is_multiple_of(4)
             && width >= 256
             && height >= 256;
         let label = format!("mask:{}", url);

@@ -350,11 +350,11 @@ impl TextInput {
                                 d.selection_start = None;
                                 crate::widgets::text_edit::haptic_selection();
                             }
-                        } else if let Some(anchor) = d.drag_select_anchor {
-                            if new_pos != anchor {
-                                d.selection_start = Some(anchor);
-                                d.cursor = new_pos;
-                            }
+                        } else if let Some(anchor) = d.drag_select_anchor
+                            && new_pos != anchor
+                        {
+                            d.selection_start = Some(anchor);
+                            d.cursor = new_pos;
                         }
                         true
                     };
@@ -386,13 +386,13 @@ impl TextInput {
                         // Skip the character insert so the field
                         // doesn't end up with stray `+` chars in the
                         // value buffer.
-                        if matches!(c, '+' | '-' | '=') {
-                            if let Some(cb) = d.on_step_callback.as_ref().map(Arc::clone) {
-                                let delta = if c == '-' { -1 } else { 1 };
-                                drop(d);
-                                cb(delta);
-                                return;
-                            }
+                        if matches!(c, '+' | '-' | '=')
+                            && let Some(cb) = d.on_step_callback.as_ref().map(Arc::clone)
+                        {
+                            let delta = if c == '-' { -1 } else { 1 };
+                            drop(d);
+                            cb(delta);
+                            return;
                         }
                         d.insert(&c.to_string());
                         d.reset_cursor_blink();

@@ -326,11 +326,11 @@ impl SvgAtlas {
                 self.entries.insert(key, region);
             } else {
                 // Atlas shrunk below surviving set — try growing
-                if self.grow(device) {
-                    if let Some(region) = self.allocate(w, h) {
-                        self.write_pixels(&region, &px);
-                        self.entries.insert(key, region);
-                    }
+                if self.grow(device)
+                    && let Some(region) = self.allocate(w, h)
+                {
+                    self.write_pixels(&region, &px);
+                    self.entries.insert(key, region);
                 }
             }
         }

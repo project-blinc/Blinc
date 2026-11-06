@@ -934,10 +934,10 @@ impl WebApp {
         // rAF tick fires — we just skip the frame and try again next
         // tick rather than panicking on borrow conflict.
         let wake = move || {
-            if let Ok(mut app) = app_for_wake.try_borrow_mut() {
-                if let Err(e) = app.run_one_frame() {
-                    tracing::error!("WebApp wake-frame failed: {e}");
-                }
+            if let Ok(mut app) = app_for_wake.try_borrow_mut()
+                && let Err(e) = app.run_one_frame()
+            {
+                tracing::error!("WebApp wake-frame failed: {e}");
             }
         };
 
@@ -1334,31 +1334,31 @@ impl WebApp {
                     // otherwise cause every tap to fire two
                     // POINTER_DOWN events.
                     evt.prevent_default();
-                    if let Ok(mut app) = app_rc.try_borrow_mut() {
-                        if let Some((x, y, len)) = touch_local_pos(evt.touches()) {
-                            // Mark this event sequence as touch
-                            // input so editable widgets switch to
-                            // mobile UX (touch drag = move cursor,
-                            // double-tap = native edit menu, etc.).
-                            blinc_layout::widgets::text_input::set_touch_input(true);
-                            if len == 1 {
-                                app.last_wheel_time_ms = None;
-                                app.wheel_input.reset();
-                                app.last_touch_pos = Some((x, y));
-                                Self::dispatch_mouse_down(
-                                    &mut app,
-                                    x,
-                                    y,
-                                    blinc_platform::MouseButton::Left,
-                                );
-                            } else {
-                                // Multi-touch: cancel any
-                                // single-touch tracking so a
-                                // pinch doesn't get
-                                // misinterpreted as a swipe when
-                                // the user lifts a finger.
-                                app.last_touch_pos = None;
-                            }
+                    if let Ok(mut app) = app_rc.try_borrow_mut()
+                        && let Some((x, y, len)) = touch_local_pos(evt.touches())
+                    {
+                        // Mark this event sequence as touch
+                        // input so editable widgets switch to
+                        // mobile UX (touch drag = move cursor,
+                        // double-tap = native edit menu, etc.).
+                        blinc_layout::widgets::text_input::set_touch_input(true);
+                        if len == 1 {
+                            app.last_wheel_time_ms = None;
+                            app.wheel_input.reset();
+                            app.last_touch_pos = Some((x, y));
+                            Self::dispatch_mouse_down(
+                                &mut app,
+                                x,
+                                y,
+                                blinc_platform::MouseButton::Left,
+                            );
+                        } else {
+                            // Multi-touch: cancel any
+                            // single-touch tracking so a
+                            // pinch doesn't get
+                            // misinterpreted as a swipe when
+                            // the user lifts a finger.
+                            app.last_touch_pos = None;
                         }
                     }
                 });
@@ -1383,26 +1383,26 @@ impl WebApp {
                     // pull-to-refresh) so the canvas owns scroll
                     // semantics end-to-end.
                     evt.prevent_default();
-                    if let Ok(mut app) = app_rc.try_borrow_mut() {
-                        if let Some((x, y, len)) = touch_local_pos(evt.touches()) {
-                            if len == 1 {
-                                if let Some((px, py)) = app.last_touch_pos {
-                                    let dx = x - px;
-                                    let dy = y - py;
-                                    // Sub-pixel jitter guard
-                                    // mirroring ios.rs:874.
-                                    if dx.abs() > 0.5 || dy.abs() > 0.5 {
-                                        Self::dispatch_scroll(&mut app, dx, dy);
-                                    }
+                    if let Ok(mut app) = app_rc.try_borrow_mut()
+                        && let Some((x, y, len)) = touch_local_pos(evt.touches())
+                    {
+                        if len == 1 {
+                            if let Some((px, py)) = app.last_touch_pos {
+                                let dx = x - px;
+                                let dy = y - py;
+                                // Sub-pixel jitter guard
+                                // mirroring ios.rs:874.
+                                if dx.abs() > 0.5 || dy.abs() > 0.5 {
+                                    Self::dispatch_scroll(&mut app, dx, dy);
                                 }
-                                app.last_touch_pos = Some((x, y));
-                                // Also forward as a mouse_move so
-                                // hover state / drag handlers
-                                // see the touch path.
-                                Self::dispatch_mouse_move(&mut app, x, y);
-                            } else {
-                                app.last_touch_pos = None;
                             }
+                            app.last_touch_pos = Some((x, y));
+                            // Also forward as a mouse_move so
+                            // hover state / drag handlers
+                            // see the touch path.
+                            Self::dispatch_mouse_move(&mut app, x, y);
+                        } else {
+                            app.last_touch_pos = None;
                         }
                     }
                 });
@@ -1562,15 +1562,18 @@ impl WebApp {
                     // (matches the desktop runner's behaviour).
                     let key_str = evt.key();
                     let mut chars = key_str.chars();
-                    if let (Some(ch), None) = (chars.next(), chars.next()) {
-                        if !navigated && !ch.is_control() && !ctrl && !meta {
-                            // Prevent the browser from also acting on
-                            // the key (e.g. quick-find triggering on
-                            // `/`, space scrolling the page) when a
-                            // Blinc text input is consuming it.
-                            evt.prevent_default();
-                            Self::dispatch_text_input(&mut app, ch, shift, ctrl, alt, meta);
-                        }
+                    if let (Some(ch), None) = (chars.next(), chars.next())
+                        && !navigated
+                        && !ch.is_control()
+                        && !ctrl
+                        && !meta
+                    {
+                        // Prevent the browser from also acting on
+                        // the key (e.g. quick-find triggering on
+                        // `/`, space scrolling the page) when a
+                        // Blinc text input is consuming it.
+                        evt.prevent_default();
+                        Self::dispatch_text_input(&mut app, ch, shift, ctrl, alt, meta);
                     }
                 }
             });
@@ -1853,17 +1856,17 @@ impl WebApp {
         // by macOS's ~800ms momentum-tail wheel events, which is
         // what would otherwise prevent the idle-debounce in
         // `run_one_frame` from ever firing during a bounce.
-        if let Some(tree) = app.current_tree.as_ref() {
-            if tree.has_bouncing_scroll() {
-                return;
-            }
+        if let Some(tree) = app.current_tree.as_ref()
+            && tree.has_bouncing_scroll()
+        {
+            return;
         }
 
         // Source events define wheel strokes; slow rendering must not split one.
-        if app.last_wheel_time_ms.is_none() {
-            if let Some(tree) = app.current_tree.as_ref() {
-                tree.begin_scroll_gesture();
-            }
+        if app.last_wheel_time_ms.is_none()
+            && let Some(tree) = app.current_tree.as_ref()
+        {
+            tree.begin_scroll_gesture();
         }
         let hit = {
             let tree = match app.current_tree.as_ref() {
@@ -1911,10 +1914,10 @@ impl WebApp {
         // runner. The router still tracks focus internally, which
         // is what `dispatch_text_input` relies on later for
         // "focused element" semantics.
-        if let Some(tree) = app.current_tree.as_mut() {
-            if tree.handle_navigation_key(&mut app.ctx.event_router, key_code, shift) {
-                return true;
-            }
+        if let Some(tree) = app.current_tree.as_mut()
+            && tree.handle_navigation_key(&mut app.ctx.event_router, key_code, shift)
+        {
+            return true;
         }
         let _ = app.ctx.event_router.on_key_down(key_code);
 
@@ -2144,10 +2147,10 @@ impl WebApp {
                 evt.stop_propagation();
                 evt.prevent_default();
                 synthesize_edit_action(action);
-                if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-                    if let Some(menu) = doc.get_element_by_id(MENU_ID) {
-                        menu.remove();
-                    }
+                if let Some(doc) = web_sys::window().and_then(|w| w.document())
+                    && let Some(menu) = doc.get_element_by_id(MENU_ID)
+                {
+                    menu.remove();
                 }
             });
             let _ = item
@@ -2161,10 +2164,10 @@ impl WebApp {
         // attach a one-shot mousedown listener on `document` that
         // removes the menu and unregisters itself.
         let dismiss = Closure::<dyn FnMut(_)>::new(move |_evt: web_sys::MouseEvent| {
-            if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-                if let Some(menu) = doc.get_element_by_id(MENU_ID) {
-                    menu.remove();
-                }
+            if let Some(doc) = web_sys::window().and_then(|w| w.document())
+                && let Some(menu) = doc.get_element_by_id(MENU_ID)
+            {
+                menu.remove();
             }
         });
         // Schedule listener attachment for the next tick so the
@@ -2565,10 +2568,10 @@ impl WebApp {
         }
 
         // ─── Phase 1d: rebuild triggers ──────────────────────────
-        if let Some(ref tree) = self.current_tree {
-            if tree.needs_rebuild() {
-                self.needs_rebuild = true;
-            }
+        if let Some(ref tree) = self.current_tree
+            && tree.needs_rebuild()
+        {
+            self.needs_rebuild = true;
         }
         if blinc_layout::widgets::take_needs_rebuild() {
             self.needs_rebuild = true;
@@ -2852,31 +2855,30 @@ impl WebApp {
         }
 
         // CSS state styles (:hover, :active, :focus)
-        if let Some(ref mut tree) = self.current_tree {
-            if tree.stylesheet().is_some() {
-                let state_changed = tree.apply_stylesheet_state_styles(&self.ctx.event_router);
-                if state_changed {
-                    tree.compute_layout(self.ctx.width, self.ctx.height);
-                    tree.update_flip_bounds();
-                }
+        if let Some(ref mut tree) = self.current_tree
+            && tree.stylesheet().is_some()
+        {
+            let state_changed = tree.apply_stylesheet_state_styles(&self.ctx.event_router);
+            if state_changed {
+                tree.compute_layout(self.ctx.width, self.ctx.height);
+                tree.update_flip_bounds();
             }
         }
 
         // Apply animated CSS property values
-        if css_active
+        if (css_active
             || !self
                 .current_tree
                 .as_ref()
-                .is_none_or(|t| t.css_transitions_empty())
+                .is_none_or(|t| t.css_transitions_empty()))
+            && let Some(ref mut tree) = self.current_tree
         {
-            if let Some(ref mut tree) = self.current_tree {
-                tree.apply_all_css_animation_props();
-                tree.apply_all_css_transition_props();
-                tree.apply_flip_animation_props();
-                if tree.apply_animated_layout_props() {
-                    tree.compute_layout(self.ctx.width, self.ctx.height);
-                    tree.update_flip_bounds();
-                }
+            tree.apply_all_css_animation_props();
+            tree.apply_all_css_transition_props();
+            tree.apply_flip_animation_props();
+            if tree.apply_animated_layout_props() {
+                tree.compute_layout(self.ctx.width, self.ctx.height);
+                tree.update_flip_bounds();
             }
         }
 

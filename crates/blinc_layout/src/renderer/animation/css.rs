@@ -1029,10 +1029,10 @@ impl RenderTree {
 
         // A transition already heading to this target carries on rather than
         // restarting with a fresh duration each frame.
-        if let Some(existing) = store.transitions.get(&stable_id) {
-            if existing.target() == target {
-                return;
-            }
+        if let Some(existing) = store.transitions.get(&stable_id)
+            && existing.target() == target
+        {
+            return;
         }
 
         let mut lanes: Vec<MultiKeyframeAnimation> = groups
@@ -1351,10 +1351,10 @@ impl RenderTree {
                 spread,
                 color,
             });
-        } else if let Some([r, g, b, a]) = anim_props.text_shadow_color {
-            if let Some(ts) = &mut props.text_shadow {
-                ts.color = blinc_core::Color::rgba(r, g, b, a);
-            }
+        } else if let Some([r, g, b, a]) = anim_props.text_shadow_color
+            && let Some(ts) = &mut props.text_shadow
+        {
+            ts.color = blinc_core::Color::rgba(r, g, b, a);
         }
 
         // Font size
@@ -1455,10 +1455,10 @@ impl RenderTree {
             } else {
                 props.shadow = vec![layer];
             }
-        } else if let Some([r, g, b, a]) = anim_props.shadow_color {
-            if let Some(first) = props.shadow.first_mut() {
-                first.color = blinc_core::Color::rgba(r, g, b, a);
-            }
+        } else if let Some([r, g, b, a]) = anim_props.shadow_color
+            && let Some(first) = props.shadow.first_mut()
+        {
+            first.color = blinc_core::Color::rgba(r, g, b, a);
         }
 
         // 3D lighting

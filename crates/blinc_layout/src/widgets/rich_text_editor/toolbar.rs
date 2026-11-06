@@ -591,11 +591,11 @@ fn color_picker_row(state: &RichTextState, version: &Signal<u32>) -> Div {
                 .on_mouse_down(move |_| {
                     if let Ok(mut data) = state_for_click.lock() {
                         data.suppress_next_outer_click = true;
-                        if let Some(sel) = data.selection {
-                            if !sel.is_empty() {
-                                data.push_undo();
-                                apply_mark_to_selection(&mut data.document, sel, Mark::Color(c));
-                            }
+                        if let Some(sel) = data.selection
+                            && !sel.is_empty()
+                        {
+                            data.push_undo();
+                            apply_mark_to_selection(&mut data.document, sel, Mark::Color(c));
                         }
                         // Always set the active format so subsequent
                         // typing carries the new color.
@@ -683,17 +683,12 @@ fn link_prompt_row(
             version_for_apply,
             |d| {
                 if let PickerState::Link { draft } = d.picker.clone() {
-                    if !draft.is_empty() {
-                        if let Some(sel) = d.selection {
-                            if !sel.is_empty() {
-                                d.push_undo();
-                                apply_mark_to_selection(
-                                    &mut d.document,
-                                    sel,
-                                    Mark::Link(Some(draft)),
-                                );
-                            }
-                        }
+                    if !draft.is_empty()
+                        && let Some(sel) = d.selection
+                        && !sel.is_empty()
+                    {
+                        d.push_undo();
+                        apply_mark_to_selection(&mut d.document, sel, Mark::Link(Some(draft)));
                     }
                     d.picker = PickerState::None;
                 }
@@ -704,11 +699,11 @@ fn link_prompt_row(
             state_for_remove,
             version_for_remove,
             |d| {
-                if let Some(sel) = d.selection {
-                    if !sel.is_empty() {
-                        d.push_undo();
-                        apply_mark_to_selection(&mut d.document, sel, Mark::Link(None));
-                    }
+                if let Some(sel) = d.selection
+                    && !sel.is_empty()
+                {
+                    d.push_undo();
+                    apply_mark_to_selection(&mut d.document, sel, Mark::Link(None));
                 }
                 d.picker = PickerState::None;
             },
@@ -764,13 +759,13 @@ fn prompt_button(
 /// selection. Returns `true` if anything changed so the caller knows
 /// whether to bump the rebuild signal.
 fn apply_mark_via(data: &mut super::state::RichTextData, mark: Mark) -> bool {
-    if let Some(sel) = data.selection {
-        if !sel.is_empty() {
-            data.push_undo();
-            let changed = apply_mark_to_selection(&mut data.document, sel, mark);
-            data.active_format = ActiveFormat::from_position(&data.document, data.cursor);
-            return changed;
-        }
+    if let Some(sel) = data.selection
+        && !sel.is_empty()
+    {
+        data.push_undo();
+        let changed = apply_mark_to_selection(&mut data.document, sel, mark);
+        data.active_format = ActiveFormat::from_position(&data.document, data.cursor);
+        return changed;
     }
     false
 }

@@ -133,13 +133,11 @@ impl TextAreaState {
     pub fn move_left(&mut self, select: bool) {
         if select && self.selection_start.is_none() {
             self.selection_start = Some(self.cursor);
-        } else if !select {
-            if let Some(start) = self.selection_start {
-                let (from, _) = self.order_positions(start, self.cursor);
-                self.cursor = from;
-                self.selection_start = None;
-                return;
-            }
+        } else if !select && let Some(start) = self.selection_start {
+            let (from, _) = self.order_positions(start, self.cursor);
+            self.cursor = from;
+            self.selection_start = None;
+            return;
         }
 
         if self.cursor.column > 0 {
@@ -158,13 +156,11 @@ impl TextAreaState {
     pub fn move_right(&mut self, select: bool) {
         if select && self.selection_start.is_none() {
             self.selection_start = Some(self.cursor);
-        } else if !select {
-            if let Some(start) = self.selection_start {
-                let (_, to) = self.order_positions(start, self.cursor);
-                self.cursor = to;
-                self.selection_start = None;
-                return;
-            }
+        } else if !select && let Some(start) = self.selection_start {
+            let (_, to) = self.order_positions(start, self.cursor);
+            self.cursor = to;
+            self.selection_start = None;
+            return;
         }
 
         let line_len = self.lines[self.cursor.line].chars().count();

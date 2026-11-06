@@ -110,10 +110,10 @@ pub(crate) fn parse_selector_list(input: &str) -> Vec<CompoundSelector> {
     let mut selectors = Vec::new();
     for part in input.split(',') {
         let trimmed = part.trim();
-        if !trimmed.is_empty() {
-            if let Ok((_, compound)) = parse_compound_selector(trimmed) {
-                selectors.push(compound);
-            }
+        if !trimmed.is_empty()
+            && let Ok((_, compound)) = parse_compound_selector(trimmed)
+        {
+            selectors.push(compound);
         }
     }
     selectors
@@ -152,10 +152,10 @@ pub(crate) fn parse_relative_selector_list(input: &str) -> Vec<ComplexSelector> 
     let mut selectors = Vec::new();
     for part in parts {
         let trimmed = part.trim();
-        if !trimmed.is_empty() {
-            if let Ok((_, complex)) = parse_complex_selector(trimmed) {
-                selectors.push(complex);
-            }
+        if !trimmed.is_empty()
+            && let Ok((_, complex)) = parse_complex_selector(trimmed)
+        {
+            selectors.push(complex);
         }
     }
     selectors

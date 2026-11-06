@@ -16,13 +16,10 @@ impl RenderContext {
         let Some((mut pixels, width, height)) = self.svg_atlas.copy_pixels(key) else {
             return PrimitiveBatch::new();
         };
-        if tintable {
-            if let Some(tint) = svg.tint {
-                for pixel in pixels.chunks_exact_mut(4) {
-                    for (channel, factor) in pixel.iter_mut().zip([tint.r, tint.g, tint.b, tint.a])
-                    {
-                        *channel = (*channel as f32 * factor).round().clamp(0.0, 255.0) as u8;
-                    }
+        if tintable && let Some(tint) = svg.tint {
+            for pixel in pixels.as_chunks_mut::<4>().0 {
+                for (channel, factor) in pixel.iter_mut().zip([tint.r, tint.g, tint.b, tint.a]) {
+                    *channel = (*channel as f32 * factor).round().clamp(0.0, 255.0) as u8;
                 }
             }
         }

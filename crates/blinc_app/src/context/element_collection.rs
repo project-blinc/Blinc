@@ -210,10 +210,10 @@ impl RenderContext {
         // Get motion values for this node from RenderState (entry/exit animations)
         let motion_values = render_state.and_then(|rs| {
             // Try stable motion first, then node-based
-            if let Some(render_node) = tree.get_render_node(node) {
-                if let Some(ref stable_key) = render_node.props.motion_stable_id {
-                    return rs.get_stable_motion_values(stable_key);
-                }
+            if let Some(render_node) = tree.get_render_node(node)
+                && let Some(ref stable_key) = render_node.props.motion_stable_id
+            {
+                return rs.get_stable_motion_values(stable_key);
             }
             rs.get_motion_values(node)
         });
@@ -300,10 +300,10 @@ impl RenderContext {
             .get(&node)
             .is_some_and(|b| b.is_any_animating())
             || render_state.is_some_and(|rs| {
-                if let Some(render_node) = tree.get_render_node(node) {
-                    if let Some(ref stable_key) = render_node.props.motion_stable_id {
-                        return rs.is_stable_motion_active(stable_key);
-                    }
+                if let Some(render_node) = tree.get_render_node(node)
+                    && let Some(ref stable_key) = render_node.props.motion_stable_id
+                {
+                    return rs.is_stable_motion_active(stable_key);
                 }
                 rs.is_motion_active(node)
             });
@@ -315,10 +315,10 @@ impl RenderContext {
         }
 
         // CSS visibility: hidden — skip rendering but preserve layout space
-        if let Some(render_node) = tree.get_render_node(node) {
-            if !render_node.props.visible || tree.layout_tree.is_display_none(node) {
-                return;
-            }
+        if let Some(render_node) = tree.get_render_node(node)
+            && (!render_node.props.visible || tree.layout_tree.is_display_none(node))
+        {
+            return;
         }
 
         // Determine if this node is a glass element

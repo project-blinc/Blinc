@@ -289,28 +289,28 @@ impl LayoutAnimationState {
     pub fn update_target(&mut self, new_bounds: ElementBounds, config: &LayoutAnimationConfig) {
         self.end_bounds = new_bounds;
 
-        if let Some(ref mut anim) = self.height_anim {
-            if config.height {
-                anim.set_target(new_bounds.height);
-            }
+        if let Some(ref mut anim) = self.height_anim
+            && config.height
+        {
+            anim.set_target(new_bounds.height);
         }
 
-        if let Some(ref mut anim) = self.width_anim {
-            if config.width {
-                anim.set_target(new_bounds.width);
-            }
+        if let Some(ref mut anim) = self.width_anim
+            && config.width
+        {
+            anim.set_target(new_bounds.width);
         }
 
-        if let Some(ref mut anim) = self.x_anim {
-            if config.x {
-                anim.set_target(new_bounds.x);
-            }
+        if let Some(ref mut anim) = self.x_anim
+            && config.x
+        {
+            anim.set_target(new_bounds.x);
         }
 
-        if let Some(ref mut anim) = self.y_anim {
-            if config.y {
-                anim.set_target(new_bounds.y);
-            }
+        if let Some(ref mut anim) = self.y_anim
+            && config.y
+        {
+            anim.set_target(new_bounds.y);
         }
     }
 

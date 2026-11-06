@@ -204,14 +204,14 @@ pub(crate) fn parse_css_dimension(input: &str) -> Option<crate::element_style::S
 
     // Support calc() expressions
     if trimmed.starts_with("calc(") {
-        if let Some(expr) = crate::calc::parse_calc(trimmed) {
-            if !expr.is_dynamic() {
-                // Static calc — check if it contains a percentage
-                // For now, evaluate as px value
-                return Some(StyleDimension::Length(
-                    expr.eval(&crate::calc::CalcContext::default()),
-                ));
-            }
+        if let Some(expr) = crate::calc::parse_calc(trimmed)
+            && !expr.is_dynamic()
+        {
+            // Static calc — check if it contains a percentage
+            // For now, evaluate as px value
+            return Some(StyleDimension::Length(
+                expr.eval(&crate::calc::CalcContext::default()),
+            ));
         }
         return None;
     }
@@ -289,14 +289,14 @@ pub(crate) enum CalcParseResult {
 /// Static if it's a pure calc, or NotCalc to fall through.
 pub(crate) fn try_parse_calc(value: &str) -> CalcParseResult {
     let v = value.trim();
-    if v.starts_with("calc(") || v.contains("env(") {
-        if let Some(expr) = crate::calc::parse_calc(v) {
-            if expr.is_dynamic() {
-                return CalcParseResult::Dynamic(expr);
-            } else {
-                let ctx = crate::calc::CalcContext::default();
-                return CalcParseResult::Static(expr.eval(&ctx));
-            }
+    if (v.starts_with("calc(") || v.contains("env("))
+        && let Some(expr) = crate::calc::parse_calc(v)
+    {
+        if expr.is_dynamic() {
+            return CalcParseResult::Dynamic(expr);
+        } else {
+            let ctx = crate::calc::CalcContext::default();
+            return CalcParseResult::Static(expr.eval(&ctx));
         }
     }
     CalcParseResult::NotCalc

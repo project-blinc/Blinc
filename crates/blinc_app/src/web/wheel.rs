@@ -19,11 +19,11 @@ impl WebApp {
         };
         while let Some(delta) = self.wheel_input.pop() {
             if delta.starts_gesture {
-                if self.last_wheel_time_ms.is_some() {
-                    if let Some(tree) = self.current_tree.as_mut() {
-                        tree.on_scroll_end();
-                        tree.on_scroll_gesture(ScrollGesturePhase::MomentumEnd);
-                    }
+                if self.last_wheel_time_ms.is_some()
+                    && let Some(tree) = self.current_tree.as_mut()
+                {
+                    tree.on_scroll_end();
+                    tree.on_scroll_gesture(ScrollGesturePhase::MomentumEnd);
                 }
                 self.last_wheel_time_ms = None;
             }

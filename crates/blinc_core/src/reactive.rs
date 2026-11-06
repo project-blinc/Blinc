@@ -616,10 +616,10 @@ impl ReactiveGraph {
     /// will be recorded as a dependency.
     pub fn get<T: Clone + 'static>(&self, signal: Signal<T>) -> Option<T> {
         // Record dependency if we're tracking
-        if let Some(ref mut deps) = *self.tracking.borrow_mut() {
-            if !deps.contains(&signal.id) {
-                deps.push(signal.id);
-            }
+        if let Some(ref mut deps) = *self.tracking.borrow_mut()
+            && !deps.contains(&signal.id)
+        {
+            deps.push(signal.id);
         }
 
         self.signals
@@ -763,13 +763,13 @@ impl ReactiveGraph {
         {
             let map = self.derived.borrow();
             let node = map.get(derived.id)?;
-            if !node.dirty.get() {
-                if let Some(value) = node.value.as_ref().and_then(|v| v.downcast_ref::<T>()) {
-                    if let Some(tracking) = self.tracking.borrow_mut().as_mut() {
-                        tracking.extend(node.dependencies.iter().copied());
-                    }
-                    return Some(value.clone());
+            if !node.dirty.get()
+                && let Some(value) = node.value.as_ref().and_then(|v| v.downcast_ref::<T>())
+            {
+                if let Some(tracking) = self.tracking.borrow_mut().as_mut() {
+                    tracking.extend(node.dependencies.iter().copied());
                 }
+                return Some(value.clone());
             }
         }
         // Dirty: run it with the map free, so the closure may create.
@@ -829,15 +829,15 @@ impl ReactiveGraph {
         {
             let map = self.derived.borrow();
             let node = map.get(derived.id)?;
-            if !node.dirty.get() {
-                if let Some(ref cached) = node.value {
-                    // The reader comes to depend on the derived's signals,
-                    // as it does when the derived has to be recomputed.
-                    if let Some(tracking) = self.tracking.borrow_mut().as_mut() {
-                        tracking.extend(node.dependencies.iter().copied());
-                    }
-                    return cached.downcast_ref::<T>().cloned();
+            if !node.dirty.get()
+                && let Some(ref cached) = node.value
+            {
+                // The reader comes to depend on the derived's signals,
+                // as it does when the derived has to be recomputed.
+                if let Some(tracking) = self.tracking.borrow_mut().as_mut() {
+                    tracking.extend(node.dependencies.iter().copied());
                 }
+                return cached.downcast_ref::<T>().cloned();
             }
             node.dirty.set(false);
         }
@@ -1297,11 +1297,11 @@ impl ReactiveGraph {
                 }
             }
             SubscriberId::Effect(id) => {
-                if let Some(node) = self.effects.get(id) {
-                    if !node.dirty.get() {
-                        node.dirty.set(true);
-                        self.pending_effects.borrow_mut().push_back(id);
-                    }
+                if let Some(node) = self.effects.get(id)
+                    && !node.dirty.get()
+                {
+                    node.dirty.set(true);
+                    self.pending_effects.borrow_mut().push_back(id);
                 }
             }
         }
@@ -2268,10 +2268,8 @@ fn dispose(node: Disposed) {
     };
     // Told after the graph lock is released: the binding registry is
     // locked before the graph on the notify path.
-    if removed {
-        if let Some(notifier) = DISPOSE_NOTIFIER.get() {
-            notifier(node);
-        }
+    if removed && let Some(notifier) = DISPOSE_NOTIFIER.get() {
+        notifier(node);
     }
 }
 

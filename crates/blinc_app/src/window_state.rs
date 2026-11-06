@@ -99,11 +99,11 @@ impl WindowStateStore {
         map.insert(window_name.to_string(), state.clone());
 
         // Ensure directory exists
-        if let Some(parent) = self.path.parent() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                tracing::warn!("Failed to create window state directory: {}", e);
-                return false;
-            }
+        if let Some(parent) = self.path.parent()
+            && let Err(e) = std::fs::create_dir_all(parent)
+        {
+            tracing::warn!("Failed to create window state directory: {}", e);
+            return false;
         }
 
         match serde_json::to_string_pretty(&map) {
@@ -114,13 +114,12 @@ impl WindowStateStore {
 
     /// Remove saved state for a window
     pub fn remove(&self, window_name: &str) -> bool {
-        if let Ok(content) = std::fs::read_to_string(&self.path) {
-            if let Ok(mut map) = serde_json::from_str::<HashMap<String, SavedWindowState>>(&content)
-            {
-                map.remove(window_name);
-                if let Ok(json) = serde_json::to_string_pretty(&map) {
-                    return std::fs::write(&self.path, json).is_ok();
-                }
+        if let Ok(content) = std::fs::read_to_string(&self.path)
+            && let Ok(mut map) = serde_json::from_str::<HashMap<String, SavedWindowState>>(&content)
+        {
+            map.remove(window_name);
+            if let Ok(json) = serde_json::to_string_pretty(&map) {
+                return std::fs::write(&self.path, json).is_ok();
             }
         }
         false

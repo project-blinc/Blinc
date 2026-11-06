@@ -85,16 +85,16 @@ impl RenderContext {
         if let Ok(store) = tree.css_anim_store().lock() {
             for job in &jobs {
                 let Some(sid) = job.stable_id else { continue };
-                if let Some(anim) = store.animations.get(&sid) {
-                    if anim.is_playing {
-                        anim_props.insert(sid, anim.current_properties.clone());
-                        continue;
-                    }
+                if let Some(anim) = store.animations.get(&sid)
+                    && anim.is_playing
+                {
+                    anim_props.insert(sid, anim.current_properties.clone());
+                    continue;
                 }
-                if let Some(trans) = store.transitions.get(&sid) {
-                    if trans.is_playing {
-                        anim_props.insert(sid, trans.current_properties.clone());
-                    }
+                if let Some(trans) = store.transitions.get(&sid)
+                    && trans.is_playing
+                {
+                    anim_props.insert(sid, trans.current_properties.clone());
                 }
             }
         }
@@ -157,83 +157,83 @@ impl RenderContext {
         target_view: &wgpu::TextureView,
     ) {
         // TEXT — alpha + blit-anchored center remap.
-        if let Some(mut text) = self.cached_motion_subtree_text_prims.clone() {
-            if !text.is_empty() {
-                if !self.motion_subtree_text_patch.is_empty() {
-                    let dpi = tree.scale_factor().max(1.0);
-                    if let Ok(store) = tree.css_anim_store().lock() {
-                        for (range, sid) in &self.motion_subtree_text_patch {
-                            let props = store
-                                .animations
-                                .get(sid)
-                                .filter(|a| a.is_playing)
-                                .map(|a| &a.current_properties)
-                                .or_else(|| {
-                                    store
-                                        .transitions
-                                        .get(sid)
-                                        .filter(|t| t.is_playing)
-                                        .map(|t| &t.current_properties)
-                                });
-                            let Some(props) = props else { continue };
-                            let live_opacity = props.opacity.unwrap_or(1.0);
-                            let t1 = (
-                                props.translate_x.unwrap_or(0.0),
-                                props.translate_y.unwrap_or(0.0),
-                            );
-                            let s1 = (props.scale_x.unwrap_or(1.0), props.scale_y.unwrap_or(1.0));
-                            let baseline = self.composite_patch_baselines.get(sid).copied();
-                            for prim in &mut text.primitives[range.clone()] {
-                                prim.color[3] *= live_opacity;
-                                if let Some((aabb, t0, s0)) = baseline {
-                                    // p_base = aabb + (p0 - aabb - t0*dpi)/s0
-                                    // p1     = aabb + t1*dpi + p_base_rel*s1
-                                    let cx = prim.bounds[0] + prim.bounds[2] * 0.5;
-                                    let cy = prim.bounds[1] + prim.bounds[3] * 0.5;
-                                    let rel_x = (cx - aabb[0] - t0.0 * dpi) / s0.0.max(1e-6);
-                                    let rel_y = (cy - aabb[1] - t0.1 * dpi) / s0.1.max(1e-6);
-                                    let nx = aabb[0] + t1.0 * dpi + rel_x * s1.0;
-                                    let ny = aabb[1] + t1.1 * dpi + rel_y * s1.1;
-                                    prim.bounds[0] = nx - prim.bounds[2] * 0.5;
-                                    prim.bounds[1] = ny - prim.bounds[3] * 0.5;
-                                }
+        if let Some(mut text) = self.cached_motion_subtree_text_prims.clone()
+            && !text.is_empty()
+        {
+            if !self.motion_subtree_text_patch.is_empty() {
+                let dpi = tree.scale_factor().max(1.0);
+                if let Ok(store) = tree.css_anim_store().lock() {
+                    for (range, sid) in &self.motion_subtree_text_patch {
+                        let props = store
+                            .animations
+                            .get(sid)
+                            .filter(|a| a.is_playing)
+                            .map(|a| &a.current_properties)
+                            .or_else(|| {
+                                store
+                                    .transitions
+                                    .get(sid)
+                                    .filter(|t| t.is_playing)
+                                    .map(|t| &t.current_properties)
+                            });
+                        let Some(props) = props else { continue };
+                        let live_opacity = props.opacity.unwrap_or(1.0);
+                        let t1 = (
+                            props.translate_x.unwrap_or(0.0),
+                            props.translate_y.unwrap_or(0.0),
+                        );
+                        let s1 = (props.scale_x.unwrap_or(1.0), props.scale_y.unwrap_or(1.0));
+                        let baseline = self.composite_patch_baselines.get(sid).copied();
+                        for prim in &mut text.primitives[range.clone()] {
+                            prim.color[3] *= live_opacity;
+                            if let Some((aabb, t0, s0)) = baseline {
+                                // p_base = aabb + (p0 - aabb - t0*dpi)/s0
+                                // p1     = aabb + t1*dpi + p_base_rel*s1
+                                let cx = prim.bounds[0] + prim.bounds[2] * 0.5;
+                                let cy = prim.bounds[1] + prim.bounds[3] * 0.5;
+                                let rel_x = (cx - aabb[0] - t0.0 * dpi) / s0.0.max(1e-6);
+                                let rel_y = (cy - aabb[1] - t0.1 * dpi) / s0.1.max(1e-6);
+                                let nx = aabb[0] + t1.0 * dpi + rel_x * s1.0;
+                                let ny = aabb[1] + t1.1 * dpi + rel_y * s1.1;
+                                prim.bounds[0] = nx - prim.bounds[2] * 0.5;
+                                prim.bounds[1] = ny - prim.bounds[3] * 0.5;
                             }
                         }
                     }
                 }
-                self.render_text(target_view, &text);
             }
+            self.render_text(target_view, &text);
         }
         // SVG — alpha only (icons are small; the settle repaint lands
         // the exact final position when the animation completes).
-        if let Some(mut svgs) = self.cached_motion_subtree_svgs.clone() {
-            if !svgs.is_empty() {
-                if svgs.iter().any(|s| s.composite_ancestor.is_some()) {
-                    if let Ok(store) = tree.css_anim_store().lock() {
-                        for svg in &mut svgs {
-                            let Some(sid) = svg.composite_ancestor else {
-                                continue;
-                            };
-                            let props = store
-                                .animations
+        if let Some(mut svgs) = self.cached_motion_subtree_svgs.clone()
+            && !svgs.is_empty()
+        {
+            if svgs.iter().any(|s| s.composite_ancestor.is_some())
+                && let Ok(store) = tree.css_anim_store().lock()
+            {
+                for svg in &mut svgs {
+                    let Some(sid) = svg.composite_ancestor else {
+                        continue;
+                    };
+                    let props = store
+                        .animations
+                        .get(&sid)
+                        .filter(|a| a.is_playing)
+                        .map(|a| &a.current_properties)
+                        .or_else(|| {
+                            store
+                                .transitions
                                 .get(&sid)
-                                .filter(|a| a.is_playing)
-                                .map(|a| &a.current_properties)
-                                .or_else(|| {
-                                    store
-                                        .transitions
-                                        .get(&sid)
-                                        .filter(|t| t.is_playing)
-                                        .map(|t| &t.current_properties)
-                                });
-                            let Some(props) = props else { continue };
-                            svg.motion_opacity *= props.opacity.unwrap_or(1.0);
-                        }
-                    }
+                                .filter(|t| t.is_playing)
+                                .map(|t| &t.current_properties)
+                        });
+                    let Some(props) = props else { continue };
+                    svg.motion_opacity *= props.opacity.unwrap_or(1.0);
                 }
-                let dpi = tree.scale_factor();
-                self.render_rasterized_svgs(target_view, &svgs, dpi);
             }
+            let dpi = tree.scale_factor();
+            self.render_rasterized_svgs(target_view, &svgs, dpi);
         }
     }
 

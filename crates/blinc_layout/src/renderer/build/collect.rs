@@ -128,18 +128,18 @@ impl RenderTree {
         props.node_id = Some(node_id);
 
         // Apply base CSS styles and animation from stylesheet if element has an ID
-        if let Some(ref stylesheet) = self.stylesheet {
-            if let Some(id) = element.element_id() {
-                // Apply base styles (background, opacity, border-radius, etc.)
-                if let Some(base_style) = stylesheet.get(id) {
-                    Self::apply_element_style_to_props(&mut props, base_style);
-                }
-                // Apply CSS animation (only if no motion animation is already set)
-                if props.motion.is_none() {
-                    if let Some(motion) = stylesheet.resolve_animation(id) {
-                        props.motion = Some(motion);
-                    }
-                }
+        if let Some(ref stylesheet) = self.stylesheet
+            && let Some(id) = element.element_id()
+        {
+            // Apply base styles (background, opacity, border-radius, etc.)
+            if let Some(base_style) = stylesheet.get(id) {
+                Self::apply_element_style_to_props(&mut props, base_style);
+            }
+            // Apply CSS animation (only if no motion animation is already set)
+            if props.motion.is_none()
+                && let Some(motion) = stylesheet.resolve_animation(id)
+            {
+                props.motion = Some(motion);
             }
         }
 
@@ -290,18 +290,18 @@ impl RenderTree {
         props.node_id = Some(node_id);
 
         // Apply base CSS styles and animation from stylesheet if element has an ID
-        if let Some(ref stylesheet) = self.stylesheet {
-            if let Some(id) = element.element_id() {
-                // Apply base styles (background, opacity, border-radius, etc.)
-                if let Some(base_style) = stylesheet.get(id) {
-                    Self::apply_element_style_to_props(&mut props, base_style);
-                }
-                // Apply CSS animation (only if no motion animation is already set)
-                if props.motion.is_none() {
-                    if let Some(motion) = stylesheet.resolve_animation(id) {
-                        props.motion = Some(motion);
-                    }
-                }
+        if let Some(ref stylesheet) = self.stylesheet
+            && let Some(id) = element.element_id()
+        {
+            // Apply base styles (background, opacity, border-radius, etc.)
+            if let Some(base_style) = stylesheet.get(id) {
+                Self::apply_element_style_to_props(&mut props, base_style);
+            }
+            // Apply CSS animation (only if no motion animation is already set)
+            if props.motion.is_none()
+                && let Some(motion) = stylesheet.resolve_animation(id)
+            {
+                props.motion = Some(motion);
             }
         }
 
@@ -560,24 +560,22 @@ impl RenderTree {
                 .register_child_index(child_node_id, index, total_children);
 
             // If parent is Motion, propagate motion animation to child
-            if is_motion {
-                if let Some(motion_config) = element.motion_animation_for_child(index) {
-                    // Append child index to stable key for unique stagger animations
-                    let child_stable_id = motion_stable_id
-                        .as_ref()
-                        .map(|key| format!("{}:child:{}", key, index));
-                    self.collect_render_props_boxed_with_motion(
-                        child_builder.as_ref(),
-                        child_node_id,
-                        Some(motion_config),
-                        child_stable_id,
-                        motion_should_replay,
-                        motion_is_suspended,
-                        motion_is_exiting,
-                        motion_on_ready_callback.clone(),
-                    );
-                    continue;
-                }
+            if is_motion && let Some(motion_config) = element.motion_animation_for_child(index) {
+                // Append child index to stable key for unique stagger animations
+                let child_stable_id = motion_stable_id
+                    .as_ref()
+                    .map(|key| format!("{}:child:{}", key, index));
+                self.collect_render_props_boxed_with_motion(
+                    child_builder.as_ref(),
+                    child_node_id,
+                    Some(motion_config),
+                    child_stable_id,
+                    motion_should_replay,
+                    motion_is_suspended,
+                    motion_is_exiting,
+                    motion_on_ready_callback.clone(),
+                );
+                continue;
             }
             self.collect_render_props_boxed(child_builder.as_ref(), child_node_id);
         }
@@ -614,25 +612,23 @@ impl RenderTree {
 
             // Queue replay with the CHILD's stable key (includes :child:N suffix)
             // This ensures replay uses the same key as initialize_motion_animations
-            if motion_should_replay {
-                if let Some(ref key) = motion_stable_id {
-                    crate::render_state::queue_global_motion_replay(key.clone());
-                }
+            if motion_should_replay && let Some(ref key) = motion_stable_id {
+                crate::render_state::queue_global_motion_replay(key.clone());
             }
         } else {
             // Apply base CSS styles and animation from stylesheet if element has an ID
-            if let Some(ref stylesheet) = self.stylesheet {
-                if let Some(id) = element.element_id() {
-                    // Apply base styles (background, opacity, border-radius, etc.)
-                    if let Some(base_style) = stylesheet.get(id) {
-                        Self::apply_element_style_to_props(&mut props, base_style);
-                    }
-                    // Apply CSS animation (only if no motion animation is already set)
-                    if props.motion.is_none() {
-                        if let Some(motion) = stylesheet.resolve_animation(id) {
-                            props.motion = Some(motion);
-                        }
-                    }
+            if let Some(ref stylesheet) = self.stylesheet
+                && let Some(id) = element.element_id()
+            {
+                // Apply base styles (background, opacity, border-radius, etc.)
+                if let Some(base_style) = stylesheet.get(id) {
+                    Self::apply_element_style_to_props(&mut props, base_style);
+                }
+                // Apply CSS animation (only if no motion animation is already set)
+                if props.motion.is_none()
+                    && let Some(motion) = stylesheet.resolve_animation(id)
+                {
+                    props.motion = Some(motion);
                 }
             }
         }

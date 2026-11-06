@@ -112,10 +112,9 @@ impl RenderTree {
                 for &node_id in &all_node_ids {
                     if self
                         .complex_selector_matches(selector, node_id, &empty_set, &empty_set, None)
+                        && let Some(render_node) = self.render_nodes.get_mut(&node_id)
                     {
-                        if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
-                            Self::apply_element_style_to_props(&mut render_node.props, style);
-                        }
+                        Self::apply_element_style_to_props(&mut render_node.props, style);
                     }
                 }
             }
@@ -134,10 +133,10 @@ impl RenderTree {
             for class_name in &state_class_names {
                 if let Some(node_ids) = class_to_nodes.get(*class_name) {
                     for &node_id in node_ids {
-                        if !self.base_styles.contains_key(&node_id) {
-                            if let Some(render_node) = self.render_nodes.get(&node_id) {
-                                self.base_styles.insert(node_id, render_node.props.clone());
-                            }
+                        if !self.base_styles.contains_key(&node_id)
+                            && let Some(render_node) = self.render_nodes.get(&node_id)
+                        {
+                            self.base_styles.insert(node_id, render_node.props.clone());
                         }
                     }
                 }
@@ -154,20 +153,20 @@ impl RenderTree {
             .collect();
 
         for (element_id, node_id) in &registered_ids {
-            if let Some(base_style) = stylesheet.get(element_id) {
-                if let Some(render_node) = self.render_nodes.get_mut(node_id) {
-                    Self::apply_element_style_to_props(&mut render_node.props, base_style);
-                }
+            if let Some(base_style) = stylesheet.get(element_id)
+                && let Some(render_node) = self.render_nodes.get_mut(node_id)
+            {
+                Self::apply_element_style_to_props(&mut render_node.props, base_style);
             }
         }
 
         // Sync CSS text-align into baked TextData for text nodes.
         // text-align may have been set by CSS above but TextData was built before CSS.
         for render_node in self.render_nodes.values_mut() {
-            if let Some(ta) = render_node.props.text_align {
-                if let ElementType::Text(ref mut text_data) = render_node.element_type {
-                    text_data.align = ta;
-                }
+            if let Some(ta) = render_node.props.text_align
+                && let ElementType::Text(ref mut text_data) = render_node.element_type
+            {
+                text_data.align = ta;
             }
         }
 
@@ -293,10 +292,10 @@ impl RenderTree {
                         }
                     }
                 }
-                if !tag_styles.is_empty() {
-                    if let Some(render_node) = self.render_nodes.get_mut(&svg_node) {
-                        render_node.props.svg_tag_styles = tag_styles;
-                    }
+                if !tag_styles.is_empty()
+                    && let Some(render_node) = self.render_nodes.get_mut(&svg_node)
+                {
+                    render_node.props.svg_tag_styles = tag_styles;
                 }
             }
         }
@@ -343,48 +342,47 @@ impl RenderTree {
             });
             if let Some((td, td_color, td_thick, ws, to, ta, fill, stroke, stroke_w, fstyle)) =
                 parent_text_props
+                && let Some(node) = self.render_nodes.get_mut(&node_id)
             {
-                if let Some(node) = self.render_nodes.get_mut(&node_id) {
-                    if node.props.text_decoration.is_none() {
-                        node.props.text_decoration = td;
+                if node.props.text_decoration.is_none() {
+                    node.props.text_decoration = td;
+                }
+                if node.props.text_decoration_color.is_none() {
+                    node.props.text_decoration_color = td_color;
+                }
+                if node.props.text_decoration_thickness.is_none() {
+                    node.props.text_decoration_thickness = td_thick;
+                }
+                if node.props.white_space.is_none() {
+                    node.props.white_space = ws;
+                }
+                if node.props.text_overflow.is_none() {
+                    node.props.text_overflow = to;
+                }
+                // text_color is NOT copied here either; see
+                // `propagate_inherited_text`.
+                if node.props.text_align.is_none()
+                    && let Some(ta) = ta
+                {
+                    node.props.text_align = Some(ta);
+                    // Also update baked TextData.align so rendering uses the
+                    // inherited value (TextData is built before CSS post-pass)
+                    if let ElementType::Text(ref mut text_data) = node.element_type {
+                        text_data.align = ta;
                     }
-                    if node.props.text_decoration_color.is_none() {
-                        node.props.text_decoration_color = td_color;
-                    }
-                    if node.props.text_decoration_thickness.is_none() {
-                        node.props.text_decoration_thickness = td_thick;
-                    }
-                    if node.props.white_space.is_none() {
-                        node.props.white_space = ws;
-                    }
-                    if node.props.text_overflow.is_none() {
-                        node.props.text_overflow = to;
-                    }
-                    // text_color is NOT copied here either; see
-                    // `propagate_inherited_text`.
-                    if node.props.text_align.is_none() {
-                        if let Some(ta) = ta {
-                            node.props.text_align = Some(ta);
-                            // Also update baked TextData.align so rendering uses the
-                            // inherited value (TextData is built before CSS post-pass)
-                            if let ElementType::Text(ref mut text_data) = node.element_type {
-                                text_data.align = ta;
-                            }
-                        }
-                    }
-                    // SVG fill/stroke (CSS spec: inherited in SVG)
-                    if node.props.fill.is_none() {
-                        node.props.fill = fill;
-                    }
-                    if node.props.stroke.is_none() {
-                        node.props.stroke = stroke;
-                    }
-                    if node.props.stroke_width.is_none() {
-                        node.props.stroke_width = stroke_w;
-                    }
-                    if node.props.font_style.is_none() {
-                        node.props.font_style = fstyle;
-                    }
+                }
+                // SVG fill/stroke (CSS spec: inherited in SVG)
+                if node.props.fill.is_none() {
+                    node.props.fill = fill;
+                }
+                if node.props.stroke.is_none() {
+                    node.props.stroke = stroke;
+                }
+                if node.props.stroke_width.is_none() {
+                    node.props.stroke_width = stroke_w;
+                }
+                if node.props.font_style.is_none() {
+                    node.props.font_style = fstyle;
                 }
             }
         }
@@ -439,13 +437,10 @@ impl RenderTree {
                 if let Some(class_name) = selector.simple_class_name() {
                     if let Some(node_ids) = class_to_nodes.get(class_name) {
                         for &node_id in node_ids {
-                            if subtree_set.contains(&node_id) {
-                                if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
-                                    Self::apply_element_style_to_props(
-                                        &mut render_node.props,
-                                        style,
-                                    );
-                                }
+                            if subtree_set.contains(&node_id)
+                                && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+                            {
+                                Self::apply_element_style_to_props(&mut render_node.props, style);
                             }
                         }
                     }
@@ -456,10 +451,9 @@ impl RenderTree {
                 for &node_id in &subtree_nodes {
                     if self
                         .complex_selector_matches(selector, node_id, &empty_set, &empty_set, None)
+                        && let Some(render_node) = self.render_nodes.get_mut(&node_id)
                     {
-                        if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
-                            Self::apply_element_style_to_props(&mut render_node.props, style);
-                        }
+                        Self::apply_element_style_to_props(&mut render_node.props, style);
                     }
                 }
             }
@@ -476,10 +470,10 @@ impl RenderTree {
             for class_name in &state_class_names {
                 if let Some(node_ids) = class_to_nodes.get(*class_name) {
                     for &node_id in node_ids {
-                        if subtree_set.contains(&node_id) {
-                            if let Some(render_node) = self.render_nodes.get(&node_id) {
-                                self.base_styles.insert(node_id, render_node.props.clone());
-                            }
+                        if subtree_set.contains(&node_id)
+                            && let Some(render_node) = self.render_nodes.get(&node_id)
+                        {
+                            self.base_styles.insert(node_id, render_node.props.clone());
                         }
                     }
                 }
@@ -488,22 +482,21 @@ impl RenderTree {
 
         // Apply simple ID rules (highest specificity, overrides class selectors)
         for &node_id in &subtree_nodes {
-            if let Some(element_id) = self.element_registry.get_id(node_id) {
-                if let Some(base_style) = stylesheet.get(&element_id) {
-                    if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
-                        Self::apply_element_style_to_props(&mut render_node.props, base_style);
-                    }
-                }
+            if let Some(element_id) = self.element_registry.get_id(node_id)
+                && let Some(base_style) = stylesheet.get(&element_id)
+                && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+            {
+                Self::apply_element_style_to_props(&mut render_node.props, base_style);
             }
         }
 
         // Update Stateful base_render_props for subtree nodes with CSS-applied values
         for &node_id in &subtree_nodes {
             let _tree_scope = self.layout_tree.enter_scope();
-            if crate::stateful::has_stateful_base_updater(node_id) {
-                if let Some(render_node) = self.render_nodes.get(&node_id) {
-                    crate::stateful::update_stateful_base_props(node_id, render_node.props.clone());
-                }
+            if crate::stateful::has_stateful_base_updater(node_id)
+                && let Some(render_node) = self.render_nodes.get(&node_id)
+            {
+                crate::stateful::update_stateful_base_props(node_id, render_node.props.clone());
             }
         }
 

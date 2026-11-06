@@ -2070,10 +2070,10 @@ pub trait DrawContext {
             self.draw_shadow(rect, cr, sh);
         }
         self.fill_rect(rect, cr, brush);
-        if let Some((width, color)) = border {
-            if width > 0.0 {
-                self.stroke_rect(rect, cr, &Stroke::new(width), Brush::Solid(color));
-            }
+        if let Some((width, color)) = border
+            && width > 0.0
+        {
+            self.stroke_rect(rect, cr, &Stroke::new(width), Brush::Solid(color));
         }
     }
 

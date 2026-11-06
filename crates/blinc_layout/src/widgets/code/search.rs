@@ -9,10 +9,10 @@ pub(super) fn close_search_overlay(data: &mut CodeEditorData) {
     data.replace_active = false;
     data.search_query.clear();
     data.search_matches.clear();
-    if let Some(handle) = data.search_overlay_handle.take() {
-        if let Some(ctx) = crate::overlay_state::OverlayContext::try_get() {
-            ctx.overlay_manager().lock().unwrap().close(handle);
-        }
+    if let Some(handle) = data.search_overlay_handle.take()
+        && let Some(ctx) = crate::overlay_state::OverlayContext::try_get()
+    {
+        ctx.overlay_manager().lock().unwrap().close(handle);
     }
     if let Ok(mut i) = data.search_input_state.lock() {
         i.value.clear();

@@ -348,12 +348,11 @@ impl Router {
                 let handle = blinc_animation::get_scheduler();
 
                 // Suspend the old route's animations
-                if let Some(ref old_path) = state.active_route_path {
-                    if *old_path != route_path {
-                        if let Some(&scope) = state.route_scopes.get(old_path) {
-                            blinc_animation::suspension::suspend_scope(scope, &handle);
-                        }
-                    }
+                if let Some(ref old_path) = state.active_route_path
+                    && *old_path != route_path
+                    && let Some(&scope) = state.route_scopes.get(old_path)
+                {
+                    blinc_animation::suspension::suspend_scope(scope, &handle);
                 }
 
                 // Get or create scope for the new route
@@ -605,10 +604,10 @@ static DEEP_LINK_HANDLER: std::sync::Mutex<Option<DeepLinkFn>> = std::sync::Mute
 /// Called automatically by platform runners (Android/iOS/Desktop).
 /// Users don't need to call this directly.
 pub fn dispatch_deep_link(uri: &str) {
-    if let Ok(guard) = DEEP_LINK_HANDLER.lock() {
-        if let Some(ref handler) = *guard {
-            handler(uri);
-        }
+    if let Ok(guard) = DEEP_LINK_HANDLER.lock()
+        && let Some(ref handler) = *guard
+    {
+        handler(uri);
     }
 }
 

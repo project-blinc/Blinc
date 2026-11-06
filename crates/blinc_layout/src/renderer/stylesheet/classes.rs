@@ -244,10 +244,10 @@ impl RenderTree {
             .then(|| self.matching_animation(node, stylesheet))
             .flatten();
         change(self);
-        if let (Some(before), Some(spec)) = (before, spec) {
-            if let Some(after) = self.snapshot_keyframe_properties(node) {
-                self.detect_and_start_transitions(node, &before, &after, &spec);
-            }
+        if let (Some(before), Some(spec)) = (before, spec)
+            && let Some(after) = self.snapshot_keyframe_properties(node)
+        {
+            self.detect_and_start_transitions(node, &before, &after, &spec);
         }
         if ease {
             let animation_after = self.matching_animation(node, stylesheet);
@@ -340,15 +340,15 @@ impl RenderTree {
 
     /// What the node is without any class's rules, kept so it can be put back.
     fn keep_snapshots(&mut self, node: LayoutNodeId) {
-        if !self.base_styles.contains_key(&node) {
-            if let Some(render_node) = self.render_nodes.get(&node) {
-                self.base_styles.insert(node, render_node.props.clone());
-            }
+        if !self.base_styles.contains_key(&node)
+            && let Some(render_node) = self.render_nodes.get(&node)
+        {
+            self.base_styles.insert(node, render_node.props.clone());
         }
-        if !self.base_taffy_styles.contains_key(&node) {
-            if let Some(style) = self.layout_tree.get_style(node) {
-                self.base_taffy_styles.insert(node, style);
-            }
+        if !self.base_taffy_styles.contains_key(&node)
+            && let Some(style) = self.layout_tree.get_style(node)
+        {
+            self.base_taffy_styles.insert(node, style);
         }
     }
 

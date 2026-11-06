@@ -214,10 +214,10 @@ impl Drop for RichTextData {
     fn drop(&mut self) {
         // Make sure we don't leak the tick callback if the editor data
         // is dropped while still focused.
-        if let Some(id) = self.tick_callback_id.take() {
-            if let Some(scheduler) = try_get_scheduler() {
-                scheduler.remove_tick_callback(id);
-            }
+        if let Some(id) = self.tick_callback_id.take()
+            && let Some(scheduler) = try_get_scheduler()
+        {
+            scheduler.remove_tick_callback(id);
         }
     }
 }
@@ -349,20 +349,20 @@ impl RichTextData {
         self.set_cursor_visible(focused);
         if focused {
             crate::widgets::text_input::increment_focus_count();
-            if self.tick_callback_id.is_none() {
-                if let Some(scheduler) = try_get_scheduler() {
-                    // Empty tick — we just need the scheduler to keep
-                    // ticking so it raises needs_redraw each frame.
-                    self.tick_callback_id = scheduler.register_tick_callback(|_dt| {});
-                }
+            if self.tick_callback_id.is_none()
+                && let Some(scheduler) = try_get_scheduler()
+            {
+                // Empty tick — we just need the scheduler to keep
+                // ticking so it raises needs_redraw each frame.
+                self.tick_callback_id = scheduler.register_tick_callback(|_dt| {});
             }
         } else {
             crate::widgets::text_input::decrement_focus_count();
             crate::widgets::text_input::clear_focused_editable_node();
-            if let Some(id) = self.tick_callback_id.take() {
-                if let Some(scheduler) = try_get_scheduler() {
-                    scheduler.remove_tick_callback(id);
-                }
+            if let Some(id) = self.tick_callback_id.take()
+                && let Some(scheduler) = try_get_scheduler()
+            {
+                scheduler.remove_tick_callback(id);
             }
         }
     }

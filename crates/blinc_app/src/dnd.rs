@@ -51,9 +51,9 @@ pub fn clear_file_drop_handler() {
 
 /// Internal: dispatch a drop event to the registered handler
 pub(crate) fn dispatch_drop_event(event: DropEvent) {
-    if let Ok(guard) = DROP_HANDLER.lock() {
-        if let Some(ref handler) = *guard {
-            handler(event);
-        }
+    if let Ok(guard) = DROP_HANDLER.lock()
+        && let Some(ref handler) = *guard
+    {
+        handler(event);
     }
 }

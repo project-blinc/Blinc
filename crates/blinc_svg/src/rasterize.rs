@@ -192,7 +192,7 @@ impl RasterizedSvg {
     /// while preserving the original alpha channel. Output is premultiplied
     /// alpha for correct GPU blending.
     pub fn apply_tint(&mut self, tint: blinc_core::Color) {
-        for chunk in self.pixels.chunks_exact_mut(4) {
+        for chunk in self.pixels.as_chunks_mut::<4>().0 {
             let alpha = chunk[3] as f32 / 255.0;
             if alpha > 0.0 {
                 // Calculate final alpha (original alpha * tint alpha)
@@ -225,7 +225,7 @@ impl RasterizedSvg {
 fn unpremultiply_alpha(data: &[u8]) -> Vec<u8> {
     let mut result = Vec::with_capacity(data.len());
 
-    for chunk in data.chunks_exact(4) {
+    for chunk in data.as_chunks::<4>().0 {
         let a = chunk[3] as f32 / 255.0;
         if a > 0.0 {
             // Unpremultiply: RGB = RGB_premul / A

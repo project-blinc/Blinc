@@ -234,17 +234,18 @@ impl RouteTrie {
         // Root "/" match: empty segments
         if segments.is_empty() {
             for node in &self.roots {
-                if let SegmentType::Static(ref s) = node.segment {
-                    if s.is_empty() && node.route_index.is_some() {
-                        return Some(MatchedRoute {
-                            path: "/".to_string(),
-                            name: node.route_name.clone(),
-                            params: RouteParams::new(),
-                            query,
-                            view_index: node.route_index.unwrap(),
-                            transition: node.route_transition.clone(),
-                        });
-                    }
+                if let SegmentType::Static(ref s) = node.segment
+                    && s.is_empty()
+                    && node.route_index.is_some()
+                {
+                    return Some(MatchedRoute {
+                        path: "/".to_string(),
+                        name: node.route_name.clone(),
+                        params: RouteParams::new(),
+                        query,
+                        view_index: node.route_index.unwrap(),
+                        transition: node.route_transition.clone(),
+                    });
                 }
             }
         }
@@ -339,18 +340,18 @@ fn match_recursive(
     // Priority: static > param > wildcard
     // 1. Try static match
     for node in nodes {
-        if let SegmentType::Static(ref s) = node.segment {
-            if s == segment {
-                if depth + 1 == segments.len() && node.route_index.is_some() {
-                    return Some((
-                        node.route_index.unwrap(),
-                        node.route_name.clone(),
-                        node.route_transition.clone(),
-                    ));
-                }
-                if let Some(result) = match_recursive(&node.children, segments, depth + 1, params) {
-                    return Some(result);
-                }
+        if let SegmentType::Static(ref s) = node.segment
+            && s == segment
+        {
+            if depth + 1 == segments.len() && node.route_index.is_some() {
+                return Some((
+                    node.route_index.unwrap(),
+                    node.route_name.clone(),
+                    node.route_transition.clone(),
+                ));
+            }
+            if let Some(result) = match_recursive(&node.children, segments, depth + 1, params) {
+                return Some(result);
             }
         }
     }

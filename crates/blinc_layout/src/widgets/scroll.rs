@@ -695,10 +695,11 @@ impl ScrollPhysics {
         // a momentum stream interrupted by a new gesture) leaves
         // `in_momentum_mode` latched and subsequent scrolls are clamped
         // to zero overscroll forever.
-        if let Some(last_time) = self.last_scroll_time {
-            if current_time - last_time > 100.0 && self.in_momentum_mode {
-                self.in_momentum_mode = false;
-            }
+        if let Some(last_time) = self.last_scroll_time
+            && current_time - last_time > 100.0
+            && self.in_momentum_mode
+        {
+            self.in_momentum_mode = false;
         }
         // Calculate velocity from delta and time since last event
         if let Some(last_time) = self.last_scroll_time {
@@ -819,13 +820,12 @@ impl ScrollPhysics {
         // the Decelerating state run the momentum.
         let has_velocity = self.velocity_x.abs() > self.config.velocity_threshold
             || self.velocity_y.abs() > self.config.velocity_threshold;
-        if has_velocity {
-            if let Some(new_state) = self
+        if has_velocity
+            && let Some(new_state) = self
                 .state
                 .on_event(blinc_core::events::event_types::SCROLL_END)
-            {
-                self.state = new_state;
-            }
+        {
+            self.state = new_state;
         }
     }
 
@@ -1095,28 +1095,28 @@ impl ScrollPhysics {
                 const SETTLE_EPS: f32 = 0.5;
 
                 // Read vertical spring value
-                if let Some(spring_id) = self.spring_y {
-                    if let Some(spring) = scheduler.get_spring(spring_id) {
-                        let at_target = (spring.value() - spring.target()).abs() < SETTLE_EPS;
-                        if spring.is_settled() || at_target {
-                            self.offset_y = spring.target();
-                        } else {
-                            self.offset_y = spring.value();
-                            still_bouncing = true;
-                        }
+                if let Some(spring_id) = self.spring_y
+                    && let Some(spring) = scheduler.get_spring(spring_id)
+                {
+                    let at_target = (spring.value() - spring.target()).abs() < SETTLE_EPS;
+                    if spring.is_settled() || at_target {
+                        self.offset_y = spring.target();
+                    } else {
+                        self.offset_y = spring.value();
+                        still_bouncing = true;
                     }
                 }
 
                 // Read horizontal spring value
-                if let Some(spring_id) = self.spring_x {
-                    if let Some(spring) = scheduler.get_spring(spring_id) {
-                        let at_target = (spring.value() - spring.target()).abs() < SETTLE_EPS;
-                        if spring.is_settled() || at_target {
-                            self.offset_x = spring.target();
-                        } else {
-                            self.offset_x = spring.value();
-                            still_bouncing = true;
-                        }
+                if let Some(spring_id) = self.spring_x
+                    && let Some(spring) = scheduler.get_spring(spring_id)
+                {
+                    let at_target = (spring.value() - spring.target()).abs() < SETTLE_EPS;
+                    if spring.is_settled() || at_target {
+                        self.offset_x = spring.target();
+                    } else {
+                        self.offset_x = spring.value();
+                        still_bouncing = true;
                     }
                 }
 
@@ -1461,14 +1461,14 @@ impl ScrollPhysics {
         // Read opacity spring value if animating
         if let Some(scheduler_arc) = self.scheduler.upgrade() {
             let scheduler = scheduler_arc.lock().unwrap();
-            if let Some(spring_id) = self.scrollbar_opacity_spring {
-                if let Some(spring) = scheduler.get_spring(spring_id) {
-                    self.scrollbar_opacity = spring.value();
-                    if !spring.is_settled() {
-                        animating = true;
-                    } else {
-                        self.scrollbar_opacity = spring.target();
-                    }
+            if let Some(spring_id) = self.scrollbar_opacity_spring
+                && let Some(spring) = scheduler.get_spring(spring_id)
+            {
+                self.scrollbar_opacity = spring.value();
+                if !spring.is_settled() {
+                    animating = true;
+                } else {
+                    self.scrollbar_opacity = spring.target();
                 }
             }
         }

@@ -306,10 +306,10 @@ impl ComplexSelector {
             return None;
         }
         let parts = &self.segments[0].0.parts;
-        if parts.len() == 1 {
-            if let SelectorPart::Class(name) = &parts[0] {
-                return Some(name.as_str());
-            }
+        if parts.len() == 1
+            && let SelectorPart::Class(name) = &parts[0]
+        {
+            return Some(name.as_str());
         }
         None
     }

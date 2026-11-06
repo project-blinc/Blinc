@@ -165,17 +165,17 @@ impl RenderContext {
                         let after_eq = abs_attr + attr.len() + 1;
                         if after_eq < s.len() {
                             let quote = s.as_bytes()[after_eq];
-                            if quote == b'"' || quote == b'\'' {
-                                if let Some(end_quote) = s[after_eq + 1..].find(quote as char) {
-                                    let remove_end = after_eq + 1 + end_quote + 1;
-                                    let remove_start =
-                                        if abs_attr > 0 && s.as_bytes()[abs_attr - 1] == b' ' {
-                                            abs_attr - 1
-                                        } else {
-                                            abs_attr
-                                        };
-                                    s.replace_range(remove_start..remove_end, "");
-                                }
+                            if (quote == b'"' || quote == b'\'')
+                                && let Some(end_quote) = s[after_eq + 1..].find(quote as char)
+                            {
+                                let remove_end = after_eq + 1 + end_quote + 1;
+                                let remove_start =
+                                    if abs_attr > 0 && s.as_bytes()[abs_attr - 1] == b' ' {
+                                        abs_attr - 1
+                                    } else {
+                                        abs_attr
+                                    };
+                                s.replace_range(remove_start..remove_end, "");
                             }
                         }
                     }
@@ -207,15 +207,15 @@ impl RenderContext {
                 }
 
                 // Insert new attributes into the opening <svg tag
-                if !svg_attrs.is_empty() {
-                    if let Some(pos) = modified.find('>') {
-                        let insert_pos = if pos > 0 && modified.as_bytes()[pos - 1] == b'/' {
-                            pos - 1
-                        } else {
-                            pos
-                        };
-                        modified.insert_str(insert_pos, &svg_attrs);
-                    }
+                if !svg_attrs.is_empty()
+                    && let Some(pos) = modified.find('>')
+                {
+                    let insert_pos = if pos > 0 && modified.as_bytes()[pos - 1] == b'/' {
+                        pos - 1
+                    } else {
+                        pos
+                    };
+                    modified.insert_str(insert_pos, &svg_attrs);
                 }
 
                 // Override fill/stroke on individual shape elements
@@ -330,10 +330,10 @@ impl RenderContext {
                             if let Some(opacity) = effective_opacity {
                                 elem_attrs.push_str(&format!(r#" opacity="{}""#, opacity));
                             }
-                            if let Some(ref path_data) = svg.svg_path_data {
-                                if *tag == "<path" {
-                                    elem_attrs.push_str(&format!(r#" d="{}""#, path_data));
-                                }
+                            if let Some(ref path_data) = svg.svg_path_data
+                                && *tag == "<path"
+                            {
+                                elem_attrs.push_str(&format!(r#" d="{}""#, path_data));
                             }
                             modified.insert_str(insert_at, &elem_attrs);
                             search_from = insert_at + elem_attrs.len() + 1;

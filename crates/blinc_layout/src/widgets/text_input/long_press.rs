@@ -127,13 +127,13 @@ pub fn is_long_press_armed() -> bool {
 /// before the cursor-move logic so a small finger jitter doesn't
 /// kill a still-valid long press.
 pub fn check_long_press_drift(current_x: f32, current_y: f32) {
-    if let Ok(mut slot) = LONG_PRESS_ARM.lock() {
-        if let Some(arm) = slot.as_ref() {
-            let dx = (current_x - arm.start_x).abs();
-            let dy = (current_y - arm.start_y).abs();
-            if dx > LONG_PRESS_MAX_DRIFT_PX || dy > LONG_PRESS_MAX_DRIFT_PX {
-                *slot = None;
-            }
+    if let Ok(mut slot) = LONG_PRESS_ARM.lock()
+        && let Some(arm) = slot.as_ref()
+    {
+        let dx = (current_x - arm.start_x).abs();
+        let dy = (current_y - arm.start_y).abs();
+        if dx > LONG_PRESS_MAX_DRIFT_PX || dy > LONG_PRESS_MAX_DRIFT_PX {
+            *slot = None;
         }
     }
 }

@@ -61,13 +61,13 @@ impl RenderTree {
                 .unwrap_or((viewport_width, viewport_height));
 
             // Update physics with dimensions
-            if let Some(physics) = self.scroll_physics.get(&node_id) {
-                if let Ok(mut p) = physics.lock() {
-                    p.viewport_width = viewport_width;
-                    p.viewport_height = viewport_height;
-                    p.content_width = content_width;
-                    p.content_height = content_height;
-                }
+            if let Some(physics) = self.scroll_physics.get(&node_id)
+                && let Ok(mut p) = physics.lock()
+            {
+                p.viewport_width = viewport_width;
+                p.viewport_height = viewport_height;
+                p.content_width = content_width;
+                p.content_height = content_height;
             }
         }
     }
@@ -778,15 +778,15 @@ impl RenderTree {
         // path is active.
         self.scroll_offsets
             .insert(scroll_container, (current_x, clamped_y));
-        if let Some(physics) = self.scroll_physics.get(&scroll_container) {
-            if let Ok(mut p) = physics.try_lock() {
-                p.offset_x = current_x;
-                p.offset_y = clamped_y;
-                // Snap velocity to zero so the scroll doesn't keep
-                // drifting after we set the offset programmatically.
-                p.velocity_x = 0.0;
-                p.velocity_y = 0.0;
-            }
+        if let Some(physics) = self.scroll_physics.get(&scroll_container)
+            && let Ok(mut p) = physics.try_lock()
+        {
+            p.offset_x = current_x;
+            p.offset_y = clamped_y;
+            // Snap velocity to zero so the scroll doesn't keep
+            // drifting after we set the offset programmatically.
+            p.velocity_x = 0.0;
+            p.velocity_y = 0.0;
         }
 
         true

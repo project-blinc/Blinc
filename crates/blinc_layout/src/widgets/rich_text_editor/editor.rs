@@ -350,17 +350,16 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                     13 => {
                         // Enter — commit the link
                         if let super::state::PickerState::Link { draft } = data.picker.clone() {
-                            if !draft.is_empty() {
-                                if let Some(sel) = data.selection {
-                                    if !sel.is_empty() {
-                                        data.push_undo();
-                                        super::format::apply_mark_to_selection(
-                                            &mut data.document,
-                                            sel,
-                                            super::format::Mark::Link(Some(draft)),
-                                        );
-                                    }
-                                }
+                            if !draft.is_empty()
+                                && let Some(sel) = data.selection
+                                && !sel.is_empty()
+                            {
+                                data.push_undo();
+                                super::format::apply_mark_to_selection(
+                                    &mut data.document,
+                                    sel,
+                                    super::format::Mark::Link(Some(draft)),
+                                );
                             }
                             data.picker = super::state::PickerState::None;
                             drop(data);
@@ -435,13 +434,13 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                     }
                     // Cmd+C — copy selected text to system clipboard
                     67 => {
-                        if let Some(sel) = data.selection {
-                            if !sel.is_empty() {
-                                let (s, e) = sel.ordered();
-                                let plain = data.document.plain_text_range(s, e);
-                                if !plain.is_empty() {
-                                    crate::widgets::text_edit::clipboard_write(&plain);
-                                }
+                        if let Some(sel) = data.selection
+                            && !sel.is_empty()
+                        {
+                            let (s, e) = sel.ordered();
+                            let plain = data.document.plain_text_range(s, e);
+                            if !plain.is_empty() {
+                                crate::widgets::text_edit::clipboard_write(&plain);
                             }
                         }
                         // Copy never mutates the document, so we don't
@@ -449,37 +448,37 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                     }
                     // Cmd+X — cut: copy then delete
                     88 if !ctx.shift => {
-                        if let Some(sel) = data.selection {
-                            if !sel.is_empty() {
-                                let (s, e) = sel.ordered();
-                                let plain = data.document.plain_text_range(s, e);
-                                if !plain.is_empty() {
-                                    crate::widgets::text_edit::clipboard_write(&plain);
-                                }
-                                data.push_undo();
-                                data.selection = None;
-                                let new_pos = delete_selection(&mut data.document, sel);
-                                data.set_cursor(new_pos);
-                                changed = true;
+                        if let Some(sel) = data.selection
+                            && !sel.is_empty()
+                        {
+                            let (s, e) = sel.ordered();
+                            let plain = data.document.plain_text_range(s, e);
+                            if !plain.is_empty() {
+                                crate::widgets::text_edit::clipboard_write(&plain);
                             }
+                            data.push_undo();
+                            data.selection = None;
+                            let new_pos = delete_selection(&mut data.document, sel);
+                            data.set_cursor(new_pos);
+                            changed = true;
                         }
                     }
                     // Cmd+V — paste: replace selection (if any) with
                     // clipboard text. Newlines in the clipboard become
                     // soft breaks via `insert_text`.
                     86 => {
-                        if let Some(text) = crate::widgets::text_edit::clipboard_read() {
-                            if !text.is_empty() {
-                                data.push_undo();
-                                let mut pos = data.cursor;
-                                if let Some(sel) = data.selection.take() {
-                                    pos = delete_selection(&mut data.document, sel);
-                                }
-                                let fmt = data.active_format.clone();
-                                let new_pos = insert_text(&mut data.document, pos, &text, &fmt);
-                                data.set_cursor(new_pos);
-                                changed = true;
+                        if let Some(text) = crate::widgets::text_edit::clipboard_read()
+                            && !text.is_empty()
+                        {
+                            data.push_undo();
+                            let mut pos = data.cursor;
+                            if let Some(sel) = data.selection.take() {
+                                pos = delete_selection(&mut data.document, sel);
                             }
+                            let fmt = data.active_format.clone();
+                            let new_pos = insert_text(&mut data.document, pos, &text, &fmt);
+                            data.set_cursor(new_pos);
+                            changed = true;
                         }
                     }
                     // Cmd+Alt+0 — paragraph
@@ -665,10 +664,10 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
 /// current cursor / selection covers — used by block-level ops that
 /// need a range even when the user has no explicit selection.
 fn block_selection(data: &super::state::RichTextData) -> super::cursor::Selection {
-    if let Some(sel) = data.selection {
-        if !sel.is_empty() {
-            return sel;
-        }
+    if let Some(sel) = data.selection
+        && !sel.is_empty()
+    {
+        return sel;
     }
     super::cursor::Selection {
         anchor: data.cursor,
@@ -706,17 +705,17 @@ fn apply_block_kind(data: &mut super::state::RichTextData, kind: BlockKind) -> b
 /// active-format flag flipped), so the caller knows whether to bump
 /// the rebuild signal.
 fn toggle_mark(data: &mut super::state::RichTextData, mark: Mark) -> bool {
-    if let Some(sel) = data.selection {
-        if !sel.is_empty() {
-            data.push_undo();
-            let changed = apply_mark_to_selection(&mut data.document, sel, mark.clone());
-            // Refresh the active format from the cursor location so the
-            // toolbar (Phase 7) sees the new state.
-            data.active_format =
-                super::cursor::ActiveFormat::from_position(&data.document, data.cursor);
-            data.reset_cursor_blink();
-            return changed;
-        }
+    if let Some(sel) = data.selection
+        && !sel.is_empty()
+    {
+        data.push_undo();
+        let changed = apply_mark_to_selection(&mut data.document, sel, mark.clone());
+        // Refresh the active format from the cursor location so the
+        // toolbar (Phase 7) sees the new state.
+        data.active_format =
+            super::cursor::ActiveFormat::from_position(&data.document, data.cursor);
+        data.reset_cursor_blink();
+        return changed;
     }
 
     // No selection — flip the active format flag in place.

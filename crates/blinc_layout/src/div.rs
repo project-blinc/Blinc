@@ -3724,14 +3724,15 @@ impl Div {
     /// the other three sides get the uniform border instead of being empty.
     fn inherit_uniform_border_to_sides(&mut self) {
         // Only inherit if we have a uniform border and no per-side borders yet
-        if self.border_width > 0.0 && !self.border_sides.has_any() {
-            if let Some(color) = self.border_color {
-                let side = crate::element::BorderSide::new(self.border_width, color);
-                self.border_sides.top = Some(side);
-                self.border_sides.right = Some(side);
-                self.border_sides.bottom = Some(side);
-                self.border_sides.left = Some(side);
-            }
+        if self.border_width > 0.0
+            && !self.border_sides.has_any()
+            && let Some(color) = self.border_color
+        {
+            let side = crate::element::BorderSide::new(self.border_width, color);
+            self.border_sides.top = Some(side);
+            self.border_sides.right = Some(side);
+            self.border_sides.bottom = Some(side);
+            self.border_sides.left = Some(side);
         }
     }
 

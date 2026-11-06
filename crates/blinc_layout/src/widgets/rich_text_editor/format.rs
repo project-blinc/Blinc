@@ -358,11 +358,12 @@ fn merge_adjacent(spans: Vec<TextSpan>) -> Vec<TextSpan> {
         if span.start >= span.end {
             continue;
         }
-        if let Some(last) = out.last_mut() {
-            if last.end == span.start && spans_format_match(last, &span) {
-                last.end = span.end;
-                continue;
-            }
+        if let Some(last) = out.last_mut()
+            && last.end == span.start
+            && spans_format_match(last, &span)
+        {
+            last.end = span.end;
+            continue;
         }
         out.push(span);
     }

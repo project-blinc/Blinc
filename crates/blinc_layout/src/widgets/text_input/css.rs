@@ -34,15 +34,15 @@ pub(super) fn apply_css_overrides(
         if let Some(base) = stylesheet.get_class(class) {
             apply_style_to_config(cfg, base, visual);
         }
-        if let Some(s) = state {
-            if let Some(state_style) = stylesheet.get_class_with_state(class, s) {
-                apply_style_to_config(cfg, state_style, visual);
-            }
+        if let Some(s) = state
+            && let Some(state_style) = stylesheet.get_class_with_state(class, s)
+        {
+            apply_style_to_config(cfg, state_style, visual);
         }
-        if matches!(visual, TextFieldState::FocusedHovered) {
-            if let Some(s) = stylesheet.get_class_with_state(class, ElementState::Focus) {
-                apply_style_to_config(cfg, s, visual);
-            }
+        if matches!(visual, TextFieldState::FocusedHovered)
+            && let Some(s) = stylesheet.get_class_with_state(class, ElementState::Focus)
+        {
+            apply_style_to_config(cfg, s, visual);
         }
     }
 
@@ -52,15 +52,15 @@ pub(super) fn apply_css_overrides(
         if let Some(base) = stylesheet.get(element_id) {
             apply_style_to_config(cfg, base, visual);
         }
-        if let Some(s) = state {
-            if let Some(state_style) = stylesheet.get_with_state(element_id, s) {
-                apply_style_to_config(cfg, state_style, visual);
-            }
+        if let Some(s) = state
+            && let Some(state_style) = stylesheet.get_with_state(element_id, s)
+        {
+            apply_style_to_config(cfg, state_style, visual);
         }
-        if matches!(visual, TextFieldState::FocusedHovered) {
-            if let Some(focus_style) = stylesheet.get_with_state(element_id, ElementState::Focus) {
-                apply_style_to_config(cfg, focus_style, visual);
-            }
+        if matches!(visual, TextFieldState::FocusedHovered)
+            && let Some(focus_style) = stylesheet.get_with_state(element_id, ElementState::Focus)
+        {
+            apply_style_to_config(cfg, focus_style, visual);
         }
     }
 
@@ -163,16 +163,16 @@ pub(super) fn apply_style_to_config(
 /// The config with the stylesheet's rules for the field's state applied.
 pub(super) fn resolved_config(cfg: &TextInputConfig, d: &TextInputData) -> TextInputConfig {
     let mut cfg = cfg.clone();
-    if d.css_element_id.is_some() || !d.css_classes.is_empty() {
-        if let Some(stylesheet) = active_stylesheet() {
-            apply_css_overrides(
-                &mut cfg,
-                &stylesheet,
-                d.css_element_id.as_deref(),
-                &d.css_classes,
-                &d.visual,
-            );
-        }
+    if (d.css_element_id.is_some() || !d.css_classes.is_empty())
+        && let Some(stylesheet) = active_stylesheet()
+    {
+        apply_css_overrides(
+            &mut cfg,
+            &stylesheet,
+            d.css_element_id.as_deref(),
+            &d.css_classes,
+            &d.visual,
+        );
     }
     cfg
 }

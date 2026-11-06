@@ -91,24 +91,24 @@ impl SvgDocument {
                     let transformed_path = apply_transform(&blinc_path, &p.abs_transform());
 
                     // Handle fill
-                    if let Some(fill) = p.fill() {
-                        if let Some(brush) = fill_to_brush(fill) {
-                            commands.push(SvgDrawCommand::FillPath {
-                                path: transformed_path.clone(),
-                                brush,
-                            });
-                        }
+                    if let Some(fill) = p.fill()
+                        && let Some(brush) = fill_to_brush(fill)
+                    {
+                        commands.push(SvgDrawCommand::FillPath {
+                            path: transformed_path.clone(),
+                            brush,
+                        });
                     }
 
                     // Handle stroke
-                    if let Some(stroke) = p.stroke() {
-                        if let Some((blinc_stroke, brush)) = stroke_to_blinc(stroke) {
-                            commands.push(SvgDrawCommand::StrokePath {
-                                path: transformed_path,
-                                stroke: blinc_stroke,
-                                brush,
-                            });
-                        }
+                    if let Some(stroke) = p.stroke()
+                        && let Some((blinc_stroke, brush)) = stroke_to_blinc(stroke)
+                    {
+                        commands.push(SvgDrawCommand::StrokePath {
+                            path: transformed_path,
+                            stroke: blinc_stroke,
+                            brush,
+                        });
                     }
                 }
                 usvg::Node::Image(_) => {

@@ -46,36 +46,36 @@ pub fn set_active_window_actions(
 
 /// Start a window drag operation (for custom title bars)
 pub fn drag_window() {
-    if let Ok(actions) = ACTIONS.lock() {
-        if let Some(ref f) = actions.drag {
-            f();
-        }
+    if let Ok(actions) = ACTIONS.lock()
+        && let Some(ref f) = actions.drag
+    {
+        f();
     }
 }
 
 /// Minimize the window
 pub fn minimize_window() {
-    if let Ok(actions) = ACTIONS.lock() {
-        if let Some(ref f) = actions.minimize {
-            f();
-        }
+    if let Ok(actions) = ACTIONS.lock()
+        && let Some(ref f) = actions.minimize
+    {
+        f();
     }
 }
 
 /// Maximize/restore the window
 pub fn maximize_window() {
-    if let Ok(actions) = ACTIONS.lock() {
-        if let Some(ref f) = actions.maximize {
-            f();
-        }
+    if let Ok(actions) = ACTIONS.lock()
+        && let Some(ref f) = actions.maximize
+    {
+        f();
     }
 }
 
 /// Close the window
 pub fn close_window() {
-    if let Ok(actions) = ACTIONS.lock() {
-        if let Some(ref f) = actions.close {
-            f();
-        }
+    if let Ok(actions) = ACTIONS.lock()
+        && let Some(ref f) = actions.close
+    {
+        f();
     }
 }

@@ -32,10 +32,10 @@ impl RenderTree {
     pub fn update_flip_bounds(&mut self) {
         self.flip_previous_bounds.clear();
         for (node_id, _render_node) in &self.render_nodes {
-            if let Some(element_id) = self.element_registry.get_id(*node_id) {
-                if let Some(bounds) = self.layout_tree.get_absolute_bounds(*node_id) {
-                    self.flip_previous_bounds.insert(element_id, bounds);
-                }
+            if let Some(element_id) = self.element_registry.get_id(*node_id)
+                && let Some(bounds) = self.layout_tree.get_absolute_bounds(*node_id)
+            {
+                self.flip_previous_bounds.insert(element_id, bounds);
             }
         }
     }
@@ -116,12 +116,10 @@ impl RenderTree {
                                 &empty,
                                 &empty,
                                 None,
-                            ) {
-                                if let Some(ts) = rule.1.transition.as_ref() {
-                                    if let Some(t) = ts.get("transform") {
-                                        return Some(t);
-                                    }
-                                }
+                            ) && let Some(ts) = rule.1.transition.as_ref()
+                                && let Some(t) = ts.get("transform")
+                            {
+                                return Some(t);
                             }
                         }
                         None

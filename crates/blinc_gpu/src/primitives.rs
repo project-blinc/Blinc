@@ -2222,15 +2222,14 @@ impl PrimitiveBatch {
                     stack.push((entry.primitive_index, config));
                 }
                 LayerCommand::Pop => {
-                    if let Some((start_idx, config)) = stack.pop() {
-                        if !config.effects.is_empty()
+                    if let Some((start_idx, config)) = stack.pop()
+                        && (!config.effects.is_empty()
                             || config.blend_mode != blinc_core::BlendMode::Normal
                             || config.transform_3d.is_some()
-                            || config.opacity < 1.0
-                        {
-                            for i in start_idx..entry.primitive_index {
-                                indices.insert(i);
-                            }
+                            || config.opacity < 1.0)
+                    {
+                        for i in start_idx..entry.primitive_index {
+                            indices.insert(i);
                         }
                     }
                 }

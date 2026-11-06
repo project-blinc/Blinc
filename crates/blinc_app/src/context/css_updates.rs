@@ -372,124 +372,120 @@ impl RenderContext {
             };
 
             // Group opacity leaves child colors intact, including at zero.
-            if let Some(new_opacity) = read_f32(|p| p.opacity) {
-                if (new_opacity - meta.last_opacity).abs() > f32::EPSILON {
-                    let index = meta.layer_push_index.expect("validated CSS opacity group");
-                    let blinc_gpu::primitives::LayerCommand::Push { config } =
-                        &mut batch.layer_commands[index].command
-                    else {
-                        unreachable!("validated CSS opacity group");
-                    };
-                    config.opacity = new_opacity;
-                    meta.last_opacity = new_opacity;
-                    any_changed = true;
-                    record_changed = true;
-                }
+            if let Some(new_opacity) = read_f32(|p| p.opacity)
+                && (new_opacity - meta.last_opacity).abs() > f32::EPSILON
+            {
+                let index = meta.layer_push_index.expect("validated CSS opacity group");
+                let blinc_gpu::primitives::LayerCommand::Push { config } =
+                    &mut batch.layer_commands[index].command
+                else {
+                    unreachable!("validated CSS opacity group");
+                };
+                config.opacity = new_opacity;
+                meta.last_opacity = new_opacity;
+                any_changed = true;
+                record_changed = true;
             }
 
             // ---- background_color ----
             // Matching-based: only patches primitives whose `color`
             // matches `meta.last_background_color` exactly, so a
             // child with its own bg stays untouched.
-            if let Some(new_bg) = read_arr(|p| p.background_color) {
-                if let Some(last_bg) = meta.last_background_color {
-                    if new_bg != last_bg {
-                        if let Some(prims) = batch.primitives.get_mut(meta.primitive_range.clone())
-                        {
-                            for p in prims.iter_mut() {
-                                if p.color == last_bg {
-                                    p.color = new_bg;
-                                }
-                            }
+            if let Some(new_bg) = read_arr(|p| p.background_color)
+                && let Some(last_bg) = meta.last_background_color
+                && new_bg != last_bg
+            {
+                if let Some(prims) = batch.primitives.get_mut(meta.primitive_range.clone()) {
+                    for p in prims.iter_mut() {
+                        if p.color == last_bg {
+                            p.color = new_bg;
                         }
-                        meta.last_background_color = Some(new_bg);
-                        any_changed = true;
-                        record_changed = true;
                     }
                 }
+                meta.last_background_color = Some(new_bg);
+                any_changed = true;
+                record_changed = true;
             }
 
             // ---- border_color ----
-            if let Some(new_bc) = read_arr(|p| p.border_color) {
-                if let Some(last_bc) = meta.last_border_color {
-                    if new_bc != last_bc {
-                        if let Some(prims) = batch.primitives.get_mut(meta.primitive_range.clone())
-                        {
-                            for p in prims.iter_mut() {
-                                if p.border_color == last_bc {
-                                    p.border_color = new_bc;
-                                }
-                            }
+            if let Some(new_bc) = read_arr(|p| p.border_color)
+                && let Some(last_bc) = meta.last_border_color
+                && new_bc != last_bc
+            {
+                if let Some(prims) = batch.primitives.get_mut(meta.primitive_range.clone()) {
+                    for p in prims.iter_mut() {
+                        if p.border_color == last_bc {
+                            p.border_color = new_bc;
                         }
-                        meta.last_border_color = Some(new_bc);
-                        any_changed = true;
-                        record_changed = true;
                     }
                 }
+                meta.last_border_color = Some(new_bc);
+                any_changed = true;
+                record_changed = true;
             }
 
             // ---- border_width ----
-            if let Some(new_bw) = read_f32(|p| p.border_width) {
-                if (new_bw - meta.last_border_width).abs() > f32::EPSILON {
-                    if let Some(prims) = batch.primitives.get_mut(meta.primitive_range.clone()) {
-                        for p in prims.iter_mut() {
-                            if (p.border[0] - meta.last_border_width).abs() < f32::EPSILON {
-                                p.border[0] = new_bw;
-                            }
+            if let Some(new_bw) = read_f32(|p| p.border_width)
+                && (new_bw - meta.last_border_width).abs() > f32::EPSILON
+            {
+                if let Some(prims) = batch.primitives.get_mut(meta.primitive_range.clone()) {
+                    for p in prims.iter_mut() {
+                        if (p.border[0] - meta.last_border_width).abs() < f32::EPSILON {
+                            p.border[0] = new_bw;
                         }
                     }
-                    meta.last_border_width = new_bw;
-                    any_changed = true;
-                    record_changed = true;
                 }
+                meta.last_border_width = new_bw;
+                any_changed = true;
+                record_changed = true;
             }
 
             // ---- corner_radius ----
-            if let Some(new_cr) = read_arr(|p| p.corner_radius) {
-                if new_cr != meta.last_corner_radius {
-                    if let Some(prims) = batch.primitives.get_mut(meta.primitive_range.clone()) {
-                        for p in prims.iter_mut() {
-                            if p.corner_radius == meta.last_corner_radius {
-                                p.corner_radius = new_cr;
-                            }
+            if let Some(new_cr) = read_arr(|p| p.corner_radius)
+                && new_cr != meta.last_corner_radius
+            {
+                if let Some(prims) = batch.primitives.get_mut(meta.primitive_range.clone()) {
+                    for p in prims.iter_mut() {
+                        if p.corner_radius == meta.last_corner_radius {
+                            p.corner_radius = new_cr;
                         }
                     }
-                    meta.last_corner_radius = new_cr;
-                    any_changed = true;
-                    record_changed = true;
                 }
+                meta.last_corner_radius = new_cr;
+                any_changed = true;
+                record_changed = true;
             }
 
             // ---- shadow_params ----
-            if let Some(new_sp) = read_arr(|p| p.shadow_params) {
-                if new_sp != meta.last_shadow_params {
-                    if let Some(prims) = batch.primitives.get_mut(meta.primitive_range.clone()) {
-                        for p in prims.iter_mut() {
-                            if p.shadow == meta.last_shadow_params {
-                                p.shadow = new_sp;
-                            }
+            if let Some(new_sp) = read_arr(|p| p.shadow_params)
+                && new_sp != meta.last_shadow_params
+            {
+                if let Some(prims) = batch.primitives.get_mut(meta.primitive_range.clone()) {
+                    for p in prims.iter_mut() {
+                        if p.shadow == meta.last_shadow_params {
+                            p.shadow = new_sp;
                         }
                     }
-                    meta.last_shadow_params = new_sp;
-                    any_changed = true;
-                    record_changed = true;
                 }
+                meta.last_shadow_params = new_sp;
+                any_changed = true;
+                record_changed = true;
             }
 
             // ---- shadow_color ----
-            if let Some(new_sc) = read_arr(|p| p.shadow_color) {
-                if new_sc != meta.last_shadow_color {
-                    if let Some(prims) = batch.primitives.get_mut(meta.primitive_range.clone()) {
-                        for p in prims.iter_mut() {
-                            if p.shadow_color == meta.last_shadow_color {
-                                p.shadow_color = new_sc;
-                            }
+            if let Some(new_sc) = read_arr(|p| p.shadow_color)
+                && new_sc != meta.last_shadow_color
+            {
+                if let Some(prims) = batch.primitives.get_mut(meta.primitive_range.clone()) {
+                    for p in prims.iter_mut() {
+                        if p.shadow_color == meta.last_shadow_color {
+                            p.shadow_color = new_sc;
                         }
                     }
-                    meta.last_shadow_color = new_sc;
-                    any_changed = true;
-                    record_changed = true;
                 }
+                meta.last_shadow_color = new_sc;
+                any_changed = true;
+                record_changed = true;
             }
 
             // ---- rotate_x (3D tilt) ----
@@ -562,10 +558,8 @@ impl RenderContext {
 
             // Visual-only changes keep the recorded bounds. Records without bounds
             // contribute no damage.
-            if record_changed {
-                if let Some(rect) = meta.last_screen_aabb {
-                    damage_rects.push(rect);
-                }
+            if record_changed && let Some(rect) = meta.last_screen_aabb {
+                damage_rects.push(rect);
             }
         }
 

@@ -69,7 +69,7 @@ impl Record<'_> {
             let table = list
                 .get(at..at.checked_add(len).ok_or(Unsupported::LayerEffect)?)
                 .ok_or(Unsupported::LayerEffect)?;
-            for rows in table[8..].chunks_exact(8) {
+            for rows in table[8..].as_chunks::<8>().0 {
                 stops.push([rows[4], rows[3]]);
             }
             (list[at + 1], count)

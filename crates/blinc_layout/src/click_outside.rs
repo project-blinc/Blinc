@@ -63,10 +63,10 @@ pub fn register_click_outside_multi(
 /// touching its callback. Lets a parent overlay re-arm its inside-set when a
 /// child overlay opens / closes.
 pub fn update_click_outside_ids(key: &str, element_ids: &[String]) {
-    if let Ok(mut reg) = REGISTRY.lock() {
-        if let Some(entry) = reg.get_mut(key) {
-            entry.element_ids = element_ids.to_vec();
-        }
+    if let Ok(mut reg) = REGISTRY.lock()
+        && let Some(entry) = reg.get_mut(key)
+    {
+        entry.element_ids = element_ids.to_vec();
     }
 }
 

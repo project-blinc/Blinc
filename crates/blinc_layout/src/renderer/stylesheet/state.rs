@@ -139,16 +139,16 @@ impl RenderTree {
         };
 
         // Get or store base style for this node
-        if !self.base_styles.contains_key(&node_id) {
-            if let Some(render_node) = self.render_nodes.get(&node_id) {
-                self.base_styles.insert(node_id, render_node.props.clone());
-            }
+        if !self.base_styles.contains_key(&node_id)
+            && let Some(render_node) = self.render_nodes.get(&node_id)
+        {
+            self.base_styles.insert(node_id, render_node.props.clone());
         }
         // Get or store base taffy style for layout transition support
-        if !self.base_taffy_styles.contains_key(&node_id) {
-            if let Some(style) = self.layout_tree.get_style(node_id) {
-                self.base_taffy_styles.insert(node_id, style);
-            }
+        if !self.base_taffy_styles.contains_key(&node_id)
+            && let Some(style) = self.layout_tree.get_style(node_id)
+        {
+            self.base_taffy_styles.insert(node_id, style);
         }
 
         // Start with base style
@@ -228,11 +228,11 @@ impl RenderTree {
         if let Some(dynamic) = self.dynamic_classes.get(&node_id) {
             for style in dynamic.layers() {
                 Self::apply_element_style_to_props(&mut render_node.props, style);
-                if style.has_layout_props() {
-                    if let Some(mut taffy_style) = self.layout_tree.get_style(node_id) {
-                        Self::apply_element_style_to_taffy(&mut taffy_style, style);
-                        self.layout_tree.set_style(node_id, taffy_style);
-                    }
+                if style.has_layout_props()
+                    && let Some(mut taffy_style) = self.layout_tree.get_style(node_id)
+                {
+                    Self::apply_element_style_to_taffy(&mut taffy_style, style);
+                    self.layout_tree.set_style(node_id, taffy_style);
                 }
             }
         }
@@ -240,11 +240,11 @@ impl RenderTree {
         // Apply base stylesheet style (if any)
         if let Some(base_style) = base_lookup.as_deref() {
             Self::apply_element_style_to_props(&mut render_node.props, base_style);
-            if base_style.has_layout_props() {
-                if let Some(mut taffy_style) = self.layout_tree.get_style(node_id) {
-                    Self::apply_element_style_to_taffy(&mut taffy_style, base_style);
-                    self.layout_tree.set_style(node_id, taffy_style);
-                }
+            if base_style.has_layout_props()
+                && let Some(mut taffy_style) = self.layout_tree.get_style(node_id)
+            {
+                Self::apply_element_style_to_taffy(&mut taffy_style, base_style);
+                self.layout_tree.set_style(node_id, taffy_style);
             }
             applied = true;
         }
@@ -255,11 +255,11 @@ impl RenderTree {
         if let Some(hover_style) = hover_lookup.as_deref() {
             layers.push(hover_style.clone());
             Self::apply_element_style_to_props(&mut render_node.props, hover_style);
-            if hover_style.has_layout_props() {
-                if let Some(mut taffy_style) = self.layout_tree.get_style(node_id) {
-                    Self::apply_element_style_to_taffy(&mut taffy_style, hover_style);
-                    self.layout_tree.set_style(node_id, taffy_style);
-                }
+            if hover_style.has_layout_props()
+                && let Some(mut taffy_style) = self.layout_tree.get_style(node_id)
+            {
+                Self::apply_element_style_to_taffy(&mut taffy_style, hover_style);
+                self.layout_tree.set_style(node_id, taffy_style);
             }
             applied = true;
         }
@@ -268,11 +268,11 @@ impl RenderTree {
         if let Some(active_style) = active_lookup.as_deref() {
             layers.push(active_style.clone());
             Self::apply_element_style_to_props(&mut render_node.props, active_style);
-            if active_style.has_layout_props() {
-                if let Some(mut taffy_style) = self.layout_tree.get_style(node_id) {
-                    Self::apply_element_style_to_taffy(&mut taffy_style, active_style);
-                    self.layout_tree.set_style(node_id, taffy_style);
-                }
+            if active_style.has_layout_props()
+                && let Some(mut taffy_style) = self.layout_tree.get_style(node_id)
+            {
+                Self::apply_element_style_to_taffy(&mut taffy_style, active_style);
+                self.layout_tree.set_style(node_id, taffy_style);
             }
             applied = true;
         }
@@ -284,11 +284,11 @@ impl RenderTree {
         {
             layers.push(focus_style.clone());
             Self::apply_element_style_to_props(&mut render_node.props, focus_style);
-            if focus_style.has_layout_props() {
-                if let Some(mut taffy_style) = self.layout_tree.get_style(node_id) {
-                    Self::apply_element_style_to_taffy(&mut taffy_style, focus_style);
-                    self.layout_tree.set_style(node_id, taffy_style);
-                }
+            if focus_style.has_layout_props()
+                && let Some(mut taffy_style) = self.layout_tree.get_style(node_id)
+            {
+                Self::apply_element_style_to_taffy(&mut taffy_style, focus_style);
+                self.layout_tree.set_style(node_id, taffy_style);
             }
             applied = true;
         }
@@ -300,10 +300,10 @@ impl RenderTree {
         }
 
         // Detect and start transitions for changed properties (visual + layout)
-        if let (Some(before_kp), Some(transition_set)) = (before_kp, transition_set) {
-            if let Some(after_kp) = self.snapshot_keyframe_properties(node_id) {
-                self.detect_and_start_transitions(node_id, &before_kp, &after_kp, &transition_set);
-            }
+        if let (Some(before_kp), Some(transition_set)) = (before_kp, transition_set)
+            && let Some(after_kp) = self.snapshot_keyframe_properties(node_id)
+        {
+            self.detect_and_start_transitions(node_id, &before_kp, &after_kp, &transition_set);
         }
 
         applied
@@ -493,10 +493,10 @@ impl RenderTree {
             let mut dynamic_props: Vec<&crate::element_style::DynamicProperty> = Vec::new();
 
             // Base style
-            if let Some(base) = stylesheet.get(element_id) {
-                if let Some(ref dps) = base.dynamic_properties {
-                    dynamic_props.extend(dps.iter());
-                }
+            if let Some(base) = stylesheet.get(element_id)
+                && let Some(ref dps) = base.dynamic_properties
+            {
+                dynamic_props.extend(dps.iter());
             }
 
             // Hover state (overrides base) — router stores hover by
@@ -505,12 +505,10 @@ impl RenderTree {
             if self
                 .stable_id(node_id)
                 .is_some_and(|s| router.is_hovered(s))
+                && let Some(hover) = stylesheet.get_with_state(element_id, ElementState::Hover)
+                && let Some(ref dps) = hover.dynamic_properties
             {
-                if let Some(hover) = stylesheet.get_with_state(element_id, ElementState::Hover) {
-                    if let Some(ref dps) = hover.dynamic_properties {
-                        dynamic_props.extend(dps.iter());
-                    }
-                }
+                dynamic_props.extend(dps.iter());
             }
 
             // Active/pressed state (overrides hover) — router stores
@@ -519,31 +517,27 @@ impl RenderTree {
                 .stable_id(node_id)
                 .map(|s| router.is_active(s))
                 .unwrap_or(false);
-            if pressed_here {
-                if let Some(active) = stylesheet.get_with_state(element_id, ElementState::Active) {
-                    if let Some(ref dps) = active.dynamic_properties {
-                        dynamic_props.extend(dps.iter());
-                    }
-                }
+            if pressed_here
+                && let Some(active) = stylesheet.get_with_state(element_id, ElementState::Active)
+                && let Some(ref dps) = active.dynamic_properties
+            {
+                dynamic_props.extend(dps.iter());
             }
 
             // Focus state
-            if router.is_focused(node_id) {
-                if let Some(focus) = stylesheet.get_with_state(element_id, ElementState::Focus) {
-                    if let Some(ref dps) = focus.dynamic_properties {
-                        dynamic_props.extend(dps.iter());
-                    }
-                }
+            if router.is_focused(node_id)
+                && let Some(focus) = stylesheet.get_with_state(element_id, ElementState::Focus)
+                && let Some(ref dps) = focus.dynamic_properties
+            {
+                dynamic_props.extend(dps.iter());
             }
 
-            if router.focus_visible(node_id) {
-                if let Some(focus) =
+            if router.focus_visible(node_id)
+                && let Some(focus) =
                     stylesheet.get_with_state(element_id, ElementState::FocusVisible)
-                {
-                    if let Some(ref dps) = focus.dynamic_properties {
-                        dynamic_props.extend(dps.iter());
-                    }
-                }
+                && let Some(ref dps) = focus.dynamic_properties
+            {
+                dynamic_props.extend(dps.iter());
             }
 
             if dynamic_props.is_empty() {
@@ -608,13 +602,13 @@ impl RenderTree {
                 if let Some(base) = self.base_taffy_styles.get_mut(&node_id) {
                     write(base);
                 }
-                if layers.iter().any(|s| s.has_layout_props()) {
-                    if let Some(mut style) = self.layout_tree.get_style(node_id) {
-                        for layer in layers.iter().filter(|s| s.has_layout_props()) {
-                            Self::apply_element_style_to_taffy(&mut style, layer);
-                        }
-                        self.layout_tree.set_style(node_id, style);
+                if layers.iter().any(|s| s.has_layout_props())
+                    && let Some(mut style) = self.layout_tree.get_style(node_id)
+                {
+                    for layer in layers.iter().filter(|s| s.has_layout_props()) {
+                        Self::apply_element_style_to_taffy(&mut style, layer);
                     }
+                    self.layout_tree.set_style(node_id, style);
                 }
             }
         }

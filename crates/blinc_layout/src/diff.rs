@@ -332,20 +332,20 @@ pub fn diff_children(
 
     // First pass: match by hash (finds unchanged/moved children)
     for (new_idx, new_hash) in new_hashes.iter().enumerate() {
-        if let Some(old_indices) = old_hash_map.get_mut(new_hash) {
-            if let Some(old_idx) = old_indices.pop() {
-                matched_old_indices.insert(old_idx);
-                if old_idx == new_idx {
-                    results.push(ChildDiff::Unchanged { index: new_idx });
-                } else {
-                    results.push(ChildDiff::Moved {
-                        old_index: old_idx,
-                        new_index: new_idx,
-                        hash: *new_hash,
-                    });
-                }
-                continue;
+        if let Some(old_indices) = old_hash_map.get_mut(new_hash)
+            && let Some(old_idx) = old_indices.pop()
+        {
+            matched_old_indices.insert(old_idx);
+            if old_idx == new_idx {
+                results.push(ChildDiff::Unchanged { index: new_idx });
+            } else {
+                results.push(ChildDiff::Moved {
+                    old_index: old_idx,
+                    new_index: new_idx,
+                    hash: *new_hash,
+                });
             }
+            continue;
         }
 
         // No hash match - mark as potentially added
@@ -375,11 +375,11 @@ pub fn diff_children(
     for (add_result_idx, add_diff) in results.iter().enumerate() {
         if let ChildDiff::Added { index: new_idx, .. } = add_diff {
             for (rem_result_idx, rem_diff) in results.iter().enumerate() {
-                if let ChildDiff::Removed { index: old_idx, .. } = rem_diff {
-                    if new_idx == old_idx {
-                        // Same position: likely a modification
-                        modified_pairs.push((add_result_idx, rem_result_idx));
-                    }
+                if let ChildDiff::Removed { index: old_idx, .. } = rem_diff
+                    && new_idx == old_idx
+                {
+                    // Same position: likely a modification
+                    modified_pairs.push((add_result_idx, rem_result_idx));
                 }
             }
         }

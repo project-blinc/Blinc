@@ -398,10 +398,8 @@ pub fn request_animation_tick() {
 /// live (which is the existing contract).
 pub fn take_animation_tick_request() -> bool {
     let was_set = ANIMATION_TICK_REQUEST.swap(false, Ordering::SeqCst);
-    if !was_set {
-        if let Some(scheduler) = blinc_animation::try_get_scheduler() {
-            scheduler.set_external_anim_active(false);
-        }
+    if !was_set && let Some(scheduler) = blinc_animation::try_get_scheduler() {
+        scheduler.set_external_anim_active(false);
     }
     was_set
 }
@@ -887,31 +885,28 @@ pub fn check_stateful_animations() -> bool {
         let mut has_active = false;
         for anim_key in &anim_keys {
             // Check spring/animated values
-            if let Some(animated) = persisted_values.get(anim_key) {
-                if let Ok(guard) = animated.lock() {
-                    if guard.is_animating() {
-                        has_active = true;
-                        break;
-                    }
-                }
+            if let Some(animated) = persisted_values.get(anim_key)
+                && let Ok(guard) = animated.lock()
+                && guard.is_animating()
+            {
+                has_active = true;
+                break;
             }
             // Check timelines
-            if let Some(timeline) = persisted_timelines.get(anim_key) {
-                if let Ok(guard) = timeline.lock() {
-                    if guard.is_playing() {
-                        has_active = true;
-                        break;
-                    }
-                }
+            if let Some(timeline) = persisted_timelines.get(anim_key)
+                && let Ok(guard) = timeline.lock()
+                && guard.is_playing()
+            {
+                has_active = true;
+                break;
             }
             // Check keyframe tracks
-            if let Some(track) = persisted_keyframes.get(anim_key) {
-                if let Ok(mut guard) = track.lock() {
-                    if guard.is_playing() {
-                        has_active = true;
-                        break;
-                    }
-                }
+            if let Some(track) = persisted_keyframes.get(anim_key)
+                && let Ok(mut guard) = track.lock()
+                && guard.is_playing()
+            {
+                has_active = true;
+                break;
             }
         }
 
@@ -3817,11 +3812,11 @@ impl<S: StateTransitions> Stateful<S> {
         let mut guard = shared.lock().unwrap();
 
         // Store node_id for future use (from event context if available)
-        if guard.node_id.is_none() {
-            if let Some(ref ctx) = event_context {
-                guard.node_id = Some(ctx.node_id);
-                guard.tree_scope = crate::tree::scope::current();
-            }
+        if guard.node_id.is_none()
+            && let Some(ref ctx) = event_context
+        {
+            guard.node_id = Some(ctx.node_id);
+            guard.tree_scope = crate::tree::scope::current();
         }
 
         // Check if inside an animating motion container
@@ -3905,18 +3900,18 @@ impl<S: StateTransitions> Stateful<S> {
             let refresh_cb = inner.refresh_callback.clone();
             drop(inner);
 
-            if !anim_keys.is_empty() {
-                if let Some(refresh_cb) = refresh_cb {
-                    let stateful_key = Arc::as_ptr(shared) as u64;
-                    let shared_for_node_id = Arc::clone(shared);
-                    let node_id_fn: StatefulNodeIdFn = Arc::new(move || {
-                        shared_for_node_id
-                            .lock()
-                            .ok()
-                            .and_then(|inner| inner.node_id)
-                    });
-                    register_stateful_animation(stateful_key, anim_keys, refresh_cb, node_id_fn);
-                }
+            if !anim_keys.is_empty()
+                && let Some(refresh_cb) = refresh_cb
+            {
+                let stateful_key = Arc::as_ptr(shared) as u64;
+                let shared_for_node_id = Arc::clone(shared);
+                let node_id_fn: StatefulNodeIdFn = Arc::new(move || {
+                    shared_for_node_id
+                        .lock()
+                        .ok()
+                        .and_then(|inner| inner.node_id)
+                });
+                register_stateful_animation(stateful_key, anim_keys, refresh_cb, node_id_fn);
             }
         }
 
@@ -3989,10 +3984,10 @@ impl<S: StateTransitions> Stateful<S> {
                 temp_div.classes.push(cls.clone());
             }
         }
-        if temp_div.element_id.is_none() {
-            if let Some(id) = base_element_id {
-                temp_div.element_id = Some(id);
-            }
+        if temp_div.element_id.is_none()
+            && let Some(id) = base_element_id
+        {
+            temp_div.element_id = Some(id);
         }
 
         let callback_props = temp_div.render_props();
@@ -4048,18 +4043,18 @@ impl<S: StateTransitions> Stateful<S> {
         // Register for animation-driven refresh if there are active animations
         // This ensures the callback re-runs while springs are animating
         let anim_keys = shared.lock().unwrap().animation_keys.clone();
-        if !anim_keys.is_empty() {
-            if let Some(refresh_cb) = refresh_callback {
-                let stateful_key = Arc::as_ptr(shared) as u64;
-                let shared_for_node_id = Arc::clone(shared);
-                let node_id_fn: StatefulNodeIdFn = Arc::new(move || {
-                    shared_for_node_id
-                        .lock()
-                        .ok()
-                        .and_then(|inner| inner.node_id)
-                });
-                register_stateful_animation(stateful_key, anim_keys, refresh_cb, node_id_fn);
-            }
+        if !anim_keys.is_empty()
+            && let Some(refresh_cb) = refresh_callback
+        {
+            let stateful_key = Arc::as_ptr(shared) as u64;
+            let shared_for_node_id = Arc::clone(shared);
+            let node_id_fn: StatefulNodeIdFn = Arc::new(move || {
+                shared_for_node_id
+                    .lock()
+                    .ok()
+                    .and_then(|inner| inner.node_id)
+            });
+            register_stateful_animation(stateful_key, anim_keys, refresh_cb, node_id_fn);
         }
 
         // Request redraw
@@ -4186,10 +4181,10 @@ impl<S: StateTransitions> Stateful<S> {
         // their delta is all-default and folds to a no-op here. (Issue #55.)
         let delta_props = props.render_props();
         self.inner.borrow_mut().merge(props);
-        if let Ok(mut guard) = self.shared_state.lock() {
-            if let Some(base) = guard.base_render_props.as_mut() {
-                base.merge_from(&delta_props);
-            }
+        if let Ok(mut guard) = self.shared_state.lock()
+            && let Some(base) = guard.base_render_props.as_mut()
+        {
+            base.merge_from(&delta_props);
         }
     }
 

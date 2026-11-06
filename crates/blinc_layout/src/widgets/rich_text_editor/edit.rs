@@ -153,13 +153,13 @@ pub fn delete_selection(doc: &mut RichDocument, sel: Selection) -> DocPosition {
     }
     // Same line — chop the range out.
     if start.block == end.block && start.line == end.line {
-        if let Some(block) = doc.blocks.get_mut(start.block) {
-            if let Some(line) = block.lines.get_mut(start.line) {
-                let s_byte = char_to_byte(&line.text, start.col);
-                let e_byte = char_to_byte(&line.text, end.col);
-                line.text.replace_range(s_byte..e_byte, "");
-                rewrite_spans_after_delete(line, s_byte, e_byte - s_byte);
-            }
+        if let Some(block) = doc.blocks.get_mut(start.block)
+            && let Some(line) = block.lines.get_mut(start.line)
+        {
+            let s_byte = char_to_byte(&line.text, start.col);
+            let e_byte = char_to_byte(&line.text, end.col);
+            line.text.replace_range(s_byte..e_byte, "");
+            rewrite_spans_after_delete(line, s_byte, e_byte - s_byte);
         }
         return start;
     }
@@ -272,15 +272,15 @@ fn delete_char_in_line(
     line_idx: usize,
     col: usize,
 ) -> DocPosition {
-    if let Some(block) = doc.blocks.get_mut(block_idx) {
-        if let Some(line) = block.lines.get_mut(line_idx) {
-            let start_byte = char_to_byte(&line.text, col);
-            let end_byte = char_to_byte(&line.text, col + 1);
-            if end_byte > start_byte {
-                line.text.replace_range(start_byte..end_byte, "");
-                let removed = end_byte - start_byte;
-                rewrite_spans_after_delete(line, start_byte, removed);
-            }
+    if let Some(block) = doc.blocks.get_mut(block_idx)
+        && let Some(line) = block.lines.get_mut(line_idx)
+    {
+        let start_byte = char_to_byte(&line.text, col);
+        let end_byte = char_to_byte(&line.text, col + 1);
+        if end_byte > start_byte {
+            line.text.replace_range(start_byte..end_byte, "");
+            let removed = end_byte - start_byte;
+            rewrite_spans_after_delete(line, start_byte, removed);
         }
     }
     DocPosition::new(block_idx, line_idx, col)

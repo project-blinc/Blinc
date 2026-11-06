@@ -136,10 +136,10 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
         }
         "scrollbar-color" => {
             let parts: Vec<&str> = value.split_whitespace().collect();
-            if parts.len() == 2 {
-                if let (Some(thumb), Some(track)) = (parse_color(parts[0]), parse_color(parts[1])) {
-                    style.scrollbar_color = Some((thumb, track));
-                }
+            if parts.len() == 2
+                && let (Some(thumb), Some(track)) = (parse_color(parts[0]), parse_color(parts[1]))
+            {
+                style.scrollbar_color = Some((thumb, track));
             }
         }
         "scrollbar-width" => match value.trim() {
@@ -782,11 +782,13 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
             for part in &parts {
                 if let Some(px) = parse_css_px(part) {
                     style.outline_width = Some(px);
-                } else if part != "solid" && part != "none" && part != "dotted" && part != "dashed"
+                } else if part != "solid"
+                    && part != "none"
+                    && part != "dotted"
+                    && part != "dashed"
+                    && let Some(color) = parse_color(part)
                 {
-                    if let Some(color) = parse_color(part) {
-                        style.outline_color = Some(color);
-                    }
+                    style.outline_color = Some(color);
                 }
             }
             if value.trim() == "none" {
@@ -985,13 +987,13 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
             use crate::pointer::PointerSpaceConfig;
             let v = value.trim();
             let parts: Vec<&str> = v.split_whitespace().collect();
-            if parts.len() == 2 {
-                if let (Ok(min), Ok(max)) = (parts[0].parse::<f32>(), parts[1].parse::<f32>()) {
-                    let config = style
-                        .pointer_space
-                        .get_or_insert(PointerSpaceConfig::default());
-                    config.range = (min, max);
-                }
+            if parts.len() == 2
+                && let (Ok(min), Ok(max)) = (parts[0].parse::<f32>(), parts[1].parse::<f32>())
+            {
+                let config = style
+                    .pointer_space
+                    .get_or_insert(PointerSpaceConfig::default());
+                config.range = (min, max);
             }
         }
         "pointer-smoothing" => {

@@ -191,8 +191,10 @@ pub fn records(
         });
     }
     Ok(floats[..needed]
-        .chunks_exact(RECORD_FLOATS)
-        .map(|chunk| Record(chunk.try_into().expect("chunks_exact yields whole records"))))
+        .as_chunks::<RECORD_FLOATS>()
+        .0
+        .iter()
+        .map(Record))
 }
 
 /// The primitives of a list, and the records that had none.
@@ -587,7 +589,9 @@ impl<'a> Record<'a> {
             }
             return Ok(Some(
                 list[at..end]
-                    .chunks_exact(4)
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
                     .map(|c| [c[0], c[1], c[2], c[3]])
                     .collect(),
             ));

@@ -219,10 +219,10 @@ pub fn diff_trees(old: &TreeSnapshot, new: &TreeSnapshot) -> TreeDiff {
 
     // Find modified elements
     for (id, new_elem) in &new.elements {
-        if let Some(old_elem) = old.elements.get(id) {
-            if let Some(diff) = diff_elements(old_elem, new_elem) {
-                modified.insert(id.clone(), diff);
-            }
+        if let Some(old_elem) = old.elements.get(id)
+            && let Some(diff) = diff_elements(old_elem, new_elem)
+        {
+            modified.insert(id.clone(), diff);
         }
     }
 

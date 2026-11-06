@@ -304,10 +304,10 @@ impl RenderContext {
                 }
 
                 // Render z=0 text (must render before z=1 primitives for proper z-ordering)
-                if let Some(glyphs) = glyphs_by_layer.get(&0) {
-                    if !glyphs.is_empty() {
-                        self.render_text(target, glyphs);
-                    }
+                if let Some(glyphs) = glyphs_by_layer.get(&0)
+                    && !glyphs.is_empty()
+                {
+                    self.render_text(target, glyphs);
                 }
                 self.render_text_decorations_for_layer(target, &decorations_by_layer, 0);
 
@@ -335,10 +335,10 @@ impl RenderContext {
                     }
 
                     // Render text for this layer (interleaved with primitives for proper z-order)
-                    if let Some(glyphs) = glyphs_by_layer.get(&z) {
-                        if !glyphs.is_empty() {
-                            self.render_text(target, glyphs);
-                        }
+                    if let Some(glyphs) = glyphs_by_layer.get(&z)
+                        && !glyphs.is_empty()
+                    {
+                        self.render_text(target, glyphs);
                     }
                     self.render_text_decorations_for_layer(target, &decorations_by_layer, z);
                 }
@@ -388,10 +388,10 @@ impl RenderContext {
 
                 // Interleaved z-layer rendering for proper text z-ordering
                 // Render z=0 text before any z>0 primitive overlays
-                if let Some(glyphs) = glyphs_by_layer.get(&0) {
-                    if !glyphs.is_empty() {
-                        self.render_text(target, glyphs);
-                    }
+                if let Some(glyphs) = glyphs_by_layer.get(&0)
+                    && !glyphs.is_empty()
+                {
+                    self.render_text(target, glyphs);
                 }
                 self.render_text_decorations_for_layer(target, &decorations_by_layer, 0);
 
@@ -415,10 +415,10 @@ impl RenderContext {
                         }
 
                         // Render text for this z-layer (interleaved for proper z-order)
-                        if let Some(glyphs) = glyphs_by_layer.get(&z) {
-                            if !glyphs.is_empty() {
-                                self.render_text(target, glyphs);
-                            }
+                        if let Some(glyphs) = glyphs_by_layer.get(&z)
+                            && !glyphs.is_empty()
+                        {
+                            self.render_text(target, glyphs);
                         }
                         self.render_text_decorations_for_layer(target, &decorations_by_layer, z);
                     }

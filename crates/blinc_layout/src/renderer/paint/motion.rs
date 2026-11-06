@@ -1126,12 +1126,11 @@ impl RenderTree {
 
         // Push clip-path if set on this element
         let has_clip_path = render_node.props.clip_path.is_some();
-        if has_clip_path {
-            if let Some(cs) =
+        if has_clip_path
+            && let Some(cs) =
                 Self::resolve_clip_path(render_node.props.clip_path.as_ref().unwrap(), &bounds)
-            {
-                ctx.push_clip(cs);
-            }
+        {
+            ctx.push_clip(cs);
         }
 
         // Render if this node matches target layer
@@ -1187,18 +1186,18 @@ impl RenderTree {
 
         // CSS filter setup
         let has_filter = render_node.props.filter.is_some();
-        if let Some(f) = &render_node.props.filter {
-            if !f.is_identity() {
-                ctx.set_css_filter(
-                    f.grayscale,
-                    f.invert,
-                    f.sepia,
-                    f.hue_rotate,
-                    f.brightness,
-                    f.contrast,
-                    f.saturate,
-                );
-            }
+        if let Some(f) = &render_node.props.filter
+            && !f.is_identity()
+        {
+            ctx.set_css_filter(
+                f.grayscale,
+                f.invert,
+                f.sepia,
+                f.hue_rotate,
+                f.brightness,
+                f.contrast,
+                f.saturate,
+            );
         }
 
         // Mask gradient setup (gradient masks are per-primitive, URL masks use LayerEffect)
@@ -1260,57 +1259,57 @@ impl RenderTree {
             let group_cy = bounds.y + bounds.height * 0.5;
 
             for child_id in self.layout_tree.children(node) {
-                if let Some(child_node) = self.render_nodes.get(&child_id) {
-                    if let Some(child_shape) = child_node.props.shape_3d {
-                        if child_shape > 0.0 && child_shape < 6.0 {
-                            group_3d_children.push(child_id);
-                            let child_bounds = self.get_render_bounds(child_id, (0.0, 0.0));
-                            if let Some(cb) = child_bounds {
-                                let ox = cb.x + cb.width * 0.5 - group_cx;
-                                let oy = cb.y + cb.height * 0.5 - group_cy;
-                                let oz = child_node.props.translate_z.unwrap_or(0.0);
-                                let cr = child_node
-                                    .props
-                                    .border_radius
-                                    .top_left
-                                    .min(child_node.props.depth.unwrap_or(20.0) * 0.5);
-                                let child_depth = child_node.props.depth.unwrap_or(20.0);
-                                let half_w = cb.width * 0.5;
-                                let half_h = cb.height * 0.5;
-                                let half_d = child_depth * 0.5;
-                                let op_type = child_node.props.op_3d.unwrap_or(0.0);
-                                let blend = child_node.props.blend_3d.unwrap_or(0.0);
+                if let Some(child_node) = self.render_nodes.get(&child_id)
+                    && let Some(child_shape) = child_node.props.shape_3d
+                    && child_shape > 0.0
+                    && child_shape < 6.0
+                {
+                    group_3d_children.push(child_id);
+                    let child_bounds = self.get_render_bounds(child_id, (0.0, 0.0));
+                    if let Some(cb) = child_bounds {
+                        let ox = cb.x + cb.width * 0.5 - group_cx;
+                        let oy = cb.y + cb.height * 0.5 - group_cy;
+                        let oz = child_node.props.translate_z.unwrap_or(0.0);
+                        let cr = child_node
+                            .props
+                            .border_radius
+                            .top_left
+                            .min(child_node.props.depth.unwrap_or(20.0) * 0.5);
+                        let child_depth = child_node.props.depth.unwrap_or(20.0);
+                        let half_w = cb.width * 0.5;
+                        let half_h = cb.height * 0.5;
+                        let half_d = child_depth * 0.5;
+                        let op_type = child_node.props.op_3d.unwrap_or(0.0);
+                        let blend = child_node.props.blend_3d.unwrap_or(0.0);
 
-                                // Get child color for per-shape coloring
-                                let color = if let Some(blinc_core::Brush::Solid(c)) =
-                                    &child_node.props.background
-                                {
-                                    [c.r, c.g, c.b, c.a]
-                                } else {
-                                    [0.8, 0.8, 0.8, 1.0]
-                                };
+                        // Get child color for per-shape coloring
+                        let color = if let Some(blinc_core::Brush::Solid(c)) =
+                            &child_node.props.background
+                        {
+                            [c.r, c.g, c.b, c.a]
+                        } else {
+                            [0.8, 0.8, 0.8, 1.0]
+                        };
 
-                                // Pack as [offset(4), params(4), half_ext(4), color(4)]
-                                raw_descs.push([
-                                    ox,
-                                    oy,
-                                    oz,
-                                    cr,
-                                    child_shape,
-                                    child_depth,
-                                    op_type,
-                                    blend,
-                                    half_w,
-                                    half_h,
-                                    half_d,
-                                    0.0,
-                                    color[0],
-                                    color[1],
-                                    color[2],
-                                    color[3],
-                                ]);
-                            }
-                        }
+                        // Pack as [offset(4), params(4), half_ext(4), color(4)]
+                        raw_descs.push([
+                            ox,
+                            oy,
+                            oz,
+                            cr,
+                            child_shape,
+                            child_depth,
+                            op_type,
+                            blend,
+                            half_w,
+                            half_h,
+                            half_d,
+                            0.0,
+                            color[0],
+                            color[1],
+                            color[2],
+                            color[3],
+                        ]);
                     }
                 }
             }
@@ -1567,33 +1566,33 @@ impl RenderTree {
             }
 
             // Draw outline outside the border
-            if render_node.props.outline_width > 0.0 {
-                if let Some(ref outline_color) = render_node.props.outline_color {
-                    let ow = render_node.props.outline_width;
-                    let offset = render_node.props.outline_offset;
-                    let expand = offset + ow / 2.0;
-                    let outline_rect = Rect::new(
-                        -expand,
-                        -expand,
-                        bounds.width + expand * 2.0,
-                        bounds.height + expand * 2.0,
-                    );
-                    let outline_radius = CornerRadius {
-                        top_left: (radius.top_left + expand).max(0.0),
-                        top_right: (radius.top_right + expand).max(0.0),
-                        bottom_right: (radius.bottom_right + expand).max(0.0),
-                        bottom_left: (radius.bottom_left + expand).max(0.0),
-                    };
-                    let stroke = Stroke::new(ow);
-                    let brush = if !has_opacity_layer && motion_opacity < 1.0 {
-                        let mut color = *outline_color;
-                        color.a *= motion_opacity;
-                        Brush::Solid(color)
-                    } else {
-                        Brush::Solid(*outline_color)
-                    };
-                    ctx.stroke_rect(outline_rect, outline_radius, &stroke, brush);
-                }
+            if render_node.props.outline_width > 0.0
+                && let Some(ref outline_color) = render_node.props.outline_color
+            {
+                let ow = render_node.props.outline_width;
+                let offset = render_node.props.outline_offset;
+                let expand = offset + ow / 2.0;
+                let outline_rect = Rect::new(
+                    -expand,
+                    -expand,
+                    bounds.width + expand * 2.0,
+                    bounds.height + expand * 2.0,
+                );
+                let outline_radius = CornerRadius {
+                    top_left: (radius.top_left + expand).max(0.0),
+                    top_right: (radius.top_right + expand).max(0.0),
+                    bottom_right: (radius.bottom_right + expand).max(0.0),
+                    bottom_left: (radius.bottom_left + expand).max(0.0),
+                };
+                let stroke = Stroke::new(ow);
+                let brush = if !has_opacity_layer && motion_opacity < 1.0 {
+                    let mut color = *outline_color;
+                    color.a *= motion_opacity;
+                    Brush::Solid(color)
+                } else {
+                    Brush::Solid(*outline_color)
+                };
+                ctx.stroke_rect(outline_rect, outline_radius, &stroke, brush);
             }
 
             // Restore foreground layer state after border/outline rendering
@@ -1612,118 +1611,117 @@ impl RenderTree {
             // drop shadow, etc.). Parent clips (e.g. scroll containers)
             // still apply via the clip stack, so honouring the
             // element's own overflow setting is enough.
-            if let ElementType::Canvas(canvas_data) = &render_node.element_type {
-                if let Some(render_fn) = &canvas_data.render_fn {
-                    let should_clip = render_node.props.clips_content;
-                    if should_clip {
-                        let clip_rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
-                        ctx.push_clip(ClipShape::rect(clip_rect));
-                    }
+            if let ElementType::Canvas(canvas_data) = &render_node.element_type
+                && let Some(render_fn) = &canvas_data.render_fn
+            {
+                let should_clip = render_node.props.clips_content;
+                if should_clip {
+                    let clip_rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
+                    ctx.push_clip(ClipShape::rect(clip_rect));
+                }
 
-                    // The current transform already positions the canvas origin.
-                    let canvas_bounds = crate::canvas::CanvasBounds {
-                        x: 0.0,
-                        y: 0.0,
-                        width: bounds.width,
-                        height: bounds.height,
+                // The current transform already positions the canvas origin.
+                let canvas_bounds = crate::canvas::CanvasBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: bounds.width,
+                    height: bounds.height,
+                };
+
+                // Independent replay restores this paint state, including
+                // the canvas's own clip and its ancestor clips.
+                let saved_affine = ctx.current_affine_elements();
+                let saved_opacity = ctx.current_opacity();
+                let saved_z_layer = ctx.z_layer();
+                let saved_ancestor_clip = ctx.current_clip_aabb();
+                let canvas_start = ctx.bg_primitive_count();
+                let skip_drawing_flag = self.skip_canvas_drawing.get();
+
+                // Retained callbacks paint with their owning group or batch.
+                // Independent callbacks defer to overlay replay when requested.
+                // A canvas something later in the tree is drawn over also paints with its
+                // batch, in order: the independent replay comes after everything cached.
+                let retained_canvas = !canvas_data.is_static
+                    && (!ctx.can_promote_composite_layer()
+                        || ctx.bg_batch_is_dynamic()
+                        || ctx.bg_batch_is_composite()
+                        || self.later_content_overlaps(node));
+                if retained_canvas {
+                    self.had_retained_canvas_painted.set(true);
+                    self.retained_canvas_redraws
+                        .borrow_mut()
+                        .push(canvas_data.redraw_while.clone());
+                }
+                let skip_drawing = skip_drawing_flag && !canvas_data.is_static && !retained_canvas;
+                if !skip_drawing {
+                    render_fn(ctx, canvas_bounds);
+                }
+
+                let canvas_end = ctx.bg_primitive_count();
+
+                if should_clip {
+                    ctx.pop_clip();
+                }
+
+                // Record independent callbacks only on their matching pass,
+                // including image-only and empty draws that can change later.
+                let layer_matches = effective_layer == target_layer;
+                let is_static_canvas = canvas_data.is_static;
+                if layer_matches && !is_static_canvas && !retained_canvas {
+                    // Overlay callbacks follow their host's dynamic content.
+                    let nested_overlay = ctx.in_overlay_subtree();
+                    let visit_seq = self.canvas_paint_records.borrow().len()
+                        + self.overlay_canvas_paint_records.borrow().len();
+                    let record = super::super::CanvasPaintRecord {
+                        visit_seq,
+                        primitive_range: canvas_start..canvas_end,
+                        affine: saved_affine,
+                        bounds_wh: (bounds.width, bounds.height),
+                        render_fn: render_fn.clone(),
+                        clips_content: should_clip,
+                        ancestor_clip_aabb: saved_ancestor_clip,
+                        z_layer: saved_z_layer,
+                        opacity: saved_opacity,
+                        in_overlay_subtree: nested_overlay,
+                        redraw_while: canvas_data.redraw_while.clone(),
                     };
-
-                    // Independent replay restores this paint state, including
-                    // the canvas's own clip and its ancestor clips.
-                    let saved_affine = ctx.current_affine_elements();
-                    let saved_opacity = ctx.current_opacity();
-                    let saved_z_layer = ctx.z_layer();
-                    let saved_ancestor_clip = ctx.current_clip_aabb();
-                    let canvas_start = ctx.bg_primitive_count();
-                    let skip_drawing_flag = self.skip_canvas_drawing.get();
-
-                    // Retained callbacks paint with their owning group or batch.
-                    // Independent callbacks defer to overlay replay when requested.
-                    // A canvas something later in the tree is drawn over also paints with its
-                    // batch, in order: the independent replay comes after everything cached.
-                    let retained_canvas = !canvas_data.is_static
-                        && (!ctx.can_promote_composite_layer()
-                            || ctx.bg_batch_is_dynamic()
-                            || ctx.bg_batch_is_composite()
-                            || self.later_content_overlaps(node));
-                    if retained_canvas {
-                        self.had_retained_canvas_painted.set(true);
-                        self.retained_canvas_redraws
+                    if nested_overlay {
+                        self.overlay_canvas_paint_records
                             .borrow_mut()
-                            .push(canvas_data.redraw_while.clone());
-                    }
-                    let skip_drawing =
-                        skip_drawing_flag && !canvas_data.is_static && !retained_canvas;
-                    if !skip_drawing {
-                        render_fn(ctx, canvas_bounds);
+                            .insert(node, record);
+                    } else {
+                        self.canvas_paint_records.borrow_mut().insert(node, record);
                     }
 
-                    let canvas_end = ctx.bg_primitive_count();
-
-                    if should_clip {
-                        ctx.pop_clip();
-                    }
-
-                    // Record independent callbacks only on their matching pass,
-                    // including image-only and empty draws that can change later.
-                    let layer_matches = effective_layer == target_layer;
-                    let is_static_canvas = canvas_data.is_static;
-                    if layer_matches && !is_static_canvas && !retained_canvas {
-                        // Overlay callbacks follow their host's dynamic content.
-                        let nested_overlay = ctx.in_overlay_subtree();
-                        let visit_seq = self.canvas_paint_records.borrow().len()
-                            + self.overlay_canvas_paint_records.borrow().len();
-                        let record = super::super::CanvasPaintRecord {
-                            visit_seq,
-                            primitive_range: canvas_start..canvas_end,
-                            affine: saved_affine,
-                            bounds_wh: (bounds.width, bounds.height),
-                            render_fn: render_fn.clone(),
-                            clips_content: should_clip,
-                            ancestor_clip_aabb: saved_ancestor_clip,
-                            z_layer: saved_z_layer,
-                            opacity: saved_opacity,
-                            in_overlay_subtree: nested_overlay,
-                            redraw_while: canvas_data.redraw_while.clone(),
-                        };
-                        if nested_overlay {
-                            self.overlay_canvas_paint_records
-                                .borrow_mut()
-                                .insert(node, record);
-                        } else {
-                            self.canvas_paint_records.borrow_mut().insert(node, record);
-                        }
-
-                        // Keep the independent region and replay record aligned.
-                        let region_screen_aabb = Self::affine_screen_aabb(
-                            &saved_affine,
-                            bounds.width,
-                            bounds.height,
-                            self.scale_factor,
-                        );
-                        let region_clip_aabb = saved_ancestor_clip;
-                        let visit_seq = self.dynamic_regions.borrow().len() as u32;
-                        self.record_dynamic_region(
-                            node,
-                            super::super::DynamicRegion {
-                                root: node,
-                                screen_aabb: region_screen_aabb,
-                                ambient: super::super::AmbientPaintState {
-                                    affine: saved_affine,
-                                    opacity: saved_opacity,
-                                    clip_aabb: region_clip_aabb,
-                                    z_layer: saved_z_layer,
-                                    in_overlay_subtree: nested_overlay,
-                                },
-                                kind: super::super::DynamicKind::Canvas {
-                                    render_fn: render_fn.clone(),
-                                    clips_content: should_clip,
-                                    bounds_wh: (bounds.width, bounds.height),
-                                },
-                                visit_seq,
+                    // Keep the independent region and replay record aligned.
+                    let region_screen_aabb = Self::affine_screen_aabb(
+                        &saved_affine,
+                        bounds.width,
+                        bounds.height,
+                        self.scale_factor,
+                    );
+                    let region_clip_aabb = saved_ancestor_clip;
+                    let visit_seq = self.dynamic_regions.borrow().len() as u32;
+                    self.record_dynamic_region(
+                        node,
+                        super::super::DynamicRegion {
+                            root: node,
+                            screen_aabb: region_screen_aabb,
+                            ambient: super::super::AmbientPaintState {
+                                affine: saved_affine,
+                                opacity: saved_opacity,
+                                clip_aabb: region_clip_aabb,
+                                z_layer: saved_z_layer,
+                                in_overlay_subtree: nested_overlay,
                             },
-                        );
-                    }
+                            kind: super::super::DynamicKind::Canvas {
+                                render_fn: render_fn.clone(),
+                                clips_content: should_clip,
+                                bounds_wh: (bounds.width, bounds.height),
+                            },
+                            visit_seq,
+                        },
+                    );
                 }
             }
         }
@@ -1895,15 +1893,13 @@ impl RenderTree {
         );
         let prev_cull_viewport = self.cull_viewport.get();
         let entered_cull = self.viewport_cull_scrolls.contains(&node);
-        if entered_cull {
-            if let Some(abs) = self.layout_tree.get_absolute_bounds(node) {
-                self.cull_viewport.set(Some((
-                    abs.x + prev_paint_scroll.0,
-                    abs.y + prev_paint_scroll.1,
-                    abs.width,
-                    abs.height,
-                )));
-            }
+        if entered_cull && let Some(abs) = self.layout_tree.get_absolute_bounds(node) {
+            self.cull_viewport.set(Some((
+                abs.x + prev_paint_scroll.0,
+                abs.y + prev_paint_scroll.1,
+                abs.width,
+                abs.height,
+            )));
         }
 
         for child_id in self.layout_tree.children(node) {
@@ -1919,25 +1915,25 @@ impl RenderTree {
             // Viewport cull: skip painting children whose on-screen
             // position falls outside the active cull viewport. Fixed and
             // sticky children opt out: scroll alone does not place them.
-            if let Some((cx, cy, cw, ch)) = self.cull_viewport.get() {
-                if !child_is_fixed && !child_is_sticky {
-                    if let Some(cb) = self.layout_tree.get_absolute_bounds(child_id) {
-                        // 200 px overscan on each axis so a smooth scroll
-                        // doesn't pop content in/out at the viewport edge.
-                        const OVERSCAN: f32 = 200.0;
-                        let vx0 = cx - OVERSCAN;
-                        let vy0 = cy - OVERSCAN;
-                        let vx1 = cx + cw + OVERSCAN;
-                        let vy1 = cy + ch + OVERSCAN;
-                        let bx0 = cb.x + child_paint_scroll.0;
-                        let by0 = cb.y + child_paint_scroll.1;
-                        let bx1 = bx0 + cb.width;
-                        let by1 = by0 + cb.height;
-                        let intersects = bx1 > vx0 && bx0 < vx1 && by1 > vy0 && by0 < vy1;
-                        if !intersects {
-                            continue;
-                        }
-                    }
+            if let Some((cx, cy, cw, ch)) = self.cull_viewport.get()
+                && !child_is_fixed
+                && !child_is_sticky
+                && let Some(cb) = self.layout_tree.get_absolute_bounds(child_id)
+            {
+                // 200 px overscan on each axis so a smooth scroll
+                // doesn't pop content in/out at the viewport edge.
+                const OVERSCAN: f32 = 200.0;
+                let vx0 = cx - OVERSCAN;
+                let vy0 = cy - OVERSCAN;
+                let vx1 = cx + cw + OVERSCAN;
+                let vy1 = cy + ch + OVERSCAN;
+                let bx0 = cb.x + child_paint_scroll.0;
+                let by0 = cb.y + child_paint_scroll.1;
+                let bx1 = bx0 + cb.width;
+                let by1 = by0 + cb.height;
+                let intersects = bx1 > vx0 && bx0 < vx1 && by1 > vy0 && by0 < vy1;
+                if !intersects {
+                    continue;
                 }
             }
 
@@ -1953,18 +1949,17 @@ impl RenderTree {
 
             // Sticky: compute corrective offset when element would scroll past threshold
             let mut has_sticky_correction = false;
-            if child_is_sticky {
-                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top) {
-                    if let Some(cb) = self.get_render_bounds(child_id, (0.0, 0.0)) {
-                        // cb.y = element's layout y relative to parent
-                        // new_cumulative_scroll.1 = total scroll from ALL ancestors
-                        let visual_y = cb.y + new_cumulative_scroll.1;
-                        if visual_y < threshold {
-                            let correction = threshold - visual_y;
-                            ctx.push_transform(Transform::translate(0.0, correction));
-                            has_sticky_correction = true;
-                        }
-                    }
+            if child_is_sticky
+                && let Some(threshold) = child_render.and_then(|n| n.props.sticky_top)
+                && let Some(cb) = self.get_render_bounds(child_id, (0.0, 0.0))
+            {
+                // cb.y = element's layout y relative to parent
+                // new_cumulative_scroll.1 = total scroll from ALL ancestors
+                let visual_y = cb.y + new_cumulative_scroll.1;
+                if visual_y < threshold {
+                    let correction = threshold - visual_y;
+                    ctx.push_transform(Transform::translate(0.0, correction));
+                    has_sticky_correction = true;
                 }
             }
 
@@ -2016,14 +2011,13 @@ impl RenderTree {
         // Render scrollbar overlay if this is a scroll container
         // Scrollbar is rendered after scroll transform is popped (in viewport space)
         // but before children inset clip is popped (clipped within content area)
-        if effective_layer == target_layer {
-            if let Some(physics) = self.scroll_physics.get(&node) {
-                if let Ok(p) = physics.try_lock() {
-                    let info = p.scrollbar_render_info();
-                    if info.opacity > 0.01 {
-                        self.render_scrollbar(ctx, bounds.width, bounds.height, &info);
-                    }
-                }
+        if effective_layer == target_layer
+            && let Some(physics) = self.scroll_physics.get(&node)
+            && let Ok(p) = physics.try_lock()
+        {
+            let info = p.scrollbar_render_info();
+            if info.opacity > 0.01 {
+                self.render_scrollbar(ctx, bounds.width, bounds.height, &info);
             }
         }
 
@@ -2367,153 +2361,153 @@ impl RenderTree {
             let retained_foreground = effective_layer == RenderLayer::Foreground
                 && !ctx.bg_batch_is_dynamic()
                 && !ctx.bg_batch_is_composite();
-            if end > start || retained_foreground {
-                if let Some(stable_id) = self.stable_id(node) {
-                    let centre = self
-                        .layout_tree
-                        .get_absolute_bounds(node)
-                        .map(|abs| {
-                            (
-                                abs.x + abs.width / 2.0 + cumulative_scroll.0,
-                                abs.y + abs.height / 2.0 + cumulative_scroll.1,
-                            )
-                        })
-                        .unwrap_or((
-                            bounds.x + bounds.width / 2.0,
-                            bounds.y + bounds.height / 2.0,
-                        ));
-                    let last_screen_aabb = ctx.bg_primitive_aabb(start, end);
+            if (end > start || retained_foreground)
+                && let Some(stable_id) = self.stable_id(node)
+            {
+                let centre = self
+                    .layout_tree
+                    .get_absolute_bounds(node)
+                    .map(|abs| {
+                        (
+                            abs.x + abs.width / 2.0 + cumulative_scroll.0,
+                            abs.y + abs.height / 2.0 + cumulative_scroll.1,
+                        )
+                    })
+                    .unwrap_or((
+                        bounds.x + bounds.width / 2.0,
+                        bounds.y + bounds.height / 2.0,
+                    ));
+                let last_screen_aabb = ctx.bg_primitive_aabb(start, end);
 
-                    // Extract solid background colour if present
-                    // (gradient / image brushes return None — those
-                    // animate via gradient_start/end_color which
-                    // are out of first-cut scope).
-                    let last_background_color =
-                        render_node.props.background.as_ref().and_then(|brush| {
-                            if let Brush::Solid(c) = brush {
-                                Some([c.r, c.g, c.b, c.a])
-                            } else {
-                                None
-                            }
-                        });
-                    let last_border_color =
-                        render_node.props.border_color.map(|c| [c.r, c.g, c.b, c.a]);
-                    let cr = &render_node.props.border_radius;
-                    let last_corner_radius =
-                        [cr.top_left, cr.top_right, cr.bottom_right, cr.bottom_left];
-                    let last_border_width = render_node.props.border_width;
-                    // CssAnimPaintMeta records the FIRST shadow layer only —
-                    // composite-layer fast-path animations interpolate one
-                    // shadow. Multi-layer animation needs a per-layer
-                    // CssAnimPaintMeta extension (follow-up).
-                    let (last_shadow_params, last_shadow_color) =
-                        match render_node.props.shadow.first() {
-                            Some(s) => (
-                                [s.offset_x, s.offset_y, s.blur, s.spread],
-                                [s.color.r, s.color.g, s.color.b, s.color.a],
-                            ),
-                            None => ([0.0; 4], [0.0; 4]),
-                        };
-                    let (last_filter_a, last_filter_b) = match &render_node.props.filter {
-                        Some(f) => (
-                            [f.grayscale, f.invert, f.sepia, f.hue_rotate.to_radians()],
-                            [f.brightness, f.contrast, f.saturate, 0.0],
-                        ),
-                        None => ([0.0, 0.0, 0.0, 0.0], [1.0, 1.0, 1.0, 0.0]),
+                // Extract solid background colour if present
+                // (gradient / image brushes return None — those
+                // animate via gradient_start/end_color which
+                // are out of first-cut scope).
+                let last_background_color =
+                    render_node.props.background.as_ref().and_then(|brush| {
+                        if let Brush::Solid(c) = brush {
+                            Some([c.r, c.g, c.b, c.a])
+                        } else {
+                            None
+                        }
+                    });
+                let last_border_color =
+                    render_node.props.border_color.map(|c| [c.r, c.g, c.b, c.a]);
+                let cr = &render_node.props.border_radius;
+                let last_corner_radius =
+                    [cr.top_left, cr.top_right, cr.bottom_right, cr.bottom_left];
+                let last_border_width = render_node.props.border_width;
+                // CssAnimPaintMeta records the FIRST shadow layer only —
+                // composite-layer fast-path animations interpolate one
+                // shadow. Multi-layer animation needs a per-layer
+                // CssAnimPaintMeta extension (follow-up).
+                let (last_shadow_params, last_shadow_color) = match render_node.props.shadow.first()
+                {
+                    Some(s) => (
+                        [s.offset_x, s.offset_y, s.blur, s.spread],
+                        [s.color.r, s.color.g, s.color.b, s.color.a],
+                    ),
+                    None => ([0.0; 4], [0.0; 4]),
+                };
+                let (last_filter_a, last_filter_b) = match &render_node.props.filter {
+                    Some(f) => (
+                        [f.grayscale, f.invert, f.sepia, f.hue_rotate.to_radians()],
+                        [f.brightness, f.contrast, f.saturate, 0.0],
+                    ),
+                    None => ([0.0, 0.0, 0.0, 0.0], [1.0, 1.0, 1.0, 0.0]),
+                };
+                let last_rotate_x_rad = render_node.props.rotate_x.unwrap_or(0.0).to_radians();
+                let last_rotate_y_rad = render_node.props.rotate_y.unwrap_or(0.0).to_radians();
+
+                // Skip `CssAnimPaintMeta` for composite-promoted
+                // nodes — their primitives live in a per-node
+                // scratch batch (now rasterized into a
+                // `LayerTexture`), NOT in `cached_bg_batch`.
+                // Inserting the record would point
+                // `primitive_range` at scratch indices; the next
+                // frame's `apply_css_deltas` would treat those
+                // as indices into `cached_bg_batch` and mutate
+                // unrelated primitives there (corruption). The
+                // composite-layer path handles all animation
+                // updates for promoted nodes via per-frame
+                // `blit_tight_texture_to_target` instead.
+                if !pushed_composite_layer {
+                    self.css_anim_paint_records.borrow_mut().insert(
+                        node,
+                        super::super::CssAnimPaintMeta {
+                            foreground_batch: retained_foreground,
+                            dynamic_batch: ctx.bg_batch_is_dynamic(),
+                            composite_batch: ctx.bg_batch_is_composite(),
+                            stable_id,
+                            primitive_range: start..end,
+                            layer_push_index: css_anim_layer_push_index,
+                            last_opacity: node_motion_opacity,
+                            last_translate: (0.0, 0.0),
+                            last_scale: (1.0, 1.0),
+                            last_rotation_rad: 0.0,
+                            last_rotate_x_rad,
+                            last_rotate_y_rad,
+                            last_background_color,
+                            last_border_color,
+                            last_corner_radius,
+                            last_border_width,
+                            last_shadow_params,
+                            last_shadow_color,
+                            last_filter_a,
+                            last_filter_b,
+                            centre,
+                            last_screen_aabb,
+                        },
+                    );
+                }
+
+                // Composite-layer DynamicRegion. Only emit for
+                // CSS-animated nodes that the promotion predicate
+                // selected — the walker routed their emit into
+                // a per-node scratch batch (see the
+                // `pushed_composite_layer` branch earlier in
+                // this fn). `natural_size` is the screen-pixel
+                // dimensions of the emitted primitives' AABB
+                // (physical pixels — `last_screen_aabb` is post-
+                // DPI). The compositor reads this region's
+                // scratch batch via
+                // `GpuPaintContext::take_composite_layer_batches`,
+                // rasterizes it into a `LayerTexture` of size
+                // `natural_size`, and blits it per frame with
+                // the active animation transform applied.
+                //
+                // Captured at the CSS bracket (not the motion
+                // bracket above) so we don't need
+                // `v2_motion_ambient` to be Some — pure-CSS
+                // animated nodes have no motion bindings.
+                if pushed_for_css {
+                    let aabb = ctx
+                        .composite_layer_bounds()
+                        .or(last_screen_aabb)
+                        .unwrap_or([0.0, 0.0, 0.0, 0.0]);
+                    let natural_w = aabb[2].max(1.0).ceil() as u32;
+                    let natural_h = aabb[3].max(1.0).ceil() as u32;
+                    let ambient = super::super::AmbientPaintState {
+                        affine: ctx.current_affine_elements(),
+                        opacity: ctx.current_opacity(),
+                        clip_aabb: ctx.current_clip_aabb(),
+                        z_layer: ctx.z_layer(),
+                        in_overlay_subtree: ctx.in_overlay_subtree(),
                     };
-                    let last_rotate_x_rad = render_node.props.rotate_x.unwrap_or(0.0).to_radians();
-                    let last_rotate_y_rad = render_node.props.rotate_y.unwrap_or(0.0).to_radians();
-
-                    // Skip `CssAnimPaintMeta` for composite-promoted
-                    // nodes — their primitives live in a per-node
-                    // scratch batch (now rasterized into a
-                    // `LayerTexture`), NOT in `cached_bg_batch`.
-                    // Inserting the record would point
-                    // `primitive_range` at scratch indices; the next
-                    // frame's `apply_css_deltas` would treat those
-                    // as indices into `cached_bg_batch` and mutate
-                    // unrelated primitives there (corruption). The
-                    // composite-layer path handles all animation
-                    // updates for promoted nodes via per-frame
-                    // `blit_tight_texture_to_target` instead.
-                    if !pushed_composite_layer {
-                        self.css_anim_paint_records.borrow_mut().insert(
-                            node,
-                            super::super::CssAnimPaintMeta {
-                                foreground_batch: retained_foreground,
-                                dynamic_batch: ctx.bg_batch_is_dynamic(),
-                                composite_batch: ctx.bg_batch_is_composite(),
-                                stable_id,
-                                primitive_range: start..end,
-                                layer_push_index: css_anim_layer_push_index,
-                                last_opacity: node_motion_opacity,
-                                last_translate: (0.0, 0.0),
-                                last_scale: (1.0, 1.0),
-                                last_rotation_rad: 0.0,
-                                last_rotate_x_rad,
-                                last_rotate_y_rad,
-                                last_background_color,
-                                last_border_color,
-                                last_corner_radius,
-                                last_border_width,
-                                last_shadow_params,
-                                last_shadow_color,
-                                last_filter_a,
-                                last_filter_b,
-                                centre,
-                                last_screen_aabb,
+                    let visit_seq = self.dynamic_regions.borrow().len() as u32;
+                    self.record_dynamic_region(
+                        node,
+                        super::super::DynamicRegion {
+                            root: node,
+                            screen_aabb: aabb,
+                            ambient,
+                            kind: super::super::DynamicKind::CssAnimated {
+                                natural_size: (natural_w, natural_h),
+                                ambient_clip: css_anim_ancestor_clip,
                             },
-                        );
-                    }
-
-                    // Composite-layer DynamicRegion. Only emit for
-                    // CSS-animated nodes that the promotion predicate
-                    // selected — the walker routed their emit into
-                    // a per-node scratch batch (see the
-                    // `pushed_composite_layer` branch earlier in
-                    // this fn). `natural_size` is the screen-pixel
-                    // dimensions of the emitted primitives' AABB
-                    // (physical pixels — `last_screen_aabb` is post-
-                    // DPI). The compositor reads this region's
-                    // scratch batch via
-                    // `GpuPaintContext::take_composite_layer_batches`,
-                    // rasterizes it into a `LayerTexture` of size
-                    // `natural_size`, and blits it per frame with
-                    // the active animation transform applied.
-                    //
-                    // Captured at the CSS bracket (not the motion
-                    // bracket above) so we don't need
-                    // `v2_motion_ambient` to be Some — pure-CSS
-                    // animated nodes have no motion bindings.
-                    if pushed_for_css {
-                        let aabb = ctx
-                            .composite_layer_bounds()
-                            .or(last_screen_aabb)
-                            .unwrap_or([0.0, 0.0, 0.0, 0.0]);
-                        let natural_w = aabb[2].max(1.0).ceil() as u32;
-                        let natural_h = aabb[3].max(1.0).ceil() as u32;
-                        let ambient = super::super::AmbientPaintState {
-                            affine: ctx.current_affine_elements(),
-                            opacity: ctx.current_opacity(),
-                            clip_aabb: ctx.current_clip_aabb(),
-                            z_layer: ctx.z_layer(),
-                            in_overlay_subtree: ctx.in_overlay_subtree(),
-                        };
-                        let visit_seq = self.dynamic_regions.borrow().len() as u32;
-                        self.record_dynamic_region(
-                            node,
-                            super::super::DynamicRegion {
-                                root: node,
-                                screen_aabb: aabb,
-                                ambient,
-                                kind: super::super::DynamicKind::CssAnimated {
-                                    natural_size: (natural_w, natural_h),
-                                    ambient_clip: css_anim_ancestor_clip,
-                                },
-                                visit_seq,
-                            },
-                        );
-                    }
+                            visit_seq,
+                        },
+                    );
                 }
             }
         }

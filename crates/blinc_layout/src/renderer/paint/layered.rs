@@ -623,31 +623,31 @@ impl RenderTree {
             }
 
             // Draw outline outside the border
-            if render_node.props.outline_width > 0.0 {
-                if let Some(ref outline_color) = render_node.props.outline_color {
-                    let ow = render_node.props.outline_width;
-                    let offset = render_node.props.outline_offset;
-                    let expand = offset + ow / 2.0;
-                    let outline_rect = Rect::new(
-                        -expand,
-                        -expand,
-                        bounds.width + expand * 2.0,
-                        bounds.height + expand * 2.0,
-                    );
-                    let outline_radius = CornerRadius {
-                        top_left: (radius.top_left + expand).max(0.0),
-                        top_right: (radius.top_right + expand).max(0.0),
-                        bottom_right: (radius.bottom_right + expand).max(0.0),
-                        bottom_left: (radius.bottom_left + expand).max(0.0),
-                    };
-                    let stroke = Stroke::new(ow);
-                    ctx.stroke_rect(
-                        outline_rect,
-                        outline_radius,
-                        &stroke,
-                        Brush::Solid(*outline_color),
-                    );
-                }
+            if render_node.props.outline_width > 0.0
+                && let Some(ref outline_color) = render_node.props.outline_color
+            {
+                let ow = render_node.props.outline_width;
+                let offset = render_node.props.outline_offset;
+                let expand = offset + ow / 2.0;
+                let outline_rect = Rect::new(
+                    -expand,
+                    -expand,
+                    bounds.width + expand * 2.0,
+                    bounds.height + expand * 2.0,
+                );
+                let outline_radius = CornerRadius {
+                    top_left: (radius.top_left + expand).max(0.0),
+                    top_right: (radius.top_right + expand).max(0.0),
+                    bottom_right: (radius.bottom_right + expand).max(0.0),
+                    bottom_left: (radius.bottom_left + expand).max(0.0),
+                };
+                let stroke = Stroke::new(ow);
+                ctx.stroke_rect(
+                    outline_rect,
+                    outline_radius,
+                    &stroke,
+                    Brush::Solid(*outline_color),
+                );
             }
 
             // Restore foreground layer state after border/outline rendering
@@ -657,31 +657,31 @@ impl RenderTree {
 
             // Handle canvas element rendering
             // Push clip to ensure canvas content respects parent bounds (e.g., scroll containers)
-            if let ElementType::Canvas(canvas_data) = &render_node.element_type {
-                if let Some(render_fn) = &canvas_data.render_fn {
-                    // Push clip for canvas bounds - this ensures content doesn't render outside
-                    let clip_rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
-                    ctx.push_clip(ClipShape::rect(clip_rect));
+            if let ElementType::Canvas(canvas_data) = &render_node.element_type
+                && let Some(render_fn) = &canvas_data.render_fn
+            {
+                // Push clip for canvas bounds - this ensures content doesn't render outside
+                let clip_rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
+                ctx.push_clip(ClipShape::rect(clip_rect));
 
-                    // `bounds.x` / `bounds.y` are already translated
-                    // onto the DrawContext by the `push_transform` at
-                    // the top of `render_node`, so in canvas-local
-                    // space the origin is (0, 0). Surfacing the
-                    // pre-translate offset to the callback is a
-                    // diagnostic breadcrumb, not a correction; forward
-                    // zero for x/y so `Rect::new(bounds.x, bounds.y,
-                    // …)` in callback code resolves to the canvas's
-                    // actual origin without double-offsetting.
-                    let canvas_bounds = crate::canvas::CanvasBounds {
-                        x: 0.0,
-                        y: 0.0,
-                        width: bounds.width,
-                        height: bounds.height,
-                    };
-                    render_fn(ctx, canvas_bounds);
+                // `bounds.x` / `bounds.y` are already translated
+                // onto the DrawContext by the `push_transform` at
+                // the top of `render_node`, so in canvas-local
+                // space the origin is (0, 0). Surfacing the
+                // pre-translate offset to the callback is a
+                // diagnostic breadcrumb, not a correction; forward
+                // zero for x/y so `Rect::new(bounds.x, bounds.y,
+                // …)` in callback code resolves to the canvas's
+                // actual origin without double-offsetting.
+                let canvas_bounds = crate::canvas::CanvasBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: bounds.width,
+                    height: bounds.height,
+                };
+                render_fn(ctx, canvas_bounds);
 
-                    ctx.pop_clip();
-                }
+                ctx.pop_clip();
             }
         }
 
@@ -724,16 +724,15 @@ impl RenderTree {
 
             // Sticky: compute corrective offset when element would scroll past threshold
             let mut has_sticky_correction = false;
-            if child_is_sticky {
-                if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top) {
-                    if let Some(cb) = self.get_render_bounds(child_id, (0.0, 0.0)) {
-                        let visual_y = cb.y + new_cumulative.1;
-                        if visual_y < threshold {
-                            let correction = threshold - visual_y;
-                            ctx.push_transform(Transform::translate(0.0, correction));
-                            has_sticky_correction = true;
-                        }
-                    }
+            if child_is_sticky
+                && let Some(threshold) = child_render.and_then(|n| n.props.sticky_top)
+                && let Some(cb) = self.get_render_bounds(child_id, (0.0, 0.0))
+            {
+                let visual_y = cb.y + new_cumulative.1;
+                if visual_y < threshold {
+                    let correction = threshold - visual_y;
+                    ctx.push_transform(Transform::translate(0.0, correction));
+                    has_sticky_correction = true;
                 }
             }
 

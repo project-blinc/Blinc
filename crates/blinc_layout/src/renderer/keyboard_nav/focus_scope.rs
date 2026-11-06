@@ -190,10 +190,10 @@ impl RenderTree {
                 self.move_focus(router, target);
             }
         }
-        if let Some(node) = router.focused() {
-            if !self.is_focusable(node) {
-                router.set_focus(None);
-            }
+        if let Some(node) = router.focused()
+            && !self.is_focusable(node)
+        {
+            router.set_focus(None);
         }
         router.focus_stable = router.focused().and_then(|n| self.stable_id(n));
         router.publish_focus();

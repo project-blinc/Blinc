@@ -133,14 +133,12 @@ impl RenderTree {
         // Simple ID rules: highest specificity, applied last
         let all_ids = self.element_registry.all_ids();
         for id in &all_ids {
-            if let Some(node_id) = self.element_registry.get(id) {
-                if let Some(style) = stylesheet.get(id) {
-                    if style.has_layout_props()
-                        && subtree_filter.is_none_or(|s| s.contains(&node_id))
-                    {
-                        overrides.push((node_id, style.clone()));
-                    }
-                }
+            if let Some(node_id) = self.element_registry.get(id)
+                && let Some(style) = stylesheet.get(id)
+                && style.has_layout_props()
+                && subtree_filter.is_none_or(|s| s.contains(&node_id))
+            {
+                overrides.push((node_id, style.clone()));
             }
         }
 
@@ -467,10 +465,10 @@ impl RenderTree {
         // Post-pass: sync text-align into baked TextData
         // =====================================================================
         for render_node in self.render_nodes.values_mut() {
-            if let Some(ta) = render_node.props.text_align {
-                if let ElementType::Text(ref mut text_data) = render_node.element_type {
-                    text_data.align = ta;
-                }
+            if let Some(ta) = render_node.props.text_align
+                && let ElementType::Text(ref mut text_data) = render_node.element_type
+            {
+                text_data.align = ta;
             }
         }
 
@@ -593,10 +591,10 @@ impl RenderTree {
                         }
                     }
                 }
-                if !tag_styles.is_empty() {
-                    if let Some(render_node) = self.render_nodes.get_mut(&svg_node) {
-                        render_node.props.svg_tag_styles = tag_styles;
-                    }
+                if !tag_styles.is_empty()
+                    && let Some(render_node) = self.render_nodes.get_mut(&svg_node)
+                {
+                    render_node.props.svg_tag_styles = tag_styles;
                 }
             }
         }
@@ -626,45 +624,44 @@ impl RenderTree {
             });
             if let Some((td, td_color, td_thick, ws, to, ta, fill, stroke, stroke_w, fstyle)) =
                 parent_text_props
+                && let Some(node) = self.render_nodes.get_mut(&node_id)
             {
-                if let Some(node) = self.render_nodes.get_mut(&node_id) {
-                    if node.props.text_decoration.is_none() {
-                        node.props.text_decoration = td;
+                if node.props.text_decoration.is_none() {
+                    node.props.text_decoration = td;
+                }
+                if node.props.text_decoration_color.is_none() {
+                    node.props.text_decoration_color = td_color;
+                }
+                if node.props.text_decoration_thickness.is_none() {
+                    node.props.text_decoration_thickness = td_thick;
+                }
+                if node.props.white_space.is_none() {
+                    node.props.white_space = ws;
+                }
+                if node.props.text_overflow.is_none() {
+                    node.props.text_overflow = to;
+                }
+                // text_color is NOT copied here either; see
+                // `propagate_inherited_text`.
+                if node.props.text_align.is_none()
+                    && let Some(ta) = ta
+                {
+                    node.props.text_align = Some(ta);
+                    if let ElementType::Text(ref mut text_data) = node.element_type {
+                        text_data.align = ta;
                     }
-                    if node.props.text_decoration_color.is_none() {
-                        node.props.text_decoration_color = td_color;
-                    }
-                    if node.props.text_decoration_thickness.is_none() {
-                        node.props.text_decoration_thickness = td_thick;
-                    }
-                    if node.props.white_space.is_none() {
-                        node.props.white_space = ws;
-                    }
-                    if node.props.text_overflow.is_none() {
-                        node.props.text_overflow = to;
-                    }
-                    // text_color is NOT copied here either; see
-                    // `propagate_inherited_text`.
-                    if node.props.text_align.is_none() {
-                        if let Some(ta) = ta {
-                            node.props.text_align = Some(ta);
-                            if let ElementType::Text(ref mut text_data) = node.element_type {
-                                text_data.align = ta;
-                            }
-                        }
-                    }
-                    if node.props.fill.is_none() {
-                        node.props.fill = fill;
-                    }
-                    if node.props.stroke.is_none() {
-                        node.props.stroke = stroke;
-                    }
-                    if node.props.stroke_width.is_none() {
-                        node.props.stroke_width = stroke_w;
-                    }
-                    if node.props.font_style.is_none() {
-                        node.props.font_style = fstyle;
-                    }
+                }
+                if node.props.fill.is_none() {
+                    node.props.fill = fill;
+                }
+                if node.props.stroke.is_none() {
+                    node.props.stroke = stroke;
+                }
+                if node.props.stroke_width.is_none() {
+                    node.props.stroke_width = stroke_w;
+                }
+                if node.props.font_style.is_none() {
+                    node.props.font_style = fstyle;
                 }
             }
         }

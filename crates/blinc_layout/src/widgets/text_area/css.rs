@@ -26,15 +26,15 @@ pub(super) fn apply_css_overrides_textarea(
         if let Some(base) = stylesheet.get_class(class) {
             apply_style_to_textarea_config(cfg, base, visual);
         }
-        if let Some(s) = state {
-            if let Some(state_style) = stylesheet.get_class_with_state(class, s) {
-                apply_style_to_textarea_config(cfg, state_style, visual);
-            }
+        if let Some(s) = state
+            && let Some(state_style) = stylesheet.get_class_with_state(class, s)
+        {
+            apply_style_to_textarea_config(cfg, state_style, visual);
         }
-        if matches!(visual, TextFieldState::FocusedHovered) {
-            if let Some(s) = stylesheet.get_class_with_state(class, ElementState::Focus) {
-                apply_style_to_textarea_config(cfg, s, visual);
-            }
+        if matches!(visual, TextFieldState::FocusedHovered)
+            && let Some(s) = stylesheet.get_class_with_state(class, ElementState::Focus)
+        {
+            apply_style_to_textarea_config(cfg, s, visual);
         }
     }
 
@@ -43,15 +43,15 @@ pub(super) fn apply_css_overrides_textarea(
         if let Some(base) = stylesheet.get(element_id) {
             apply_style_to_textarea_config(cfg, base, visual);
         }
-        if let Some(s) = state {
-            if let Some(state_style) = stylesheet.get_with_state(element_id, s) {
-                apply_style_to_textarea_config(cfg, state_style, visual);
-            }
+        if let Some(s) = state
+            && let Some(state_style) = stylesheet.get_with_state(element_id, s)
+        {
+            apply_style_to_textarea_config(cfg, state_style, visual);
         }
-        if matches!(visual, TextFieldState::FocusedHovered) {
-            if let Some(focus_style) = stylesheet.get_with_state(element_id, ElementState::Focus) {
-                apply_style_to_textarea_config(cfg, focus_style, visual);
-            }
+        if matches!(visual, TextFieldState::FocusedHovered)
+            && let Some(focus_style) = stylesheet.get_with_state(element_id, ElementState::Focus)
+        {
+            apply_style_to_textarea_config(cfg, focus_style, visual);
         }
     }
 

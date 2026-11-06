@@ -924,10 +924,10 @@ impl RenderState {
             let scheduler = self.animations.lock().unwrap();
             for state in self.node_states.values_mut() {
                 // Update opacity from spring
-                if let Some(spring_id) = state.opacity_spring {
-                    if let Some(value) = scheduler.get_spring_value(spring_id) {
-                        state.opacity = value.clamp(0.0, 1.0);
-                    }
+                if let Some(spring_id) = state.opacity_spring
+                    && let Some(value) = scheduler.get_spring_value(spring_id)
+                {
+                    state.opacity = value.clamp(0.0, 1.0);
                 }
 
                 // Update background color from springs
@@ -953,10 +953,10 @@ impl RenderState {
                 }
 
                 // Update motion animation
-                if let Some(ref mut motion) = state.motion {
-                    if Self::tick_motion(motion, dt_ms) {
-                        motion_active = true;
-                    }
+                if let Some(ref mut motion) = state.motion
+                    && Self::tick_motion(motion, dt_ms)
+                {
+                    motion_active = true;
                 }
             }
         } // Drop scheduler lock
@@ -1334,17 +1334,17 @@ impl RenderState {
     /// follow-up). Mirrors the same guard `start_stable_motion` has on
     /// `Suspended | Waiting | Entering | Visible`.
     pub fn start_enter_motion(&mut self, node_id: LayoutNodeId, config: MotionAnimation) {
-        if let Some(state) = self.node_states.get(&node_id) {
-            if let Some(ref motion) = state.motion {
-                match motion.state {
-                    MotionState::Suspended
-                    | MotionState::Waiting { .. }
-                    | MotionState::Entering { .. }
-                    | MotionState::Visible
-                    | MotionState::Exiting { .. } => return,
-                    MotionState::Removed => {
-                        // Allow restart after a completed exit.
-                    }
+        if let Some(state) = self.node_states.get(&node_id)
+            && let Some(ref motion) = state.motion
+        {
+            match motion.state {
+                MotionState::Suspended
+                | MotionState::Waiting { .. }
+                | MotionState::Entering { .. }
+                | MotionState::Visible
+                | MotionState::Exiting { .. } => return,
+                MotionState::Removed => {
+                    // Allow restart after a completed exit.
                 }
             }
         }
@@ -1383,17 +1383,17 @@ impl RenderState {
     ///
     /// This is called when a node with motion config is about to be removed.
     pub fn start_exit_motion(&mut self, node_id: LayoutNodeId) {
-        if let Some(state) = self.node_states.get_mut(&node_id) {
-            if let Some(ref mut motion) = state.motion {
-                if motion.config.exit_to.is_some() && motion.config.exit_duration_ms > 0 {
-                    motion.state = MotionState::Exiting {
-                        progress: 0.0,
-                        duration_ms: motion.config.exit_duration_ms as f32,
-                    };
-                    motion.current = MotionKeyframe::default(); // Start from visible
-                } else {
-                    motion.state = MotionState::Removed;
-                }
+        if let Some(state) = self.node_states.get_mut(&node_id)
+            && let Some(ref mut motion) = state.motion
+        {
+            if motion.config.exit_to.is_some() && motion.config.exit_duration_ms > 0 {
+                motion.state = MotionState::Exiting {
+                    progress: 0.0,
+                    duration_ms: motion.config.exit_duration_ms as f32,
+                };
+                motion.current = MotionKeyframe::default(); // Start from visible
+            } else {
+                motion.state = MotionState::Removed;
             }
         }
     }
@@ -1591,12 +1591,12 @@ impl RenderState {
     /// Used when an overlay's close is cancelled (e.g., mouse re-enters hover card).
     /// This interrupts the exit animation and immediately sets the motion to fully visible.
     pub fn cancel_stable_motion_exit(&mut self, key: &str) {
-        if let Some(motion) = self.stable_motions.get_mut(key) {
-            if matches!(motion.state, MotionState::Exiting { .. }) {
-                // Return to fully visible state
-                motion.state = MotionState::Visible;
-                motion.current = MotionKeyframe::default(); // Reset to default (fully visible)
-            }
+        if let Some(motion) = self.stable_motions.get_mut(key)
+            && matches!(motion.state, MotionState::Exiting { .. })
+        {
+            // Return to fully visible state
+            motion.state = MotionState::Visible;
+            motion.current = MotionKeyframe::default(); // Reset to default (fully visible)
         }
     }
 
@@ -1684,36 +1684,36 @@ impl RenderState {
     /// Transitions a motion from `Suspended` → `Waiting` or `Entering` state.
     /// No-op if the motion is not in `Suspended` state.
     pub fn start_suspended_motion(&mut self, key: &str) {
-        if let Some(motion) = self.stable_motions.get_mut(key) {
-            if matches!(motion.state, MotionState::Suspended) {
-                let config = &motion.config;
-                tracing::debug!(
-                    "Motion '{}': Starting from suspended (enter_duration={}ms)",
-                    key,
-                    config.enter_duration_ms
-                );
+        if let Some(motion) = self.stable_motions.get_mut(key)
+            && matches!(motion.state, MotionState::Suspended)
+        {
+            let config = &motion.config;
+            tracing::debug!(
+                "Motion '{}': Starting from suspended (enter_duration={}ms)",
+                key,
+                config.enter_duration_ms
+            );
 
-                // Transition to the appropriate next state
-                motion.state = if config.enter_delay_ms > 0 {
-                    MotionState::Waiting {
-                        remaining_delay_ms: config.enter_delay_ms as f32,
-                    }
-                } else if config.enter_from.is_some() && config.enter_duration_ms > 0 {
-                    MotionState::Entering {
-                        progress: 0.0,
-                        duration_ms: config.enter_duration_ms as f32,
-                    }
-                } else {
-                    MotionState::Visible
-                };
+            // Transition to the appropriate next state
+            motion.state = if config.enter_delay_ms > 0 {
+                MotionState::Waiting {
+                    remaining_delay_ms: config.enter_delay_ms as f32,
+                }
+            } else if config.enter_from.is_some() && config.enter_duration_ms > 0 {
+                MotionState::Entering {
+                    progress: 0.0,
+                    duration_ms: config.enter_duration_ms as f32,
+                }
+            } else {
+                MotionState::Visible
+            };
 
-                // Reset current values to enter_from state
-                motion.current = if matches!(motion.state, MotionState::Visible) {
-                    MotionKeyframe::default()
-                } else {
-                    config.enter_from.clone().unwrap_or_default()
-                };
-            }
+            // Reset current values to enter_from state
+            motion.current = if matches!(motion.state, MotionState::Visible) {
+                MotionKeyframe::default()
+            } else {
+                config.enter_from.clone().unwrap_or_default()
+            };
         }
     }
 

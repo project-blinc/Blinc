@@ -631,12 +631,10 @@ impl CodeEditorData {
     pub fn move_right(&mut self, select: bool) {
         if select && self.selection_start.is_none() {
             self.selection_start = Some(self.cursor);
-        } else if !select {
-            if let Some(sel) = self.selection_start.take() {
-                let (_, end) = order_positions(sel, self.cursor);
-                self.cursor = end;
-                return;
-            }
+        } else if !select && let Some(sel) = self.selection_start.take() {
+            let (_, end) = order_positions(sel, self.cursor);
+            self.cursor = end;
+            return;
         }
         if self.cursor.line < self.lines.len() {
             let line_len = self.lines[self.cursor.line].chars().count();
@@ -794,15 +792,14 @@ impl CodeEditorData {
             for ch in line.chars() {
                 if ch == '{' {
                     stack.push(i);
-                } else if ch == '}' {
-                    if let Some(start) = stack.pop() {
-                        if start != i {
-                            regions.push(FoldRegion {
-                                start_line: start,
-                                end_line: i,
-                            });
-                        }
-                    }
+                } else if ch == '}'
+                    && let Some(start) = stack.pop()
+                    && start != i
+                {
+                    regions.push(FoldRegion {
+                        start_line: start,
+                        end_line: i,
+                    });
                 }
             }
         }
@@ -1554,15 +1551,14 @@ impl CodeEditor {
                     // Focus via FSM
                     {
                         let mut shared = shared_for_click.lock().unwrap();
-                        if !shared.state.is_focused() {
-                            if let Some(new_state) = shared
+                        if !shared.state.is_focused()
+                            && let Some(new_state) = shared
                                 .state
                                 .on_event(event_types::POINTER_DOWN)
                                 .or_else(|| shared.state.on_event(event_types::FOCUS))
-                            {
-                                shared.state = new_state;
-                                shared.needs_visual_update = true;
-                            }
+                        {
+                            shared.state = new_state;
+                            shared.needs_visual_update = true;
                         }
                     }
 
@@ -1593,15 +1589,15 @@ impl CodeEditor {
                     crate::widgets::text_input::set_focused_editable_node(
                         ctx.node_id,
                         Some(Box::new(move || {
-                            if let Ok(mut d) = blur_state.lock() {
-                                if d.focused {
-                                    d.focused = false;
-                                    d.selection_start = None;
-                                    if let Ok(mut cs) = d.cursor_state.lock() {
-                                        cs.visible = false;
-                                    }
-                                    decrement_focus_count();
+                            if let Ok(mut d) = blur_state.lock()
+                                && d.focused
+                            {
+                                d.focused = false;
+                                d.selection_start = None;
+                                if let Ok(mut cs) = d.cursor_state.lock() {
+                                    cs.visible = false;
                                 }
+                                decrement_focus_count();
                             }
                         })),
                     );
@@ -2072,10 +2068,8 @@ impl CodeEditor {
                         d.reset_cursor_blink();
                         d.ensure_cursor_visible();
                     }
-                    if text_changed {
-                        if let Some(ref cb) = d.on_change {
-                            cb(&d.value());
-                        }
+                    if text_changed && let Some(ref cb) = d.on_change {
+                        cb(&d.value());
                     }
                     let should_open_search = d.search_active && d.search_overlay_handle.is_none();
                     let needs_editor_refresh =
@@ -2813,30 +2807,29 @@ fn build_editor_content(
         if let Some((open, close)) = bracket_positions {
             for pos in [open, close] {
                 // Find visible row for this line
-                if let Some(vis_row) = visible_lines.iter().position(|&l| l == pos.line) {
-                    if pos.line < data.lines.len() {
-                        let before: String =
-                            data.lines[pos.line].chars().take(pos.column).collect();
-                        let x = data.measure_mono(&before) + pad;
-                        let char_w = data.measure_mono(
-                            &data.lines[pos.line]
-                                .chars()
-                                .skip(pos.column)
-                                .take(1)
-                                .collect::<String>(),
-                        );
-                        let y = vis_row as f32 * line_height_px + pad;
-                        code_area = code_area.child(
-                            div()
-                                .class("blinc-code-bracket")
-                                .absolute()
-                                .left(x)
-                                .top(y)
-                                .w(char_w.max(2.0))
-                                .h(line_height_px)
-                                .rounded(2.0),
-                        );
-                    }
+                if let Some(vis_row) = visible_lines.iter().position(|&l| l == pos.line)
+                    && pos.line < data.lines.len()
+                {
+                    let before: String = data.lines[pos.line].chars().take(pos.column).collect();
+                    let x = data.measure_mono(&before) + pad;
+                    let char_w = data.measure_mono(
+                        &data.lines[pos.line]
+                            .chars()
+                            .skip(pos.column)
+                            .take(1)
+                            .collect::<String>(),
+                    );
+                    let y = vis_row as f32 * line_height_px + pad;
+                    code_area = code_area.child(
+                        div()
+                            .class("blinc-code-bracket")
+                            .absolute()
+                            .left(x)
+                            .top(y)
+                            .w(char_w.max(2.0))
+                            .h(line_height_px)
+                            .rounded(2.0),
+                    );
                 }
             }
         }
@@ -2852,30 +2845,30 @@ fn build_editor_content(
     // Search match highlights
     if data.search_active && !data.search_matches.is_empty() {
         for (match_idx, &(line_idx, col_start, col_end)) in data.search_matches.iter().enumerate() {
-            if let Some(vis_row) = visible_lines.iter().position(|&l| l == line_idx) {
-                if line_idx < data.lines.len() {
-                    let before: String = data.lines[line_idx].chars().take(col_start).collect();
-                    let matched: String = data.lines[line_idx]
-                        .chars()
-                        .skip(col_start)
-                        .take(col_end - col_start)
-                        .collect();
-                    let x = data.measure_mono(&before) + pad;
-                    let w = data.measure_mono(&matched);
-                    let y = vis_row as f32 * line_height_px + pad;
-                    let mut mark = div()
-                        .class("blinc-code-find-match")
-                        .absolute()
-                        .left(x)
-                        .top(y)
-                        .w(w)
-                        .h(line_height_px)
-                        .rounded(2.0);
-                    if match_idx == data.search_match_idx {
-                        mark = mark.attr("data-active", "");
-                    }
-                    code_area = code_area.child(mark);
+            if let Some(vis_row) = visible_lines.iter().position(|&l| l == line_idx)
+                && line_idx < data.lines.len()
+            {
+                let before: String = data.lines[line_idx].chars().take(col_start).collect();
+                let matched: String = data.lines[line_idx]
+                    .chars()
+                    .skip(col_start)
+                    .take(col_end - col_start)
+                    .collect();
+                let x = data.measure_mono(&before) + pad;
+                let w = data.measure_mono(&matched);
+                let y = vis_row as f32 * line_height_px + pad;
+                let mut mark = div()
+                    .class("blinc-code-find-match")
+                    .absolute()
+                    .left(x)
+                    .top(y)
+                    .w(w)
+                    .h(line_height_px)
+                    .rounded(2.0);
+                if match_idx == data.search_match_idx {
+                    mark = mark.attr("data-active", "");
                 }
+                code_area = code_area.child(mark);
             }
         }
     }

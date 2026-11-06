@@ -76,13 +76,13 @@ impl RenderTree {
     fn close_focus_scope(&self, key: &str) {
         if let Some(id) = key.strip_prefix("stack-").and_then(|s| s.parse().ok()) {
             crate::widgets::overlay_stack::OverlayHandle::from_raw(id).close();
-        } else if let Some(id) = key.strip_prefix("legacy-").and_then(|s| s.parse().ok()) {
-            if let Some(ctx) = crate::overlay_state::OverlayContext::try_get() {
-                ctx.overlay_manager()
-                    .lock()
-                    .unwrap()
-                    .close(crate::widgets::overlay::OverlayHandle::from_raw(id));
-            }
+        } else if let Some(id) = key.strip_prefix("legacy-").and_then(|s| s.parse().ok())
+            && let Some(ctx) = crate::overlay_state::OverlayContext::try_get()
+        {
+            ctx.overlay_manager()
+                .lock()
+                .unwrap()
+                .close(crate::widgets::overlay::OverlayHandle::from_raw(id));
         }
     }
 
@@ -125,8 +125,9 @@ impl RenderTree {
         let Some(group) = group else {
             return false;
         };
-        if !bar && key == KEY_TAB {
-            if let Some(scope) = router.focus_scopes.iter().rev().find(|s| {
+        if !bar
+            && key == KEY_TAB
+            && let Some(scope) = router.focus_scopes.iter().rev().find(|s| {
                 s.return_to
                     .and_then(|id| self.layout_id(id))
                     .is_some_and(|n| {
@@ -134,11 +135,11 @@ impl RenderTree {
                             self.element_registry().attribute(g, "role").as_deref() != Some("menu")
                         })
                     })
-            }) {
-                self.close_focus_scope(&scope.key);
-                router.pending_tab = Some(shift);
-                return true;
-            }
+            })
+        {
+            self.close_focus_scope(&scope.key);
+            router.pending_tab = Some(shift);
+            return true;
         }
         let items = self.roving_items(group);
         if items.is_empty() {
@@ -180,28 +181,26 @@ impl RenderTree {
                 .last()
                 .and_then(|scope| scope.return_to)
                 .and_then(|id| self.layout_id(id));
-            if let Some(trigger) = trigger {
-                if let Some(parent) = self.roving_group(trigger) {
-                    if self.element_registry().attribute(parent, "role").as_deref()
-                        == Some("menubar")
-                    {
-                        let triggers = self.roving_items(parent);
-                        if let Some(at) = triggers.iter().position(|&n| n == trigger) {
-                            let next = if key == 37 {
-                                (at + triggers.len() - 1) % triggers.len()
-                            } else {
-                                (at + 1) % triggers.len()
-                            };
-                            self.move_focus(router, triggers[next]);
-                            self.click_node(triggers[next]);
-                            return true;
-                        }
-                    } else if key == 37 {
-                        if let Some(scope) = router.focus_scopes.last() {
-                            self.close_focus_scope(&scope.key);
-                        }
+            if let Some(trigger) = trigger
+                && let Some(parent) = self.roving_group(trigger)
+            {
+                if self.element_registry().attribute(parent, "role").as_deref() == Some("menubar") {
+                    let triggers = self.roving_items(parent);
+                    if let Some(at) = triggers.iter().position(|&n| n == trigger) {
+                        let next = if key == 37 {
+                            (at + triggers.len() - 1) % triggers.len()
+                        } else {
+                            (at + 1) % triggers.len()
+                        };
+                        self.move_focus(router, triggers[next]);
+                        self.click_node(triggers[next]);
                         return true;
                     }
+                } else if key == 37 {
+                    if let Some(scope) = router.focus_scopes.last() {
+                        self.close_focus_scope(&scope.key);
+                    }
+                    return true;
                 }
             }
         }

@@ -459,17 +459,17 @@ impl Stylesheet {
             if let Some((target_compound, _)) = selector.segments.last() {
                 // Check if the rightmost compound has a Type that matches an SVG tag name
                 for part in &target_compound.parts {
-                    if let SelectorPart::Type(name) = part {
-                        if SVG_TAG_NAMES.contains(&name.as_str()) {
-                            // Ancestor segments = everything except the last
-                            let ancestors = if selector.segments.len() > 1 {
-                                &selector.segments[..selector.segments.len() - 1]
-                            } else {
-                                &[]
-                            };
-                            results.push((name.as_str(), ancestors, style));
-                            break;
-                        }
+                    if let SelectorPart::Type(name) = part
+                        && SVG_TAG_NAMES.contains(&name.as_str())
+                    {
+                        // Ancestor segments = everything except the last
+                        let ancestors = if selector.segments.len() > 1 {
+                            &selector.segments[..selector.segments.len() - 1]
+                        } else {
+                            &[]
+                        };
+                        results.push((name.as_str(), ancestors, style));
+                        break;
                     }
                 }
             }
@@ -839,15 +839,14 @@ impl Stylesheet {
         state: ElementState,
     ) -> Option<crate::motion::MotionAnimation> {
         // First try state-specific animation
-        if let Some(style) = self.get_with_state(id, state) {
-            if let Some(anim_config) = &style.animation {
-                if let Some(keyframes) = self.get_keyframes(&anim_config.name) {
-                    let mut motion = keyframes
-                        .to_motion_animation(anim_config.duration_ms, anim_config.duration_ms);
-                    motion.enter_delay_ms = anim_config.delay_ms;
-                    return Some(motion);
-                }
-            }
+        if let Some(style) = self.get_with_state(id, state)
+            && let Some(anim_config) = &style.animation
+            && let Some(keyframes) = self.get_keyframes(&anim_config.name)
+        {
+            let mut motion =
+                keyframes.to_motion_animation(anim_config.duration_ms, anim_config.duration_ms);
+            motion.enter_delay_ms = anim_config.delay_ms;
+            return Some(motion);
         }
 
         // Fall back to base animation
@@ -916,31 +915,30 @@ impl Stylesheet {
         state: ElementState,
     ) -> Option<blinc_animation::MultiKeyframeAnimation> {
         // First try state-specific animation
-        if let Some(style) = self.get_with_state(id, state) {
-            if let Some(anim_config) = &style.animation {
-                if let Some(keyframes) = self.get_keyframes(&anim_config.name) {
-                    let mut anim = keyframes.to_multi_keyframe_animation(
-                        anim_config.duration_ms,
-                        anim_config.timing.to_easing(),
-                    );
+        if let Some(style) = self.get_with_state(id, state)
+            && let Some(anim_config) = &style.animation
+            && let Some(keyframes) = self.get_keyframes(&anim_config.name)
+        {
+            let mut anim = keyframes.to_multi_keyframe_animation(
+                anim_config.duration_ms,
+                anim_config.timing.to_easing(),
+            );
 
-                    let iterations = if anim_config.iteration_count == 0 {
-                        -1
-                    } else {
-                        anim_config.iteration_count as i32
-                    };
-                    anim.set_iterations(iterations);
-                    anim.set_delay(anim_config.delay_ms);
-                    anim.set_direction(anim_config.direction.to_play_direction());
-                    anim.set_fill_mode(anim_config.fill_mode.to_fill_mode());
+            let iterations = if anim_config.iteration_count == 0 {
+                -1
+            } else {
+                anim_config.iteration_count as i32
+            };
+            anim.set_iterations(iterations);
+            anim.set_delay(anim_config.delay_ms);
+            anim.set_direction(anim_config.direction.to_play_direction());
+            anim.set_fill_mode(anim_config.fill_mode.to_fill_mode());
 
-                    if anim_config.direction.starts_reversed() {
-                        anim.set_reversed(true);
-                    }
-
-                    return Some(anim);
-                }
+            if anim_config.direction.starts_reversed() {
+                anim.set_reversed(true);
             }
+
+            return Some(anim);
         }
 
         // Fall back to base animation

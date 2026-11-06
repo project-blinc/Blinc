@@ -532,15 +532,13 @@ impl AnimationScheduler {
             // duration of any animation, which on cn_demo with three
             // infinite-loop spinners pinned the main thread at full
             // refresh rate even when the user wasn't looking at them.
-            if !was_active {
-                if let Some(callback) = wake_callback {
-                    tracing::debug!(
-                        "Animation tick: waking driver (transition idle→active, continuous={}, active={})",
-                        wants_continuous,
-                        has_active
-                    );
-                    callback();
-                }
+            if !was_active && let Some(callback) = wake_callback {
+                tracing::debug!(
+                    "Animation tick: waking driver (transition idle→active, continuous={}, active={})",
+                    wants_continuous,
+                    has_active
+                );
+                callback();
             }
         }
 
@@ -1522,19 +1520,19 @@ impl SchedulerHandle {
 
     /// Pause a spring — freezes at current position
     pub fn pause_spring(&self, id: SpringId) {
-        if let Some(inner) = self.inner.upgrade() {
-            if let Some(spring) = inner.lock().unwrap().springs.get_mut(id) {
-                spring.pause();
-            }
+        if let Some(inner) = self.inner.upgrade()
+            && let Some(spring) = inner.lock().unwrap().springs.get_mut(id)
+        {
+            spring.pause();
         }
     }
 
     /// Resume a paused spring
     pub fn resume_spring(&self, id: SpringId) {
-        if let Some(inner) = self.inner.upgrade() {
-            if let Some(spring) = inner.lock().unwrap().springs.get_mut(id) {
-                spring.resume();
-            }
+        if let Some(inner) = self.inner.upgrade()
+            && let Some(spring) = inner.lock().unwrap().springs.get_mut(id)
+        {
+            spring.resume();
         }
         self.wake();
     }
@@ -1591,20 +1589,20 @@ impl SchedulerHandle {
 
     /// Start a keyframe animation
     pub fn start_keyframe(&self, id: KeyframeId) {
-        if let Some(inner) = self.inner.upgrade() {
-            if let Some(keyframe) = inner.lock().unwrap().keyframes.get_mut(id) {
-                keyframe.start();
-            }
+        if let Some(inner) = self.inner.upgrade()
+            && let Some(keyframe) = inner.lock().unwrap().keyframes.get_mut(id)
+        {
+            keyframe.start();
         }
         self.wake();
     }
 
     /// Stop a keyframe animation
     pub fn stop_keyframe(&self, id: KeyframeId) {
-        if let Some(inner) = self.inner.upgrade() {
-            if let Some(keyframe) = inner.lock().unwrap().keyframes.get_mut(id) {
-                keyframe.stop();
-            }
+        if let Some(inner) = self.inner.upgrade()
+            && let Some(keyframe) = inner.lock().unwrap().keyframes.get_mut(id)
+        {
+            keyframe.stop();
         }
     }
 
@@ -1648,20 +1646,20 @@ impl SchedulerHandle {
 
     /// Start a timeline
     pub fn start_timeline(&self, id: TimelineId) {
-        if let Some(inner) = self.inner.upgrade() {
-            if let Some(timeline) = inner.lock().unwrap().timelines.get_mut(id) {
-                timeline.start();
-            }
+        if let Some(inner) = self.inner.upgrade()
+            && let Some(timeline) = inner.lock().unwrap().timelines.get_mut(id)
+        {
+            timeline.start();
         }
         self.wake();
     }
 
     /// Stop a timeline
     pub fn stop_timeline(&self, id: TimelineId) {
-        if let Some(inner) = self.inner.upgrade() {
-            if let Some(timeline) = inner.lock().unwrap().timelines.get_mut(id) {
-                timeline.stop();
-            }
+        if let Some(inner) = self.inner.upgrade()
+            && let Some(timeline) = inner.lock().unwrap().timelines.get_mut(id)
+        {
+            timeline.stop();
         }
     }
 

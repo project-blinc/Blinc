@@ -35,12 +35,11 @@ pub(crate) fn parse_at_position(s: &str) -> ((ClipLength, ClipLength), &str) {
     if let Some(rest) = s.strip_prefix("at") {
         let rest = rest.trim();
         let tokens: Vec<&str> = rest.splitn(2, char::is_whitespace).collect();
-        if tokens.len() == 2 {
-            if let (Some(cx), Some(cy)) =
+        if tokens.len() == 2
+            && let (Some(cx), Some(cy)) =
                 (parse_clip_length(tokens[0]), parse_clip_length(tokens[1]))
-            {
-                return ((cx, cy), "");
-            }
+        {
+            return ((cx, cy), "");
         }
         // single token → cx, cy=50%
         if let Some(cx) = tokens.first().and_then(|t| parse_clip_length(t)) {

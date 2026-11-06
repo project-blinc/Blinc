@@ -48,20 +48,20 @@ pub fn compile_flow(graph: &FlowGraph) -> Result<FlowShader, FlowError> {
 
     let mut buffers: Vec<FlowBuffer> = Vec::new();
     for input in &graph.inputs {
-        if let FlowInputSource::Buffer { name, ty } = &input.source {
-            if !buffers.iter().any(|b| b.name == *name) {
-                buffers.push(FlowBuffer {
-                    name: name.clone().into(),
-                    element_size: match ty {
-                        FlowType::Float => 4,
-                        FlowType::Vec2 => 8,
-                        FlowType::Vec3 => 12,
-                        FlowType::Vec4 => 16,
-                        FlowType::Mat4 => 64,
-                    },
-                    read_write: false,
-                });
-            }
+        if let FlowInputSource::Buffer { name, ty } = &input.source
+            && !buffers.iter().any(|b| b.name == *name)
+        {
+            buffers.push(FlowBuffer {
+                name: name.clone().into(),
+                element_size: match ty {
+                    FlowType::Float => 4,
+                    FlowType::Vec2 => 8,
+                    FlowType::Vec3 => 12,
+                    FlowType::Vec4 => 16,
+                    FlowType::Mat4 => 64,
+                },
+                read_write: false,
+            });
         }
     }
     for output in &graph.outputs {
@@ -126,10 +126,10 @@ pub fn flow_needs_scene_texture(graph: &FlowGraph) -> bool {
         }
     }
     for output in &graph.outputs {
-        if let Some(expr) = &output.expr {
-            if expr_uses_scene(expr) {
-                return true;
-            }
+        if let Some(expr) = &output.expr
+            && expr_uses_scene(expr)
+        {
+            return true;
         }
     }
     false

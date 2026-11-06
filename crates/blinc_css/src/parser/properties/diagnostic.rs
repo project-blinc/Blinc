@@ -947,11 +947,13 @@ pub(crate) fn apply_property_with_errors(
             for part in &parts {
                 if let Some(px) = parse_css_px(part) {
                     style.outline_width = Some(px);
-                } else if part != "solid" && part != "none" && part != "dotted" && part != "dashed"
+                } else if part != "solid"
+                    && part != "none"
+                    && part != "dotted"
+                    && part != "dashed"
+                    && let Some(color) = parse_color(part)
                 {
-                    if let Some(color) = parse_color(part) {
-                        style.outline_color = Some(color);
-                    }
+                    style.outline_color = Some(color);
                 }
             }
             if value.trim() == "none" {
