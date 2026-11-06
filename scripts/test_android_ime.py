@@ -17,6 +17,64 @@ SDK = Path(os.environ.get("ANDROID_HOME", Path.home() / "Library/Android/sdk"))
 JAVA = Path(os.environ.get("BLINC_TEST_JAVA_HOME", "/Applications/Android Studio.app/Contents/jbr/Contents/Home"))
 
 
+def read_png(path):
+    """Decode an 8-bit, non-interlaced RGB or RGBA PNG into rows of (r, g, b)."""
+    import struct
+    import zlib
+
+    data = Path(path).read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise RuntimeError(f"{path} is not a PNG")
+    pos, idat, width, height, depth, kind = 8, b"", 0, 0, 0, 0
+    while pos < len(data):
+        length, tag = struct.unpack(">I4s", data[pos:pos + 8])
+        chunk = data[pos + 8:pos + 8 + length]
+        if tag == b"IHDR":
+            width, height, depth, kind, _, _, interlace = struct.unpack(">IIBBBBB", chunk)
+            if depth != 8 or kind not in (2, 6) or interlace:
+                raise RuntimeError("only 8-bit RGB or RGBA PNGs without interlacing are supported")
+        elif tag == b"IDAT":
+            idat += chunk
+        pos += 12 + length
+    step = 3 if kind == 2 else 4
+    raw = zlib.decompress(idat)
+    stride = width * step
+    rows, previous = [], bytearray(stride)
+    for y in range(height):
+        base = y * (stride + 1)
+        filter_type, line = raw[base], bytearray(raw[base + 1:base + 1 + stride])
+        for i in range(stride):
+            left = line[i - step] if i >= step else 0
+            up = previous[i]
+            upper_left = previous[i - step] if i >= step else 0
+            if filter_type == 1:
+                line[i] = (line[i] + left) & 255
+            elif filter_type == 2:
+                line[i] = (line[i] + up) & 255
+            elif filter_type == 3:
+                line[i] = (line[i] + (left + up) // 2) & 255
+            elif filter_type == 4:
+                estimate = left + up - upper_left
+                nearest = min((abs(estimate - left), left), (abs(estimate - up), up), (abs(estimate - upper_left), upper_left))[1]
+                line[i] = (line[i] + nearest) & 255
+        rows.append([(line[x * step], line[x * step + 1], line[x * step + 2]) for x in range(width)])
+        previous = line
+    return rows
+
+
+def write_png(path, rows):
+    import struct
+    import zlib
+
+    def chunk(tag, body):
+        return struct.pack(">I", len(body)) + tag + body + struct.pack(">I", zlib.crc32(tag + body))
+
+    height, width = len(rows), len(rows[0]) if rows else 0
+    raw = b"".join(b"\x00" + bytes(c for pixel in row for c in pixel) for row in rows)
+    Path(path).write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+                          + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
 def prepare(native=False):
     project = OUT / "project"
     project.mkdir(parents=True, exist_ok=True)
@@ -176,12 +234,11 @@ def main():
             if args.native:
                 run("rendered-edit", [adb, "-s", serial, "pull", f"/sdcard/Android/data/{package}/files/ime-native.png", str(OUT / "ime-native.png")])
                 run("rendered-bounds", [adb, "-s", serial, "pull", f"/sdcard/Android/data/{package}/files/ime-native-bounds.json", str(OUT / "ime-native-bounds.json")])
-                from PIL import Image
                 bounds = json.loads((OUT / "ime-native-bounds.json").read_text())
-                with Image.open(OUT / "ime-native.png") as screenshot:
-                    pixels = screenshot.convert("RGB").crop(bounds)
-                    pixels.save(OUT / "ime-input.png")
-                    orange = sum(1 for r, g, b in pixels.get_flattened_data() if r > 150 and 60 < g < 200 and b < 100)
+                left, top, right, bottom = bounds
+                pixels = [row[left:right] for row in read_png(OUT / "ime-native.png")[top:bottom]]
+                write_png(OUT / "ime-input.png", pixels)
+                orange = sum(1 for row in pixels for r, g, b in row if r > 150 and 60 < g < 200 and b < 100)
                 (OUT / "emoji-pixels.json").write_text(json.dumps({"bounds": bounds, "orange_pixels": orange}) + "\n")
                 if orange < 20:
                     raise RuntimeError("The typed fox has no visible colour pixels in the GPU input")
