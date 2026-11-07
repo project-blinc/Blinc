@@ -147,14 +147,17 @@ jobs:
         run: |
           cargo run -p blinc-build-web-examples -- --no-gallery --shard "${{ matrix.shard }}/${{ needs.shards.outputs.count }}"
 
+      # `target/` is restored from the cargo cache, so a previous run's output can already be
+      # here: start from nothing, and copy the contents so an existing directory never nests.
       - name: Collect the built wrappers
         run: |
+          rm -rf target/wrapper-shard
           mkdir -p target/wrapper-shard
           for dir in examples/_generated/*/; do
             if [ -f "$dir/pkg/package.json" ]; then
               name=$(basename "$dir")
-              mkdir -p "target/wrapper-shard/$name"
-              cp -R "$dir/pkg" "target/wrapper-shard/$name/pkg"
+              mkdir -p "target/wrapper-shard/$name/pkg"
+              cp -R "$dir/pkg/." "target/wrapper-shard/$name/pkg/"
             fi
           done
           ls target/wrapper-shard | wc -l
