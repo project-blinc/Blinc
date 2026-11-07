@@ -236,197 +236,202 @@ impl GpuRenderer {
                 source: wgpu::ShaderSource::Wgsl(shader_src.into()),
             });
 
+        // Bindings 0..=13 are shared; 14 and 15 are morph-target storage buffers that only the
+        // storage-buffer shader reads, so the WebGL2 layout stops at 13.
+        let layout_entries = [
+            // 0: Uniforms (view_proj, model, light_view_proj, camera, light, flags)
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            // 1: Material uniforms
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            // 2: Base color texture
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            // 3: Texture sampler (shared for base color, normal, displacement)
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+            // 4: Normal map texture
+            wgpu::BindGroupLayoutEntry {
+                binding: 4,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            // 5: Shadow map (depth texture)
+            wgpu::BindGroupLayoutEntry {
+                binding: 5,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    sample_type: wgpu::TextureSampleType::Depth,
+                },
+                count: None,
+            },
+            // 6: Shadow comparison sampler
+            wgpu::BindGroupLayoutEntry {
+                binding: 6,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                count: None,
+            },
+            // 7: Displacement / height map texture
+            wgpu::BindGroupLayoutEntry {
+                binding: 7,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            // 8: Joint matrices — storage buffer (normal) or texture (WebGL2 DT)
+            wgpu::BindGroupLayoutEntry {
+                binding: 8,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: if self.has_storage_buffers {
+                    wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    }
+                } else {
+                    wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    }
+                },
+                count: None,
+            },
+            // 9: Metallic / roughness texture (glTF convention:
+            // metallic in .b, roughness in .g, multiplied per-texel
+            // by the scalar factors in MaterialUniforms).
+            wgpu::BindGroupLayoutEntry {
+                binding: 9,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            // 10: Emissive texture — multiplied per-texel by the
+            // scalar `emissive` RGB in MaterialUniforms. Used for
+            // self-lit surfaces (HUD glyphs, LED panels, etc.).
+            wgpu::BindGroupLayoutEntry {
+                binding: 10,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            // 11: Ambient occlusion texture — .r channel attenuates
+            // the ambient/indirect diffuse term. `occlusion_strength`
+            // in MaterialUniforms controls how much AO applies.
+            wgpu::BindGroupLayoutEntry {
+                binding: 11,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            // 12: Environment cubemap for IBL reflections
+            wgpu::BindGroupLayoutEntry {
+                binding: 12,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::Cube,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            // 13: Environment cubemap sampler
+            wgpu::BindGroupLayoutEntry {
+                binding: 13,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+            // 14: Morph-target deltas (positions + normals,
+            // interleaved two-vec4-per-(target, vertex)).
+            // Vertex stage only — the vertex shader's
+            // per-target loop is the sole consumer.
+            wgpu::BindGroupLayoutEntry {
+                binding: 14,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            // 15: Morph-target weights — one f32 per target,
+            // updated per draw from the pose's weight
+            // sink.
+            wgpu::BindGroupLayoutEntry {
+                binding: 15,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ];
         let bind_group_layout =
             self.device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("Mesh Bind Group Layout"),
-                    entries: &[
-                        // 0: Uniforms (view_proj, model, light_view_proj, camera, light, flags)
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        // 1: Material uniforms
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        // 2: Base color texture
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 2,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                multisampled: false,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            },
-                            count: None,
-                        },
-                        // 3: Texture sampler (shared for base color, normal, displacement)
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 3,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                            count: None,
-                        },
-                        // 4: Normal map texture
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 4,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                multisampled: false,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            },
-                            count: None,
-                        },
-                        // 5: Shadow map (depth texture)
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 5,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                multisampled: false,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Depth,
-                            },
-                            count: None,
-                        },
-                        // 6: Shadow comparison sampler
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 6,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
-                            count: None,
-                        },
-                        // 7: Displacement / height map texture
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 7,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                multisampled: false,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            },
-                            count: None,
-                        },
-                        // 8: Joint matrices — storage buffer (normal) or texture (WebGL2 DT)
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 8,
-                            visibility: wgpu::ShaderStages::VERTEX,
-                            ty: if self.has_storage_buffers {
-                                wgpu::BindingType::Buffer {
-                                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                    has_dynamic_offset: false,
-                                    min_binding_size: None,
-                                }
-                            } else {
-                                wgpu::BindingType::Texture {
-                                    sample_type: wgpu::TextureSampleType::Float {
-                                        filterable: false,
-                                    },
-                                    view_dimension: wgpu::TextureViewDimension::D2,
-                                    multisampled: false,
-                                }
-                            },
-                            count: None,
-                        },
-                        // 9: Metallic / roughness texture (glTF convention:
-                        // metallic in .b, roughness in .g, multiplied per-texel
-                        // by the scalar factors in MaterialUniforms).
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 9,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                multisampled: false,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            },
-                            count: None,
-                        },
-                        // 10: Emissive texture — multiplied per-texel by the
-                        // scalar `emissive` RGB in MaterialUniforms. Used for
-                        // self-lit surfaces (HUD glyphs, LED panels, etc.).
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 10,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                multisampled: false,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            },
-                            count: None,
-                        },
-                        // 11: Ambient occlusion texture — .r channel attenuates
-                        // the ambient/indirect diffuse term. `occlusion_strength`
-                        // in MaterialUniforms controls how much AO applies.
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 11,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                multisampled: false,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            },
-                            count: None,
-                        },
-                        // 12: Environment cubemap for IBL reflections
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 12,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                multisampled: false,
-                                view_dimension: wgpu::TextureViewDimension::Cube,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            },
-                            count: None,
-                        },
-                        // 13: Environment cubemap sampler
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 13,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                            count: None,
-                        },
-                        // 14: Morph-target deltas (positions + normals,
-                        // interleaved two-vec4-per-(target, vertex)).
-                        // Vertex stage only — the vertex shader's
-                        // per-target loop is the sole consumer.
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 14,
-                            visibility: wgpu::ShaderStages::VERTEX,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        // 15: Morph-target weights — one f32 per target,
-                        // updated per draw from the pose's weight
-                        // sink.
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 15,
-                            visibility: wgpu::ShaderStages::VERTEX,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                    ],
+                    entries: if self.has_storage_buffers {
+                        &layout_entries
+                    } else {
+                        &layout_entries[..14]
+                    },
                 });
 
         let pipeline_layout = self
@@ -2028,13 +2033,9 @@ impl GpuRenderer {
             //   - `Bc*`       → `GpuImage::from_compressed` with the
             //                   slot's sRGB vs linear color space.
             //
-            // If a BC-encoded texture arrives on an adapter without
-            // `TEXTURE_COMPRESSION_BC`, `from_compressed` would fail
-            // the upload (wgpu errors on the texture format). Skip
-            // it and warn — the mesh binds the 1×1 default. Callers
-            // controlling encoding via `blinc_gltf::LoadOptions`
-            // should query `renderer.has_texture_compression_bc()`
-            // before enabling BC.
+            // A BC-encoded texture on an adapter without
+            // `TEXTURE_COMPRESSION_BC` cannot be uploaded as BC, so it is
+            // expanded to RGBA8 on the CPU and takes the uncompressed path.
             //
             // Cache eviction caveat: if an entry is FIFO-evicted
             // from `cached_gpu_images` and `with_bytes` returns None
@@ -2044,11 +2045,20 @@ impl GpuRenderer {
             // drop stays despite this.
             use blinc_core::TexturePixelFormat;
             let compressed = td.format.is_compressed();
-            if compressed && !self.has_texture_compression_bc {
+            let expand = compressed && !self.has_texture_compression_bc;
+            let expanded = if expand {
+                td.with_bytes(|bytes| {
+                    crate::bc_decode::decode_to_rgba8(bytes, td.format, td.width, td.height)
+                })
+                .flatten()
+            } else {
+                None
+            };
+            if expand && expanded.is_none() {
                 tracing::warn!(
                     label,
                     format = ?td.format,
-                    "BC texture received but device has no TEXTURE_COMPRESSION_BC — binding default"
+                    "BC texture could not be expanded for a device without TEXTURE_COMPRESSION_BC — binding default"
                 );
                 continue;
             }
@@ -2063,7 +2073,7 @@ impl GpuRenderer {
                     is_color,
                     "uploading mesh texture"
                 );
-                if compressed {
+                if compressed && !expand {
                     crate::image::GpuImage::from_compressed(
                         &self.device,
                         &self.queue,
@@ -2075,7 +2085,8 @@ impl GpuRenderer {
                         Some(*label),
                     )
                 } else {
-                    debug_assert_eq!(td.format, TexturePixelFormat::Rgba8);
+                    debug_assert!(expand || td.format == TexturePixelFormat::Rgba8);
+                    let bytes = expanded.as_deref().unwrap_or(bytes);
                     // Color slots (diffuse, emissive) upload as
                     // sRGB so the sampler decodes to linear on
                     // read — matches what `Bc1RgbaUnormSrgb` /
@@ -2297,84 +2308,89 @@ impl GpuRenderer {
         };
 
         // ── Create bind group ────────────────────────────────────────────
+        let bind_group_entries = [
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: mp.uniform_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: mp.material_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(base_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::Sampler(&mp.sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: wgpu::BindingResource::TextureView(normal_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: wgpu::BindingResource::TextureView(&mp.shadow_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: wgpu::BindingResource::Sampler(&mp.shadow_sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 7,
+                resource: wgpu::BindingResource::TextureView(displacement_view),
+            },
+            joint_binding_8,
+            wgpu::BindGroupEntry {
+                binding: 9,
+                resource: wgpu::BindingResource::TextureView(metallic_roughness_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 10,
+                resource: wgpu::BindingResource::TextureView(emissive_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 11,
+                resource: wgpu::BindingResource::TextureView(occlusion_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 12,
+                resource: wgpu::BindingResource::TextureView(&mp.env_cubemap_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 13,
+                resource: wgpu::BindingResource::Sampler(&mp.env_sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 14,
+                resource: {
+                    // Resolve the delta buffer: cached per-mesh if
+                    // any morph targets, else the zero-sized dummy.
+                    let buf = morph_cache_key
+                        .and_then(|k| {
+                            mp.morph_deltas_cache
+                                .iter()
+                                .find(|(key, _)| *key == k)
+                                .map(|(_, b)| b)
+                        })
+                        .unwrap_or(&mp.morph_deltas_dummy);
+                    buf.as_entire_binding()
+                },
+            },
+            wgpu::BindGroupEntry {
+                binding: 15,
+                resource: mp.morph_weights_buffer.as_entire_binding(),
+            },
+        ];
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Mesh Bind Group"),
             layout: &mp.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: mp.uniform_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: mp.material_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(base_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::Sampler(&mp.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::TextureView(normal_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: wgpu::BindingResource::TextureView(&mp.shadow_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: wgpu::BindingResource::Sampler(&mp.shadow_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 7,
-                    resource: wgpu::BindingResource::TextureView(displacement_view),
-                },
-                joint_binding_8,
-                wgpu::BindGroupEntry {
-                    binding: 9,
-                    resource: wgpu::BindingResource::TextureView(metallic_roughness_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 10,
-                    resource: wgpu::BindingResource::TextureView(emissive_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 11,
-                    resource: wgpu::BindingResource::TextureView(occlusion_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 12,
-                    resource: wgpu::BindingResource::TextureView(&mp.env_cubemap_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 13,
-                    resource: wgpu::BindingResource::Sampler(&mp.env_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 14,
-                    resource: {
-                        // Resolve the delta buffer: cached per-mesh if
-                        // any morph targets, else the zero-sized dummy.
-                        let buf = morph_cache_key
-                            .and_then(|k| {
-                                mp.morph_deltas_cache
-                                    .iter()
-                                    .find(|(key, _)| *key == k)
-                                    .map(|(_, b)| b)
-                            })
-                            .unwrap_or(&mp.morph_deltas_dummy);
-                        buf.as_entire_binding()
-                    },
-                },
-                wgpu::BindGroupEntry {
-                    binding: 15,
-                    resource: mp.morph_weights_buffer.as_entire_binding(),
-                },
-            ],
+            entries: if self.has_storage_buffers {
+                &bind_group_entries
+            } else {
+                &bind_group_entries[..14]
+            },
         });
 
         // ── Main depth buffer ────────────────────────────────────────────
