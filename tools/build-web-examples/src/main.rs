@@ -1488,7 +1488,8 @@ fn render_index_html(
         position: relative;
         {stage_css}
       }}
-      #stage canvas {{ display: block; width: 100%; height: 100%; touch-action: none; }}
+      #stage {{ -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }}
+      #stage canvas {{ display: block; width: 100%; height: 100%; touch-action: none; outline: 0; }}
       .demo-input-bridge {{ position: absolute; left: 8px; top: 8px; width: 1px; height: 1px; padding: 0; opacity: 0; pointer-events: none; }}
       #loading {{
         position: absolute;
