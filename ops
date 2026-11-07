@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1794075486,"nonce":"dN4Q2lOKSEswscO3BYzhFKDhtsk=","status":2}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794075584,"nonce":"g1n2aqQWAWecyr2vBNSOx+EeVmU=","message":"Owner confirmed on a phone (Chrome, dark theme, live /components/cn/select/): the open Select popup renders over the page with its options legible and no background text showing through. Closed after this check.","files":null}]}
