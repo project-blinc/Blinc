@@ -1,17 +1,10 @@
 # @flow Shader
 
 Demonstrates the @flow DAG-based shader system.
-Custom GPU fragment shaders are defined in CSS via `@flow` blocks
-and applied to elements with `flow: <name>`.
+Custom GPU fragment shaders are written as `@flow` blocks, transpiled to WGSL at
+compile time by `flow!` and drawn by a canvas with `Canvas::flow`.
 
-<iframe
-  src="../../examples/flow_demo/index.html"
-  width="100%"
-  height="560"
-  loading="lazy"
-  style="border:1px solid #45475a;border-radius:8px;background:#181825;"
-  title="Blinc flow_demo example"
-></iframe>
+<div class="blinc-example" data-example="flow_demo" data-title="Blinc flow_demo example"></div>
 
 > **Tip:** Some demos are best viewed in a full browser window. Click "Open in a new tab" below for the full experience.
 

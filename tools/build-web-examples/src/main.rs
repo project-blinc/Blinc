@@ -266,7 +266,7 @@ const INFERABLE_DEPS: &[(&str, &str, &str)] = &[
 // ============================================================================
 
 /// Everything the codegen stage needs to know about one example.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ExampleMeta {
     /// Base name of the source file without `.rs`, e.g. `"scroll"`.
     name: String,
@@ -296,7 +296,7 @@ struct ExampleMeta {
     /// Window width/height from `WindowConfig { width: N, height: M }`
     /// in the example's `fn main`. Extracted so the generated
     /// `index.html` can set `data-width`/`data-height` on the canvas
-    /// for consistent rendering in docs/book iframes.
+    /// for consistent rendering in docs/book demos.
     window_size: Option<(u32, u32)>,
     /// `true` when the example defines `pub fn theme_bundle() ->
     /// ThemeBundle`. When set, the wasm wrapper hands the bundle to
@@ -315,6 +315,14 @@ struct ExampleMeta {
     has_theme_color_scheme: bool,
     /// The source calls `web_sys::window()`, which is `None` in a worker, so the page must start it.
     needs_page_thread: bool,
+}
+
+impl ExampleMeta {
+    /// Whether the book can run the example inside its page. A worker owns the canvas there, so an
+    /// example that needs the page thread, or streams media through a DOM element, has no place in it.
+    fn in_book(&self) -> bool {
+        !self.needs_page_thread && !self.image_assets.iter().any(|p| is_media_url(p))
+    }
 }
 
 /// Walk `EXAMPLES_DIR`, parse each `.rs`, and return metadata for
@@ -1654,19 +1662,19 @@ fi
 //      cards linking to each per-example sub-page. Auto-generated
 //      from the discovered example list.
 //   2. `example-gallery/<name>.md` — one page per example: title,
-//      description, lazy-loaded iframe, "view source" GitHub link.
+//      description, an inline worker-hosted demo, "view source" GitHub link.
 //   3. `SUMMARY.md` — patched between the
 //      `<!-- begin:web-examples -->` / `<!-- end:web-examples -->`
 //      markers to add nested entries for each example page. The
 //      rest of SUMMARY.md is left untouched.
 //
-// The per-example sub-pages use an iframe with `loading="lazy"` so
-// browsing the gallery doesn't spawn 40+ WebGPU contexts at once
-// (Chrome refuses to allocate that many). The iframe src points at
-// `../../examples/<name>/index.html`, which resolves against the
-// book's HTML output root — CI copies `examples/_generated/<name>/`
-// into `target/book/examples/<name>/` after the mdbook build so
-// the relative path lines up at serve time.
+// The per-example sub-pages mount their demo lazily, when it scrolls into
+// view, so browsing the gallery doesn't spawn 40+ WebGPU contexts at once
+// (Chrome refuses to allocate that many). The demo's module is at
+// `../../examples/<name>/`, which resolves against the book's HTML output
+// root — CI copies `examples/_generated/<name>/` into
+// `target/book/examples/<name>/` after the mdbook build so the relative
+// path lines up at serve time.
 
 /// Path (relative to the workspace root) of the gallery's sub-page
 /// directory under the mdBook source tree.
@@ -1680,7 +1688,9 @@ const SUMMARY_PATH: &str = "docs/book/src/SUMMARY.md";
 
 /// Write the gallery index page, one sub-page per example, and
 /// patch SUMMARY.md to include them. Idempotent.
-fn emit_gallery(workspace_root: &Path, examples: &[ExampleMeta]) -> std::io::Result<()> {
+fn emit_gallery(workspace_root: &Path, all: &[ExampleMeta]) -> std::io::Result<()> {
+    let examples: Vec<ExampleMeta> = all.iter().filter(|m| m.in_book()).cloned().collect();
+    let examples = examples.as_slice();
     let gallery_dir = workspace_root.join(GALLERY_SUBDIR);
     fs::create_dir_all(&gallery_dir)?;
 
@@ -1712,10 +1722,8 @@ fn emit_gallery(workspace_root: &Path, examples: &[ExampleMeta]) -> std::io::Res
     Ok(())
 }
 
-/// Render the per-example gallery sub-page. Keeps the iframe at a
-/// fixed height that matches the default wgpu canvas aspect ratio
-/// well enough for most demos; authors can tune per-example heights
-/// later via a manifest field if the default feels cramped.
+/// Render the per-example gallery sub-page. The demo is a placeholder the book's
+/// `blinc-example.js` fills with the worker host, once the page scrolls it into view.
 fn render_gallery_page(meta: &ExampleMeta) -> String {
     let source_url = format!(
         "{SOURCE_LINK_BASE}/{path}",
@@ -1724,8 +1732,8 @@ fn render_gallery_page(meta: &ExampleMeta) -> String {
     // Gallery sub-pages live at `docs/book/src/web/example-gallery/<name>.md`,
     // which renders to `target/book/web/example-gallery/<name>.html`.
     // CI stages wasm-pack output at `target/book/examples/<name>/`.
-    // So the iframe path is `../../examples/<name>/index.html`.
-    let iframe_src = format!("../../examples/{name}/index.html", name = meta.name);
+    // So the example path is `../../examples/<name>/index.html`.
+    let example_src = format!("../../examples/{name}/index.html", name = meta.name);
 
     let description = if meta.description.trim().is_empty() {
         String::from(
@@ -1742,22 +1750,15 @@ fn render_gallery_page(meta: &ExampleMeta) -> String {
 
 {description}
 
-<iframe
-  src="{iframe_src}"
-  width="100%"
-  height="560"
-  loading="lazy"
-  style="border:1px solid #45475a;border-radius:8px;background:#181825;"
-  title="Blinc {name} example"
-></iframe>
+<div class="blinc-example" data-example="{name}" data-title="Blinc {name} example"></div>
 
 > **Tip:** Some demos are best viewed in a full browser window. Click "Open in a new tab" below for the full experience.
 
-[Open in a new tab]({iframe_src}) · [View source on GitHub]({source_url})
+[Open in a new tab]({example_src}) · [View source on GitHub]({source_url})
 "#,
         title = meta.title,
         description = description,
-        iframe_src = iframe_src,
+        example_src = example_src,
         source_url = source_url,
         name = meta.name,
     )
@@ -1777,7 +1778,7 @@ fn render_gallery_index(examples: &[ExampleMeta]) -> String {
          [Contributing → Examples](../contributing/examples.md) page for the\n\
          convention that makes this work.\n\n\
          Click any card to open the example in a focused view with a\n\
-         lazy-loaded iframe. Each demo spawns its own WebGPU context, so\n\
+         lazily started demo. Each demo spawns its own WebGPU context, so\n\
          loading more than ~8 at once will start hitting Chrome's\n\
          per-tab GPU context limit — the per-example pages keep that\n\
          manageable.\n\n\
@@ -2279,6 +2280,43 @@ mod page_thread_tests {
 }
 
 #[cfg(test)]
+mod gallery_tests {
+    use super::{ExampleMeta, render_gallery_page};
+    use std::path::PathBuf;
+
+    fn meta(name: &str, assets: &[&str], page_thread: bool) -> ExampleMeta {
+        ExampleMeta {
+            name: name.into(),
+            source_path: PathBuf::from(format!("examples/blinc_app_examples/examples/{name}.rs")),
+            title: name.into(),
+            description: String::new(),
+            extra_deps: Vec::new(),
+            image_assets: assets.iter().map(|a| a.to_string()).collect(),
+            window_size: None,
+            has_theme_bundle: false,
+            has_theme_color_scheme: false,
+            needs_page_thread: page_thread,
+        }
+    }
+
+    #[test]
+    fn the_book_keeps_only_examples_a_worker_can_run() {
+        assert!(meta("plain", &[], false).in_book());
+        assert!(meta("image", &["a/b.png"], false).in_book());
+        assert!(!meta("window", &[], true).in_book());
+        assert!(!meta("video", &["a/clip.mp4"], false).in_book());
+    }
+
+    #[test]
+    fn a_gallery_page_holds_a_placeholder_not_a_frame() {
+        let page = render_gallery_page(&meta("plain", &[], false));
+        assert!(page.contains(r#"<div class="blinc-example" data-example="plain""#));
+        assert!(!page.contains("<iframe"));
+        assert!(page.contains("(../../examples/plain/index.html)"));
+    }
+}
+
+#[cfg(test)]
 mod shard_tests {
     use super::in_shard;
 
@@ -2303,7 +2341,7 @@ const WORKER_RUNTIME_FILES: [&str; 4] = ["host.js", "media-host.js", "protocol.j
 
 /// Copy each built wrapper's public-facing files (`index.html` +
 /// `pkg/`) into `stage_dir/<name>/`. CI uses this to drop the
-/// wasm artifacts into `target/book/examples/` so mdBook's iframe
+/// wasm artifacts into `target/book/examples/` so the book's demo mounts
 /// references resolve at serve time.
 fn stage_wrappers(
     workspace_root: &Path,

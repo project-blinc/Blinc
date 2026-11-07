@@ -10,14 +10,7 @@ Supports:
 - CSS transitions and @keyframes animation
 - Works with scroll containers
 
-<iframe
-  src="../../examples/overflow_fade_demo/index.html"
-  width="100%"
-  height="560"
-  loading="lazy"
-  style="border:1px solid #45475a;border-radius:8px;background:#181825;"
-  title="Blinc overflow_fade_demo example"
-></iframe>
+<div class="blinc-example" data-example="overflow_fade_demo" data-title="Blinc overflow_fade_demo example"></div>
 
 > **Tip:** Some demos are best viewed in a full browser window. Click "Open in a new tab" below for the full experience.
 

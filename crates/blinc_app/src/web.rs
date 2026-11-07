@@ -605,7 +605,7 @@ impl WebApp {
         //      <canvas data-width="800" data-height="600" data-dpr="1">
         //    When present, these lock the logical viewport and DPR to
         //    fixed values regardless of the browser's actual CSS layout
-        //    or display scaling. This gives docs/book iframe demos a
+        //    or display scaling. This gives docs/book demos a
         //    consistent rendering across all devices (no layout reflow
         //    on resize, no DPR-dependent visual differences).
         let data_attr = |name: &str| -> Option<f64> {

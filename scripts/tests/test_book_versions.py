@@ -89,6 +89,16 @@ class BookVersionsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Missing release demo"):
             books.freeze(book, examples, self.root / "release.tar.gz")
 
+    def test_inline_demos_must_exist_in_the_release(self):
+        book = self.book("0.6.0", '<div class="blinc-example" data-example="missing"></div>')
+        examples = self.root / "examples"
+        (examples / "present").mkdir(parents=True)
+        (examples / "present" / "index.html").write_text("demo")
+        with self.assertRaisesRegex(ValueError, "Missing release demo"):
+            books.freeze(book, examples, self.root / "release.tar.gz")
+        book = self.book("0.6.1", '<div class="blinc-example" data-example="present"></div>')
+        books.freeze(book, examples, self.root / "ok.tar.gz")
+
     def test_print_demos_use_the_snapshot_root_and_remain_validated(self):
         book = self.book("0.6.0", "Released")
         chapter = book / "chapter.html"

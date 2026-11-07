@@ -7,14 +7,7 @@ outward past the tab's box and visually merge with the toolbar beneath,
 giving the active tab its signature smooth connection to the toolbar
 edge.
 
-<iframe
-  src="../../examples/chrome_tabs_demo/index.html"
-  width="100%"
-  height="560"
-  loading="lazy"
-  style="border:1px solid #45475a;border-radius:8px;background:#181825;"
-  title="Blinc chrome_tabs_demo example"
-></iframe>
+<div class="blinc-example" data-example="chrome_tabs_demo" data-title="Blinc chrome_tabs_demo example"></div>
 
 > **Tip:** Some demos are best viewed in a full browser window. Click "Open in a new tab" below for the full experience.
 

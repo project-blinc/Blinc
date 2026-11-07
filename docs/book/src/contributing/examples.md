@@ -264,7 +264,10 @@ Running `cargo run -p blinc-build-web-examples` (no flags) writes:
   `src/lib.rs`, `index.html`, `serve.sh`, `.gitignore`.
 - **`docs/book/src/web/example-gallery.md`** — the gallery index.
 - **`docs/book/src/web/example-gallery/<name>.md`** — one page per
-  example with an iframe of the wasm build.
+  example. Its demo runs in the page, in the same worker host the
+  component catalog uses, once it scrolls into view
+  (`docs/book/theme/blinc-example.js`). Examples that start on the page
+  thread, or stream audio or video, get no gallery page.
 - **`docs/book/src/SUMMARY.md`** — patched between
   `<!-- begin:web-examples -->` / `<!-- end:web-examples -->`
   markers to include the new gallery pages in the book's TOC.
@@ -279,8 +282,8 @@ Flags:
   --release` in each wrapper. Used by CI.
 - `--stage-to <dir>` — after `--build`, copy each wrapper's
   `index.html` + `pkg/` into `<dir>/<name>/`. Used by CI to drop
-  artifacts into `target/book/examples/` for mdBook iframe
-  resolution. Implies `--build`.
+  artifacts into `target/book/examples/`, where the book's demos
+  find them. Implies `--build`.
 - `--no-gallery` — skip the markdown + SUMMARY patch. Useful for
   lint-only CI steps that don't need to touch the book source.
 

@@ -48,14 +48,7 @@ cargo run -p blinc_app_examples --example strangler_demo \
 [`blinc_game_kit`]: https://github.com/project-blinc/blinc_game_kit
 [`blinc_game_kit`]: https://github.com/project-blinc/blinc_game_kit
 
-<iframe
-  src="../../examples/strangler_demo/index.html"
-  width="100%"
-  height="560"
-  loading="lazy"
-  style="border:1px solid #45475a;border-radius:8px;background:#181825;"
-  title="Blinc strangler_demo example"
-></iframe>
+<div class="blinc-example" data-example="strangler_demo" data-title="Blinc strangler_demo example"></div>
 
 > **Tip:** Some demos are best viewed in a full browser window. Click "Open in a new tab" below for the full experience.
 

@@ -7,14 +7,7 @@ Showcases newly added CSS visual features:
 - text-decoration: Underline, line-through with color and thickness
 - text-overflow: Ellipsis truncation with white-space: nowrap
 
-<iframe
-  src="../../examples/css_features_demo/index.html"
-  width="100%"
-  height="560"
-  loading="lazy"
-  style="border:1px solid #45475a;border-radius:8px;background:#181825;"
-  title="Blinc css_features_demo example"
-></iframe>
+<div class="blinc-example" data-example="css_features_demo" data-title="Blinc css_features_demo example"></div>
 
 > **Tip:** Some demos are best viewed in a full browser window. Click "Open in a new tab" below for the full experience.
 

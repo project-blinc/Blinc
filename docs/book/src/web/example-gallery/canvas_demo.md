@@ -10,14 +10,7 @@ Features demonstrated:
 - Canvas for cursor/indicator rendering
 - BlincComponent derive macro for type-safe animation hooks
 
-<iframe
-  src="../../examples/canvas_demo/index.html"
-  width="100%"
-  height="560"
-  loading="lazy"
-  style="border:1px solid #45475a;border-radius:8px;background:#181825;"
-  title="Blinc canvas_demo example"
-></iframe>
+<div class="blinc-example" data-example="canvas_demo" data-title="Blinc canvas_demo example"></div>
 
 > **Tip:** Some demos are best viewed in a full browser window. Click "Open in a new tab" below for the full experience.
 

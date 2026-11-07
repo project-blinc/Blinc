@@ -9,7 +9,7 @@ here — no per-target forks. See the
 convention that makes this work.
 
 Click any card to open the example in a focused view with a
-lazy-loaded iframe. Each demo spawns its own WebGPU context, so
+lazily started demo. Each demo spawns its own WebGPU context, so
 loading more than ~8 at once will start hitting Chrome's
 per-tab GPU context limit — the per-example pages keep that
 manageable.
@@ -21,6 +21,7 @@ manageable.
 - [**Carousel Demo - Selector API Showcase**](./example-gallery/carousel_demo.md) — Demonstrates the new selector API features:
 - [**Chrome-Style Tabs**](./example-gallery/chrome_tabs_demo.md) — Demonstrates the notch element in "reverse" mode: instead of a dropdown
 - [**blinc_cn Components**](./example-gallery/cn_demo.md) — Showcases all available blinc_cn components in a scrollable grid layout.
+- [**Run with `cargo run -p blinc_app_examples --features cn --example cn_pickers_demo`.**](./example-gallery/cn_pickers_demo.md) — Auto-built from the cross-target source.
 - [**Code Element**](./example-gallery/code_demo.md) — Demonstrates both read-only code display and editable code editor.
 - [**Complex SVG**](./example-gallery/complex_svg_demo.md) — Displays an SVG at various sizes to test rasterization quality,
 - [**CSS Debug**](./example-gallery/css_debug.md) — Tests three known CSS issues:
@@ -28,9 +29,9 @@ manageable.
 - [**Layer Effects**](./example-gallery/effects_demo.md) — Showcases GPU-accelerated layer effects including:
 - [**Emoji and HTML Entities**](./example-gallery/emoji_demo.md) — This example demonstrates:
 - [**@flow Shader**](./example-gallery/flow_demo.md) — Demonstrates the @flow DAG-based shader system.
-- [**Fluid Surface**](./example-gallery/fluid_demo.md) — Combines `@flow` GPU shaders with `pointer-query` CSS-driven interaction.
+- [**Fluid Surface**](./example-gallery/fluid_demo.md) — Combines a canvas flow shader with `pointer-query` CSS-driven interaction.
 - [**Skeleton animation with glTF + `blinc_canvas_kit`.**](./example-gallery/gltf_animation_demo.md) — Loads Sketchfab's buster_drone (39 meshes, 92 nodes, one 25-second
-- [**`DrawContext::run_gpu_pass` end-to-end demo.**](./example-gallery/gpu_pass_demo.md) — Shows the same pattern a user would reach for if they wanted to
+- [**Gpu Pass Demo**](./example-gallery/gpu_pass_demo.md) — Auto-built from the cross-target source.
 - [**Image CSS Styling**](./example-gallery/image_css_demo.md) — Demonstrates CSS properties that work on images via stylesheets:
 - [**Image Layer Test**](./example-gallery/image_layer_test.md) — Tests the rendering order of images vs primitives (paths, backgrounds).
 - [**Keyframe Animation Canvas**](./example-gallery/keyframe_canvas.md) — Demonstrates keyframe animations with the canvas element for:
@@ -60,6 +61,5 @@ manageable.
 - [**Theme System**](./example-gallery/theme_demo.md) — This example demonstrates the Blinc theming system capabilities:
 - [**Timeline Animation**](./example-gallery/timeline_demo.md) — This example demonstrates timeline-based animations using the stateful API:
 - [**Typography**](./example-gallery/typography_demo.md) — This example demonstrates typography helpers:
-- [**Video Player**](./example-gallery/video_demo.md) — Demonstrates the video_player widget with `blinc::media::VideoPlayer` instance and controls.
 - [**Wet Glass**](./example-gallery/wet_glass_demo.md) — Procedural wet-window effect with real light refraction through water drops.
 - [**Windowed Application**](./example-gallery/windowed.md) — This example demonstrates how to create a windowed Blinc application

@@ -127,13 +127,21 @@ def freeze(book, examples, archive):
     shutil.copytree(examples, book / "examples", dirs_exist_ok=True)
     class Frames(HTMLParser):
         def handle_starttag(self, tag, attributes):
+            attributes = dict(attributes)
             if tag == "iframe":
-                self.sources.append(dict(attributes).get("src", ""))
+                self.sources.append(attributes.get("src", ""))
+            elif tag == "div" and "blinc-example" in attributes.get("class", "").split():
+                # An inline demo names its example; the book root is where `examples/` lives.
+                self.demos.append(attributes.get("data-example", ""))
 
     for chapter in metadata["pages"]:
         parser = Frames()
         parser.sources = []
+        parser.demos = []
         parser.feed((book / chapter).read_text())
+        for demo in parser.demos:
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", demo) or not (book / "examples" / demo / "index.html").is_file():
+                raise ValueError(f"Missing release demo: {chapter} -> examples/{demo}")
         for source in parser.sources:
             url = urlsplit(source)
             if not source or url.scheme or url.netloc or source.startswith("/"):

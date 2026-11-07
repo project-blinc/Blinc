@@ -20,14 +20,7 @@ identity path.
 Asset: `marble_cliff_02` by Rob Tuytel, published under CC0
 (<https://polyhaven.com/a/marble_cliff_02>).
 
-<iframe
-  src="../../examples/texture_transform_demo/index.html"
-  width="100%"
-  height="560"
-  loading="lazy"
-  style="border:1px solid #45475a;border-radius:8px;background:#181825;"
-  title="Blinc texture_transform_demo example"
-></iframe>
+<div class="blinc-example" data-example="texture_transform_demo" data-title="Blinc texture_transform_demo example"></div>
 
 > **Tip:** Some demos are best viewed in a full browser window. Click "Open in a new tab" below for the full experience.
 

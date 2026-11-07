@@ -10,8 +10,8 @@ description = "A GPU-accelerated, reactive UI framework for Rust. Fine-grained s
 build-dir = "../../target/book-dev"
 
 [output.html]
-additional-js = ["theme/version-selector.js"]
-additional-css = ["theme/version-selector.css"]
+additional-js = ["theme/version-selector.js", "theme/blinc-example.js"]
+additional-css = ["theme/version-selector.css", "theme/blinc-example.css"]
 site-url = "/docs/dev/"
 git-repository-url = "https://github.com/project-blinc/Blinc"
 edit-url-template = "https://github.com/project-blinc/Blinc/edit/main/docs/book/{path}"

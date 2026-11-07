@@ -8,14 +8,7 @@ Features demonstrated:
 - Window resize/focus events via context properties
 - Image element with hover glow effect
 
-<iframe
-  src="../../examples/windowed/index.html"
-  width="100%"
-  height="560"
-  loading="lazy"
-  style="border:1px solid #45475a;border-radius:8px;background:#181825;"
-  title="Blinc windowed example"
-></iframe>
+<div class="blinc-example" data-example="windowed" data-title="Blinc windowed example"></div>
 
 > **Tip:** Some demos are best viewed in a full browser window. Click "Open in a new tab" below for the full experience.
 
