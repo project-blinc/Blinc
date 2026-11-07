@@ -1,0 +1,6 @@
+# The 0.6.0 book is frozen, and its demo pages carry a glTF loader that fails when a model's buffer is
+# still downloading, and run on the page thread. The development book has the fixes and the worker
+# runner, so the frozen book's demos load those builds. Remove these rules once the stable book is
+# rebuilt from a release that has them.
+/docs/examples/* /docs/dev/examples/:splat 302
+/docs/0.6.0/examples/* /docs/dev/examples/:splat 302
