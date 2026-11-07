@@ -86,7 +86,12 @@ pub(crate) struct MeshPipeline {
     /// The resulting accum/reveal pair is composited over the HDR
     /// target by `oit_composite_pipeline` once all BLEND draws for
     /// the frame have landed (on `is_last`).
-    pub(crate) oit_accum_pipeline: wgpu::RenderPipeline,
+    ///
+    /// `None` without storage buffers (the WebGL2 path), where the
+    /// per-target blend states it needs are unavailable: BLEND
+    /// materials then draw through `pipeline` with premultiplied alpha
+    /// and the OIT passes are skipped.
+    pub(crate) oit_accum_pipeline: Option<wgpu::RenderPipeline>,
     /// Fullscreen composite pass that reads `oit_accum_view` and
     /// `oit_reveal_view` and blends the OIT result over the HDR
     /// intermediate. Runs once per frame on the last mesh, before
@@ -563,7 +568,7 @@ impl GpuRenderer {
         // Depth test on, depth write off: opaque geometry in front
         // still occludes, but BLEND fragments don't occlude each
         // other — OIT handles ordering without a per-triangle sort.
-        let oit_accum_pipeline =
+        let oit_accum_pipeline = self.has_storage_buffers.then(|| {
             self.device
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                     label: Some("Mesh Pipeline (OIT Accum)"),
@@ -634,7 +639,8 @@ impl GpuRenderer {
                     multisample: wgpu::MultisampleState::default(),
                     multiview: None,
                     cache: None,
-                });
+                })
+        });
 
         // ── OIT composite pipeline ──────────────────────────────────────
         //
@@ -2569,7 +2575,7 @@ impl GpuRenderer {
         // append to an empty accumulator. `reveal = 1.0` means "no
         // BLEND fragment has touched this pixel yet"; each fragment
         // multiplies it by (1 - α_i) via the pipeline's blend factor.
-        if is_first {
+        if is_first && mp.oit_accum_pipeline.is_some() {
             let accum_view = mp
                 .oit_accum_view
                 .as_ref()
@@ -2654,7 +2660,8 @@ impl GpuRenderer {
         } else {
             wgpu::LoadOp::Load
         };
-        let is_blend = matches!(mesh.material.alpha_mode, blinc_core::draw::AlphaMode::Blend);
+        let is_blend = matches!(mesh.material.alpha_mode, blinc_core::draw::AlphaMode::Blend)
+            && mp.oit_accum_pipeline.is_some();
         if is_blend {
             // BLEND → OIT accum + reveal MRT. Both targets share the
             // main depth buffer (test only, no write) so opaque
@@ -2693,7 +2700,7 @@ impl GpuRenderer {
                 }),
                 ..Default::default()
             });
-            pass.set_pipeline(&mp.oit_accum_pipeline);
+            pass.set_pipeline(mp.oit_accum_pipeline.as_ref().unwrap());
             pass.set_bind_group(0, &bind_group, &[]);
             pass.set_vertex_buffer(0, vertex_buffer.slice(..));
             pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
@@ -2737,7 +2744,7 @@ impl GpuRenderer {
         // The composite shader discards pixels where no BLEND
         // fragment wrote (reveal ≈ 1.0, coverage < 1e-4), so the
         // pass is a no-op on pixels that only had opaque geometry.
-        if is_last {
+        if is_last && mp.oit_accum_pipeline.is_some() {
             let accum_view = mp.oit_accum_view.as_ref().unwrap();
             let reveal_view = mp.oit_reveal_view.as_ref().unwrap();
             let composite_bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
