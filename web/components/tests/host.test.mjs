@@ -12,13 +12,15 @@ async function host() {
     emit(type, event = {}) { for (const callback of this.events[type] || []) callback({ preventDefault() {}, ...event }); }
     getBoundingClientRect() { return this.rect; }
     replaceChildren(...children) { this.children = children; }
-    focus() { this.emit('focus'); }
+    focus() { if (!this.focused) { this.focused = true; this.emit('focus'); } }
+    blur() { if (this.focused) { this.focused = false; this.emit('blur'); } }
     setPointerCapture() { this.captured = true; }
     hasPointerCapture() { return this.captured; }
     releasePointerCapture() { this.captured = false; this.emit('lostpointercapture'); }
     transferControlToOffscreen() { return { offscreen: true }; }
   }
   const workers = [];
+  const timers = new Map(); let nextTimer = 1;
   class Worker {
     constructor() { this.messages = []; workers.push(this); }
     postMessage(message) { this.messages.push(message); }
@@ -30,7 +32,7 @@ async function host() {
     crypto: { randomUUID: () => 'host-test' }, AbortController,
     devicePixelRatio: 2, performance: { now: () => 100 },
     window: { addEventListener() {} }, matchMedia: () => ({ addEventListener() {}, removeEventListener() {} }),
-    setTimeout: () => 1, clearTimeout() {},
+    setTimeout: callback => { const id = nextTimer++; timers.set(id, callback); return id; }, clearTimeout(id) { timers.delete(id); },
     ResizeObserver: class { observe() {} disconnect() {} },
     WheelEvent: { DOM_DELTA_LINE: 1, DOM_DELTA_PAGE: 2 },
   });
@@ -44,7 +46,7 @@ async function host() {
   await module.link(specifier => specifier.endsWith('media-host.js') ? media : protocol); await module.evaluate();
   const demo = new module.namespace.LiveDemo(container, { slug: 'button', title: 'Button', build: 'test', width: 560, height: 320 }, () => {});
   let seq = 0;
-  return { demo, container, worker: workers[0],
+  return { demo, container, worker: workers[0], timers,
     notify(type, payload = {}) { workers[0].onmessage({ data: envelope('host-test', seq++, type, payload) }); },
   };
 }
@@ -131,4 +133,30 @@ test('A one-finger drag scrolls and its lift ends the gesture, while a mouse dra
   demo.canvas.emit('pointercancel', touch(50, 50));
   demo.canvas.emit('pointerup', touch(50, 50));
   assert.equal(input().filter(event => event.kind === 'touch-end').length, 2);
+});
+
+test('A tap raises the keyboard and drops it only when nothing took focus; a drag and a report never flip it off', async () => {
+  const { demo, notify, timers } = await host();
+  demo.setVisible(true); notify('ready');
+  const at = (x, y) => ({ clientX: 80 + x, clientY: 120 + y, pointerId: 3, pointerType: 'touch', button: 0 });
+  const runTimers = () => { for (const [id, callback] of [...timers]) { timers.delete(id); callback(); } };
+  assert.equal(demo.editor.inputMode, 'none', 'no keyboard before any tap');
+  // A tap on a text input: the demo then reports it is editing, and the keyboard stays.
+  demo.canvas.emit('pointerdown', at(100, 100)); demo.canvas.emit('pointerup', at(100, 100));
+  assert.equal(demo.editor.inputMode, 'text', 'the tap raises it inside the gesture');
+  notify('state', { editable: false });
+  notify('state', { editable: true });
+  runTimers();
+  assert.equal(demo.editor.inputMode, 'text', 'an editable demo keeps its keyboard');
+  // A report that nothing is editable does not drop it by itself.
+  notify('state', { editable: false });
+  assert.equal(demo.editor.inputMode, 'text');
+  // A tap that lands on nothing editable drops it once the delay has passed.
+  demo.canvas.emit('pointerdown', at(20, 20)); demo.canvas.emit('pointerup', at(20, 20));
+  assert.equal(demo.editor.inputMode, 'text');
+  runTimers();
+  assert.equal(demo.editor.inputMode, 'none');
+  // A drag is a scroll: it does not raise the keyboard.
+  demo.canvas.emit('pointerdown', at(50, 200)); demo.canvas.emit('pointermove', at(50, 120)); demo.canvas.emit('pointerup', at(50, 120));
+  assert.equal(demo.editor.inputMode, 'none');
 });

@@ -36,6 +36,9 @@ export class LiveDemo {
       this.editor.setAttribute('autocapitalize', 'off');
       this.editor.autocomplete = 'off'; this.editor.spellcheck = false;
       this.editor.tabIndex = -1;
+      // The keyboard is raised by a tap and dropped only once the demo says nothing is being edited.
+      this.editor.inputMode = 'none';
+      this.editable = false;
       this.container.replaceChildren(this.canvas, this.editor);
       this.bindInput();
       const rect = this.container.getBoundingClientRect();
@@ -50,8 +53,11 @@ export class LiveDemo {
         if (data.type === 'ready' || data.type === 'state') {
           this.state = data.payload;
           this.canvas.style.cursor = data.payload.cursor || 'default';
-          // Keep IME input inside the active viewport without covering the canvas.
-          this.editor.inputMode = data.payload.editable ? 'text' : 'none';
+          // iOS drops a keyboard whose input mode is switched off while the field is focused and does
+          // not raise it again outside a tap, so a report never turns the keyboard off by itself:
+          // `settleKeyboard` does, after a tap, once the demo has had time to take focus.
+          this.editable = !!data.payload.editable;
+          if (this.editable) this.editor.inputMode = 'text';
         }
         if (data.type === 'error') this.stop();
         this.onStatus(data.type, data.payload);
@@ -117,6 +123,7 @@ export class LiveDemo {
     listen(this.canvas, 'pointerdown', e => {
       e.preventDefault(); this.editor.focus({ preventScroll: true });
       this.pointerDown = true;
+      this.downAt = position(e);
       this.canvas.setPointerCapture(e.pointerId);
       if (e.pointerType === 'touch') { this.touch = position(e); this.input({ kind: 'touch-start' }, e); }
       this.input({ kind: 'pointer-move', ...position(e) }, e);
@@ -126,6 +133,9 @@ export class LiveDemo {
       this.pointerDown = false;
       this.input({ kind: 'pointer-up', ...position(e), button: e.button }, e);
       endTouch(e);
+      // A drag scrolls; only a tap can be an edit, so only a tap raises the keyboard.
+      const at = position(e);
+      if (!this.downAt || Math.hypot(at.x - this.downAt.x, at.y - this.downAt.y) <= 10) { this.armKeyboard(); this.settleKeyboard(); }
       if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
     });
     for (const event of ['pointerleave', 'pointercancel']) {
@@ -187,8 +197,19 @@ export class LiveDemo {
       }
     });
   }
+  /** Raise the keyboard now, inside the tap iOS requires, and drop it later if nothing took focus. */
+  armKeyboard() {
+    clearTimeout(this.keyboardTimer);
+    this.editor.inputMode = 'text';
+    this.editor.focus({ preventScroll: true });
+  }
+  settleKeyboard() {
+    clearTimeout(this.keyboardTimer);
+    this.keyboardTimer = setTimeout(() => { if (!this.editable) this.editor.inputMode = 'none'; }, 400);
+  }
   stop() {
     if (this.stopped) return;
+    clearTimeout(this.keyboardTimer);
     this.stopped = true;
     clearTimeout(this.timeout);
     this.ready = false;
