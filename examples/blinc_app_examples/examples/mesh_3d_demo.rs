@@ -248,14 +248,25 @@ impl AsyncAssets {
 
 #[cfg(target_arch = "wasm32")]
 async fn sleep_ms(ms: u32) {
+    use wasm_bindgen::JsCast;
     use wasm_bindgen::prelude::*;
     use wasm_bindgen_futures::JsFuture;
-    let promise = js_sys::Promise::new(&mut |resolve: js_sys::Function, _reject| {
-        web_sys::window().and_then(|w| {
-            w.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms as i32)
-                .ok()
-        });
-    });
+    // `setTimeout` exists on a page and on a worker's global scope; `window()` is `None` in a
+    // worker, where a promise that never resolves would stall the load loop for good.
+    let global = js_sys::global();
+    let set_timeout = js_sys::Reflect::get(&global, &"setTimeout".into())
+        .ok()
+        .and_then(|f| f.dyn_into::<js_sys::Function>().ok());
+    let promise = js_sys::Promise::new(
+        &mut |resolve: js_sys::Function, _reject| match &set_timeout {
+            Some(set_timeout) => {
+                let _ = set_timeout.call2(&global, &resolve, &JsValue::from(ms as i32));
+            }
+            None => {
+                let _ = resolve.call0(&JsValue::NULL);
+            }
+        },
+    );
     let _ = JsFuture::from(promise).await;
 }
 

@@ -313,6 +313,8 @@ struct ExampleMeta {
     /// a specific scheme (e.g. `ColorScheme::Dark`) so desktop and
     /// web render identically regardless of the user's OS pref.
     has_theme_color_scheme: bool,
+    /// The source calls `web_sys::window()`, which is `None` in a worker, so the page must start it.
+    needs_page_thread: bool,
 }
 
 /// Walk `EXAMPLES_DIR`, parse each `.rs`, and return metadata for
@@ -421,12 +423,19 @@ fn discover_examples(workspace_root: &Path) -> Vec<ExampleMeta> {
             window_size,
             has_theme_bundle,
             has_theme_color_scheme,
+            needs_page_thread: needs_page_thread(&source),
         });
     }
 
     // Deterministic order so re-runs produce byte-identical output.
     found.sort_by(|a, b| a.name.cmp(&b.name));
     found
+}
+
+/// Whether an example reaches for the page's `window`, which a worker does not have. Such an
+/// example starts on the page thread until it is written to work in both.
+fn needs_page_thread(source: &str) -> bool {
+    source.contains("web_sys::window()")
 }
 
 /// Returns true if the parsed syn AST contains a top-level item
@@ -873,6 +882,7 @@ fn generate_wrapper(workspace_root: &Path, meta: &ExampleMeta) -> std::io::Resul
             &crate_name,
             meta.window_size,
             &meta.image_assets,
+            !meta.needs_page_thread,
         ),
     )?;
 
@@ -1362,6 +1372,7 @@ fn render_index_html(
     crate_name: &str,
     window_size: Option<(u32, u32)>,
     image_assets: &[String],
+    worker_capable: bool,
 ) -> String {
     // Convert crate name back to the JS import shim filename. wasm-pack
     // emits `<package_name_with_underscores>.js`, not hyphens.
@@ -1381,7 +1392,7 @@ fn render_index_html(
         None => "width: 100vw; height: 100vh;".to_string(),
     };
     // Media streams through a DOM element, which a worker cannot own; those stay on the page.
-    let worker_ok = image_assets.iter().all(|p| !is_media_url(p));
+    let worker_ok = worker_capable && image_assets.iter().all(|p| !is_media_url(p));
 
     // `<link rel="preload" as="fetch" crossorigin>` lets the browser
     // begin downloading each asset URL in parallel with the wasm
@@ -2254,6 +2265,17 @@ fn build_wrappers_with_wasm_pack(
 /// Whether the wrapper at `index` of the sorted list belongs to the 1-based shard `K/N`.
 fn in_shard(index: usize, shard: Option<(usize, usize)>) -> bool {
     shard.is_none_or(|(k, n)| index % n == k - 1)
+}
+
+#[cfg(test)]
+mod page_thread_tests {
+    use super::needs_page_thread;
+
+    #[test]
+    fn an_example_that_reads_the_window_starts_on_the_page() {
+        assert!(needs_page_thread("let w = web_sys::window().unwrap();"));
+        assert!(!needs_page_thread("let g = js_sys::global();"));
+    }
 }
 
 #[cfg(test)]
