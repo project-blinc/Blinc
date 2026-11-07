@@ -38,7 +38,7 @@ with sync_playwright() as p:
             assert section.locator('[data-chart-animation]').is_hidden()
             assert '/poster.png' in section.locator('[data-chart-image]').get_attribute('src')
         section.get_by_role('tab', name='Code', exact=True).click()
-        assert f"pub fn {example['entry']}(" in section.locator('pre code').inner_text()
+        assert f"pub fn {example['entry']}(" in section.locator('pre code.language-rust').inner_text()
         assert section.locator('.hljs-call').count() > 0
         section.get_by_role('tab', name='Live', exact=True).click()
         canvas = section.locator('.chart-live canvas')
