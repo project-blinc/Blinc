@@ -1,15 +1,22 @@
+import { LiveDemo } from './runtime/host.js';
+
 const sections = [...document.querySelectorAll('[data-chart-section]')];
 if (sections.length) {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const visible = new Set();
   let active;
-  const notify = () => active?.frame.contentWindow?.postMessage({ kind: 'catalog-visibility', visible: !document.hidden && visible.has(active.section) && !active.section.querySelector('[data-chart-panel="live"]').hidden }, location.origin);
+  const pageDark = () => document.documentElement.dataset.scheme !== 'light';
+  const notify = () => active?.demo.setVisible(!document.hidden && visible.has(active.section) && !active.section.querySelector('[data-chart-panel="live"]').hidden);
   function closeActive() {
     if (!active) return;
-    active.frame.remove();
+    active.demo.stop();
+    active.host.replaceChildren();
     active.select('preview');
     active = undefined;
   }
+  document.addEventListener('page-scheme-change', event => {
+    if (active?.demo.ready) active.demo.send('theme', { dark: event.detail === 'dark', family: 'hybrid' });
+  });
   const primary = document.querySelector('.example');
   primary.querySelector('[data-tab="live"]').addEventListener('click', closeActive);
   for (const section of sections) {
@@ -39,12 +46,17 @@ if (sections.length) {
         closeActive();
         primary.querySelector('[data-tab="preview"]').click();
         const host = section.querySelector('[data-chart-live]');
-        const frame = document.createElement('iframe');
-        frame.title = `${section.querySelector('h2').textContent} live Blinc demo`;
-        frame.src = host.dataset.demoUrl;
-        frame.addEventListener('load', notify);
-        host.replaceChildren(frame);
-        active = { section, frame, select };
+        const status = document.createElement('div');
+        status.className = 'chart-live-status';
+        status.textContent = 'Loading live preview…';
+        const demo = new LiveDemo(host, {
+          ...JSON.parse(host.dataset.demoConfig), dark: pageDark(), family: 'hybrid',
+        }, (type, data) => {
+          if (type === 'ready') { status.remove(); notify(); }
+          if (type === 'error') { status.textContent = 'Live preview is unavailable. Use Open to run it on its own page.'; host.append(status); }
+        });
+        host.append(status);
+        active = { section, demo, host, select };
       }
       notify();
     }

@@ -50,10 +50,13 @@ pub(super) fn sections(
                 pages::css_code_block(&component_css, &format!("{}-css", c.slug)),
             ),
             (
-                "URL",
-                format!(
-                    "/components/{}/{}/examples/{}/?standalone=1&amp;embed=1&amp;tab=live",
-                    parent.library, parent.slug, c.slug
+                "CONFIG",
+                pages::esc(
+                    &serde_json::json!({
+                        "slug": c.slug, "title": c.title, "build": build,
+                        "width": c.viewport.width, "height": c.viewport.height,
+                    })
+                    .to_string(),
                 ),
             ),
             (

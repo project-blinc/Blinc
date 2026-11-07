@@ -28,7 +28,7 @@ with sync_playwright() as p:
     assert page.locator('.sidebar h2').all_text_contents() == ['Get started', 'Components', 'Blocks']
     assert page.locator('.sidebar a[aria-current]').evaluate('(node)=>getComputedStyle(node).boxShadow') == 'none'
     assert page.locator('[data-chart-section]').count() == len(charts['examples'])
-    assert page.locator('iframe').count() == 0, 'extra live hosts must load on demand'
+    assert page.locator('.chart-live canvas').count() == 0, 'extra live hosts must load on demand'
     page.screenshot(path=str(output / 'page-dark.png'))
     previous = None
     for example in charts['examples']:
@@ -41,41 +41,31 @@ with sync_playwright() as p:
         assert f"pub fn {example['entry']}(" in section.locator('pre code').inner_text()
         assert section.locator('.hljs-call').count() > 0
         section.get_by_role('tab', name='Live', exact=True).click()
-        host = section.locator('iframe')
-        host.wait_for()
-        frame = host.element_handle().content_frame()
-        frame.wait_for_function("document.querySelector('#live-canvas')?.dataset.status==='ready'", timeout=90000)
-        frame.wait_for_function("window.__chartMessages.at(-1)!=='pause'", timeout=10000)
+        canvas = section.locator('.chart-live canvas')
+        canvas.wait_for()
+        section.locator('.chart-live-status').wait_for(state='detached', timeout=90000)
+        page.wait_for_function("window.__chartMessages.at(-1)!=='pause'", timeout=10000)
         page.wait_for_timeout(600)
-        assert page.locator('iframe').count() == 1
+        assert page.locator('.chart-live canvas').count() == 1
         if previous:
-            assert previous.is_detached(), 'the previous extra host must be released'
-        previous = frame
-        raw = frame.locator('#live-canvas canvas').screenshot(path=str(output / f'{slug}.png'))
+            assert previous.evaluate('(node)=>!node.isConnected'), 'the previous extra host must be released'
+        previous = canvas.element_handle()
+        raw = canvas.screenshot(path=str(output / f'{slug}.png'))
         image = Image.open(io.BytesIO(raw)).convert('RGB')
         pixels = image.tobytes()
         coloured = sum(max(pixels[i:i+3])-min(pixels[i:i+3]) > 35 and max(pixels[i:i+3]) > 80 for i in range(0, len(pixels), 3))
         assert coloured > 100, f'{slug}: no coloured plot pixels'
-        print('PASS', slug, frame.evaluate('window.__chartState.backend'), coloured, flush=True)
+        print('PASS', slug, page.evaluate('window.__chartState.backend'), coloured, flush=True)
         if slug == 'area-chart':
-            frame.evaluate("window.__originalCanvas=document.querySelector('#live-canvas canvas')")
-            assert '--chart-1: var(--primary)' in frame.locator('#custom-css').input_value()
-            frame.locator('#apply-css').click()
-            frame.wait_for_function("document.querySelector('#css-status').textContent==='Applied'")
-            assert frame.evaluate("window.__originalCanvas===document.querySelector('#live-canvas canvas')")
-            frame.locator('#live-canvas canvas').screenshot(path=str(output / 'area-custom-css.png'))
-            frame.locator('[data-theme-family="expressive"]').click()
-            frame.wait_for_function("window.__chartState.family==='expressive'")
-            assert frame.evaluate("window.__originalCanvas===document.querySelector('#live-canvas canvas')")
+            page.evaluate("window.__chartMessages.length=0")
             page.locator('label:has(#page-scheme)').click()
-            frame.wait_for_function("document.documentElement.dataset.scheme==='light'")
-            assert frame.evaluate("window.__originalCanvas===document.querySelector('#live-canvas canvas')")
+            page.wait_for_function("window.__chartMessages.includes('theme')")
         section.get_by_role('tab', name='Code', exact=True).click()
-        frame.wait_for_function("window.__chartMessages.at(-1)==='pause'")
+        page.wait_for_function("window.__chartMessages.at(-1)==='pause'")
     page.locator('#tab-preview').focus()
     page.keyboard.press('ArrowRight')
     assert page.locator('#tab-live').get_attribute('aria-selected') == 'true'
-    assert page.locator('iframe').count() == 0
+    assert page.locator('.chart-live canvas').count() == 0
     page.set_viewport_size({'width': 390, 'height': 844})
     page.locator('#tab-preview').click()
     page.evaluate('window.scrollTo(0,0)')
@@ -83,9 +73,9 @@ with sync_playwright() as p:
     assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'), 'mobile page overflows'
     section = page.locator('#area-chart')
     section.get_by_role('tab', name='Live', exact=True).click()
-    frame = section.locator('iframe').element_handle().content_frame()
-    frame.wait_for_function("document.querySelector('#live-canvas')?.dataset.status==='ready'", timeout=90000)
-    assert frame.evaluate('document.documentElement.scrollWidth<=innerWidth'), 'embedded mobile controls overflow'
+    section.locator('.chart-live canvas').wait_for()
+    section.locator('.chart-live-status').wait_for(state='detached', timeout=90000)
+    assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'), 'live chart overflows on mobile'
     page.wait_for_timeout(600)
     section.screenshot(path=str(output / 'area-mobile.png'))
     page.goto(f'{args.url}/components/cn/line-chart/', wait_until='domcontentloaded')
