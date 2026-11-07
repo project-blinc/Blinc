@@ -21,14 +21,27 @@
 // the shader never branches on `has_*` flags for the texture samples
 // themselves, only for the scalar override fallback.
 
+// Layout must match `Uniforms` in mesh.wgsl and `MeshUniforms` in mesh_pipeline.rs: both shader
+// variants read the same uploaded buffer. This shader lights with the key light (`lights[0]`)
+// only and has no morph targets.
+struct DirLight {
+    direction: vec3<f32>,
+    intensity: f32,
+    color: vec3<f32>,
+    _pad: f32,
+}
+
 struct Uniforms {
     view_proj: mat4x4<f32>,
     model: mat4x4<f32>,
     light_view_proj: mat4x4<f32>,
     camera_pos: vec3<f32>,
     _pad: f32,
-    light_dir: vec3<f32>,
-    light_intensity: f32,
+    lights: array<DirLight, 4>,
+    light_count: u32,
+    _pad_lc0: f32,
+    _pad_lc1: f32,
+    _pad_lc2: f32,
     viewport_size: vec2<f32>,
     has_texture: f32,
     has_normal_map: f32,
@@ -36,6 +49,10 @@ struct Uniforms {
     displacement_scale: f32,
     normal_scale: f32,
     has_skinning: f32,
+    morph_target_count: u32,
+    morph_vertex_count: u32,
+    _pad_morph0: u32,
+    _pad_morph1: u32,
 }
 
 struct MaterialUniforms {
@@ -366,7 +383,7 @@ fn shade_dt(input: VertexOutput) -> vec4<f32> {
     // Direct lighting from the single directional sun light. IBL
     // (environment-based indirect lighting) lands in Stage 4 and
     // adds a second contribution alongside this one.
-    let L = normalize(-uniforms.light_dir);
+    let L = normalize(-uniforms.lights[0].direction);
     let V = normalize(uniforms.camera_pos - input.world_pos);
     let H = normalize(L + V);
 
@@ -400,10 +417,10 @@ fn shade_dt(input: VertexOutput) -> vec4<f32> {
     let diffuse_brdf = kd * base_color.rgb / 3.14159265;
 
     // Combined direct radiance. `n_dot_l` factor is the Lambert term
-    // from the rendering equation; `uniforms.light_intensity` is the
+    // from the rendering equation; `lights[0].intensity` is the
     // sun's irradiance in arbitrary units tuned by the caller.
     let direct_lighting =
-        (diffuse_brdf + specular_brdf) * uniforms.light_intensity * n_dot_l;
+        (diffuse_brdf + specular_brdf) * uniforms.lights[0].intensity * n_dot_l;
 
     // --- Shadow --------------------------------------------------------------
     var shadow_factor = 1.0;
