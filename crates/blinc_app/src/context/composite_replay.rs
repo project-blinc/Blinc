@@ -395,7 +395,9 @@ impl RenderContext {
                 } else {
                     text.width
                 };
-                let needs_wrap = text.wrap && effective_width < text.measured_width - 2.0;
+                let needs_wrap = text.wrap
+                    && effective_width
+                        < text.measured_width - super::cached_text::wrap_slack(scale_factor);
                 let wrap_width = Some(text.width);
                 let font_name = text.font_family.name.as_deref();
                 let generic = to_gpu_generic_font(text.font_family.generic);

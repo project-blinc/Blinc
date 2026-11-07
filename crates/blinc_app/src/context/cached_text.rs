@@ -8,6 +8,12 @@ pub(super) struct TextBatch {
     pub(super) aux_data: Arc<Vec<[f32; 4]>>,
 }
 
+/// How much narrower than its measured text a box may be before the text wraps, in physical
+/// pixels. Layout rounds a box to a whole logical pixel, so the allowance grows with the density.
+pub(super) fn wrap_slack(scale_factor: f32) -> f32 {
+    2.0 * scale_factor.max(1.0)
+}
+
 fn primitive_bounds(p: &GpuPrimitive) -> [f32; 4] {
     let [x, y, w, h] = p.bounds;
     let [a, b, c, d] = p.local_affine;
@@ -92,5 +98,20 @@ impl RenderContext {
             );
         }
         self.render_legacy_text(target, &batch.glyphs);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wrap_slack;
+
+    #[test]
+    fn the_wrap_allowance_grows_with_density_and_never_drops_below_two_pixels() {
+        assert_eq!(wrap_slack(1.0), 2.0);
+        assert_eq!(wrap_slack(2.0), 4.0);
+        // A two-digit label whose box layout rounded down by 0.87 logical pixels is 2.6 physical
+        // pixels short at 3x; the allowance must cover it, or the digits wrap one per line.
+        assert!(wrap_slack(3.0) > 0.87 * 3.0);
+        assert_eq!(wrap_slack(0.5), 2.0);
     }
 }

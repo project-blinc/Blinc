@@ -9,6 +9,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - The registered iOS Rust builder uses the complete UI build path, including queued core styles, overlays and build-scope cleanup.
 
 ### Fixed
+- Text no longer wraps one character per line at 3x display density when layout rounds its box a fraction of a pixel narrower than the text. The wrap allowance scales with the density, so Calendar day numbers stay on one line on phones.
 - A one-finger drag scrolls containers in worker-hosted web demos. `WebInput` gains `TouchStart`, `TouchScroll` and `TouchEnd`, which the worker runner handles as the main-thread runner does: the drag advances the scroll container under the finger, and lifting it lets a flick carry on.
 - `use_state_keyed` and `use_signal_keyed` run their initial-value closure with no lock held. A closure that creates a signal, such as a text input state, or calls another hook no longer deadlocks the UI thread on first build.
 - iOS text measurement shares the renderer’s font registry, keeping carets aligned with fallback glyphs.

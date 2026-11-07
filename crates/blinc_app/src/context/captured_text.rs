@@ -29,7 +29,8 @@ impl RenderContext {
         let effective_width = text
             .clip_bounds
             .map_or(text.width, |clip| clip[2].min(text.width));
-        let wrap = text.wrap && effective_width < text.measured_width - 2.0;
+        let wrap = text.wrap
+            && effective_width < text.measured_width - super::cached_text::wrap_slack(dpi);
         let mut result = PrimitiveBatch::new();
         let mut paints = Vec::with_capacity(2);
         if let Some(shadow) = text.text_shadow {

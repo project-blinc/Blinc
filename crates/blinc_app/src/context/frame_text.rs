@@ -75,7 +75,8 @@ impl RenderContext {
             };
 
             // Wrap if effective width is significantly smaller than measured width
-            let needs_wrap = text.wrap && effective_width < text.measured_width - 2.0;
+            let needs_wrap = text.wrap
+                && effective_width < text.measured_width - cached_text::wrap_slack(scale_factor);
 
             // Always pass width for alignment - the layout engine needs max_width
             // to calculate center/right alignment offsets
@@ -232,7 +233,8 @@ impl RenderContext {
             } else {
                 text.width
             };
-            let needs_wrap = text.wrap && effective_width < text.measured_width - 2.0;
+            let needs_wrap = text.wrap
+                && effective_width < text.measured_width - cached_text::wrap_slack(scale_factor);
             let wrap_width = Some(text.width);
             let font_name = text.font_family.name.as_deref();
             let generic = to_gpu_generic_font(text.font_family.generic);
@@ -323,7 +325,8 @@ impl RenderContext {
             } else {
                 text.width
             };
-            let needs_wrap = text.wrap && effective_width < text.measured_width - 2.0;
+            let needs_wrap = text.wrap
+                && effective_width < text.measured_width - cached_text::wrap_slack(scale_factor);
             let wrap_width = Some(text.width);
             let font_name = text.font_family.name.as_deref();
             let generic = to_gpu_generic_font(text.font_family.generic);
