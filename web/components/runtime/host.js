@@ -102,27 +102,41 @@ export class LiveDemo {
     listen(this.container, 'contextmenu', e => e.preventDefault());
     listen(this.canvas, 'dragstart', e => e.preventDefault());
     listen(this.canvas, 'selectstart', e => e.preventDefault());
-    listen(this.canvas, 'pointermove', e => this.input({ kind: 'pointer-move', ...position(e) }, e));
+    // A finger has no wheel: its drag is sent as scroll steps, and its lift ends the gesture so a
+    // flick carries on and an overscroll springs back. The browser's own panning is off on the canvas.
+    const endTouch = e => { if (this.touch) { this.touch = null; this.input({ kind: 'touch-end' }, e); } };
+    listen(this.canvas, 'pointermove', e => {
+      const at = position(e);
+      this.input({ kind: 'pointer-move', ...at }, e);
+      if (this.touch && e.pointerType === 'touch') {
+        const dx = at.x - this.touch.x, dy = at.y - this.touch.y;
+        this.touch = at;
+        if (dx || dy) this.input({ kind: 'touch-scroll', dx, dy }, e);
+      }
+    });
     listen(this.canvas, 'pointerdown', e => {
       e.preventDefault(); this.editor.focus({ preventScroll: true });
       this.pointerDown = true;
       this.canvas.setPointerCapture(e.pointerId);
+      if (e.pointerType === 'touch') { this.touch = position(e); this.input({ kind: 'touch-start' }, e); }
       this.input({ kind: 'pointer-move', ...position(e) }, e);
       this.input({ kind: 'pointer-down', ...position(e), button: e.button }, e);
     });
     listen(this.canvas, 'pointerup', e => {
       this.pointerDown = false;
       this.input({ kind: 'pointer-up', ...position(e), button: e.button }, e);
+      endTouch(e);
       if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
     });
     for (const event of ['pointerleave', 'pointercancel']) {
-      listen(this.canvas, event, () => this.input({ kind: 'pointer-leave' }));
+      listen(this.canvas, event, e => { this.input({ kind: 'pointer-leave' }); endTouch(e); });
     }
-    listen(this.canvas, 'lostpointercapture', () => {
+    listen(this.canvas, 'lostpointercapture', e => {
       if (this.pointerDown) {
         this.pointerDown = false;
         this.input({ kind: 'pointer-leave' });
       }
+      endTouch(e);
     });
     listen(this.canvas, 'wheel', e => {
       e.preventDefault();

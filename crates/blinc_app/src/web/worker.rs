@@ -37,15 +37,46 @@ impl WebCanvas {
 #[derive(Debug, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum WebInput {
-    PointerMove { x: f32, y: f32 },
-    PointerDown { x: f32, y: f32, button: u16 },
-    PointerUp { x: f32, y: f32, button: u16 },
+    PointerMove {
+        x: f32,
+        y: f32,
+    },
+    PointerDown {
+        x: f32,
+        y: f32,
+        button: u16,
+    },
+    PointerUp {
+        x: f32,
+        y: f32,
+        button: u16,
+    },
     PointerLeave,
-    Wheel { x: f32, y: f32 },
-    KeyDown { code: u32 },
-    KeyUp { code: u32 },
-    Text { text: String },
-    Focus { focused: bool },
+    Wheel {
+        x: f32,
+        y: f32,
+    },
+    KeyDown {
+        code: u32,
+    },
+    KeyUp {
+        code: u32,
+    },
+    Text {
+        text: String,
+    },
+    Focus {
+        focused: bool,
+    },
+    /// A finger went down. Send it with the pointer-down so text input knows touch is in use.
+    TouchStart,
+    /// One step of a one-finger drag, in logical pixels, which scrolls the container under it.
+    TouchScroll {
+        dx: f32,
+        dy: f32,
+    },
+    /// The finger lifted: a flick carries on as momentum and an overscroll springs back.
+    TouchEnd,
 }
 
 impl WebApp {
@@ -153,6 +184,23 @@ impl WebApp {
                 for ch in text.chars() {
                     Self::dispatch_text_input(self, ch, shift, ctrl, alt, meta);
                 }
+            }
+            WebInput::TouchStart => {
+                blinc_layout::widgets::text_input::set_touch_input(true);
+            }
+            WebInput::TouchScroll { dx, dy } => {
+                // Sub-pixel jitter is not a drag.
+                if dx.abs() > 0.5 || dy.abs() > 0.5 {
+                    Self::dispatch_scroll(self, dx, dy);
+                }
+            }
+            WebInput::TouchEnd => {
+                if let Some(tree) = self.current_tree.as_mut() {
+                    tree.on_scroll_end();
+                    tree.on_scroll_gesture(blinc_layout::renderer::ScrollGesturePhase::MomentumEnd);
+                }
+                blinc_layout::widgets::text_input::cancel_long_press_timer();
+                self.last_wheel_time_ms = None;
             }
             WebInput::Focus { focused } => {
                 self.ctx.focused = focused;

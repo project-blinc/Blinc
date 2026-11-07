@@ -9,6 +9,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - The registered iOS Rust builder uses the complete UI build path, including queued core styles, overlays and build-scope cleanup.
 
 ### Fixed
+- A one-finger drag scrolls containers in worker-hosted web demos. `WebInput` gains `TouchStart`, `TouchScroll` and `TouchEnd`, which the worker runner handles as the main-thread runner does: the drag advances the scroll container under the finger, and lifting it lets a flick carry on.
 - `use_state_keyed` and `use_signal_keyed` run their initial-value closure with no lock held. A closure that creates a signal, such as a text input state, or calls another hook no longer deadlocks the UI thread on first build.
 - iOS text measurement shares the renderer’s font registry, keeping carets aligned with fallback glyphs.
 - Browser wheel input is dispatched before pointer movement changes its target, preserving swipe cancellation and preventing queued input from navigating another Calendar.

@@ -107,3 +107,28 @@ test('Wheel timing uses the original DOM event timestamp', async () => {
   assert.deepEqual(wheel.map(m => m.payload.event.x), [-12, -12, -12]);
   demo.stop();
 });
+
+test('A one-finger drag scrolls and its lift ends the gesture, while a mouse drag sends no touch input', async () => {
+  const { demo, worker, notify } = await host();
+  demo.setVisible(true); notify('ready');
+  const input = () => worker.messages.filter(message => message.type === 'input').map(message => JSON.parse(JSON.stringify(message.payload.event)));
+  const touch = (x, y) => ({ clientX: 80 + x, clientY: 120 + y, pointerId: 7, pointerType: 'touch', button: 0 });
+  demo.canvas.emit('pointerdown', touch(100, 200));
+  demo.canvas.emit('pointermove', touch(100, 170));
+  demo.canvas.emit('pointermove', touch(104, 150));
+  demo.canvas.emit('pointerup', touch(104, 150));
+  const kinds = input().map(event => event.kind);
+  assert.deepEqual(kinds, ['focus', 'touch-start', 'pointer-move', 'pointer-down', 'pointer-move', 'touch-scroll', 'pointer-move', 'touch-scroll', 'pointer-up', 'touch-end']);
+  assert.deepEqual(input().filter(event => event.kind === 'touch-scroll'), [{ kind: 'touch-scroll', dx: 0, dy: -30 }, { kind: 'touch-scroll', dx: 4, dy: -20 }]);
+  const before = input().length;
+  const mouse = { clientX: 180, clientY: 210, pointerId: 1, pointerType: 'mouse', button: 0 };
+  demo.canvas.emit('pointerdown', mouse);
+  demo.canvas.emit('pointermove', { ...mouse, clientY: 250 });
+  demo.canvas.emit('pointerup', mouse);
+  assert.ok(input().slice(before).every(event => !event.kind.startsWith('touch')), 'a mouse never produces touch input');
+  // A cancelled touch ends the gesture once, not twice.
+  demo.canvas.emit('pointerdown', touch(50, 50));
+  demo.canvas.emit('pointercancel', touch(50, 50));
+  demo.canvas.emit('pointerup', touch(50, 50));
+  assert.equal(input().filter(event => event.kind === 'touch-end').length, 2);
+});
