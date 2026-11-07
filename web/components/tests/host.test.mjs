@@ -12,8 +12,8 @@ async function host() {
     emit(type, event = {}) { for (const callback of this.events[type] || []) callback({ preventDefault() {}, ...event }); }
     getBoundingClientRect() { return this.rect; }
     replaceChildren(...children) { this.children = children; }
-    focus() { if (!this.focused) { this.focused = true; this.emit('focus'); } }
-    blur() { if (this.focused) { this.focused = false; this.emit('blur'); } }
+    focus() { if (!this.focused) { this.focused = true; document.activeElement = this; this.emit('focus'); } }
+    blur() { if (this.focused) { this.focused = false; document.activeElement = null; this.emit('blur'); } }
     setPointerCapture() { this.captured = true; }
     hasPointerCapture() { return this.captured; }
     releasePointerCapture() { this.captured = false; this.emit('lostpointercapture'); }
@@ -27,7 +27,7 @@ async function host() {
     terminate() { this.terminated = true; }
   }
   const container = new Element();
-  const document = { hidden: false, createElement: () => new Element() };
+  const document = { hidden: false, activeElement: null, createElement: () => new Element() };
   const context = vm.createContext({ URL, console, document, Worker, HTMLCanvasElement: Element,
     crypto: { randomUUID: () => 'host-test' }, AbortController,
     devicePixelRatio: 2, performance: { now: () => 100 },
@@ -135,28 +135,50 @@ test('A one-finger drag scrolls and its lift ends the gesture, while a mouse dra
   assert.equal(input().filter(event => event.kind === 'touch-end').length, 2);
 });
 
-test('A tap raises the keyboard and drops it only when nothing took focus; a drag and a report never flip it off', async () => {
-  const { demo, notify, timers } = await host();
+test('A tap raises the keyboard when the demo says it focused something editable, and never for a drag or a stray report', async () => {
+  const { demo, notify, timers, worker } = await host();
   demo.setVisible(true); notify('ready');
   const at = (x, y) => ({ clientX: 80 + x, clientY: 120 + y, pointerId: 3, pointerType: 'touch', button: 0 });
-  const runTimers = () => { for (const [id, callback] of [...timers]) { timers.delete(id); callback(); } };
+  const token = () => worker.messages.filter(m => m.type === 'sync').at(-1).payload.token;
+  const focusEvents = () => worker.messages.filter(m => m.type === 'input' && m.payload.event.kind === 'focus').map(m => m.payload.event.focused);
   assert.equal(demo.editor.inputMode, 'none', 'no keyboard before any tap');
-  // A tap on a text input: the demo then reports it is editing, and the keyboard stays.
+  // The demo answers before the finger lifts: an editable answer raises the keyboard inside the tap.
+  demo.canvas.emit('pointerdown', at(100, 100));
+  assert.equal(demo.editor.inputMode, 'none', 'a press alone does not raise it');
+  notify('state', { editable: true, sync: token() });
+  demo.canvas.emit('pointerup', at(100, 100));
+  assert.equal(demo.editor.inputMode, 'text');
+  assert.equal(demo.editor.focused, true);
+  // iOS moves focus to the tapped canvas and the host hands it back: the demo hears no blur.
+  demo.editor.emit('blur', { relatedTarget: demo.canvas }); demo.editor.emit('focus');
+  assert.deepEqual(focusEvents(), [true, true]);
+  demo.editor.emit('blur', { relatedTarget: null });
+  assert.equal(focusEvents().at(-1), false, 'a real blur still reaches the demo');
+  demo.editor.emit('focus');
+  // A stray report that nothing is editable does not drop it.
+  notify('state', { editable: false });
+  assert.equal(demo.editor.inputMode, 'text');
+  // The demo answers before the lift that nothing is editable: no keyboard at all, and it drops.
+  demo.canvas.emit('pointerdown', at(20, 20));
+  notify('state', { editable: false, sync: token() });
+  demo.canvas.emit('pointerup', at(20, 20));
+  assert.equal(demo.editor.inputMode, 'none');
+  // A tap lifted before any answer raises it inside the gesture, then follows the answer.
   demo.canvas.emit('pointerdown', at(100, 100)); demo.canvas.emit('pointerup', at(100, 100));
-  assert.equal(demo.editor.inputMode, 'text', 'the tap raises it inside the gesture');
-  notify('state', { editable: false });
-  notify('state', { editable: true });
-  runTimers();
-  assert.equal(demo.editor.inputMode, 'text', 'an editable demo keeps its keyboard');
-  // A report that nothing is editable does not drop it by itself.
-  notify('state', { editable: false });
   assert.equal(demo.editor.inputMode, 'text');
-  // A tap that lands on nothing editable drops it once the delay has passed.
+  notify('state', { editable: true, sync: token() });
+  assert.equal(demo.editor.inputMode, 'text');
   demo.canvas.emit('pointerdown', at(20, 20)); demo.canvas.emit('pointerup', at(20, 20));
-  assert.equal(demo.editor.inputMode, 'text');
-  runTimers();
+  assert.equal(demo.editor.inputMode, 'text', 'it stays up until the demo has answered');
+  notify('state', { editable: false, sync: token() });
+  assert.equal(demo.editor.inputMode, 'none');
+  // A demo that never answers does not leave the keyboard up.
+  demo.canvas.emit('pointerdown', at(20, 20)); demo.canvas.emit('pointerup', at(20, 20));
+  for (const [id, callback] of [...timers]) { timers.delete(id); callback(); }
   assert.equal(demo.editor.inputMode, 'none');
   // A drag is a scroll: it does not raise the keyboard.
-  demo.canvas.emit('pointerdown', at(50, 200)); demo.canvas.emit('pointermove', at(50, 120)); demo.canvas.emit('pointerup', at(50, 120));
+  demo.canvas.emit('pointerdown', at(50, 200)); notify('state', { editable: true, sync: token() });
+  demo.editor.inputMode = 'none';
+  demo.canvas.emit('pointermove', at(50, 120)); demo.canvas.emit('pointerup', at(50, 120));
   assert.equal(demo.editor.inputMode, 'none');
 });

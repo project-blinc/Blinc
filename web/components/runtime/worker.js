@@ -1,7 +1,7 @@
 import { VERSION, HOST_TYPES, envelope, valid } from './protocol.js';
 
 let instance, runtime, seq = 0, lastInput = -1, active = false, frameId = null;
-let booted = false, disposed = false, failed = false, lastState = '';
+let booted = false, disposed = false, failed = false, lastState = '', syncToken = null;
 const emit = (type, payload) => postMessage(envelope(instance, seq++, type, payload));
 function cancelFrame() {
   if (frameId !== null) cancelAnimationFrame(frameId);
@@ -22,7 +22,10 @@ function draw() {
     const parsed = JSON.parse(state);
     // Selection and cursor are host services; only send changes to their values.
     const key = JSON.stringify({ ...parsed, frames: undefined });
-    if (key !== lastState) { lastState = key; emit('state', parsed); }
+    // A sync request is answered by the next frame, changed or not, so the host knows the report
+    // follows every input it sent before asking.
+    if (syncToken !== null) { emit('state', { ...parsed, sync: syncToken }); syncToken = null; lastState = key; }
+    else if (key !== lastState) { lastState = key; emit('state', parsed); }
     if (active) frameId = requestAnimationFrame(draw);
   } catch (error) { fail(error); }
 }
@@ -115,6 +118,7 @@ self.onmessage = async ({ data }) => {
           runtime.input(JSON.stringify(payload.event), !!mods.shift, !!mods.ctrl, !!mods.alt, !!mods.meta, payload.timestamp);
         }
         break;
+      case 'sync': syncToken = payload.token; if (runtime && frameId === null) frameId = requestAnimationFrame(draw); break;
       case 'resize': if (runtime) runtime.resize(payload.width, payload.height, payload.dpr); break;
       case 'theme': if (runtime) runtime.theme(payload.dark, payload.family); break;
       case 'props': if (runtime) runtime.control(payload.disabled, payload.progress); break;

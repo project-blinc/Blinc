@@ -1,5 +1,5 @@
 export const VERSION = 1;
-export const HOST_TYPES = new Set(['boot', 'input', 'resize', 'theme', 'props', 'css', 'pause', 'resume', 'dispose', 'media-state', 'media-frame']);
+export const HOST_TYPES = new Set(['boot', 'input', 'resize', 'theme', 'props', 'css', 'pause', 'resume', 'sync', 'dispose', 'media-state', 'media-frame']);
 export const WORKER_TYPES = new Set(['progress', 'first-frame', 'ready', 'state', 'css-result', 'error', 'disposed', 'media']);
 
 export function envelope(instance, seq, type, payload = {}) {

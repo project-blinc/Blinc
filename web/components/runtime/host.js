@@ -55,9 +55,10 @@ export class LiveDemo {
           this.canvas.style.cursor = data.payload.cursor || 'default';
           // iOS drops a keyboard whose input mode is switched off while the field is focused and does
           // not raise it again outside a tap, so a report never turns the keyboard off by itself:
-          // `settleKeyboard` does, after a tap, once the demo has had time to take focus.
+          // `tapAnswered` does, once the demo has answered a sync sent with the tap.
           this.editable = !!data.payload.editable;
           if (this.editable) this.editor.inputMode = 'text';
+          if (data.payload.sync !== undefined && data.payload.sync === this.tap?.token) this.tapAnswered(!!data.payload.editable);
         }
         if (data.type === 'error') this.stop();
         this.onStatus(data.type, data.payload);
@@ -107,6 +108,8 @@ export class LiveDemo {
     };
     listen(this.container, 'contextmenu', e => e.preventDefault());
     listen(this.canvas, 'dragstart', e => e.preventDefault());
+    // A tap must not move focus off the editor; the editor is focused explicitly on pointerdown.
+    listen(this.canvas, 'mousedown', e => e.preventDefault());
     listen(this.canvas, 'selectstart', e => e.preventDefault());
     // A finger has no wheel: its drag is sent as scroll steps, and its lift ends the gesture so a
     // flick carries on and an overscroll springs back. The browser's own panning is off on the canvas.
@@ -124,6 +127,7 @@ export class LiveDemo {
       e.preventDefault(); this.editor.focus({ preventScroll: true });
       this.pointerDown = true;
       this.downAt = position(e);
+      this.beginTap();
       this.canvas.setPointerCapture(e.pointerId);
       if (e.pointerType === 'touch') { this.touch = position(e); this.input({ kind: 'touch-start' }, e); }
       this.input({ kind: 'pointer-move', ...position(e) }, e);
@@ -135,7 +139,7 @@ export class LiveDemo {
       endTouch(e);
       // A drag scrolls; only a tap can be an edit, so only a tap raises the keyboard.
       const at = position(e);
-      if (!this.downAt || Math.hypot(at.x - this.downAt.x, at.y - this.downAt.y) <= 10) { this.armKeyboard(); this.settleKeyboard(); }
+      if (!this.downAt || Math.hypot(at.x - this.downAt.x, at.y - this.downAt.y) <= 10) this.endTap();
       if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
     });
     for (const event of ['pointerleave', 'pointercancel']) {
@@ -155,8 +159,10 @@ export class LiveDemo {
       this.input({ kind: 'wheel', x: -e.deltaX * unit, y: -e.deltaY * unit }, e);
     }, { passive: false });
     listen(this.canvas, 'focus', () => this.editor.focus({ preventScroll: true }));
-    listen(this.editor, 'focus', () => this.input({ kind: 'focus', focused: true }));
-    listen(this.editor, 'blur', () => this.input({ kind: 'focus', focused: false }));
+    listen(this.editor, 'focus', () => { if (!this.refocusing) this.input({ kind: 'focus', focused: true }); });
+    // Focus moving to the canvas (iOS focuses a tapped tabindex element) is handed straight back to the
+    // editor below, so the demo is not told it lost focus.
+    listen(this.editor, 'blur', e => { if (!this.refocusing && e.relatedTarget !== this.canvas) this.input({ kind: 'focus', focused: false }); });
     let composing = false;
     listen(this.editor, 'compositionstart', () => { composing = true; });
     listen(this.editor, 'compositionend', e => {
@@ -200,12 +206,46 @@ export class LiveDemo {
   /** Raise the keyboard now, inside the tap iOS requires, and drop it later if nothing took focus. */
   armKeyboard() {
     clearTimeout(this.keyboardTimer);
+    const wasOff = this.editor.inputMode !== 'text';
     this.editor.inputMode = 'text';
+    if (wasOff && document.activeElement === this.editor) {
+      // The pointerdown focus happened with the keyboard off, and iOS shows the keyboard only for a
+      // focus that lands after the mode is on. Re-focus inside the tap without telling the demo.
+      this.refocusing = true;
+      try { this.editor.blur(); this.editor.focus({ preventScroll: true }); } finally { this.refocusing = false; }
+      return;
+    }
     this.editor.focus({ preventScroll: true });
   }
-  settleKeyboard() {
+  /** A press asks the demo what it has focused once it has handled the press. */
+  beginTap() {
+    this.syncCount = (this.syncCount || 0) + 1;
+    this.tap = { token: this.syncCount, answered: false, editable: false, up: false };
+    this.send('sync', { token: this.tap.token });
+  }
+  /**
+   * A tap raises the keyboard when the demo has said it focused something editable. A tap lifted
+   * before the demo answered raises it anyway, since iOS allows that only inside the tap, and
+   * drops it when the answer says nothing is editable.
+   */
+  endTap() {
+    const tap = this.tap;
     clearTimeout(this.keyboardTimer);
-    this.keyboardTimer = setTimeout(() => { if (!this.editable) this.editor.inputMode = 'none'; }, 400);
+    if (tap?.answered) {
+      if (tap.editable) this.armKeyboard(); else this.editor.inputMode = 'none';
+      return;
+    }
+    if (tap) tap.up = true;
+    this.armKeyboard();
+    // A demo that never answers must not leave the keyboard up.
+    this.keyboardTimer = setTimeout(() => { if (!this.editable) this.editor.inputMode = 'none'; }, 5000);
+  }
+  tapAnswered(editable) {
+    const tap = this.tap;
+    tap.answered = true; tap.editable = editable;
+    if (!tap.up) return;
+    clearTimeout(this.keyboardTimer);
+    if (!editable) this.editor.inputMode = 'none';
   }
   stop() {
     if (this.stopped) return;
