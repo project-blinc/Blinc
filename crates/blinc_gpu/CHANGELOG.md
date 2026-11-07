@@ -8,6 +8,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - `GpuRenderer::with_offscreen_canvas` shares web surface/device setup with the DOM canvas constructor.
 
 ### Fixed
+- The WebGL2 SDF shaders (`sdf_core_dt` and `sdf_core_vb`) composite a border over the fill with source-over alpha, as `sdf_core` does. A semi-transparent border no longer leaks the page through the ring, which drew a dim stroke with a dotted line along rounded corners.
 - Web renderer setup probes for a WebGPU adapter first and uses the WebGL2 backend when there is none. Browsers that expose `navigator.gpu` but return no adapter no longer fail with "No suitable GPU adapter found".
 
 ## [0.6.0] - 2026-11-04

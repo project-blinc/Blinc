@@ -958,7 +958,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             let inner_aa = aa_width;
             let border_blend = smoothstep(-inner_aa, inner_aa, -inner_sdf);
 
-            // Only apply border color where we're inside the shape
+            // Composite the border over the fill with source-over alpha, as sdf_core.wgsl does:
+            // a four-component mix pulls the border's alpha into the body, so a semi-transparent
+            // border over an opaque fill leaks the page through the ring and traces the corner.
+            let border_t = border_blend * step(0.001, fill_alpha);
             var border_rgba = prim.border_color;
             if prim.side_color_top.a + prim.side_color_right.a
                 + prim.side_color_bottom.a + prim.side_color_left.a > 0.0 {
@@ -968,7 +971,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                     prim.side_color_bottom, prim.side_color_left
                 );
             }
-            fill_color = mix(fill_color, border_rgba, border_blend * step(0.001, fill_alpha));
+            let border_a = border_rgba.a * border_t;
+            let out_a = border_a + fill_color.a * (1.0 - border_a);
+            let premult_rgb = border_rgba.rgb * border_a
+                + fill_color.rgb * fill_color.a * (1.0 - border_a);
+            let new_rgb = select(
+                premult_rgb / max(out_a, 0.0001),
+                vec3<f32>(0.0),
+                out_a < 0.0001
+            );
+            fill_color = vec4<f32>(new_rgb, out_a);
         }
     }
 
