@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1794137236,"nonce":"L/xF+LQmgc1HnHDhhlM+nfFOJyk=","added":["debt","area:core","area:layout"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1794137479,"nonce":"OoNDlgic7Z6q3/8khn+vbS3DXyw=","added":["milestone:0.7.0"],"removed":null}]}
