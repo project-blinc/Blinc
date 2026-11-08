@@ -433,7 +433,7 @@ fn themed_button() -> impl ElementBuilder {
 | `HybridTheme` | An even mix of Apple HIG and Material 3, and the fallback when no platform theme applies. `BlincTheme` and `DefaultTheme` are aliases of it |
 | `RestrainedTheme` | Apple-leaning: quiet motion and tight curves |
 | `ExpressiveTheme` | Material-leaning: bolder radii and longer motion |
-| Platform themes | macOS (Human Interface Guidelines), Windows (Fluent), Linux (Adwaita), iOS, Android (Material You). Web uses Hybrid |
+| Platform themes | macOS (Human Interface Guidelines), Windows (Fluent), Linux (Adwaita). iOS and Android use Expressive, and web uses Hybrid |
 
 Each has `light()`, `dark()` and `bundle()`, for example `RestrainedTheme::bundle()`. `platform_theme_bundle()` returns the bundle for the current platform, and `ThemeState::init_default()` installs it with the detected colour scheme.
 

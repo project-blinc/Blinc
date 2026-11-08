@@ -7,7 +7,7 @@
 //!
 //! The theme system provides:
 //! - **Design tokens**: Colors, typography, spacing, radii, shadows, animations
-//! - **Platform themes**: Native look and feel for macOS, Windows, Linux, iOS, Android
+//! - **Platform themes**: Native look and feel for macOS, Windows and Linux; iOS and Android use Blinc's Expressive
 //! - **Color scheme detection**: Automatic detection of system dark/light mode
 //! - **Dynamic overrides**: Runtime customization without layout rebuilds
 //!
@@ -48,7 +48,7 @@
 //! Built-in themes:
 //!
 //! - [`BlincTheme`]: Default theme derived from Catppuccin design system
-//! - Platform-specific themes for macOS, Windows, Linux, iOS, Android
+//! - Platform-specific themes for macOS, Windows and Linux
 //!
 //! # Dynamic Overrides
 //!

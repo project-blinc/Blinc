@@ -4,6 +4,9 @@ All notable changes to `blinc_theme` will be documented in this file.
 
 ## [Unreleased]
 
+### Removed
+- `themes::platform::ios::IOSTheme` and `themes::platform::android::AndroidTheme`. They only wrapped `BlincTheme` with a TODO. `platform_theme_bundle()` now returns `ExpressiveTheme::bundle()` on iOS and Android, Blinc's own theme; the old themes were `BlincTheme` (Hybrid) underneath.
+
 ### Fixed
 - The Linux theme names its UI sans from the shared `blinc_core::system_fonts::LINUX_SANS` list (Adwaita Sans first), so it and the text registry resolve the same families in the same order. The previous list named Cantarell first and left out Noto Sans and Adwaita Sans.
 - Runtime overrides apply to `ThemeState::colors()`, `spacing()` and `radii()` and to the CSS variable map. Before, spacing and radius overrides changed only `spacing_value(token)` and `radius(token)`, and colour overrides skipped `colors()`, so `--space-*` and `--radius-*` kept the theme's values.
