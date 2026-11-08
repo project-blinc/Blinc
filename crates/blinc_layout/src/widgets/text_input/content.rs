@@ -62,7 +62,7 @@ pub(super) fn caret_x(d: &mut TextInputData, cfg: &TextInputConfig) -> f32 {
     let shown = shown_text(d, cfg);
     let before = if d.cursor > 0 && !d.value.is_empty() {
         let text_before: String = shown.chars().take(d.cursor).collect();
-        crate::text_measure::measure_text(&text_before, cfg.font_size).width
+        cfg.face.measure(&text_before, cfg.font_size).width
     } else {
         0.0
     };

@@ -62,7 +62,7 @@ pub(super) fn selection_span(d: &TextAreaState, row: usize) -> (f32, f32) {
     }
     let width_to = |col: usize| {
         let prefix: String = vl.text.chars().take(col - vl.start_char).collect();
-        crate::text_measure::measure_text(&prefix, d.font_size).width
+        d.face.measure(&prefix, d.font_size).width
     };
     let (x0, x1) = (width_to(from), width_to(to));
     // A selection running on past this line ends in a sliver for the break.

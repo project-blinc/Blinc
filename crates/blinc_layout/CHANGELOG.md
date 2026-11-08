@@ -8,6 +8,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 
 ### Fixed
+- The caret, selection, wrapping and click mapping of text inputs and text areas measure with the font family, weight, style and letter spacing the field's own rules set, as the layout measures the drawn text. The cn default `letter-spacing: var(--tracking-tight)` no longer leaves the caret to the right of the text, and a field whose family differs from the default no longer drifts. Values a field inherits from an ancestor are not read, as with its font size.
 - A stylesheet rule on an id with `:hover`, `:active` or `:focus` is ordered against the widget's own rules by specificity: `#cb:hover { border-color }` beats the widget's `.blinc-checkbox:hover` rule. The rule stays a simple rule for animations and the state table, and is also a complex rule for ordering.
 - A stylesheet rule on an id with `:checked` or `:disabled` (`#cb:checked`, `#btn:disabled`) applies. It was parsed as a pointer-state rule that nothing read, so the element kept the widget's own look. Such rules are now matched like any selector on the element's `checked` and `disabled` attributes: they outrank the widget's class rules and follow the attribute as it changes.
 - Native IME candidates update single-line, multiline, code and rich text documents without duplicate commits. Composition defers change callbacks, groups supported undo history, respects UTF-16 selection boundaries and rolls back invalid single-line commits.
@@ -22,6 +23,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Overlay focus returns to stable trigger identities on dismissal, and nested scopes constrain Tab to the topmost active popup. Pointer focus persists without a keyboard ring. Menu roles support roving focus, submenu keys and keyboard context-menu activation.
 
 ### Added
+- `text_measure::TextFace` (family, weight, italic, letter spacing), `TextInputConfig::face` and `TextAreaConfig::face`, and `TextInputData::cursor_position_from_x_with`. Exhaustive struct literals of the two configs must initialize `face`; builder and `..Default::default()` construction remain valid.
 - `RenderProps` carries optional `important_colors` metadata. Initialize it to `None` in exhaustive literals or use `..Default::default()`.
 - CSS `:focus-visible` distinguishes keyboard focus from pointer focus.
 

@@ -78,6 +78,8 @@ pub struct TextAreaState {
     pub(crate) line_height: f32,
     /// Cached font size for scroll calculations with wrapping
     pub(crate) font_size: f32,
+    /// Cached font properties the lines are measured with
+    pub(crate) face: crate::text_measure::TextFace,
     /// Cached available width for text (for wrapping calculations)
     pub(crate) available_width: f32,
     /// Cached wrap enabled flag
@@ -146,9 +148,10 @@ impl Default for TextAreaState {
             cursor_blink_interval_ms: 530, // Standard cursor blink rate (~530ms)
             cursor_state: cursor_state(),
             scroll_physics: Arc::new(Mutex::new(ScrollPhysics::default())),
-            viewport_height: 120.0,   // Default height from TextAreaConfig
-            line_height: 14.0 * 1.4,  // Default font_size * line_height
-            font_size: 14.0,          // Default font size
+            viewport_height: 120.0,  // Default height from TextAreaConfig
+            line_height: 14.0 * 1.4, // Default font_size * line_height
+            font_size: 14.0,         // Default font size
+            face: crate::text_measure::TextFace::default(),
             available_width: 276.0,   // Default width minus padding/borders
             wrap_enabled: true,       // Default to wrapping (visual lines handle cursor tracking)
             visual_lines: Vec::new(), // Computed on first layout

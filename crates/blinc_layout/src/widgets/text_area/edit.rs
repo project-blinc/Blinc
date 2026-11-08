@@ -264,7 +264,7 @@ impl TextAreaState {
         // Find character position that best matches target_x
         for i in 0..=char_count {
             let prefix: String = vl.text.chars().take(i).collect();
-            let prefix_width = crate::text_measure::measure_text(&prefix, self.font_size).width;
+            let prefix_width = self.face.measure(&prefix, self.font_size).width;
 
             let dist = (prefix_width - target_x).abs();
             if dist < min_dist {

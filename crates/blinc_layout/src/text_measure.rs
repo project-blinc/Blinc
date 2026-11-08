@@ -396,6 +396,71 @@ pub fn measure_text_with_options(
     }
 }
 
+/// The font properties an editable field's text is drawn with, taken from the field's rules.
+/// The caret, selection, wrapping and click mapping measure with it, so they agree with the
+/// layout, which measures the drawn text with the same properties.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextFace {
+    pub family: crate::div::FontFamily,
+    /// 100 to 900; 400 is normal.
+    pub weight: u16,
+    pub italic: bool,
+    /// Pixels added after every character.
+    pub letter_spacing: f32,
+}
+
+impl Default for TextFace {
+    fn default() -> Self {
+        Self {
+            family: crate::div::FontFamily::default(),
+            weight: 400,
+            italic: false,
+            letter_spacing: 0.0,
+        }
+    }
+}
+
+impl TextFace {
+    /// Take the font properties `style` sets, leaving the others as they are.
+    pub fn apply_style(&mut self, style: &crate::element_style::ElementStyle) {
+        use crate::element_style::StyleGenericFont as G;
+        if let Some(family) = &style.font_family {
+            let generic = match family.generic {
+                G::System => crate::div::GenericFont::System,
+                G::Monospace => crate::div::GenericFont::Monospace,
+                G::Serif => crate::div::GenericFont::Serif,
+                G::SansSerif => crate::div::GenericFont::SansSerif,
+            };
+            self.family = match &family.name {
+                Some(name) => crate::div::FontFamily::named_with_fallback(name.clone(), generic),
+                None => crate::div::FontFamily::generic(generic),
+            };
+        }
+        if let Some(weight) = style.font_weight {
+            self.weight = weight.weight();
+        }
+        if let Some(style) = style.font_style {
+            self.italic = style.is_italic();
+        }
+        if let Some(spacing) = style.letter_spacing {
+            self.letter_spacing = spacing;
+        }
+    }
+
+    /// The size of `text` at `font_size` in this face.
+    pub fn measure(&self, text: &str, font_size: f32) -> TextMetrics {
+        if *self == Self::default() {
+            return measure_text(text, font_size);
+        }
+        let mut options = TextLayoutOptions::new().with_letter_spacing(self.letter_spacing);
+        options.font_name = self.family.name.clone();
+        options.generic_font = self.family.generic;
+        options.font_weight = self.weight;
+        options.italic = self.italic;
+        measure_text_with_options(text, font_size, &options)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

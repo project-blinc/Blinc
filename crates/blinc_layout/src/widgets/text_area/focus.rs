@@ -91,6 +91,7 @@ pub(super) fn take_metrics(d: &mut TextAreaState, cfg: &TextAreaConfig) {
     d.line_height = cfg.font_size * cfg.line_height;
     d.viewport_height = cfg.effective_height() - cfg.padding_y * 2.0 - cfg.border_width * 2.0;
     d.font_size = cfg.font_size;
+    d.face = cfg.face.clone();
     d.available_width = cfg.effective_width() - cfg.padding_x * 2.0 - cfg.border_width * 2.0;
     d.wrap_enabled = cfg.wrap;
 }

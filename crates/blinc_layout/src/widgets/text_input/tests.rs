@@ -304,3 +304,40 @@ fn a_bound_placeholder_and_invalid_follow_their_signals() {
     assert_eq!(d.placeholder, "Full name");
     assert!(d.invalid);
 }
+
+/// The caret and the click-to-caret mapping use the letter spacing the text is drawn
+/// with, taken from the field's CSS like the font size is.
+#[test]
+fn caret_and_hit_test_follow_css_letter_spacing() {
+    use crate::text_measure::{TextLayoutOptions, measure_text_with_options};
+    ensure_theme_initialized();
+    let sheet = Stylesheet::parse(".tracked { letter-spacing: -3px; }").unwrap();
+    let mut cfg = TextInputConfig::default();
+    apply_css_overrides(
+        &mut cfg,
+        &sheet,
+        None,
+        &[Arc::from("tracked")],
+        &TextFieldState::Idle,
+    );
+    let drawn = |text: &str| {
+        measure_text_with_options(
+            text,
+            cfg.font_size,
+            &TextLayoutOptions::new().with_letter_spacing(-3.0),
+        )
+        .width
+    };
+
+    let mut data = TextInputData::with_value("hello world");
+    data.cursor = 5;
+    assert_eq!(caret_x(&mut data, &cfg), drawn("hello"));
+
+    // A click on the drawn edge after three characters lands after three.
+    let x = drawn("hel");
+    assert_eq!(
+        data.cursor_position_from_x_with(x, cfg.font_size, &cfg.face),
+        3
+    );
+    assert_ne!(data.cursor_position_from_x(x, cfg.font_size), 3);
+}

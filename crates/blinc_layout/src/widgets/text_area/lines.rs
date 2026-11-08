@@ -6,12 +6,17 @@ impl TextAreaState {
     /// Calculate the number of visual lines a text line takes when wrapped
     ///
     /// Returns 1 for short lines, more for lines that wrap.
-    pub(super) fn visual_lines_for_text(text: &str, font_size: f32, available_width: f32) -> usize {
+    pub(super) fn visual_lines_for_text(
+        text: &str,
+        font_size: f32,
+        face: &crate::text_measure::TextFace,
+        available_width: f32,
+    ) -> usize {
         if text.is_empty() || available_width <= 0.0 {
             return 1;
         }
 
-        let metrics = crate::text_measure::measure_text(text, font_size);
+        let metrics = face.measure(text, font_size);
         if metrics.width <= available_width {
             return 1;
         }
@@ -27,6 +32,10 @@ impl TextAreaState {
         let mut h = std::hash::DefaultHasher::new();
         self.lines.hash(&mut h);
         self.font_size.to_bits().hash(&mut h);
+        self.face.family.name.hash(&mut h);
+        self.face.weight.hash(&mut h);
+        self.face.italic.hash(&mut h);
+        self.face.letter_spacing.to_bits().hash(&mut h);
         self.available_width.to_bits().hash(&mut h);
         self.wrap_enabled.hash(&mut h);
         h.finish()
@@ -48,6 +57,7 @@ impl TextAreaState {
         self.visual_lines.clear();
 
         let font_size = self.font_size;
+        let face = self.face.clone();
         let available_width = self.available_width;
         let wrap_enabled = self.wrap_enabled;
 
@@ -66,7 +76,7 @@ impl TextAreaState {
 
             if !wrap_enabled || available_width <= 0.0 {
                 // No wrapping - entire logical line is one visual line
-                let width = crate::text_measure::measure_text(line_text, font_size).width;
+                let width = face.measure(line_text, font_size).width;
                 self.visual_lines.push(VisualLine {
                     logical_line: logical_line_idx,
                     start_char: 0,
@@ -94,7 +104,7 @@ impl TextAreaState {
                     // Check width up to this character (inclusive)
                     let test_end = end_char + 1;
                     let test_text: String = chars[start_char..test_end].iter().collect();
-                    let test_width = crate::text_measure::measure_text(&test_text, font_size).width;
+                    let test_width = face.measure(&test_text, font_size).width;
 
                     if test_width > available_width && end_char > start_char {
                         // This character would exceed width, break here
@@ -114,7 +124,7 @@ impl TextAreaState {
                 if last_word_break > start_char && end_char < char_count {
                     end_char = last_word_break;
                     let text: String = chars[start_char..end_char].iter().collect();
-                    current_width = crate::text_measure::measure_text(&text, font_size).width;
+                    current_width = face.measure(&text, font_size).width;
                 }
 
                 // Create visual line
@@ -209,7 +219,7 @@ impl TextAreaState {
                     return 0.0;
                 }
                 let text_before: String = vl.text.chars().take(local_col).collect();
-                return crate::text_measure::measure_text(&text_before, self.font_size).width;
+                return self.face.measure(&text_before, self.font_size).width;
             }
         }
 
@@ -264,7 +274,8 @@ impl TextAreaState {
         let mut cursor_visual_y = 0.0f32;
 
         for (idx, line) in self.lines.iter().enumerate() {
-            let line_visual_count = Self::visual_lines_for_text(line, font_size, available_width);
+            let line_visual_count =
+                Self::visual_lines_for_text(line, font_size, &self.face, available_width);
 
             if idx < self.cursor.line {
                 visual_line_count += line_visual_count;
@@ -274,8 +285,7 @@ impl TextAreaState {
                 // within that line based on cursor column position
                 if line_visual_count > 1 && !line.is_empty() {
                     let text_before: String = line.chars().take(self.cursor.column).collect();
-                    let prefix_width =
-                        crate::text_measure::measure_text(&text_before, font_size).width;
+                    let prefix_width = self.face.measure(&text_before, font_size).width;
                     let lines_into = (prefix_width / available_width).floor() as usize;
                     cursor_visual_y += lines_into as f32 * line_height;
                 }
@@ -398,7 +408,7 @@ impl TextAreaState {
         // Check position before each character and after the last within this visual line
         for i in 0..=char_count {
             let prefix: String = vl.text.chars().take(i).collect();
-            let prefix_width = crate::text_measure::measure_text(&prefix, font_size).width;
+            let prefix_width = self.face.measure(&prefix, font_size).width;
 
             let dist = (prefix_width - x).abs();
             if dist < min_dist {
@@ -429,7 +439,7 @@ impl TextAreaState {
         // Check position before each character and after the last
         for i in 0..=char_count {
             let prefix: String = line.chars().take(i).collect();
-            let prefix_width = crate::text_measure::measure_text(&prefix, font_size).width;
+            let prefix_width = self.face.measure(&prefix, font_size).width;
 
             let dist = (prefix_width - x).abs();
             if dist < min_dist {

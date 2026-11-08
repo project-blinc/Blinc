@@ -468,6 +468,16 @@ impl TextInputData {
     /// This is used for click-to-position cursor functionality.
     /// The x coordinate should be relative to the start of the text content (after padding).
     pub fn cursor_position_from_x(&self, x: f32, font_size: f32) -> usize {
+        self.cursor_position_from_x_with(x, font_size, &Default::default())
+    }
+
+    /// [`Self::cursor_position_from_x`] for text drawn in `face`.
+    pub fn cursor_position_from_x_with(
+        &self,
+        x: f32,
+        font_size: f32,
+        face: &crate::text_measure::TextFace,
+    ) -> usize {
         let display = self.display_text();
         if display.is_empty() {
             return 0;
@@ -486,7 +496,7 @@ impl TextInputData {
         // Check position before each character and after the last
         for i in 0..=char_count {
             let prefix: String = display.chars().take(i).collect();
-            let prefix_width = crate::text_measure::measure_text(&prefix, font_size).width;
+            let prefix_width = face.measure(&prefix, font_size).width;
 
             let dist = (prefix_width - text_x).abs();
             if dist < min_dist {
@@ -523,7 +533,7 @@ impl TextInputData {
         // Calculate total text width
         let display = self.display_text();
         let total_text_width = if !display.is_empty() {
-            crate::text_measure::measure_text(&display, config.font_size).width
+            config.face.measure(&display, config.font_size).width
         } else {
             0.0
         };
@@ -531,7 +541,7 @@ impl TextInputData {
         // Calculate cursor x position (where cursor is in the full text)
         let cursor_x = if self.cursor > 0 && !display.is_empty() {
             let text_before: String = display.chars().take(self.cursor).collect();
-            crate::text_measure::measure_text(&text_before, config.font_size).width
+            config.face.measure(&text_before, config.font_size).width
         } else {
             0.0
         };

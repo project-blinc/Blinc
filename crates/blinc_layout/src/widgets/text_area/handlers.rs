@@ -42,6 +42,7 @@ impl TextArea {
                 // text_input uses at its own click handler.
                 let cfg = config_for_click.lock().unwrap();
                 let font_size = cfg.font_size;
+                let face = cfg.face.clone();
                 let line_height = cfg.font_size * cfg.line_height;
                 let available_width =
                     cfg.effective_width() - cfg.padding_x * 2.0 - cfg.border_width * 2.0;
@@ -89,6 +90,7 @@ impl TextArea {
 
                     // Update cached config values for visual line computation
                     d.font_size = font_size;
+                    d.face = face.clone();
                     d.line_height = line_height;
                     d.available_width = available_width;
                     d.wrap_enabled = wrap_enabled;

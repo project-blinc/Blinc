@@ -17,6 +17,9 @@ pub struct TextAreaConfig {
     pub cols: Option<usize>,
     /// Font size
     pub font_size: f32,
+    /// The font properties the field's text is drawn with, from its CSS. Wrapping, the caret,
+    /// selection and click mapping measure with them.
+    pub face: crate::text_measure::TextFace,
     /// Line height multiplier
     pub line_height: f32,
     /// Approximate character width in ems (for cols calculation)
@@ -70,6 +73,7 @@ impl Default for TextAreaConfig {
             rows: None,
             cols: None,
             font_size: 14.0,
+            face: crate::text_measure::TextFace::default(),
             line_height: 1.4,
             char_width_ratio: 0.6,
             text_color: theme.color(ColorToken::TextPrimary),

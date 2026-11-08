@@ -140,6 +140,9 @@ pub(super) fn apply_style_to_config(
         cfg.font_size = size;
     }
 
+    // Font family, weight, style and letter spacing
+    cfg.face.apply_style(style);
+
     // Caret (cursor) color
     if let Some(color) = style.caret_color {
         cfg.cursor_color = color;

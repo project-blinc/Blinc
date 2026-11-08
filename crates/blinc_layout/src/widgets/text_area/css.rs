@@ -83,6 +83,7 @@ pub(super) fn apply_style_to_textarea_config(
     if let Some(size) = style.font_size {
         cfg.font_size = size;
     }
+    cfg.face.apply_style(style);
     if let Some(color) = style.caret_color {
         cfg.cursor_color = color;
     }

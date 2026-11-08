@@ -11,6 +11,9 @@ pub struct TextInputConfig {
     pub height: f32,
     pub use_full_width: bool,
     pub font_size: f32,
+    /// The font properties the field's text is drawn with, from its CSS. The caret, selection and
+    /// click mapping measure with them.
+    pub face: crate::text_measure::TextFace,
     pub text_color: Color,
     pub placeholder_color: Color,
     pub cursor_color: Color,
@@ -34,6 +37,7 @@ impl Default for TextInputConfig {
             height: 44.0,
             use_full_width: false,
             font_size: 16.0,
+            face: crate::text_measure::TextFace::default(),
             text_color: theme.color(ColorToken::TextPrimary),
             placeholder_color: theme.color(ColorToken::TextTertiary),
             cursor_color: theme.color(ColorToken::Accent),

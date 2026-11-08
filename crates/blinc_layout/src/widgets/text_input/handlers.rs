@@ -106,10 +106,11 @@ impl TextInput {
                     // "H" of "Hello World" lands a cursor position
                     // PAST the H, so a drag-select that starts there
                     // misses the first character.
-                    let (font_size, text_origin_x, is_centered_align) = {
+                    let (font_size, face, text_origin_x, is_centered_align) = {
                         let cfg = config_for_click.lock().unwrap();
                         (
                             cfg.font_size,
+                            cfg.face.clone(),
                             cfg.padding_x + cfg.border_width,
                             matches!(cfg.text_align, blinc_core::TextAlign::Center),
                         )
@@ -156,7 +157,7 @@ impl TextInput {
                     let cursor_pos = if is_centered_align {
                         d.value.chars().count()
                     } else {
-                        d.cursor_position_from_x(text_x, font_size)
+                        d.cursor_position_from_x_with(text_x, font_size, &face)
                     };
 
                     // Double-click detection (select word)
@@ -312,12 +313,16 @@ impl TextInput {
                         // would cover one character less than the
                         // mouse-down anchor on the very first
                         // character.
-                        let (font_size, text_origin_x) = {
+                        let (font_size, face, text_origin_x) = {
                             let cfg = config_for_drag.lock().unwrap();
-                            (cfg.font_size, cfg.padding_x + cfg.border_width)
+                            (
+                                cfg.font_size,
+                                cfg.face.clone(),
+                                cfg.padding_x + cfg.border_width,
+                            )
                         };
                         let text_x = (ctx.local_x - text_origin_x).max(0.0);
-                        let new_pos = d.cursor_position_from_x(text_x, font_size);
+                        let new_pos = d.cursor_position_from_x_with(text_x, font_size, &face);
 
                         // Touch input branches its drag semantics:
                         //
