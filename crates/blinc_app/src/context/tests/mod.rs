@@ -44,5 +44,6 @@ mod rgba_order_tests;
 mod rgba_path_clip_tests;
 mod snapshot_group_tests;
 mod styled_group_tests;
+mod surface_resize_tests;
 mod svg_group_tests;
 mod tree_scope_tests;

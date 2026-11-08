@@ -13,12 +13,17 @@ impl RenderContext {
         &mut self,
         tree: &RenderTree,
         render_state: &blinc_layout::RenderState,
-        width: u32,
-        height: u32,
+        _window_width: u32,
+        _window_height: u32,
         target_view: &wgpu::TextureView,
         target_texture: &wgpu::Texture,
         try_fast_paint: bool,
     ) -> Result<()> {
+        // The surface texture can still have the size of the last `Resized`
+        // event while the window size passed in is already the new one.
+        // Size everything from the texture we copy into, so the static layer
+        // never outgrows it (wgpu rejects the copy and aborts otherwise).
+        let (width, height) = (target_texture.width(), target_texture.height());
         self.renderer.ensure_static_layer(width, height);
 
         // Retained callbacks share ancestor commands and cannot be refreshed
