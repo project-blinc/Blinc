@@ -168,6 +168,30 @@ fn foreground_layers_nested_paths_clips_and_public_glass_dispatch() {
     }
 }
 
+/// A dynamic batch that went through cross-stream resolution keeps the mark for good, with
+/// nothing left in it. With no node following a binding there is nothing to patch, so the
+/// cached frame presents as it is instead of repainting every frame.
+#[test]
+#[ignore] // Requires GPU
+fn a_resolved_dynamic_batch_without_bindings_keeps_the_cached_frame() {
+    use blinc_animation::AnimationScheduler;
+    let mut app = app();
+    let ui = div().w(160.0).h(120.0);
+    let mut tree = blinc_layout::RenderTree::from_element(&ui);
+    tree.compute_layout(160.0, 120.0);
+    let _state = blinc_layout::RenderState::new(Arc::new(Mutex::new(AnimationScheduler::new())));
+    let context = app.context();
+    let mut resolved = PrimitiveBatch::new();
+    resolved.cross_stream_groups.resolved = true;
+    assert!(
+        resolved.has_ordered_draws(),
+        "the mark alone reads as ordered"
+    );
+    context.cached_dynamic_batch = Some(resolved);
+    context.cached_bg_batch = Some(PrimitiveBatch::new());
+    assert!(context.apply_binding_deltas(&tree, 1.0));
+}
+
 #[test]
 #[ignore] // Requires GPU
 fn foreground_layers_cache_patchers_request_full_paint_without_mutation() {

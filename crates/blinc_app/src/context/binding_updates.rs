@@ -6,6 +6,18 @@ impl RenderContext {
     /// affected stream requires a full paint.
     pub fn apply_binding_deltas(&mut self, tree: &blinc_layout::RenderTree, scale: f32) -> bool {
         self.last_binding_damage_rects.clear();
+        // No painted node follows a binding, so the cache has nothing to patch. A batch that only
+        // carries the mark of cross-stream resolution, with no ordered or foreground content in
+        // it, presents as it is; an unchanged cache needs dispatch to show a fresh frame.
+        if tree.composite_bindings().is_empty()
+            && self.cached_dynamic_batch.as_ref().is_none_or(|b| {
+                !b.has_foreground_content()
+                    && !b.has_foreground_layers()
+                    && !b.has_ordered_content()
+            })
+        {
+            return true;
+        }
         // Shared captures rebase native ranges and retain moving output at its paint anchor.
         if !tree.motion_bindings_map().is_empty()
             && [

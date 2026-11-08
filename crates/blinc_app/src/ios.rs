@@ -164,7 +164,8 @@ impl IOSApp {
 
         // Set up the redraw callback
         set_redraw_callback(|| {
-            tracing::debug!("Theme changed - requesting full rebuild");
+            tracing::debug!("Theme changed - requesting full rebuild + CSS reparse");
+            blinc_layout::widgets::request_css_reparse();
             blinc_layout::widgets::request_full_rebuild();
         });
     }
@@ -378,6 +379,8 @@ impl IOSApp {
             is_scrolling: false,
             gesture_detector: GestureDetector::new(),
             last_frame_time_ms: 0,
+            state_styles: crate::mobile_paint::StateStyleGate::default(),
+            scroll_animating: false,
             last_applied_keyboard_inset: 0.0,
             last_focus_tap_generation: 0,
         })
@@ -421,6 +424,11 @@ pub struct IOSRenderContext {
     gesture_detector: GestureDetector,
     /// Last frame time for CSS animation delta calculation
     last_frame_time_ms: u64,
+    /// Skips the pointer and focus style pass while the router state and the tree are unchanged.
+    state_styles: crate::mobile_paint::StateStyleGate,
+    /// A scroll fling or other scroll animation was still running at the last tick, so the next
+    /// frame has to be drawn.
+    scroll_animating: bool,
     /// Keyboard inset value applied last frame, used to detect changes so
     /// `scroll_focused_text_input_above_keyboard` only runs when the inset
     /// actually moves (otherwise we'd re-clamp the scroll offset every
@@ -464,7 +472,7 @@ impl IOSRenderContext {
         let css_animating = self
             .render_tree
             .as_ref()
-            .map(|tree| !tree.css_animations_empty())
+            .map(|tree| !tree.css_animations_empty() || !tree.css_transitions_empty())
             .unwrap_or(false);
 
         // Long-press timer armed — the user is touching a text input
@@ -475,6 +483,7 @@ impl IOSRenderContext {
 
         dirty
             || wake_requested
+            || self.scroll_animating
             || animations_active
             || has_stateful_updates
             || has_pending_rebuilds
@@ -486,6 +495,7 @@ impl IOSRenderContext {
     /// Call this when the view's bounds change.
     /// `width` and `height` are in physical pixels.
     pub fn update_size(&mut self, width: u32, height: u32, scale_factor: f64) {
+        crate::mobile_paint::request_full_paint();
         let physical_width = width as f32;
         let physical_height = height as f32;
         let logical_width = physical_width / scale_factor as f32;
@@ -574,6 +584,12 @@ impl IOSRenderContext {
             if let Ok(mut t) = toast_tray().lock() {
                 t.update(now);
             }
+        }
+
+        // A theme change re-resolves the stylesheet's `var()` references against the new
+        // tokens, as the desktop and web runners do.
+        if blinc_layout::widgets::take_needs_css_reparse() {
+            self.windowed_ctx.reparse_css();
         }
 
         // Drain CSS queued by `ThemeBundle::with_css` →
@@ -673,34 +689,8 @@ impl IOSRenderContext {
         self.build_scope.finish(build_pass);
 
         // Tick and apply CSS animations/transitions synchronously with rendering
-        if let Some(ref mut tree) = self.render_tree {
-            let current_time = blinc_layout::prelude::elapsed_ms();
-            let dt_ms = if self.last_frame_time_ms > 0 {
-                (current_time - self.last_frame_time_ms) as f32
-            } else {
-                16.0
-            };
-            {
-                let store = tree.css_anim_store();
-                let mut s = store.lock().unwrap();
-                s.tick(dt_ms);
-            }
-            let flip_active = tree.tick_flip_animations(dt_ms);
-            let css_active = tree.css_has_active() || flip_active;
-            if tree.stylesheet().is_some() {
-                tree.apply_stylesheet_state_styles(&self.windowed_ctx.event_router);
-            }
-            if css_active || !tree.css_transitions_empty() || tree.has_active_flip_animations() {
-                tree.apply_all_css_animation_props();
-                tree.apply_all_css_transition_props();
-                tree.apply_flip_animation_props();
-                if tree.apply_animated_layout_props() {
-                    tree.compute_layout(self.windowed_ctx.width, self.windowed_ctx.height);
-                    tree.update_flip_bounds();
-                }
-            }
-            self.last_frame_time_ms = current_time;
-        }
+        self.state_styles.force();
+        self.tick_css();
 
         // Increment rebuild count
         self.rebuild_count += 1;
@@ -714,6 +704,53 @@ impl IOSRenderContext {
                 }
             }
         }
+    }
+
+    /// Advance CSS animations and transitions, and apply the `:hover`, `:active` and `:focus`
+    /// styles of the current pointer and focus state.
+    ///
+    /// Runs every frame, not only when the UI is rebuilt, so a press or a focus change shows
+    /// without one. Returns whether an animation or flip is running.
+    fn tick_css(&mut self) -> bool {
+        let Some(ref mut tree) = self.render_tree else {
+            return false;
+        };
+        let current_time = blinc_layout::prelude::elapsed_ms();
+        let dt_ms = if self.last_frame_time_ms > 0 {
+            (current_time - self.last_frame_time_ms) as f32
+        } else {
+            16.0
+        };
+        {
+            let store = tree.css_anim_store();
+            let mut s = store.lock().unwrap();
+            s.tick(dt_ms);
+        }
+        let flip_active = tree.tick_flip_animations(dt_ms);
+        let active = tree.css_has_active() || flip_active;
+        let state_changed = tree.stylesheet().is_some()
+            && self
+                .state_styles
+                .should_apply(self.windowed_ctx.event_router.state_fingerprint())
+            && tree.apply_stylesheet_state_styles(&self.windowed_ctx.event_router);
+        if state_changed
+            || active
+            || !tree.css_transitions_empty()
+            || tree.has_active_flip_animations()
+        {
+            crate::mobile_paint::request_full_paint();
+        }
+        if active || !tree.css_transitions_empty() || tree.has_active_flip_animations() {
+            tree.apply_all_css_animation_props();
+            tree.apply_all_css_transition_props();
+            tree.apply_flip_animation_props();
+            if tree.apply_animated_layout_props() {
+                tree.compute_layout(self.windowed_ctx.width, self.windowed_ctx.height);
+                tree.update_flip_bounds();
+            }
+        }
+        self.last_frame_time_ms = current_time;
+        active
     }
 
     /// Get the render tree for rendering
@@ -743,6 +780,7 @@ impl IOSRenderContext {
     /// characters never reach the Rust text-input widget — the
     /// keyboard is purely visual.
     pub fn handle_text_input(&mut self, text: &str) {
+        crate::mobile_paint::request_full_paint();
         let tree = match &mut self.render_tree {
             Some(t) => t,
             None => {
@@ -765,6 +803,7 @@ impl IOSRenderContext {
     /// same `key_code = 8` desktop dispatches for the Backspace
     /// key.
     pub fn handle_key_down(&mut self, key_code: u32) {
+        crate::mobile_paint::request_full_paint();
         self.handle_key_down_with_modifiers(key_code, 0);
     }
 
@@ -784,6 +823,7 @@ impl IOSRenderContext {
     ///   - bit 2 (0x04): alt
     ///   - bit 3 (0x08): meta (Cmd on macOS, Win on Windows)
     pub fn handle_key_down_with_modifiers(&mut self, key_code: u32, modifiers: u32) {
+        crate::mobile_paint::request_full_paint();
         let tree = match &mut self.render_tree {
             Some(t) => t,
             None => {
@@ -819,6 +859,7 @@ impl IOSRenderContext {
     /// passes `0.0`, which collapses the inset and lets the UI return
     /// to its full-viewport layout.
     pub fn handle_keyboard_inset(&mut self, inset: f32) {
+        crate::mobile_paint::request_full_paint();
         let clamped = inset.max(0.0);
         if (self.windowed_ctx.keyboard_inset - clamped).abs() < 0.5 {
             // Sub-pixel diff — ignore. Avoids redraw spam during
@@ -853,6 +894,7 @@ impl IOSRenderContext {
     /// }
     /// ```
     pub fn handle_touch(&mut self, touch: blinc_platform_ios::Touch) {
+        crate::mobile_paint::request_full_paint();
         use blinc_layout::tree::LayoutNodeId;
 
         // Pending event structure for deferred dispatch
@@ -1029,6 +1071,9 @@ impl IOSRenderContext {
             }
         }
 
+        // A touch changes the pressed and focus state; the next frame draws it.
+        blinc_layout::request_redraw();
+
         // Clear callback
         self.windowed_ctx.event_router.clear_event_callback();
 
@@ -1128,6 +1173,7 @@ impl IOSRenderContext {
 
     /// Set focus state
     pub fn set_focused(&mut self, focused: bool) {
+        crate::mobile_paint::request_full_paint();
         self.windowed_ctx.focused = focused;
     }
 }
@@ -1245,6 +1291,30 @@ pub extern "C" fn blinc_build_frame(ctx: *mut IOSRenderContext) {
             sched.tick();
         }
 
+        // Scroll momentum advances every frame, not only on frames that rebuild the tree. A
+        // scrolling frame, and the one after it settles, paints the whole tree.
+        let was_scrolling = ctx.scroll_animating;
+        ctx.scroll_animating = ctx.tick_scroll();
+        if was_scrolling || ctx.scroll_animating {
+            crate::mobile_paint::request_full_paint();
+        }
+
+        // An overlay or toast that is new or moving is not in the cached layer.
+        {
+            use blinc_layout::overlay_state::{overlay_stack, toast_tray};
+            let overlays = overlay_stack()
+                .lock()
+                .map(|s| s.is_dirty() || s.has_animating_overlays())
+                .unwrap_or(true);
+            let toasts = toast_tray()
+                .lock()
+                .map(|t| t.is_dirty() || t.has_animating())
+                .unwrap_or(true);
+            if overlays || toasts {
+                crate::mobile_paint::request_full_paint();
+            }
+        }
+
         // Soft keyboard: show/hide based on text widget focus.
         //
         // The implementation lives in `BlincNativeBridge.swift`
@@ -1328,6 +1398,7 @@ pub extern "C" fn blinc_build_frame(ctx: *mut IOSRenderContext) {
         let needs_scroll_pass = inset_changed || (tap_changed && current_inset > 0.0);
 
         if needs_scroll_pass {
+            crate::mobile_paint::request_full_paint();
             let viewport_h = ctx.windowed_ctx.height;
             if let Some(ref mut tree) = ctx.render_tree {
                 let scrolled =
@@ -1349,6 +1420,8 @@ pub extern "C" fn blinc_build_frame(ctx: *mut IOSRenderContext) {
         let has_prop_updates = blinc_layout::has_pending_partial_prop_updates();
 
         if has_stateful_updates || has_pending_rebuilds || has_prop_updates {
+            crate::mobile_paint::request_full_paint();
+            ctx.state_styles.force();
             // Drain the unified property channel
             // ([[project-reactive-architecture-v2]]).
             let prop_updates = ctx
@@ -1382,11 +1455,14 @@ pub extern "C" fn blinc_build_frame(ctx: *mut IOSRenderContext) {
         let no_tree_yet = ctx.render_tree.is_none();
 
         if !needs_rebuild && !no_tree_yet {
-            // No full rebuild needed - incremental updates already applied
+            // No full rebuild needed - incremental updates already applied. The pointer and
+            // focus styles and the transitions still advance.
+            ctx.tick_css();
             return;
         }
 
         // PHASE 3: Full rebuild using UI builder (required on first load or when dirty)
+        crate::mobile_paint::request_full_paint();
         if let Some(rust_builder) = get_rust_ui_builder() {
             rust_builder(ctx);
         } else if let Some(builder) = get_ui_builder() {
@@ -1720,39 +1796,10 @@ pub extern "C" fn blinc_tick_animations(ctx: *mut IOSRenderContext) -> bool {
         };
 
         // Tick and apply CSS animations/transitions synchronously with rendering
-        let css_active = if let Some(ref mut tree) = ctx.render_tree {
-            let current_time = blinc_layout::prelude::elapsed_ms();
-            let dt_ms = if ctx.last_frame_time_ms > 0 {
-                (current_time - ctx.last_frame_time_ms) as f32
-            } else {
-                16.0
-            };
-            {
-                let store = tree.css_anim_store();
-                let mut s = store.lock().unwrap();
-                s.tick(dt_ms);
-            }
-            let flip_active = tree.tick_flip_animations(dt_ms);
-            let active = tree.css_has_active() || flip_active;
-            if tree.stylesheet().is_some() {
-                tree.apply_stylesheet_state_styles(&ctx.windowed_ctx.event_router);
-            }
-            if active || !tree.css_transitions_empty() || tree.has_active_flip_animations() {
-                tree.apply_all_css_animation_props();
-                tree.apply_all_css_transition_props();
-                tree.apply_flip_animation_props();
-                if tree.apply_animated_layout_props() {
-                    tree.compute_layout(ctx.windowed_ctx.width, ctx.windowed_ctx.height);
-                    tree.update_flip_bounds();
-                }
-            }
-            ctx.last_frame_time_ms = current_time;
-            active
-        } else {
-            false
-        };
+        let css_active = ctx.tick_css();
+        ctx.scroll_animating = ctx.tick_scroll();
 
-        motion_active || css_active
+        motion_active || css_active || ctx.scroll_animating
     }
 }
 
@@ -2013,8 +2060,9 @@ pub extern "C" fn blinc_init_gpu(
 
     // Configure surface with the format the renderer selected
     let format = app.texture_format();
+    // COPY_DST: the compositor blits its cached layer onto the drawable.
     let surface_config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
         format,
         width,
         height,
@@ -2124,13 +2172,23 @@ pub extern "C" fn blinc_render_frame(gpu: *mut IOSGpuRenderer) -> bool {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        if let Err(e) = gpu.app.render_tree_with_motion(
+        // Paint the whole tree after anything that can change it; otherwise only what the
+        // scheduler moves is repainted over the cached layer.
+        let try_fast_paint =
+            !crate::mobile_paint::take_full_paint(blinc_layout::prelude::elapsed_ms())
+                && gpu.app.has_render_cache();
+        gpu.app.set_blend_target(&surface_texture.texture);
+        let rendered = gpu.app.render_tree_with_motion_opt(
             tree,
             &ctx.render_state,
             &view,
+            Some(&surface_texture.texture),
             gpu.surface_config.width,
             gpu.surface_config.height,
-        ) {
+            try_fast_paint,
+        );
+        gpu.app.clear_blend_target();
+        if let Err(e) = rendered {
             tracing::error!("blinc_render_frame: render error: {}", e);
             surface_texture.present();
             return false;

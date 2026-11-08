@@ -8,7 +8,17 @@ All notable changes to `blinc_app` will be documented in this file.
 - iOS accessibility snapshot/action FFI connects GPU-rendered controls to native UIKit accessibility elements and text-field editing. The host scales content and input coordinates with Dynamic Type.
 - The registered iOS Rust builder uses the complete UI build path, including queued core styles, overlays and build-scope cleanup.
 
+### Changed
+- The iOS and Android runners present through the compositor as the desktop runner does: a frame with no input, state change, scroll or CSS motion blits the cached static layer and re-records only canvas and overlay content, instead of repainting the tree. Input, text and key events, keyboard insets, rebuilds, stateful updates, scrolling, overlays and CSS state changes request a full paint, and a full paint runs at least once a second. The iOS surface is configured with `COPY_DST`; Android adds it when the surface supports it and otherwise keeps the direct path.
+
 ### Fixed
+- The iOS and Android runners apply `:hover`, `:active` and `:focus` styles only when the event router's hover, press or focus state changes, or after a rebuild or prop update, as the desktop runner does. The pass walks every styled element and ran on every frame, which was most of an idle frame's CPU on iOS.
+- The iOS accessibility snapshot is reused until something raises a paint request, and for at most 500 ms. It walked and serialised the whole semantic tree on every frame.
+- `RenderContext::render_tree_with_motion_opt` with `try_fast_paint = false` always repaints the tree. The compositor's inner call could still reuse the cached layer for a caller that asked for a full paint.
+- `apply_binding_deltas` accepts a frame with no composite bindings when the cached dynamic batch holds no foreground or ordered content. A batch that had only been through cross-stream resolution was rejected, which invalidated the static layer on every frame of an app with a canvas.
+- The iOS runner ticks scroll physics on every frame and keeps drawing while a fling runs. It ticked only on frames that rebuilt the tree, so a flick advanced in occasional steps and then stopped, instead of gliding.
+- The iOS runner ticks CSS transitions and animations and applies `:hover`, `:active` and `:focus` styles on every frame, not only on a rebuild, so press and focus states change as they do on Android and desktop. A touch requests a redraw.
+- The iOS and Android runners reparse CSS and rebuild when the theme changes, as the desktop runner does.
 - The web runner marks the motions still in the tree and closes the motion frame on every frame, as the desktop runner does. A motion unmounted without a rebuild exits and is dropped, and a Motion shown again after a theme switch plays its entrance instead of staying in its finished state.
 - Text no longer wraps one character per line at 3x display density when layout rounds its box a fraction of a pixel narrower than the text. The wrap allowance scales with the density, so Calendar day numbers stay on one line on phones.
 - A one-finger drag scrolls containers in worker-hosted web demos. `WebInput` gains `TouchStart`, `TouchScroll` and `TouchEnd`, which the worker runner handles as the main-thread runner does: the drag advances the scroll container under the finger, and lifting it lets a flick carry on.

@@ -13,6 +13,22 @@ pub unsafe extern "C" fn blinc_accessibility_snapshot(ctx: *const IOSRenderConte
     let Some(ctx) = (unsafe { ctx.as_ref() }) else {
         return std::ptr::null_mut();
     };
+    // Walking and serialising the whole semantic tree is the costliest step of an idle frame.
+    // The snapshot is reused until something raises a paint request, and at most this long.
+    const MAX_AGE_MS: u64 = 500;
+    static CACHE: std::sync::Mutex<Option<(usize, u64, u64, CString)>> =
+        std::sync::Mutex::new(None);
+    let key = ctx as *const IOSRenderContext as usize;
+    let generation = crate::mobile_paint::paint_generation();
+    let now = blinc_layout::prelude::elapsed_ms();
+    if let Ok(cache) = CACHE.lock()
+        && let Some((k, g, at, json)) = cache.as_ref()
+        && *k == key
+        && *g == generation
+        && now.saturating_sub(*at) < MAX_AGE_MS
+    {
+        return json.clone().into_raw();
+    }
     let nodes = ctx
         .render_tree
         .as_ref()
@@ -50,9 +66,11 @@ pub unsafe extern "C" fn blinc_accessibility_snapshot(ctx: *const IOSRenderConte
             "selection": n.selection, "foreground": paint.map(|p| p.0), "fontSize": paint.map(|p| p.1),
         })
     }).collect();
-    CString::new(serde_json::to_string(&nodes).unwrap())
-        .unwrap()
-        .into_raw()
+    let json = CString::new(serde_json::to_string(&nodes).unwrap()).unwrap();
+    if let Ok(mut cache) = CACHE.lock() {
+        *cache = Some((key, generation, now, json.clone()));
+    }
+    json.into_raw()
 }
 
 /// Release a semantic snapshot allocated by Blinc.
@@ -80,6 +98,7 @@ pub unsafe extern "C" fn blinc_accessibility_action(
     let Some(ctx) = (unsafe { ctx.as_mut() }) else {
         return false;
     };
+    crate::mobile_paint::request_full_paint();
     let Some(tree) = ctx.render_tree.as_mut() else {
         return false;
     };

@@ -728,7 +728,9 @@ impl RenderContext {
                     Err(_) => false,
                 }
             };
-        let inner_try_fast = self.cached_bg_batch.is_some() && !needs_walker;
+        // A caller that asked for a full paint gets one: the inner call may reuse the cache only
+        // when this frame was allowed to.
+        let inner_try_fast = try_fast_paint && self.cached_bg_batch.is_some() && !needs_walker;
         let result = self.render_tree_with_motion_opt(
             tree,
             render_state,

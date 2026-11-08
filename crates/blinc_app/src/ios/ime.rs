@@ -38,6 +38,7 @@ pub unsafe extern "C" fn blinc_ime_edit(ctx: *mut IOSRenderContext, json: *const
     let Some(ctx) = (unsafe { ctx.as_mut() }) else {
         return false;
     };
+    crate::mobile_paint::request_full_paint();
     if json.is_null() {
         return false;
     }

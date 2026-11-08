@@ -144,7 +144,8 @@ impl AndroidApp {
 
         // Set up the redraw callback
         set_redraw_callback(|| {
-            tracing::debug!("Theme changed - requesting full rebuild");
+            tracing::debug!("Theme changed - requesting full rebuild + CSS reparse");
+            blinc_layout::widgets::request_css_reparse();
             blinc_layout::widgets::request_full_rebuild();
         });
     }
@@ -220,6 +221,7 @@ impl AndroidApp {
 
     fn android_surface_config(
         app_instance: &BlincApp,
+        surface: &wgpu::Surface<'_>,
         width: u32,
         height: u32,
     ) -> wgpu::SurfaceConfiguration {
@@ -245,8 +247,18 @@ impl AndroidApp {
             height,
         );
 
+        // COPY_DST lets the compositor blit its cached layer onto the swapchain image, which
+        // is what repaints only what moves. Without it every frame paints the whole tree.
+        let copy_dst = surface
+            .get_capabilities(app_instance.adapter())
+            .usages
+            .contains(wgpu::TextureUsages::COPY_DST);
         wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage: if copy_dst {
+                wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST
+            } else {
+                wgpu::TextureUsages::RENDER_ATTACHMENT
+            },
             format,
             width,
             height,
@@ -282,7 +294,7 @@ impl AndroidApp {
         }
 
         let surface = Self::create_surface_for_native_window(app_instance, window)?;
-        let config = Self::android_surface_config(app_instance, width, height);
+        let config = Self::android_surface_config(app_instance, &surface, width, height);
         surface.configure(app_instance.device(), &config);
 
         let scale_factor = blinc_platform_android::get_display_density(app);
@@ -451,6 +463,9 @@ impl AndroidApp {
         let mut needs_rebuild = true;
         let mut needs_redraw_next_frame = false;
         let mut last_frame_time_ms: u64 = 0;
+        // Skips the pointer and focus style pass while the router state and the tree are unchanged.
+        let mut state_styles = crate::mobile_paint::StateStyleGate::default();
+        let mut scroll_was_animating = false;
         let mut running = true;
         let mut focused = false;
         // Latest keyboard inset already pushed into `windowed_ctx.keyboard_inset`.
@@ -798,6 +813,7 @@ impl AndroidApp {
                         while input_iter.next(|event| {
                             match event {
                                 AndroidInputEvent::MotionEvent(motion_event) => {
+                                    crate::mobile_paint::request_full_paint();
                                     let action = motion_event.action();
                                     let pointer_count = motion_event.pointer_count();
                                     let action_index = motion_event.pointer_index();
@@ -1063,6 +1079,7 @@ impl AndroidApp {
                                     }
                                 }
                                 AndroidInputEvent::KeyEvent(key_event) => {
+                                    crate::mobile_paint::request_full_paint();
                                     // Forward soft-keyboard / hardware-keyboard
                                     // input to the Rust text-input widget. The
                                     // mirror of the iOS path in `ios.rs::handle_text_input`
@@ -1228,7 +1245,10 @@ impl AndroidApp {
 
             blinc_layout::widgets::text_input::process_pending_input_focus();
             if let Some(tree) = render_tree.as_mut() {
-                needs_redraw_next_frame |= ime::drain(tree);
+                if ime::drain(tree) {
+                    needs_redraw_next_frame = true;
+                    crate::mobile_paint::request_full_paint();
+                }
             }
             ime::synchronize(render_tree.as_ref(), &mut native_ime_snapshot);
 
@@ -1301,6 +1321,11 @@ impl AndroidApp {
             if scroll_animating {
                 needs_redraw_next_frame = true;
             }
+            // A scrolling frame, and the one after it settles, paints the whole tree.
+            if scroll_animating || scroll_was_animating {
+                crate::mobile_paint::request_full_paint();
+            }
+            scroll_was_animating = scroll_animating;
 
             // =========================================================
             // Soft keyboard: show/hide based on text widget focus
@@ -1449,6 +1474,7 @@ impl AndroidApp {
             let needs_scroll_pass = inset_changed || (tap_changed && pending_inset_px > 0);
 
             if needs_scroll_pass {
+                crate::mobile_paint::request_full_paint();
                 let inset_to_apply = pending_inset_px.max(0) as f32;
                 if let Some(ref mut windowed_ctx) = ctx {
                     windowed_ctx.keyboard_inset = inset_to_apply;
@@ -1541,6 +1567,8 @@ impl AndroidApp {
             let has_prop_updates = blinc_layout::has_pending_partial_prop_updates();
 
             if has_stateful_updates || has_pending_rebuilds || has_prop_updates {
+                crate::mobile_paint::request_full_paint();
+                state_styles.force();
                 if has_stateful_updates {
                     tracing::debug!("Redraw requested by: stateful state change");
                 }
@@ -1614,6 +1642,8 @@ impl AndroidApp {
             static REBUILD_COUNT: std::sync::atomic::AtomicU64 =
                 std::sync::atomic::AtomicU64::new(0);
             if needs_rebuild && focused {
+                crate::mobile_paint::request_full_paint();
+                state_styles.force();
                 let count = REBUILD_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 if count % 60 == 0 {
                     tracing::warn!("REBUILD #{} (every 60th logged)", count);
@@ -1650,6 +1680,13 @@ impl AndroidApp {
                         if let Ok(mut t) = toast_tray().lock() {
                             t.update(now);
                         }
+                    }
+
+                    // A theme change re-resolves the stylesheet's `var()`
+                    // references against the new tokens, as the desktop and
+                    // web runners do.
+                    if blinc_layout::widgets::take_needs_css_reparse() {
+                        windowed_ctx.reparse_css();
                     }
 
                     // Drain CSS queued by `ThemeBundle::with_css` →
@@ -1768,10 +1805,18 @@ impl AndroidApp {
 
                     // Apply CSS state styles (:hover, :active, :focus)
                     // This also detects property changes and starts new transitions
+                    let mut state_changed = false;
                     if let Some(ref windowed_ctx) = ctx {
-                        if tree.stylesheet().is_some() {
-                            tree.apply_stylesheet_state_styles(&windowed_ctx.event_router);
+                        if tree.stylesheet().is_some()
+                            && state_styles
+                                .should_apply(windowed_ctx.event_router.state_fingerprint())
+                        {
+                            state_changed =
+                                tree.apply_stylesheet_state_styles(&windowed_ctx.event_router);
                         }
+                    }
+                    if state_changed || css_active || !tree.css_transitions_empty() {
+                        crate::mobile_paint::request_full_paint();
                     }
                     if css_active
                         || !tree.css_transitions_empty()
@@ -1845,13 +1890,35 @@ impl AndroidApp {
                                 );
                             }
                             let view = output.texture.create_view(&Default::default());
-                            if let Err(e) = app_instance.render_tree_with_motion(
-                                tree,
-                                rs,
-                                &view,
-                                config.width,
-                                config.height,
-                            ) {
+                            // The compositor needs to blit onto the swapchain image. After
+                            // anything that can change the tree, or without the usage, the
+                            // whole tree is painted.
+                            let rendered = if config.usage.contains(wgpu::TextureUsages::COPY_DST) {
+                                let try_fast_paint = !crate::mobile_paint::take_full_paint(
+                                    blinc_layout::prelude::elapsed_ms(),
+                                ) && app_instance.has_render_cache();
+                                app_instance.set_blend_target(&output.texture);
+                                let result = app_instance.render_tree_with_motion_opt(
+                                    tree,
+                                    rs,
+                                    &view,
+                                    Some(&output.texture),
+                                    config.width,
+                                    config.height,
+                                    try_fast_paint,
+                                );
+                                app_instance.clear_blend_target();
+                                result
+                            } else {
+                                app_instance.render_tree_with_motion(
+                                    tree,
+                                    rs,
+                                    &view,
+                                    config.width,
+                                    config.height,
+                                )
+                            };
+                            if let Err(e) = rendered {
                                 tracing::error!("Render error: {}", e);
                             }
                             let was_suboptimal = output.suboptimal;
