@@ -124,3 +124,7 @@ Screen Recording *.mov
 
 # Local wrangler state
 .wrangler/
+
+# Python bytecode from the CI and test scripts
+__pycache__/
+*.py[cod]
