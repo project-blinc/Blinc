@@ -834,7 +834,7 @@ fn animation_none_names_no_keyframes() {
 }
 
 #[test]
-fn font_family_keeps_the_first_name_and_generic() {
+fn font_family_keeps_the_stack_up_to_the_first_generic() {
     let sheet = crate::parser::Stylesheet::parse(
         r#".a { font-family: "Noto Sans", system-ui, sans-serif; } .b { font-family: 'JetBrains Mono', monospace; } .c { font-family: serif; }"#,
     )
@@ -851,6 +851,50 @@ fn font_family_keeps_the_first_name_and_generic() {
     assert_eq!(fam("b").generic, StyleGenericFont::Monospace);
     assert_eq!(fam("c").name, None);
     assert_eq!(fam("c").generic, StyleGenericFont::Serif);
+}
+
+#[test]
+fn font_family_stacks_keep_their_order_and_stop_at_a_generic() {
+    let sheet = crate::parser::Stylesheet::parse(
+        r#".a { font-family: "Inter", 'Helvetica Neue', Arial, sans-serif; } .b { font-family: system-ui, "Inter"; } .c { font-family: Georgia, serif, Arial; }"#,
+    )
+    .expect("css");
+    let fam = |c: &str| {
+        sheet
+            .get_class(c)
+            .and_then(|s| s.font_family.clone())
+            .expect(c)
+    };
+    assert_eq!(
+        fam("a").name.as_deref(),
+        Some("Inter, Helvetica Neue, Arial")
+    );
+    assert_eq!(fam("a").generic, StyleGenericFont::SansSerif);
+    // `system-ui` always resolves, so the names after it are never reached.
+    assert_eq!(fam("b").name, None);
+    assert_eq!(fam("b").generic, StyleGenericFont::System);
+    assert_eq!(fam("c").name.as_deref(), Some("Georgia"));
+    assert_eq!(fam("c").generic, StyleGenericFont::Serif);
+}
+
+#[test]
+fn a_quoted_family_may_hold_a_comma_and_is_never_a_keyword() {
+    let sheet = crate::parser::Stylesheet::parse(
+        r#".a { font-family: "Foo, Bar", Arial, sans-serif; } .b { font-family: "serif", Georgia; }"#,
+    )
+    .expect("css");
+    let fam = |c: &str| {
+        sheet
+            .get_class(c)
+            .and_then(|s| s.font_family.clone())
+            .expect(c)
+    };
+    // A name with a comma is written in quotes in the stack so the registry reads it back whole.
+    assert_eq!(fam("a").name.as_deref(), Some("\"Foo, Bar\", Arial"));
+    assert_eq!(fam("a").generic, StyleGenericFont::SansSerif);
+    // Quoted, `serif` is a family called serif, not the generic.
+    assert_eq!(fam("b").name.as_deref(), Some("serif, Georgia"));
+    assert_eq!(fam("b").generic, StyleGenericFont::System);
 }
 
 #[test]

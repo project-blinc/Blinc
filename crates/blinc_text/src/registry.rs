@@ -1035,10 +1035,11 @@ impl FontRegistry {
 
     /// Fast font lookup for rendering with specific weight and style
     /// The face text in this family, weight and style is drawn in: the
-    /// cached one, else loaded now. Tries the named family in the style,
-    /// then the generic family in the style, then the normal style, then
-    /// sans-serif. Measuring and drawing both resolve here, so text is
-    /// measured in the face it is drawn in.
+    /// cached one, else loaded now. `name` is a font stack, its families
+    /// joined with commas as `font-family` lists them, and the first one
+    /// installed wins. Then the generic family in the style, then the
+    /// normal style, then sans-serif. Measuring and drawing both resolve
+    /// here, so text is measured in the face it is drawn in.
     pub fn resolve_styled(
         &mut self,
         name: Option<&str>,
@@ -1046,20 +1047,33 @@ impl FontRegistry {
         weight: u16,
         italic: bool,
     ) -> Option<Arc<FontFace>> {
-        if let Some(font) = self.get_for_render_with_style(name, generic, weight, italic) {
-            return Some(font);
-        }
-        if let Some(name) = name
-            && let Ok(font) = self.load_font_with_style(name, weight, italic)
+        let stack: Vec<String> = name.map(family_stack).unwrap_or_default();
+        if stack.is_empty()
+            && let Some(font) = self.get_for_render_with_style(None, generic, weight, italic)
         {
             return Some(font);
+        }
+        for family in &stack {
+            if let Some(font) = self.get_cached_with_style(family, weight, italic) {
+                return Some(font);
+            }
+            if let Ok(font) = self.load_font_with_style(family, weight, italic) {
+                return Some(font);
+            }
         }
         if let Ok(font) = self.load_generic_with_style(generic, weight, italic) {
             return Some(font);
         }
         if weight != 400 || italic {
-            if let Some(font) = self.get_for_render_with_style(name, generic, 400, false) {
+            if stack.is_empty()
+                && let Some(font) = self.get_for_render_with_style(None, generic, 400, false)
+            {
                 return Some(font);
+            }
+            for family in &stack {
+                if let Some(font) = self.get_cached_with_style(family, 400, false) {
+                    return Some(font);
+                }
             }
             if let Ok(font) = self.load_generic_with_style(generic, 400, false) {
                 return Some(font);
@@ -1197,6 +1211,38 @@ impl Default for FontRegistry {
     }
 }
 
+/// The families of a font stack, in order: `name` split at the commas outside quotes. A family
+/// in quotes is read as written, with `\\` and `"` escaped inside, so one that holds a comma can
+/// be named; either quote character works. A name with no comma is a stack of one.
+pub fn family_stack(name: &str) -> Vec<String> {
+    let mut stack = Vec::new();
+    let mut current = String::new();
+    let (mut quote, mut escaped) = (None::<char>, false);
+    let mut finish = |current: &mut String| {
+        let family = current.trim();
+        if !family.is_empty() {
+            stack.push(family.to_string());
+        }
+        current.clear();
+    };
+    for ch in name.chars() {
+        match (quote, ch) {
+            (Some(_), _) if escaped => {
+                current.push(ch);
+                escaped = false;
+            }
+            (Some(_), '\\') => escaped = true,
+            (Some(q), _) if ch == q => quote = None,
+            (Some(_), _) => current.push(ch),
+            (None, '"' | '\'') => quote = Some(ch),
+            (None, ',') => finish(&mut current),
+            (None, _) => current.push(ch),
+        }
+    }
+    finish(&mut current);
+    stack
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1262,6 +1308,44 @@ mod tests {
             generation: 0,
             scan_system: scan_bold,
         }
+    }
+
+    /// A stack resolves to the first of its families that is installed, whatever is cached.
+    #[test]
+    fn a_font_stack_resolves_to_the_first_installed_family() {
+        let mut registry = regular_only();
+        registry.system_fonts_loaded = true;
+        let fira = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/fonts/FiraCode-Regular.ttf"
+        ))
+        .unwrap();
+        let fira = Arc::new(FontFace::from_data(fira).unwrap());
+        assert!(registry.register_face("Fira Test".to_string(), Arc::clone(&fira)));
+
+        let resolve = |registry: &mut FontRegistry, stack: &str| {
+            registry
+                .resolve_styled(Some(stack), GenericFont::SansSerif, 400, false)
+                .unwrap()
+        };
+        // The first family is missing: the next installed one is used, not the generic.
+        let arial = resolve(&mut registry, "No Such Font, Arial");
+        assert_eq!(arial.family_name(), "Arial");
+        let second = resolve(&mut registry, "No Such Font, \"Fira Test\", Arial");
+        assert!(Arc::ptr_eq(&second, &fira));
+        // An installed first family wins over a later one that is already cached.
+        let first = resolve(&mut registry, "Arial, Fira Test");
+        assert_eq!(first.family_name(), "Arial");
+        // A family whose name holds a comma is named in quotes and resolves whole.
+        assert!(registry.register_face("Fira, Comma".to_string(), Arc::clone(&fira)));
+        let comma = resolve(&mut registry, "\"Fira, Comma\", Arial");
+        assert!(Arc::ptr_eq(&comma, &fira));
+        // A stack of one family behaves as before.
+        assert!(Arc::ptr_eq(&resolve(&mut registry, "Fira Test"), &fira));
+        assert_eq!(family_stack("A, \"B C\", 'D'"), ["A", "B C", "D"]);
+        // A quoted family may hold a comma, and is one family.
+        assert_eq!(family_stack("\"Foo, Bar\", Arial"), ["Foo, Bar", "Arial"]);
+        assert_eq!(family_stack("\"Say \\\"hi\\\"\", B"), ["Say \"hi\"", "B"]);
     }
 
     #[test]

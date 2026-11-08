@@ -354,17 +354,75 @@ pub(crate) fn parse_letter_spacing(value: &str, font_size: Option<f32>) -> Optio
     parse_length_value(v)
 }
 
-/// A `font-family` list: the first named family and the first generic
-/// keyword. Quotes around names are dropped.
+/// A `font-family` list: the named families in order up to the first generic keyword, which
+/// ends the list as in CSS, and that keyword. A quoted word is a family name, never a
+/// keyword. The names are joined with `, ` in `name`, which the font registry walks in order;
+/// a name holding a comma, quote or backslash is written in double quotes there.
 pub(crate) fn parse_font_family(value: &str) -> Option<crate::element_style::StyleFontFamily> {
     use crate::element_style::{StyleFontFamily, StyleGenericFont};
     let mut family = StyleFontFamily::default();
     let mut generic_seen = false;
+    let mut names: Vec<String> = Vec::new();
     let mut any = false;
+    for item in split_family_list(value) {
+        let item = item.trim();
+        let (name, quoted) = match item.chars().next() {
+            Some(q @ ('"' | '\'')) if item.len() >= 2 && item.ends_with(q) => {
+                (item[1..item.len() - 1].trim(), true)
+            }
+            _ => (item, false),
+        };
+        if name.is_empty() {
+            continue;
+        }
+        any = true;
+        let generic = if quoted {
+            None
+        } else {
+            match name.to_ascii_lowercase().as_str() {
+                "monospace" | "ui-monospace" => Some(StyleGenericFont::Monospace),
+                "serif" | "ui-serif" => Some(StyleGenericFont::Serif),
+                "sans-serif" | "ui-sans-serif" => Some(StyleGenericFont::SansSerif),
+                "system-ui" | "-apple-system" | "blinkmacsystemfont" => {
+                    Some(StyleGenericFont::System)
+                }
+                _ => None,
+            }
+        };
+        match generic {
+            Some(g) if !generic_seen => {
+                family.generic = g;
+                generic_seen = true;
+            }
+            Some(_) => {}
+            None if !generic_seen => names.push(stack_entry(name)),
+            None => {}
+        }
+    }
+    if !names.is_empty() {
+        family.name = Some(names.join(", "));
+    }
+    any.then_some(family)
+}
+
+/// The items of a `font-family` value: split at the commas outside quotes and parentheses.
+fn split_family_list(value: &str) -> Vec<&str> {
     let (mut depth, mut start) = (0usize, 0usize);
+    let (mut quote, mut escaped) = (None::<char>, false);
     let mut items = Vec::new();
     for (i, ch) in value.char_indices() {
+        if let Some(q) = quote {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == q {
+                quote = None;
+            }
+            continue;
+        }
         match ch {
+            '"' | '\'' => quote = Some(ch),
             '(' => depth += 1,
             ')' => depth = depth.saturating_sub(1),
             ',' if depth == 0 => {
@@ -375,28 +433,15 @@ pub(crate) fn parse_font_family(value: &str) -> Option<crate::element_style::Sty
         }
     }
     items.push(&value[start..]);
-    for item in items {
-        let item = item.trim().trim_matches(|c| c == '"' || c == '\'').trim();
-        if item.is_empty() {
-            continue;
-        }
-        any = true;
-        let generic = match item.to_ascii_lowercase().as_str() {
-            "monospace" | "ui-monospace" => Some(StyleGenericFont::Monospace),
-            "serif" | "ui-serif" => Some(StyleGenericFont::Serif),
-            "sans-serif" | "ui-sans-serif" => Some(StyleGenericFont::SansSerif),
-            "system-ui" | "-apple-system" | "blinkmacsystemfont" => Some(StyleGenericFont::System),
-            _ => None,
-        };
-        match generic {
-            Some(g) if !generic_seen => {
-                family.generic = g;
-                generic_seen = true;
-            }
-            Some(_) => {}
-            None if family.name.is_none() => family.name = Some(item.to_string()),
-            None => {}
-        }
+    items
+}
+
+/// One family as it is written in a stack: bare, or in double quotes, with `\` and `"` escaped,
+/// when it holds a comma, quote or backslash. The font registry's `family_stack` reads it back.
+fn stack_entry(name: &str) -> String {
+    if name.contains([',', '"', '\\']) {
+        format!("\"{}\"", name.replace('\\', "\\\\").replace('"', "\\\""))
+    } else {
+        name.to_string()
     }
-    any.then_some(family)
 }

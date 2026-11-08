@@ -33,10 +33,11 @@ pub enum StyleGenericFont {
     SansSerif,
 }
 
-/// A `font-family` list reduced to what the text pipeline takes: the first
-/// named family and the first generic keyword.
+/// A `font-family` list: the named families before the first generic keyword, and that keyword.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StyleFontFamily {
+    /// The named families in order, joined with `, `. The font registry tries them in that
+    /// order, so the first installed one is used.
     pub name: Option<String>,
     pub generic: StyleGenericFont,
 }

@@ -465,6 +465,34 @@ mod tests {
         assert_eq!(measurer.measured.lock().unwrap().entries.len(), 1);
     }
 
+    /// A font stack is measured in the first of its families that is installed. Fira Code is
+    /// monospace, so narrow and wide glyphs come out the same width only if it was the face used.
+    #[test]
+    fn a_font_stack_is_measured_in_its_first_installed_family() {
+        let registry = Arc::new(Mutex::new(FontRegistry::new()));
+        let data = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/fonts/FiraCode-Regular.ttf"
+        ))
+        .unwrap();
+        let face = Arc::new(blinc_text::FontFace::from_data(data).unwrap());
+        assert!(
+            registry
+                .lock()
+                .unwrap()
+                .register_face("Fira Stack Test".into(), face)
+        );
+        let measurer = FontTextMeasurer::with_shared_registry(registry);
+        let width = |stack: &str, text: &str| {
+            let mut options = TextLayoutOptions::new();
+            options.font_name = Some(stack.to_string());
+            measurer.measure_with_options(text, 16.0, &options).width
+        };
+        let stack = "No Such Font, Fira Stack Test, sans";
+        assert_eq!(width(stack, "iiiiii"), width(stack, "WWWWWW"));
+        assert_eq!(width(stack, "iiiiii"), width("Fira Stack Test", "iiiiii"));
+    }
+
     /// A long text is measured each time and not kept.
     #[test]
     fn a_long_text_is_not_cached() {
