@@ -284,10 +284,12 @@ impl RenderContext {
                         measured_width: scaled_measured_width,
                         font_family: text_data.font_family.clone(),
                         word_spacing: text_data.word_spacing,
+                        // Device pixels, like the font size it is drawn with.
                         letter_spacing: render_node
                             .props
                             .letter_spacing
-                            .unwrap_or(text_data.letter_spacing),
+                            .unwrap_or(text_data.letter_spacing)
+                            * scale,
                         z_index: *z_layer,
                         ascender: text_data.ascender * scale,
                         half_leading: text_data.half_leading * scale,
@@ -876,7 +878,9 @@ impl RenderContext {
                                 measured_width: segment_width,
                                 font_family: styled_data.font_family.clone(),
                                 word_spacing: 0.0,
-                                letter_spacing: render_node.props.letter_spacing.unwrap_or(0.0),
+                                letter_spacing: render_node.props.letter_spacing.unwrap_or(0.0)
+                                    * scale
+                                    * effective_motion_scale.1,
                                 z_index: *z_layer,
                                 ascender: scaled_ascender * effective_motion_scale.1, // Scale ascender with motion
                                 half_leading: scaled_half_leading * effective_motion_scale.1,
