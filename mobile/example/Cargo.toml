@@ -19,6 +19,8 @@ required-features = ["desktop"]
 [dependencies]
 blinc_core = { path = "../../crates/blinc_core" }
 blinc_layout = { path = "../../crates/blinc_layout" }
+blinc_cn = { path = "../../crates/blinc_cn" }
+blinc_theme = { path = "../../crates/blinc_theme" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

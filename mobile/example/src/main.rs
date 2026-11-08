@@ -1,42 +1,99 @@
 //! Example
 //!
 //! A Blinc UI application with desktop, Android, iOS, and HarmonyOS support.
-//! Demonstrates counter interactions and keyframe canvas animations.
+//! Demonstrates blinc_cn components (button, input) on the system light or dark
+//! theme, counter interactions and keyframe canvas animations.
 
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
+use blinc_cn as cn;
+use blinc_cn::{ButtonSize, ButtonVariant, button, cn_bundle, input};
 use blinc_core::reactive::State;
 use blinc_core::{Brush, DrawContext, Gradient};
+use blinc_theme::{ColorToken, ThemeState, detect_system_color_scheme};
 use std::f32::consts::PI;
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 
-/// Counter button with stateful hover/press states
-fn counter_button(label: &str, count: State<i32>, delta: i32) -> impl ElementBuilder {
-    let label = label.to_string();
+/// A colour of the active theme, read when the UI is built so it follows the system scheme.
+fn token(token: ColorToken) -> Color {
+    ThemeState::get().color(token)
+}
 
-    let count = count.clone();
-    stateful::<ButtonState>()
-        .on_state(move |ctx| {
-            let bg = match ctx.state() {
-                ButtonState::Idle => Color::rgba(0.3, 0.3, 0.4, 1.0),
-                ButtonState::Hovered => Color::rgba(0.4, 0.4, 0.5, 1.0),
-                ButtonState::Pressed => Color::rgba(0.2, 0.2, 0.3, 1.0),
-                ButtonState::Disabled => Color::rgba(0.2, 0.2, 0.2, 0.5),
-            };
+/// A theme colour at the given opacity.
+fn with_alpha(color: Color, alpha: f32) -> Color {
+    Color::rgba(color.r, color.g, color.b, alpha)
+}
 
-            div()
-                .w(80.0)
-                .h(50.0)
-                .rounded(8.0)
-                .bg(bg)
-                .items_center()
-                .justify_center()
-                .cursor(CursorStyle::Pointer)
-                .child(text(&label).size(24.0).color(Color::WHITE))
-        })
-        .on_click(move |_| {
-            count.set(count.get() + delta);
-        })
+/// Install the cn theme and its stylesheet, before the runner starts so the first build has them.
+/// The runner keeps a theme that is already set, so this replaces its platform default.
+fn install_cn_theme() {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        ThemeState::init(
+            cn_bundle().with_css(MOBILE_CSS),
+            detect_system_color_scheme(),
+        )
+    });
+}
+
+/// The example's own rules over cn's defaults. Card padding is a CSS rule in cn (24 pt), so a
+/// 16 pt grouped card is a rule here, which wins over the component layer.
+const MOBILE_CSS: &str = r#"
+.cn-card { padding: var(--space-4); gap: var(--space-3); }
+.demo-card { padding: var(--space-3); align-items: center; }
+.list-card { padding: 0; gap: 0; overflow: hidden; }
+"#;
+
+/// Spacing methods (`gap`, `p`, `px`, `pt`, `pb`) count in 4 px units; this converts points.
+fn u(points: f32) -> f32 {
+    points / 4.0
+}
+
+/// Horizontal page margin: the 16 pt of the iOS and Material layout grids.
+const MARGIN: f32 = 16.0;
+/// Padding inside a card.
+const CARD_PAD: f32 = 16.0;
+/// Space between the two columns of the demo grid.
+const GRID_GAP: f32 = 12.0;
+
+/// A grouped section: a small uppercase label over a rounded card, the inset-grouped pattern.
+fn section(title: &str, body: Div) -> Div {
+    grouped(title, cn::card().w_full().child(body))
+}
+
+/// A small uppercase label over `card`.
+fn grouped(title: &str, card: cn::Card) -> Div {
+    div()
+        .w_full()
+        .flex_col()
+        .gap(u(8.0))
+        .child(
+            div().w_full().px(u(4.0)).child(
+                cn::p(title.to_uppercase())
+                    .size(13.0)
+                    .color(token(ColorToken::TextSecondary)),
+            ),
+        )
+        .child(card)
+}
+
+/// The inside of a card: a column as wide as the card, so text wraps at its edge.
+fn card_body() -> Div {
+    div().w_full().flex_col().gap(u(12.0))
+}
+
+/// Counter button: a cn button at the large size (44 pt or more to tap). Its colours come from
+/// the theme through the variant: `Primary` is the `primary` token, `Outline` a border only.
+fn counter_button(
+    label: &str,
+    count: State<i32>,
+    delta: i32,
+    variant: ButtonVariant,
+) -> impl ElementBuilder {
+    button(label)
+        .variant(variant)
+        .size(ButtonSize::Large)
+        .on_click(move |_| count.set(count.get() + delta))
 }
 
 /// Counter display that reacts to count changes
@@ -44,10 +101,9 @@ fn counter_display(count: State<i32>) -> impl ElementBuilder {
     stateful::<NoState>()
         .deps([count.signal_id()])
         .on_state(move |_ctx| {
-            div().child(
-                text(format!("Count: {}", count.get()))
-                    .size(48.0)
-                    .color(Color::rgba(0.4, 0.8, 1.0, 1.0))
+            div().w_full().flex_row().justify_center().child(
+                cn::h1(count.get().to_string())
+                    .color(token(ColorToken::TextPrimary))
                     .align(TextAlign::Center),
             )
         })
@@ -57,15 +113,31 @@ fn counter_display(count: State<i32>) -> impl ElementBuilder {
 fn counter_section(ctx: &WindowedContext) -> Div {
     let count = ctx.use_state_keyed("count", || 0i32);
 
-    section_card("Counter Demo")
-        .child(counter_display(count.clone()))
-        .child(
-            div()
-                .flex_row()
-                .gap(16.0)
-                .child(counter_button("-", count.clone(), -1))
-                .child(counter_button("+", count.clone(), 1)),
-        )
+    section(
+        "Counter",
+        card_body()
+            .items_center()
+            .child(counter_display(count.clone()))
+            .child(
+                div()
+                    .flex_row()
+                    .items_center()
+                    .justify_center()
+                    .gap(u(16.0))
+                    .child(counter_button(
+                        "\u{2212}",
+                        count.clone(),
+                        -1,
+                        ButtonVariant::Outline,
+                    ))
+                    .child(counter_button(
+                        "+",
+                        count.clone(),
+                        1,
+                        ButtonVariant::Primary,
+                    )),
+            ),
+    )
 }
 
 /// Soft-keyboard test section.
@@ -87,40 +159,24 @@ fn counter_section(ctx: &WindowedContext) -> Div {
 /// up.
 fn keyboard_section(ctx: &WindowedContext) -> Div {
     // Persistent text-input state, keyed so it survives rebuilds.
-    // `text_input_state_with_placeholder` returns a
-    // `SharedTextInputState` (Arc<Mutex<TextInputData>>) which is
-    // cloned into the widget on every rebuild — the underlying
-    // buffer + cursor position + focus flag persist across
-    // rebuilds because the Arc points at the same allocation.
     let input_state = ctx.use_state_keyed("kbd_test_input", || {
-        text_input_state_with_placeholder("Tap to focus and type…")
+        text_input_state_with_placeholder("Tap to type")
     });
 
-    // Surrounding container is dark, so the input's idle and
-    // focused background colors both need to be dark too —
-    // otherwise the focus state defaults to the theme's
-    // `InputBgFocus` (light, designed for light-mode pages) and
-    // the white text becomes invisible on a white field.
-
-    section_card("Soft Keyboard Test")
-        .child(
-            text("Tap the field — the OS soft keyboard should pop up on mobile.")
-                .size(13.0)
-                .align(TextAlign::Center)
-                .color(Color::rgba(0.7, 0.7, 0.78, 1.0)),
-        )
-        .child(
-            div().w_full().child(
-                text_input(&input_state.get())
-                    .w_full()
-                    .text_color(Color::WHITE)
-                    .placeholder_color(Color::rgba(0.55, 0.55, 0.62, 1.0)),
-            ),
-        )
+    section(
+        "Soft keyboard",
+        card_body().child(
+            input(&input_state.get())
+                .label("Message")
+                .placeholder("Tap to type")
+                .description("The system keyboard opens when you tap the field.")
+                .w_full(),
+        ),
+    )
 }
 
 /// Demo 1: Spinning loader using rotation keyframes
-fn spinning_loader_demo(ctx: &WindowedContext) -> Div {
+fn spinning_loader_demo(ctx: &WindowedContext, col: f32) -> cn::Card {
     let timeline = ctx.use_animated_timeline();
 
     let entry_id = timeline.lock().unwrap().configure(|t| {
@@ -132,7 +188,7 @@ fn spinning_loader_demo(ctx: &WindowedContext) -> Div {
 
     let render_timeline = Arc::clone(&timeline);
 
-    demo_card("Spinning Loader").child(
+    demo_card("Spinning Loader", col).child(
         canvas(move |ctx: &mut dyn DrawContext, bounds| {
             let timeline = render_timeline.lock().unwrap();
             let angle_deg = timeline.get(entry_id).unwrap_or(0.0);
@@ -172,7 +228,7 @@ fn spinning_loader_demo(ctx: &WindowedContext) -> Div {
                         thickness,
                     ),
                     blinc_core::CornerRadius::uniform(thickness / 2.0),
-                    Brush::Solid(Color::rgba(0.4, 0.8, 1.0, alpha)),
+                    Brush::Solid(with_alpha(token(ColorToken::Primary), alpha)),
                 );
             }
         })
@@ -182,7 +238,7 @@ fn spinning_loader_demo(ctx: &WindowedContext) -> Div {
 }
 
 /// Demo 2: Pulsing dots with staggered keyframes
-fn pulsing_dots_demo(ctx: &WindowedContext) -> Div {
+fn pulsing_dots_demo(ctx: &WindowedContext, col: f32) -> cn::Card {
     let timelines: Vec<SharedAnimatedTimeline> = (0..3)
         .map(|i| ctx.use_animated_timeline_for(format!("pulsing_dot_{}", i)))
         .collect();
@@ -207,7 +263,7 @@ fn pulsing_dots_demo(ctx: &WindowedContext) -> Div {
 
     let timelines_clone: Vec<_> = timelines.iter().map(Arc::clone).collect();
 
-    demo_card("Pulsing Dots").child(
+    demo_card("Pulsing Dots", col).child(
         canvas(move |ctx: &mut dyn DrawContext, bounds| {
             let cx = bounds.width / 2.0;
             let cy = bounds.height / 2.0;
@@ -227,7 +283,7 @@ fn pulsing_dots_demo(ctx: &WindowedContext) -> Div {
                 ctx.fill_rect(
                     Rect::new(x - r, cy - r, r * 2.0, r * 2.0),
                     blinc_core::CornerRadius::uniform(r),
-                    Brush::Solid(Color::rgba(0.4, 1.0, 0.8, opacity)),
+                    Brush::Solid(with_alpha(token(ColorToken::Accent), opacity)),
                 );
             }
         })
@@ -237,7 +293,7 @@ fn pulsing_dots_demo(ctx: &WindowedContext) -> Div {
 }
 
 /// Demo 3: Progress bar with eased fill animation
-fn progress_bar_demo(ctx: &WindowedContext) -> Div {
+fn progress_bar_demo(ctx: &WindowedContext, col: f32) -> Div {
     let timeline = ctx.use_animated_timeline();
 
     let entry_id = timeline.lock().unwrap().configure(|t| {
@@ -253,55 +309,60 @@ fn progress_bar_demo(ctx: &WindowedContext) -> Div {
         ready_timeline.lock().unwrap().start();
     });
 
-    demo_card("Progress Bar")
+    div()
         .id("progress-bar-demo")
-        .child(
-            canvas(move |ctx: &mut dyn DrawContext, bounds| {
-                let timeline = render_timeline.lock().unwrap();
-                let progress_val = timeline.get(entry_id).unwrap_or(0.0);
-
-                let bar_width = bounds.width - 20.0;
-                let bar_height = 12.0;
-                let bar_x = 10.0;
-                let bar_y = (bounds.height - bar_height) / 2.0;
-
-                // Background
-                ctx.fill_rect(
-                    Rect::new(bar_x, bar_y, bar_width, bar_height),
-                    blinc_core::CornerRadius::uniform(6.0),
-                    Brush::Solid(Color::rgba(0.2, 0.2, 0.25, 1.0)),
-                );
-
-                // Filled portion
-                let fill_width = bar_width * progress_val;
-                if fill_width > 0.0 {
-                    ctx.fill_rect(
-                        Rect::new(bar_x, bar_y, fill_width, bar_height),
-                        blinc_core::CornerRadius::uniform(6.0),
-                        Brush::Gradient(Gradient::linear(
-                            Point::new(bar_x, bar_y),
-                            Point::new(bar_x + fill_width, bar_y),
-                            Color::rgba(0.4, 0.8, 1.0, 1.0),
-                            Color::rgba(0.6, 0.4, 1.0, 1.0),
-                        )),
-                    );
-                }
-            })
-            .w(150.0)
-            .h(60.0),
-        )
-        .child(
-            text("Tap to restart")
-                .size(12.0)
-                .color(Color::rgba(0.5, 0.5, 0.5, 1.0)),
-        )
         .on_click(move |_| {
             click_timeline.lock().unwrap().restart();
         })
+        .child(
+            demo_card("Progress Bar", col)
+                .child(
+                    canvas(move |ctx: &mut dyn DrawContext, bounds| {
+                        let timeline = render_timeline.lock().unwrap();
+                        let progress_val = timeline.get(entry_id).unwrap_or(0.0);
+
+                        let bar_width = bounds.width - 20.0;
+                        let bar_height = 12.0;
+                        let bar_x = 10.0;
+                        let bar_y = (bounds.height - bar_height) / 2.0;
+
+                        // Background
+                        ctx.fill_rect(
+                            Rect::new(bar_x, bar_y, bar_width, bar_height),
+                            blinc_core::CornerRadius::uniform(6.0),
+                            Brush::Solid(token(ColorToken::Border)),
+                        );
+
+                        // Filled portion
+                        let fill_width = bar_width * progress_val;
+                        if fill_width > 0.0 {
+                            ctx.fill_rect(
+                                Rect::new(bar_x, bar_y, fill_width, bar_height),
+                                blinc_core::CornerRadius::uniform(6.0),
+                                Brush::Gradient(Gradient::linear(
+                                    Point::new(bar_x, bar_y),
+                                    Point::new(bar_x + fill_width, bar_y),
+                                    token(ColorToken::Primary),
+                                    token(ColorToken::Accent),
+                                )),
+                            );
+                        }
+                    })
+                    .w(col - 2.0 * DEMO_PAD)
+                    .h(60.0),
+                )
+                .child(
+                    div()
+                        .w_full()
+                        .flex_row()
+                        .justify_center()
+                        .child(cn::caption("Tap to restart")),
+                ),
+        )
 }
 
 /// Demo 4: Bouncing ball with squash and stretch
-fn bouncing_ball_demo(ctx: &WindowedContext) -> Div {
+fn bouncing_ball_demo(ctx: &WindowedContext, col: f32) -> cn::Card {
     let timeline = ctx.use_animated_timeline();
 
     let entry_id = timeline.lock().unwrap().configure(|t| {
@@ -313,7 +374,7 @@ fn bouncing_ball_demo(ctx: &WindowedContext) -> Div {
 
     let render_timeline = Arc::clone(&timeline);
 
-    demo_card("Bouncing Ball").child(
+    demo_card("Bouncing Ball", col).child(
         canvas(move |ctx: &mut dyn DrawContext, bounds| {
             let timeline = render_timeline.lock().unwrap();
             let t = timeline.get(entry_id).unwrap_or(0.0);
@@ -379,113 +440,193 @@ fn bouncing_ball_demo(ctx: &WindowedContext) -> Div {
     )
 }
 
-/// Animation demos section
+/// Padding inside a demo card.
+const DEMO_PAD: f32 = 12.0;
+
+/// Animation demos section: two columns of equal cards.
 fn animation_section(ctx: &WindowedContext) -> Div {
-    section_card("Keyframe Animations")
-        .child(
-            text("Canvas elements with multi-property keyframe animations")
-                .size(16.0)
-                .color(Color::rgba(0.6, 0.6, 0.7, 1.0))
-                .align(TextAlign::Center),
-        )
-        .child(
-            div()
-                .flex_row()
-                .gap(10.0)
-                .flex_wrap()
-                .justify_center()
-                .child(spinning_loader_demo(ctx))
-                .child(pulsing_dots_demo(ctx)),
-        )
-        .child(
-            div()
-                .flex_row()
-                .gap(10.0)
-                .flex_wrap()
-                .justify_center()
-                .child(progress_bar_demo(ctx))
-                .child(bouncing_ball_demo(ctx)),
-        )
-}
-
-/// Helper to create a section card
-fn section_card(title: &str) -> Div {
-    div()
-        .w_full()
-        .flex_col()
-        .gap(6.0)
-        .py(5.0)
-        .px(8.0)
-        .bg(Color::rgba(0.12, 0.12, 0.17, 1.0))
-        .rounded(16.0)
-        .items_center()
-        .child(
-            div().items_center().child(
-                text(title)
-                    .size(24.0)
-                    .align(TextAlign::Center)
-                    .weight(FontWeight::Bold)
-                    .color(Color::WHITE)
-                    .no_wrap(),
+    // Page margins and the section card's padding come off the width before the two columns do.
+    let col = ((ctx.width - 2.0 * MARGIN - 2.0 * CARD_PAD - GRID_GAP) / 2.0).floor();
+    section(
+        "Keyframe animations",
+        card_body()
+            .child(
+                cn::p("Canvas elements animated with keyframes.")
+                    .size(15.0)
+                    .color(token(ColorToken::TextSecondary)),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .flex_row()
+                    .gap(u(GRID_GAP))
+                    .child(spinning_loader_demo(ctx, col))
+                    .child(pulsing_dots_demo(ctx, col)),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .flex_row()
+                    .gap(u(GRID_GAP))
+                    .child(progress_bar_demo(ctx, col))
+                    .child(bouncing_ball_demo(ctx, col)),
             ),
-        )
+    )
 }
 
-/// Helper to create a demo card
-fn demo_card(title: &str) -> Div {
-    div()
-        .w(170.0)
-        .flex_col()
-        .gap(5.0)
-        .py(8.0)
-        .px(4.0)
-        .bg(Color::rgba(0.18, 0.18, 0.23, 1.0))
-        .rounded(12.0)
+/// One inbox row: an initial in a tinted circle, a name over a preview, and the time.
+fn inbox_row(name: &str, preview: &str, time: &str, last: bool) -> Div {
+    let row = div()
+        .w_full()
+        .flex_row()
         .items_center()
+        .gap(u(12.0))
+        .px(u(MARGIN))
+        .py(u(10.0))
         .child(
-            text(title)
+            div()
+                .w(40.0)
+                .h(40.0)
+                .flex_row()
+                .items_center()
+                .justify_center()
+                .rounded_full()
+                .bg(with_alpha(token(ColorToken::Primary), 0.15))
+                .child(
+                    cn::p(name.chars().next().unwrap_or('?').to_string())
+                        .size(17.0)
+                        .weight(FontWeight::SemiBold)
+                        .color(token(ColorToken::Primary)),
+                ),
+        )
+        .child(
+            div()
+                .flex_1()
+                .flex_col()
+                .gap(u(2.0))
+                .child(cn::p(name).size(16.0).weight(FontWeight::SemiBold))
+                .child(
+                    cn::p(preview)
+                        .size(14.0)
+                        .color(token(ColorToken::TextSecondary)),
+                ),
+        )
+        .child(
+            cn::p(time)
+                .size(13.0)
+                .color(token(ColorToken::TextSecondary)),
+        );
+    let mut group = div().w_full().flex_col().child(row);
+    if !last {
+        // Inset like the iOS list separator: it starts under the text, not the avatar.
+        group = group.child(div().w_full().pl(u(MARGIN + 52.0)).child(cn::separator()));
+    }
+    group
+}
+
+/// A long list of rows: enough height to scroll on any phone.
+fn inbox_section() -> Div {
+    const PEOPLE: [(&str, &str, &str); 24] = [
+        (
+            "Ada Lovelace",
+            "The engine can compose elaborate music",
+            "9:41",
+        ),
+        ("Grace Hopper", "Found the moth in relay 70", "9:12"),
+        ("Alan Turing", "Can machines think? Notes attached", "8:55"),
+        ("Katherine Johnson", "Trajectory checks are done", "8:30"),
+        (
+            "Margaret Hamilton",
+            "Priority displays worked as designed",
+            "Yesterday",
+        ),
+        ("Linus Torvalds", "Just a hobby, won't be big", "Yesterday"),
+        (
+            "Barbara Liskov",
+            "A subtype must stay substitutable",
+            "Yesterday",
+        ),
+        ("Dennis Ritchie", "The compiler fits on one tape", "Tuesday"),
+        (
+            "Ken Thompson",
+            "Rewrote the shell over the weekend",
+            "Tuesday",
+        ),
+        ("Edsger Dijkstra", "Goto considered, again", "Tuesday"),
+        ("Donald Knuth", "Volume 4 is almost ready", "Monday"),
+        ("Frances Allen", "Loop optimisation review", "Monday"),
+        (
+            "John Carmack",
+            "Fast inverse square root, explained",
+            "Monday",
+        ),
+        ("Radia Perlman", "Spanning tree, in verse", "Sunday"),
+        ("Tim Berners-Lee", "This is for everyone", "Sunday"),
+        ("Hedy Lamarr", "Frequency hopping sketch", "Sunday"),
+        ("Bjarne Stroustrup", "Zero-cost, as promised", "Saturday"),
+        ("Guido van Rossum", "Readability counts", "Saturday"),
+        ("Yukihiro Matsumoto", "Optimised for happiness", "Saturday"),
+        ("Anders Hejlsberg", "Types make refactors safe", "Friday"),
+        ("James Gosling", "Write once, run anywhere", "Friday"),
+        ("Brendan Eich", "Ten days in May", "Friday"),
+        ("Rich Hickey", "Simple is not easy", "Thursday"),
+        ("Joe Armstrong", "Let it crash", "Thursday"),
+    ];
+    let last = PEOPLE.len() - 1;
+    let mut rows = div().w_full().flex_col();
+    for (i, (name, preview, time)) in PEOPLE.iter().enumerate() {
+        rows = rows.child(inbox_row(name, preview, time, i == last));
+    }
+    grouped("Inbox", cn::card().w_full().class("list-card").child(rows))
+}
+
+/// A demo card: a title over its canvas, `col` points wide.
+fn demo_card(title: &str, col: f32) -> cn::Card {
+    cn::card().w(col).class("demo-card").child(
+        div().w_full().flex_col().items_center().gap(u(8.0)).child(
+            cn::p(title)
                 .size(14.0)
                 .weight(FontWeight::SemiBold)
-                .color(Color::WHITE),
-        )
+                .align(TextAlign::Center),
+        ),
+    )
 }
 
-/// Main application UI with scroll container
+/// Main application UI with scroll container.
+///
+/// Content sits inside the safe area: below the status bar and notch, above the home indicator.
 fn app_ui(ctx: &mut WindowedContext) -> impl ElementBuilder {
+    let (top, bottom) = (ctx.safe_top(), ctx.safe_bottom());
     div()
         .w(ctx.width)
         .h(ctx.height)
-        .bg(Color::rgba(0.08, 0.08, 0.12, 1.0))
+        .bg(token(ColorToken::Background))
         .child(
             scroll().w(ctx.width).h(ctx.height).child(
                 div()
                     .w_full()
                     .flex_col()
-                    .items_center()
-                    .gap(4.0)
-                    .px(8.0)
-                    .py(15.0)
-                    // Header
+                    .gap(u(24.0))
+                    .px(u(MARGIN))
+                    .pt(u(top + MARGIN))
+                    .pb(u(bottom + 24.0))
+                    // Large title, leading aligned, over a secondary line.
                     .child(
-                        text("Blinc Mobile Example")
-                            .align(TextAlign::Center)
-                            .size(28.0)
-                            .weight(FontWeight::Bold)
-                            .color(Color::WHITE),
+                        div()
+                            .w_full()
+                            .flex_col()
+                            .gap(u(4.0))
+                            .child(cn::h1("Blinc"))
+                            .child(
+                                cn::p("Components, input and animation on mobile.")
+                                    .size(15.0)
+                                    .color(token(ColorToken::TextSecondary)),
+                            ),
                     )
-                    .child(
-                        text("Scroll down for more demos")
-                            .size(14.0)
-                            .color(Color::rgba(0.5, 0.5, 0.6, 1.0)),
-                    )
-                    // Counter section
                     .child(counter_section(ctx))
-                    // Soft-keyboard test section
                     .child(keyboard_section(ctx))
-                    // Animation section
                     .child(animation_section(ctx))
-                    // Footer spacer
-                    .child(div().h(20.0)),
+                    .child(inbox_section()),
             ),
         )
 }
@@ -507,7 +648,12 @@ fn main() -> Result<()> {
         ..Default::default()
     };
 
-    WindowedApp::run(config, |ctx| app_ui(ctx))
+    WindowedApp::run_with_theme(
+        config,
+        cn_bundle().with_css(MOBILE_CSS),
+        detect_system_color_scheme(),
+        |ctx| app_ui(ctx),
+    )
 }
 
 // =============================================================================
@@ -538,6 +684,8 @@ fn android_main(app: AndroidApp) {
         log::warn!("Failed to init Android native bridge: {}", e);
     }
 
+    // The cn theme goes in before the first frame, so its stylesheet is drained with the first build.
+    install_cn_theme();
     blinc_app::AndroidApp::run(app, |ctx| app_ui(ctx)).expect("Failed to run Android app");
 }
 
@@ -582,6 +730,8 @@ pub extern "C" fn ios_app_init() {
 
     eprintln!("[Blinc] ios_app_init called - registering UI builder");
 
+    // The cn theme goes in before the first frame, so its stylesheet is drained with the first build.
+    install_cn_theme();
     blinc_app::ios::register_rust_ui_builder(|ctx| app_ui(ctx));
 
     eprintln!("[Blinc] UI builder registered");
