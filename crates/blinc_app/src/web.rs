@@ -2649,6 +2649,7 @@ impl WebApp {
                     tree.compute_layout(self.ctx.width, self.ctx.height);
                     tree.apply_flip_transitions();
                     tree.update_flip_bounds();
+                    self.render_state.begin_stable_motion_frame();
                     tree.initialize_motion_animations(&mut self.render_state);
                     self.render_state.end_stable_motion_frame();
                     self.render_state.process_global_motion_replays();
@@ -2705,6 +2706,7 @@ impl WebApp {
                         if let Some(ref stylesheet) = self.ctx.stylesheet {
                             self.ctx.pointer_query.register_from_stylesheet(stylesheet);
                         }
+                        self.render_state.begin_stable_motion_frame();
                         existing_tree.initialize_motion_animations(&mut self.render_state);
                         self.render_state.end_stable_motion_frame();
                         self.render_state.process_global_motion_replays();
@@ -2731,6 +2733,7 @@ impl WebApp {
 
                 tree.compute_layout(self.ctx.width, self.ctx.height);
                 tree.update_flip_bounds();
+                self.render_state.begin_stable_motion_frame();
                 tree.initialize_motion_animations(&mut self.render_state);
                 self.render_state.end_stable_motion_frame();
                 self.render_state.process_global_motion_replays();
@@ -2746,6 +2749,12 @@ impl WebApp {
                 self.build_scope.keep(build_pass);
             }
             self.ctx.rebuild_count = self.ctx.rebuild_count.saturating_add(1);
+        } else if let Some(tree) = self.current_tree.as_ref() {
+            // Every frame marks the motions still in the tree and closes the frame, so an
+            // unmounted motion exits and is dropped even when no rebuild follows.
+            self.render_state.begin_stable_motion_frame();
+            tree.initialize_motion_animations(&mut self.render_state);
+            self.render_state.end_stable_motion_frame();
         }
 
         // ─── Phase 4: animation tick ─────────────────────────────
