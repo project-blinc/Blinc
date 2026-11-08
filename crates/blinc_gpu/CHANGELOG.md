@@ -6,8 +6,17 @@ All notable changes to `blinc_gpu` will be documented in this file.
 
 ### Added
 - `GpuRenderer::with_offscreen_canvas` shares web surface/device setup with the DOM canvas constructor.
+- `PrimitiveBatch::has_ordered_content` reports the ordered draws a batch holds now (captured groups, ordered images, glass, layer samples, meshes, GPU passes, clipped paths). `has_ordered_draws` is that or the mark left by cross-stream resolution.
+
+### Changed
+- Plain rects and circles draw with a compact shader, `sdf_simple.wgsl`: a solid fill, circular or convex superellipse corners, an optional uniform border and an optional rounded rect clip. The vertex stage passes what the fragment stage needs as flat values, so the fragment stage loads nothing. `GpuPrimitive::is_plain_core` picks the primitives and `SdfPipelineCategory::CorePlain` carries them; the output matches the core shader's to within 2/255 (`tests/plain_shader_parity.rs` in `blinc_recorder`). Tiers without storage buffers in the vertex stage keep the core pipelines.
+- `sd_shaped_rect` returns early for a convex superellipse corner outside its corner square, with the values the general form returns there, so the interior and straight edges of a large rounded rect skip its `pow` calls.
+- The main SDF pass clears to the colour of its first primitive when that is an opaque, square, unclipped rect covering the whole target (a page background), instead of drawing it: the same pixels without shading the screen once more. `GpuPrimitive::opaque_backdrop` decides.
+- A rect, circle or ellipse that uses none of the optional core features (solid fill, no mask, CSS filter, inline shadow, 3D tilt or shape clip; a border, corner shape and rect or rounded clip are kept) draws with `sdf_core.wgsl` compiled without those blocks. The shader declares `override FEAT_*` switches and a second pipeline sets them off; `GpuPrimitive::is_simple_core` picks the primitives and `SdfPipelineCategory::CoreSimple` carries them, with draw order kept by contiguous runs. One source, two pipelines: the full shader sizes its registers for every feature on every fragment, which left phone GPUs well under their frame rate. The vertex-buffer and data-texture tiers have no switches and share the full pipeline. A `match` on `SdfPipelineCategory` needs the new arm.
+- On iOS and Android the end-of-frame `GpuRenderer::poll` no longer waits for the GPU to go idle. The CPU encodes the next frame while the GPU draws the last, and the swapchain paces the loop. Desktop keeps the wait.
 
 ### Fixed
+- `draw_shadow` emits nothing for a shadow whose colour has no alpha. The primitive painted nothing but the shader still ran over its whole blurred area, about a screen of fragments for each large card whose `box-shadow` was `none`.
 - The WebGL2 SDF shaders (`sdf_core_dt` and `sdf_core_vb`) composite a border over the fill with source-over alpha, as `sdf_core` does. A semi-transparent border no longer leaks the page through the ring, which drew a dim stroke with a dotted line along rounded corners.
 - Web renderer setup probes for a WebGPU adapter first and uses the WebGL2 backend when there is none. Browsers that expose `navigator.gpu` but return no adapter no longer fail with "No suitable GPU adapter found".
 

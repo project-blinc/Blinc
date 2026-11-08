@@ -2252,6 +2252,10 @@ pub const CLEAR_QUAD_SHADER: &str = include_str!("shaders/clear_quad.wgsl");
 /// Part of the multi-pipeline SDF split for driver compatibility.
 pub const SDF_CORE_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_core.wgsl"));
 
+/// Split SDF shader: plain Rect and Circle (solid fill, circular corners, uniform border,
+/// rounded rect clip). Only for tiers with storage buffers in the vertex stage.
+pub const SDF_SIMPLE_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_simple.wgsl"));
+
 /// Split SDF shader: Shadow primitives
 ///
 /// Handles prim_type 3-6 (Shadow, InnerShadow, CircleShadow,
@@ -3596,6 +3600,11 @@ mod tests {
     #[test]
     fn sdf_core_shader_parses() {
         parse_wgsl(SDF_CORE_SHADER).expect("SDF_CORE_SHADER");
+    }
+
+    #[test]
+    fn sdf_simple_shader_parses() {
+        parse_wgsl(SDF_SIMPLE_SHADER).expect("SDF_SIMPLE_SHADER");
     }
 
     #[test]

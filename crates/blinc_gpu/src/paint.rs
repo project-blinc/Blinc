@@ -3838,6 +3838,11 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
     }
 
     fn draw_shadow(&mut self, rect: Rect, corner_radius: CornerRadius, shadow: Shadow) {
+        // A shadow with no colour paints nothing, but the shader would still run over its whole
+        // blurred area.
+        if shadow.color.a * self.combined_opacity() <= 0.0 {
+            return;
+        }
         let transformed = self.transform_rect(rect);
         let scaled_radius = self.scale_corner_radius(corner_radius);
         let opacity = self.combined_opacity();

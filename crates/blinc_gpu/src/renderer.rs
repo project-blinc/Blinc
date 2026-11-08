@@ -464,6 +464,16 @@ struct Pipelines {
     sdf_notch: wgpu::RenderPipeline,
     /// Split SDF overlay pipeline: core shapes (1x sampled)
     sdf_core_overlay: wgpu::RenderPipeline,
+    /// Core shapes that use none of the optional features (the core shader compiled without
+    /// them). Shares the full pipeline on tiers whose shader has no feature switches.
+    sdf_core_simple: wgpu::RenderPipeline,
+    /// The 1x sampled overlay of `sdf_core_simple`.
+    sdf_core_simple_overlay: wgpu::RenderPipeline,
+    /// Plain rects and circles through the compact shader. Shares `sdf_core_simple` on tiers
+    /// without storage buffers in the vertex stage.
+    sdf_plain: wgpu::RenderPipeline,
+    /// The 1x sampled overlay of `sdf_plain`.
+    sdf_plain_overlay: wgpu::RenderPipeline,
     /// Split SDF overlay pipeline: shadow shapes (1x sampled)
     sdf_shadow_overlay: wgpu::RenderPipeline,
     /// Split SDF overlay pipeline: 3D raymarched shapes (1x sampled)
@@ -1574,7 +1584,9 @@ impl GpuRenderer {
             }
             let range = start..i;
             match cat {
-                SdfPipelineCategory::Core => ranges.core = range,
+                SdfPipelineCategory::Core
+                | SdfPipelineCategory::CoreSimple
+                | SdfPipelineCategory::CorePlain => ranges.core = range,
                 SdfPipelineCategory::Shadow => ranges.shadow = range,
                 SdfPipelineCategory::Sdf3D => ranges.sdf_3d = range,
                 SdfPipelineCategory::Notch => ranges.notch = range,
@@ -1602,7 +1614,9 @@ impl GpuRenderer {
         let full = 0..len;
         for p in primitives {
             match p.pipeline_category() {
-                SdfPipelineCategory::Core => {
+                SdfPipelineCategory::Core
+                | SdfPipelineCategory::CoreSimple
+                | SdfPipelineCategory::CorePlain => {
                     if ranges.core.is_empty() {
                         ranges.core = full.clone();
                     }
@@ -1716,6 +1730,10 @@ impl GpuRenderer {
                 (SdfPipelineCategory::Core, true) | (SdfPipelineCategory::Text, true) => {
                     &pipelines.sdf_core_overlay
                 }
+                (SdfPipelineCategory::CoreSimple, false) => &pipelines.sdf_core_simple,
+                (SdfPipelineCategory::CoreSimple, true) => &pipelines.sdf_core_simple_overlay,
+                (SdfPipelineCategory::CorePlain, false) => &pipelines.sdf_plain,
+                (SdfPipelineCategory::CorePlain, true) => &pipelines.sdf_plain_overlay,
             };
             render_pass.set_pipeline(pipeline);
             render_pass.draw(0..6, start..end);
@@ -1800,7 +1818,10 @@ impl GpuRenderer {
                 SdfPipelineCategory::Sdf3D => &msaa.sdf_3d,
                 // Core + Text both ride sdf_core (its PRIM_TEXT branch
                 // samples the glyph atlas for prim_type=7).
-                SdfPipelineCategory::Core | SdfPipelineCategory::Text => &msaa.sdf_core,
+                SdfPipelineCategory::Core
+                | SdfPipelineCategory::CoreSimple
+                | SdfPipelineCategory::CorePlain
+                | SdfPipelineCategory::Text => &msaa.sdf_core,
             };
             render_pass.set_pipeline(pipeline);
             render_pass.draw(0..6, start..end);
@@ -2314,10 +2335,14 @@ impl GpuRenderer {
             }
             for sdf_pipeline in [
                 &self.pipelines.sdf_core,
+                &self.pipelines.sdf_core_simple,
+                &self.pipelines.sdf_plain,
                 &self.pipelines.sdf_shadow,
                 &self.pipelines.sdf_3d,
                 &self.pipelines.sdf_notch,
                 &self.pipelines.sdf_core_overlay,
+                &self.pipelines.sdf_core_simple_overlay,
+                &self.pipelines.sdf_plain_overlay,
                 &self.pipelines.sdf_shadow_overlay,
                 &self.pipelines.sdf_3d_overlay,
                 &self.pipelines.sdf_notch_overlay,
@@ -2499,6 +2524,13 @@ impl GpuRenderer {
             label: Some("SDF Core Shader"),
             source: wgpu::ShaderSource::Wgsl(sdf_core_source.into()),
         });
+        // The compact shader reads the primitive in the vertex stage, so it needs the full tier.
+        let sdf_simple_shader = has_vertex_storage.then(|| {
+            device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("SDF Simple Shader"),
+                source: wgpu::ShaderSource::Wgsl(crate::shaders::SDF_SIMPLE_SHADER.into()),
+            })
+        });
         let sdf_shadow_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("SDF Shadow Shader"),
             source: wgpu::ShaderSource::Wgsl(sdf_shadow_source.into()),
@@ -2547,6 +2579,7 @@ impl GpuRenderer {
             &bind_group_layouts,
             &sdf_shader,
             &sdf_core_shader,
+            sdf_simple_shader.as_ref(),
             &sdf_shadow_shader,
             &sdf_3d_shader,
             &sdf_notch_shader,
@@ -3492,6 +3525,7 @@ impl GpuRenderer {
         layouts: &BindGroupLayouts,
         sdf_shader: &wgpu::ShaderModule,
         sdf_core_shader: &wgpu::ShaderModule,
+        sdf_simple_shader: Option<&wgpu::ShaderModule>,
         sdf_shadow_shader: &wgpu::ShaderModule,
         sdf_3d_shader: &wgpu::ShaderModule,
         sdf_notch_shader: &wgpu::ShaderModule,
@@ -3610,8 +3644,13 @@ impl GpuRenderer {
 
         // Helper closure to create an SDF pipeline pair (MSAA + overlay) from a shader module
         let make_sdf_pipeline_pair = |shader: &wgpu::ShaderModule,
-                                      label: &str|
+                                      label: &str,
+                                      constants: &[(&str, f64)]|
          -> (wgpu::RenderPipeline, wgpu::RenderPipeline) {
+            let fragment_options = wgpu::PipelineCompilationOptions {
+                constants,
+                ..Default::default()
+            };
             let msaa = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(&sdf_layout),
@@ -3625,7 +3664,7 @@ impl GpuRenderer {
                     module: shader,
                     entry_point: Some("fs_main"),
                     targets: color_targets,
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    compilation_options: fragment_options.clone(),
                 }),
                 primitive: primitive_state,
                 depth_stencil: None,
@@ -3647,7 +3686,7 @@ impl GpuRenderer {
                     module: shader,
                     entry_point: Some("fs_main"),
                     targets: color_targets,
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    compilation_options: fragment_options.clone(),
                 }),
                 primitive: primitive_state,
                 depth_stencil: None,
@@ -3665,21 +3704,48 @@ impl GpuRenderer {
         // handles are Send+Sync there); Vulkan drivers overlap the compiles,
         // trimming cold first-launch pipeline build. wasm32 wgpu types are
         // !Send (single-threaded), so build serially there.
+        // The simple core pipeline compiles the same module with the optional blocks off. Tiers
+        // whose shader has no feature switches share the full pipeline.
+        const SIMPLE_CORE_CONSTANTS: &[(&str, f64)] = &[
+            ("FEAT_GRADIENT", 0.0),
+            ("FEAT_MASK", 0.0),
+            ("FEAT_FILTER", 0.0),
+            ("FEAT_SHADOW", 0.0),
+            ("FEAT_3D", 0.0),
+            ("FEAT_CLIP_SHAPE", 0.0),
+        ];
         #[cfg(not(target_arch = "wasm32"))]
         let (
             (sdf_core, sdf_core_overlay),
+            simple_core,
+            plain_core,
             (sdf_shadow, sdf_shadow_overlay),
             (sdf_3d, sdf_3d_overlay),
             (sdf_notch, sdf_notch_overlay),
         ) = std::thread::scope(|s| {
-            let h_core = s.spawn(|| make_sdf_pipeline_pair(sdf_core_shader, "SDF Core Pipeline"));
+            let h_core =
+                s.spawn(|| make_sdf_pipeline_pair(sdf_core_shader, "SDF Core Pipeline", &[]));
+            let h_simple = has_vertex_storage.then(|| {
+                s.spawn(|| {
+                    make_sdf_pipeline_pair(
+                        sdf_core_shader,
+                        "SDF Core Simple Pipeline",
+                        SIMPLE_CORE_CONSTANTS,
+                    )
+                })
+            });
+            let h_plain = sdf_simple_shader.map(|shader| {
+                s.spawn(|| make_sdf_pipeline_pair(shader, "SDF Plain Pipeline", &[]))
+            });
             let h_shadow =
-                s.spawn(|| make_sdf_pipeline_pair(sdf_shadow_shader, "SDF Shadow Pipeline"));
-            let h_3d = s.spawn(|| make_sdf_pipeline_pair(sdf_3d_shader, "SDF 3D Pipeline"));
+                s.spawn(|| make_sdf_pipeline_pair(sdf_shadow_shader, "SDF Shadow Pipeline", &[]));
+            let h_3d = s.spawn(|| make_sdf_pipeline_pair(sdf_3d_shader, "SDF 3D Pipeline", &[]));
             let h_notch =
-                s.spawn(|| make_sdf_pipeline_pair(sdf_notch_shader, "SDF Notch Pipeline"));
+                s.spawn(|| make_sdf_pipeline_pair(sdf_notch_shader, "SDF Notch Pipeline", &[]));
             (
                 h_core.join().unwrap(),
+                h_simple.map(|h| h.join().unwrap()),
+                h_plain.map(|h| h.join().unwrap()),
                 h_shadow.join().unwrap(),
                 h_3d.join().unwrap(),
                 h_notch.join().unwrap(),
@@ -3689,15 +3755,30 @@ impl GpuRenderer {
         #[cfg(target_arch = "wasm32")]
         let (
             (sdf_core, sdf_core_overlay),
+            simple_core,
+            plain_core,
             (sdf_shadow, sdf_shadow_overlay),
             (sdf_3d, sdf_3d_overlay),
             (sdf_notch, sdf_notch_overlay),
         ) = (
-            make_sdf_pipeline_pair(sdf_core_shader, "SDF Core Pipeline"),
-            make_sdf_pipeline_pair(sdf_shadow_shader, "SDF Shadow Pipeline"),
-            make_sdf_pipeline_pair(sdf_3d_shader, "SDF 3D Pipeline"),
-            make_sdf_pipeline_pair(sdf_notch_shader, "SDF Notch Pipeline"),
+            make_sdf_pipeline_pair(sdf_core_shader, "SDF Core Pipeline", &[]),
+            has_vertex_storage.then(|| {
+                make_sdf_pipeline_pair(
+                    sdf_core_shader,
+                    "SDF Core Simple Pipeline",
+                    SIMPLE_CORE_CONSTANTS,
+                )
+            }),
+            sdf_simple_shader
+                .map(|shader| make_sdf_pipeline_pair(shader, "SDF Plain Pipeline", &[])),
+            make_sdf_pipeline_pair(sdf_shadow_shader, "SDF Shadow Pipeline", &[]),
+            make_sdf_pipeline_pair(sdf_3d_shader, "SDF 3D Pipeline", &[]),
+            make_sdf_pipeline_pair(sdf_notch_shader, "SDF Notch Pipeline", &[]),
         );
+        let (sdf_core_simple, sdf_core_simple_overlay) =
+            simple_core.unwrap_or_else(|| (sdf_core.clone(), sdf_core_overlay.clone()));
+        let (sdf_plain, sdf_plain_overlay) = plain_core
+            .unwrap_or_else(|| (sdf_core_simple.clone(), sdf_core_simple_overlay.clone()));
 
         // Text pipeline
         let text_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -4057,6 +4138,10 @@ impl GpuRenderer {
             sdf_3d,
             sdf_notch,
             sdf_core_overlay,
+            sdf_core_simple,
+            sdf_core_simple_overlay,
+            sdf_plain,
+            sdf_plain_overlay,
             sdf_shadow_overlay,
             sdf_3d_overlay,
             sdf_notch_overlay,
@@ -4798,7 +4883,15 @@ impl GpuRenderer {
         // is a `Result<PollStatus, _>` rather than the old `MaintainResult`,
         // and we don't care about the precise status here — we just want
         // to block until the GPU is idle.
-        let _ = self.device.poll(wgpu::PollType::Wait);
+        //
+        // Mobile skips the wait: the swapchain paces frames, and idling the CPU until the
+        // GPU finishes serialises encode with execution.
+        let poll = if cfg!(any(target_os = "ios", target_os = "android")) {
+            wgpu::PollType::Poll
+        } else {
+            wgpu::PollType::Wait
+        };
+        let _ = self.device.poll(poll);
     }
 
     /// Bind real glyph atlas textures into the default SDF bind group.
@@ -5903,7 +5996,20 @@ impl GpuRenderer {
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
 
         // Cull off-screen primitives before GPU upload
-        let visible_primitives = self.cull_primitives(&batch.primitives);
+        let mut visible_primitives = self.cull_primitives(&batch.primitives);
+
+        // A page background that fills the target and sits under everything else is the clear
+        // colour: drawing it would shade every pixel once more for the same result.
+        let backdrop = visible_primitives.first().and_then(|p| {
+            p.opaque_backdrop((self.viewport_size.0 as f32, self.viewport_size.1 as f32))
+        });
+        let clear_color = match backdrop {
+            Some(color) => {
+                visible_primitives.remove(0);
+                color
+            }
+            None => clear_color,
+        };
 
         // Sort primitives by pipeline category and upload
         let sdf_ranges = self.upload_sorted_primitives(&visible_primitives);

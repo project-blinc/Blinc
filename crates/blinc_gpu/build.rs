@@ -94,6 +94,8 @@ fn mentions(haystack: &str, ident: &str) -> bool {
 fn main() {
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
     let shaders = Path::new("src/shaders");
+    // A new shader file changes the directory, not any file already listed.
+    println!("cargo:rerun-if-changed=src/shaders");
 
     let mut prelude_src = String::new();
     for path in [PRELUDE, "src/shaders/common/notch_abi.wgsl"] {

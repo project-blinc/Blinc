@@ -116,6 +116,17 @@ struct Primitive {
     clip_shape: vec4<f32>,
 }
 
+// Feature switches, set per pipeline. The default pipeline keeps every feature; the simple
+// pipeline turns off the ones a plain solid shape never uses, so the compiler does not size
+// the shader's registers for them. Which primitives take it is `GpuPrimitive::is_simple_core`.
+override FEAT_GRADIENT: bool = true;
+override FEAT_BORDER: bool = true;
+override FEAT_MASK: bool = true;
+override FEAT_FILTER: bool = true;
+override FEAT_SHADOW: bool = true;
+override FEAT_3D: bool = true;
+override FEAT_CLIP_SHAPE: bool = true;
+
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var<storage, read> primitives: array<Primitive>;
 // Glyph atlas textures for unified text rendering
@@ -547,7 +558,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // be tested in the same frame the SDF evaluates — which means clips
     // rotate with motion-binding / CSS rotation automatically.
     var clip_alpha = calculate_clip_alpha(p, prim.clip_bounds, prim.clip_radius, prim.clip_corner_shape, clip_type, prim.clip_fade, prim.clip_fade_bounds);
-    clip_alpha = clip_alpha * abi_shape_clip_alpha(p, prim.clip_shape.x);
+    if FEAT_CLIP_SHAPE {
+        clip_alpha = clip_alpha * abi_shape_clip_alpha(p, prim.clip_shape.x);
+    }
     if clip_alpha < 0.001 {
         discard;
     }
@@ -571,7 +584,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // ── Perspective Unprojection (flat elements with 3D perspective) ──
     var sp = p;
-    if has_3d {
+    if FEAT_3D && has_3d {
         let pd = select(800.0, persp_d, persp_d > 0.001);
         let rel = p - center;
 
@@ -611,7 +624,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // `sp - prim.bounds.xy` puts the sample point in the same frame, so
     // any rotation (CSS, motion-binding timeline, motion-binding rotation
     // updated via apply_binding_deltas) naturally rotates the polygon.
-    if clip_type == 4u {
+    if FEAT_CLIP_SHAPE && clip_type == 4u {
         let vertex_count = u32(prim.clip_radius.z);
         let aux_offset = u32(prim.clip_radius.w);
         let local_p = sp - prim.bounds.xy;
@@ -624,7 +637,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // A clip in the primitive's own frame. `sp` has been taken back through any
     // transform, so a turned parent clips its children to its turned, rounded box.
-    if prim.local_clip_bounds.z > 0.0 {
+    if FEAT_CLIP_SHAPE && prim.local_clip_bounds.z > 0.0 {
         let local_d = sd_shaped_rect(
             sp - origin,
             prim.local_clip_bounds.xy,
@@ -641,7 +654,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var result = vec4<f32>(0.0);
 
     // Calculate shadow first (rendered behind)
-    if prim.shadow.z > 0.0 || prim.shadow.w != 0.0 {
+    if FEAT_SHADOW && (prim.shadow.z > 0.0 || prim.shadow.w != 0.0) {
         let shadow_offset = prim.shadow.xy;
         let blur = prim.shadow.z;
         let spread = prim.shadow.w;
@@ -886,7 +899,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let mb = in.mesh_bary;
         fill_color = c0 * mb.x + c1 * mb.y + c2 * mb.z;
     } else {
-        switch fill_type {
+        switch select(0u, fill_type, FEAT_GRADIENT) {
             case 0u /* FILL_SOLID */: {
                 fill_color = prim.color;
             }
@@ -957,7 +970,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // have no border to render, so short-circuit past this block for
     // them.
     let max_border = max(max(border_top, border_right), max(border_bottom, border_left));
-    if max_border > 0.0 && prim_type != 9u {
+    if FEAT_BORDER && max_border > 0.0 && prim_type != 9u {
         // For uniform border (legacy: only .x set), use it for all sides
         let bt = select(border_top, border_top, border_right > 0.0 || border_bottom > 0.0 || border_left > 0.0);
         let br = select(border_top, border_right, border_right > 0.0 || border_bottom > 0.0 || border_left > 0.0);
@@ -1140,7 +1153,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // mask_info.x: 0=none, 1=linear, 2=radial
     // mask_params are in OBB (0-1) space relative to element bounds
     let mask_type = prim.mask_info.x;
-    if mask_type > 0.5 {
+    if FEAT_MASK && mask_type > 0.5 {
         // Compute normalized UV relative to element bounds
         let mask_uv = (sp - origin) / max(size, vec2<f32>(0.001));
         var mask_t: f32;
@@ -1169,7 +1182,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Skip if all identity (filter_a all zero, filter_b = (1,1,1,0))
     let fa = prim.filter_a;
     let fb = prim.filter_b;
-    if fa.x != 0.0 || fa.y != 0.0 || fa.z != 0.0 || abs(fa.w) > 0.001 || fb.x != 1.0 || fb.y != 1.0 || fb.z != 1.0 {
+    if FEAT_FILTER && (fa.x != 0.0 || fa.y != 0.0 || fa.z != 0.0 || abs(fa.w) > 0.001 || fb.x != 1.0 || fb.y != 1.0 || fb.z != 1.0) {
         result = apply_css_filter(result, fa, fb);
     }
 

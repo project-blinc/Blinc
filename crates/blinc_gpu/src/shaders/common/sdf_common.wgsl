@@ -792,6 +792,16 @@ fn sd_shaped_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius: vec4
 
     // Convex superellipse, clamped to the corner quadrant and bounded by
     // the box.
+    //
+    // Outside the corner square the curve does not apply, and the general form below reduces
+    // to these values exactly, so the interior and straight edges (nearly every fragment of a
+    // large rounded rect) skip its `pow` calls. Past both axes the arc is exactly r away.
+    if qa.x <= 0.0 && qa.y <= 0.0 {
+        return max(box_d, -r);
+    }
+    if qa.x <= 0.0 || qa.y <= 0.0 {
+        return box_d;
+    }
     let p_exp = pow(2.0, min(abs(n), 5.0));
     let t = max(qa, vec2<f32>(0.0)) / rr;
     return max(box_d, superellipse_dist(t, p_exp, r));

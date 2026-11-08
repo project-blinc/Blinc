@@ -86,6 +86,14 @@ pub enum SdfPipelineCategory {
     Notch = 3,
     /// Text (prim_type 7) — handled by TEXT_SHADER pipeline
     Text = 4,
+    /// A Core primitive that uses none of the optional features: solid fill, no mask, CSS
+    /// filter, inline shadow, 3D tilt or shape clip. Drawn by the core shader compiled
+    /// without those blocks. See [`GpuPrimitive::is_simple_core`].
+    CoreSimple = 5,
+    /// A `CoreSimple` rect or circle with nothing but circular corners, a uniform border and
+    /// a rounded rect clip. Drawn by the compact `sdf_simple.wgsl`. See
+    /// [`GpuPrimitive::is_plain_core`].
+    CorePlain = 6,
 }
 
 impl GpuPrimitive {
@@ -101,6 +109,89 @@ impl GpuPrimitive {
     /// `set_3d_shape` state onto every primitive built during that element's
     /// render, and we don't want a shadow to be raymarched as a solid 3D
     /// shape or have sdf_core overwrite it.
+    /// Whether a rect, circle or ellipse needs only the core shader's basic path: a solid fill
+    /// with an optional border, corner shape and rect or rounded clip.
+    ///
+    /// Each test mirrors the condition that enables the matching block in `sdf_core.wgsl`, so a
+    /// primitive that passes draws the same pixels in the simple pipeline. A NaN fails every
+    /// test and takes the full shader.
+    pub fn is_simple_core(&self) -> bool {
+        let [prim_type, fill_type, clip_type, _] = self.type_info;
+        let [fa_x, fa_y, fa_z, fa_w] = self.filter_a;
+        let [fb_x, fb_y, fb_z, _] = self.filter_b;
+        prim_type <= 2
+            && fill_type == 0
+            && clip_type != 4
+            && self.clip_shape[0] < 0.5
+            && self.local_clip_bounds[2] <= 0.0
+            && self.mask_info[0] <= 0.5
+            && fa_x == 0.0
+            && fa_y == 0.0
+            && fa_z == 0.0
+            && fa_w.abs() <= 0.001
+            && fb_x == 1.0
+            && fb_y == 1.0
+            && fb_z == 1.0
+            && self.shadow[2] <= 0.0
+            && self.shadow[3] == 0.0
+            && self.rotation[2].abs() <= 0.0001
+            && self.perspective[0].abs() <= 0.0001
+            && self.perspective[2] <= 0.001
+    }
+
+    /// Whether the compact shader draws this primitive exactly as the core shader would: a
+    /// simple rect or circle, circular or convex superellipse corners, no clip or a rounded rect
+    /// clip, no edge fade,
+    /// no local transform, and a border that is the same width and colour on every side.
+    pub fn is_plain_core(&self) -> bool {
+        let [bt, br, bb, bl] = self.border;
+        let uniform_border =
+            (br == 0.0 && bb == 0.0 && bl == 0.0) || (bt == br && br == bb && bb == bl);
+        let [a, b, c, d] = self.local_affine;
+        let side_alphas = self.side_color_top[3]
+            + self.side_color_right[3]
+            + self.side_color_bottom[3]
+            + self.side_color_left[3];
+        self.is_simple_core()
+            && self.type_info[0] <= 1
+            && self.type_info[2] <= 1
+            // Circular or convex superellipse corners: not a bevel, scoop, square or notch.
+            && self.corner_shape.iter().all(|n| *n > 0.01 && *n < 100.0)
+            && self.clip_corner_shape == [1.0; 4]
+            && self.clip_fade == [0.0; 4]
+            && uniform_border
+            && side_alphas == 0.0
+            && (a - 1.0).abs() < 0.0001
+            && b.abs() < 0.0001
+            && c.abs() < 0.0001
+            && (d - 1.0).abs() < 0.0001
+    }
+
+    /// The colour this primitive paints when it is an opaque, square, unclipped rect that fills
+    /// a `viewport`-sized target by itself: a page background. Drawing it is the same as clearing
+    /// the target to that colour, which costs no shading.
+    pub fn opaque_backdrop(&self, viewport: (f32, f32)) -> Option<[f64; 4]> {
+        let [x, y, w, h] = self.bounds;
+        let identity = self.local_affine == [1.0, 0.0, 0.0, 1.0];
+        (self.is_simple_core()
+            && self.type_info[0] == 0
+            && self.type_info[2] == 0
+            && identity
+            && self.color[3] >= 1.0
+            && self.border == [0.0; 4]
+            && self.corner_radius == [0.0; 4]
+            && self.clip_fade == [0.0; 4]
+            && self.shadow == [0.0; 4]
+            && x <= 0.0
+            && y <= 0.0
+            && x + w >= viewport.0
+            && y + h >= viewport.1)
+            .then(|| {
+                let [r, g, b, _] = self.color;
+                [r as f64, g as f64, b as f64, 1.0]
+            })
+    }
+
     pub fn pipeline_category(&self) -> SdfPipelineCategory {
         let prim_type = self.type_info[0];
         let shape_3d_type = self.perspective[3] as u32;
@@ -108,6 +199,10 @@ impl GpuPrimitive {
             0..=2 => {
                 if shape_3d_type > 0 {
                     SdfPipelineCategory::Sdf3D
+                } else if self.is_plain_core() {
+                    SdfPipelineCategory::CorePlain
+                } else if self.is_simple_core() {
+                    SdfPipelineCategory::CoreSimple
                 } else {
                     SdfPipelineCategory::Core
                 }
@@ -1856,7 +1951,14 @@ impl PrimitiveBatch {
 
     /// Draws consumed together by the ordered renderer, including path-only groups.
     pub fn has_ordered_draws(&self) -> bool {
-        self.has_cross_stream_groups()
+        self.cross_stream_groups.resolved || self.has_ordered_content()
+    }
+
+    /// Ordered draws the batch holds now: captured groups, ordered images, glass, layer
+    /// samples, meshes, GPU passes and clipped paths. A batch that has only been through
+    /// cross-stream resolution keeps that mark with none of these in it.
+    pub fn has_ordered_content(&self) -> bool {
+        !self.cross_stream_groups.captures.is_empty()
             || self.has_ordered_images()
             || self.layer_commands.iter().any(|entry| {
                 matches!(
@@ -2547,4 +2649,121 @@ pub struct GpuRect {
     pub border_width: f32,
     pub border_color: [f32; 4],
     pub _padding: [f32; 3],
+}
+
+#[cfg(test)]
+mod simple_core_tests {
+    use super::*;
+
+    fn simple() -> GpuPrimitive {
+        GpuPrimitive::default()
+    }
+
+    /// The simple pipeline compiles the core shader without the optional blocks, so a
+    /// primitive that reaches one of them has to stay on the full pipeline.
+    #[test]
+    fn a_plain_primitive_is_simple_and_each_optional_feature_is_not() {
+        assert_eq!(simple().pipeline_category(), SdfPipelineCategory::CorePlain);
+
+        // Features the simple pipeline keeps.
+        let mut bordered = simple();
+        bordered.border = [1.0, 0.0, 0.0, 0.0];
+        bordered.corner_radius = [8.0; 4];
+        bordered.type_info[2] = 1; // a rect clip
+        assert!(bordered.is_simple_core());
+
+        type Change = fn(&mut GpuPrimitive);
+        let cases: [(&str, Change); 9] = [
+            ("gradient", |p| p.type_info[1] = 1),
+            ("polygon clip", |p| p.type_info[2] = 4),
+            ("shape clip", |p| p.clip_shape[0] = 3.0),
+            ("local clip", |p| p.local_clip_bounds[2] = 10.0),
+            ("mask", |p| p.mask_info[0] = 1.0),
+            ("filter", |p| p.filter_a[0] = 0.5),
+            ("brightness", |p| p.filter_b[0] = 1.2),
+            ("inline shadow", |p| p.shadow[2] = 8.0),
+            ("tilt", |p| p.perspective[0] = 0.2),
+        ];
+        for (name, change) in cases {
+            let mut p = simple();
+            change(&mut p);
+            assert!(!p.is_simple_core(), "{name} needs the full shader");
+            assert_eq!(p.pipeline_category(), SdfPipelineCategory::Core, "{name}");
+        }
+
+        // Simple primitives the compact shader cannot draw take the simple core pipeline: a
+        // corner shape, an ellipse, a circle clip, per-side borders, an edge fade, a transform.
+        let not_plain: [(&str, Change); 9] = [
+            ("bevel", |p| p.corner_shape = [0.0; 4]),
+            ("scoop", |p| p.corner_shape = [-1.0; 4]),
+            ("ellipse", |p| p.type_info[0] = 2),
+            ("circle clip", |p| p.type_info[2] = 2),
+            ("clip corner shape", |p| p.clip_corner_shape = [2.0; 4]),
+            ("per-side border", |p| p.border = [1.0, 2.0, 1.0, 2.0]),
+            ("side colour", |p| p.side_color_top[3] = 1.0),
+            ("clip fade", |p| p.clip_fade[0] = 4.0),
+            ("rotation", |p| p.local_affine = [0.9, 0.1, -0.1, 0.9]),
+        ];
+        for (name, change) in not_plain {
+            let mut p = simple();
+            change(&mut p);
+            assert!(!p.is_plain_core(), "{name} is not plain");
+            assert_eq!(
+                p.pipeline_category(),
+                SdfPipelineCategory::CoreSimple,
+                "{name}"
+            );
+        }
+        // A squircle corner is plain; the compact shader draws its curve.
+        let mut squircle = simple();
+        squircle.corner_shape = [1.084; 4];
+        assert!(squircle.is_plain_core());
+        // The same width on every side is uniform, and a circle is plain.
+        let mut uniform = simple();
+        uniform.border = [2.0; 4];
+        assert!(uniform.is_plain_core());
+        let mut circle = simple();
+        circle.type_info[0] = 1;
+        assert!(circle.is_plain_core());
+
+        // Other categories are untouched.
+        let mut text = simple();
+        text.type_info[0] = 7;
+        assert_eq!(text.pipeline_category(), SdfPipelineCategory::Text);
+        let mut mesh = simple();
+        mesh.type_info[0] = 9;
+        assert_eq!(mesh.pipeline_category(), SdfPipelineCategory::Core);
+        let mut boxed = simple();
+        boxed.perspective[3] = 1.0;
+        assert_eq!(boxed.pipeline_category(), SdfPipelineCategory::Sdf3D);
+
+        // A page background is the clear colour; anything that changes the pixels is not.
+        let mut backdrop = simple();
+        backdrop.bounds = [0.0, 0.0, 400.0, 800.0];
+        backdrop.color = [0.1, 0.2, 0.3, 1.0];
+        let view = (400.0, 800.0);
+        assert_eq!(
+            backdrop.opaque_backdrop(view),
+            Some([0.1_f32 as f64, 0.2_f32 as f64, 0.3_f32 as f64, 1.0])
+        );
+        let breaks: [(&str, Change); 7] = [
+            ("translucent", |p| p.color[3] = 0.9),
+            ("rounded", |p| p.corner_radius = [8.0; 4]),
+            ("bordered", |p| p.border = [1.0, 0.0, 0.0, 0.0]),
+            ("clipped", |p| p.type_info[2] = 1),
+            ("short", |p| p.bounds[3] = 700.0),
+            ("offset", |p| p.bounds[0] = 5.0),
+            ("gradient", |p| p.type_info[1] = 1),
+        ];
+        for (name, change) in breaks {
+            let mut p = backdrop;
+            change(&mut p);
+            assert_eq!(p.opaque_backdrop(view), None, "{name} is not a backdrop");
+        }
+
+        // A NaN fails the tests and takes the full shader.
+        let mut nan = simple();
+        nan.mask_info[0] = f32::NAN;
+        assert!(!nan.is_simple_core());
+    }
 }

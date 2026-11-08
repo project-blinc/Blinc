@@ -19,6 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// would use. Kept explicit so a new shader has to be added here too.
 const SHADERS: &[(&str, &str)] = &[
     ("sdf_core", include_str!("../src/shaders/sdf_core.wgsl")),
+    ("sdf_simple", include_str!("../src/shaders/sdf_simple.wgsl")),
     (
         "sdf_core_dt",
         include_str!("../src/shaders/sdf_core_dt.wgsl"),
