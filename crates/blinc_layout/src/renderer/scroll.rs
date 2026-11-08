@@ -17,7 +17,7 @@
 //!   outward.
 //! - **Offset reads/writes**: `apply_scroll_delta`,
 //!   `apply_scroll_delta_with_bounds`, `set_scroll_offset`,
-//!   `get_scroll_offset` (rounded to whole pixels to avoid jitter),
+//!   `get_scroll_offset` (rounded to whole device pixels to avoid jitter),
 //!   `is_scroll_container`, `get_scroll_direction`,
 //!   `can_consume_scroll`. `scroll_focused_text_input_above_keyboard`
 //!   is the mobile-keyboard companion that scrolls a focused input
@@ -829,8 +829,11 @@ impl RenderTree {
                 .unwrap_or((0.0, 0.0))
         };
 
-        // Round to whole pixels to prevent subpixel jitter
-        (x.round(), y.round())
+        // Round to whole device pixels: no subpixel jitter, and a coasting scroll advances in the
+        // finest steps the screen can show. Whole points were three device pixels at 3x, so a
+        // slowing glide stepped unevenly, two points a frame then one.
+        let scale = self.scale_factor.max(1.0);
+        ((x * scale).round() / scale, (y * scale).round() / scale)
     }
 
     /// Render scrollbar overlay for a scroll container

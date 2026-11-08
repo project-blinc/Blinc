@@ -251,7 +251,14 @@ impl Default for ScrollConfig {
             // Critical damping = 2 * sqrt(stiffness * mass) = 2 * sqrt(3000) ≈ 109.5
             // Using damping = 110 (slightly overdamped) for fast snap with no rebound
             bounce_spring: SpringConfig::new(3000.0, 110.0, 1.0),
-            deceleration: 1500.0, // Decelerate at 1500 px/s² (shared with desktop/web)
+            // Decay rate driver (see `ScrollPhysics::tick`): 1500 on desktop and web, 1000 on
+            // iOS, which is a velocity decay of 2 per second, the rate UIKit's normal
+            // deceleration uses, so a flick glides as far as it does in a native list.
+            deceleration: if cfg!(target_os = "ios") {
+                1000.0
+            } else {
+                1500.0
+            },
             velocity_threshold: 3.0, // Stop when below 3 px/s
             // Safety cap on visible overscroll as a fraction of viewport.
             // The apparent-stretch curve in `apply_scroll_delta` tapers
@@ -796,6 +803,15 @@ impl ScrollPhysics {
             self.in_momentum_mode = false;
             self.last_scroll_time = None;
             return;
+        }
+
+        // A finger held still before it lifts launches nothing: the velocity is from the last
+        // movement, which is too old to describe the release.
+        if let Some(last) = self.last_scroll_time
+            && crate::widgets::text_input::elapsed_ms() as f64 - last > 100.0
+        {
+            self.velocity_x = 0.0;
+            self.velocity_y = 0.0;
         }
 
         // Finger-lift. Transition out of the active scroll state.
@@ -3342,5 +3358,57 @@ mod tests {
         );
         assert_eq!(physics.config.scrollbar.size, ScrollbarSize::Thin);
         assert_eq!(physics.config.scrollbar.auto_dismiss_delay, 2.0);
+    }
+
+    /// A touch flick coasts after the finger lifts, and the coast follows the clock: the same
+    /// total distance however the frames fall.
+    #[test]
+    fn a_flick_coasts_after_release() {
+        let mut physics = ScrollPhysics::default();
+        physics.viewport_height = 400.0;
+        physics.content_height = 10_000.0;
+        let now = crate::widgets::text_input::elapsed_ms() as f64;
+        for i in 0..5 {
+            physics.apply_touch_scroll_delta(0.0, -20.0, now + i as f64 * 16.0);
+        }
+        let at_release = physics.offset_y;
+        physics.on_scroll_end();
+        assert_eq!(physics.state, ScrollState::Decelerating);
+        let mut frames = 0;
+        while physics.tick(1.0 / 60.0) && frames < 600 {
+            frames += 1;
+        }
+        assert!(
+            physics.offset_y < at_release - 100.0,
+            "a flick should glide on after the finger lifts"
+        );
+        assert_eq!(physics.state, ScrollState::Idle);
+    }
+
+    /// A finger that rests before lifting does not fling: the speed is that of the last
+    /// movement, which is too old to describe the release.
+    #[test]
+    fn a_finger_held_still_before_release_launches_nothing() {
+        let mut physics = ScrollPhysics::default();
+        physics.viewport_height = 400.0;
+        physics.content_height = 10_000.0;
+        let now = crate::widgets::text_input::elapsed_ms() as f64;
+        for i in 0..5 {
+            physics.apply_touch_scroll_delta(0.0, -20.0, now + i as f64 * 16.0);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        physics.on_scroll_end();
+        assert_eq!(physics.velocity_y, 0.0);
+        assert!(!physics.tick(1.0 / 60.0), "nothing is left to animate");
+    }
+
+    #[test]
+    fn deceleration_matches_the_platform() {
+        let expected = if cfg!(target_os = "ios") {
+            1000.0
+        } else {
+            1500.0
+        };
+        assert_eq!(ScrollConfig::default().deceleration, expected);
     }
 }

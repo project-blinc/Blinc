@@ -7,7 +7,12 @@ All notable changes to `blinc_layout` will be documented in this file.
 ### Accessibility
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 
+### Changed
+- Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
+
 ### Fixed
+- The scroll offset a frame paints is rounded to whole device pixels instead of whole points. At 3x a coasting scroll advanced two points a frame, then one, which read as judder as it slowed; it now moves in thirds of a point. Hit testing keeps the exact offset.
+- A finger that rests for more than 100 ms before lifting no longer launches a fling from the speed of its last movement.
 - A CSS font stack is measured and drawn in the first of its families that is installed, in layout, text inputs and text areas alike, instead of only its first name.
 - The caret, selection, wrapping and click mapping of text inputs and text areas measure with the font family, weight, style and letter spacing the field's own rules set, as the layout measures the drawn text. The cn default `letter-spacing: var(--tracking-tight)` no longer leaves the caret to the right of the text, and a field whose family differs from the default no longer drifts. Values a field inherits from an ancestor are not read, as with its font size.
 - A stylesheet rule on an id with `:hover`, `:active` or `:focus` is ordered against the widget's own rules by specificity: `#cb:hover { border-color }` beats the widget's `.blinc-checkbox:hover` rule. The rule stays a simple rule for animations and the state table, and is also a complex rule for ordering.
