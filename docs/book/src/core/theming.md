@@ -11,6 +11,7 @@ The theming system is built around these core concepts:
 - **ThemeBundle**: Light + dark variants plus optional CSS, installed via `WindowedApp::run_with_theme`
 - **Animated Transitions**: Smooth spring-based color interpolation between themes
 - **Platform Detection**: Automatic system dark/light mode detection
+- **CSS Variables**: Every token is also a `:root` variable. Rules read it with `var()`, and an app overrides it in its own `:root`
 
 ---
 
@@ -94,9 +95,71 @@ defaults.
 
 ---
 
+## Tokens as CSS Variables
+
+Every token the installed theme publishes is a `:root` variable, named after the token in kebab case. `ColorToken::TextPrimary` is `--text-primary` and `ColorToken::InputBg` is `--input-bg`. Radii, spacing, typography, shadows and animation follow the same scheme: `--radius-lg`, `--space-4`, `--text-sm`, `--shadow-md`, `--duration-fast`. A rule reads one with `var()`, and it follows the current theme and colour scheme with no Rust code:
+
+```css
+.panel {
+    background: var(--surface);
+    color: var(--text-primary);
+    border-color: var(--border);
+    border-radius: var(--radius-lg);
+}
+```
+
+[CSS Styling](./css-styling.md#theme-integration) lists the variables. Prefer this to reading `ThemeState` in Rust for fills, borders, radii and text colour: the rule is resolved again when the scheme or bundle changes, and it can be overridden without touching the component. Keep Rust token reads (see [Reading Tokens in Rust](#reading-tokens-in-rust)) for values CSS cannot express, such as canvas painting.
+
+### Overriding a token in `:root`
+
+CSS attached to the bundle (or added with `add_css`) can set the same variable in `:root`. A variable defined in your CSS takes precedence over the theme's, wherever the `:root` block sits relative to the rules that read it:
+
+```rust
+let bundle = BlincTheme::bundle().with_css(r#"
+    :root {
+        --text-primary: #1a1a1a;
+        --radius-lg: 6px;
+    }
+"#);
+```
+
+An override is global: every rule that reads `--text-primary` changes with it, including the cn components. It is also one value for both colour schemes. To vary it by scheme, keep it in a named source and replace the source when the scheme changes. `WindowedContext::set_css(name, css)` replaces the source with that name and returns a `Result`:
+
+```rust
+let _ = ctx.set_css("scheme-overrides", ":root { --text-primary: #f2f2f2; }");
+```
+
+A `:root` override reaches CSS only. `ThemeState::color` and the Rust defaults widgets build from the theme still read the theme's value, because `ThemeState` does not look at the stylesheet's `:root` variables. Code that needs the overridden value can read the variable with `blinc::layout::css_parser::active_stylesheet()` and `get_variable("text-primary")`, which returns the raw string, or the app can set the same value with `set_color_override` (which CSS also sees, though a `:root` value still wins there). Declaring the visual in CSS avoids the split.
+
+### Component hooks
+
+blinc_cn declares a hook per component part, named `--cn-<component>-<part>`, and each falls back to a theme token. The textarea fill, for example, is `background: var(--cn-textarea-bg, var(--input-bg))`. Setting the hook in `:root` changes that one component without retuning the theme:
+
+```css
+:root {
+    --cn-textarea-bg: #ffffff;
+    --cn-dialog-bg: var(--surface-elevated);
+}
+```
+
+Only the hooks the cn stylesheet declares exist, such as `--cn-input-bg`, `--cn-dialog-bg` and `--cn-calendar-selected-bg`. For anything else, give the element your own class and write rules for it. They apply after the component's defaults (see [Component layers](./css-styling.md#component-layers-layer)).
+
+### Choosing where to override
+
+| Goal | Use |
+|------|-----|
+| Retune the whole theme | A custom `Theme`, or a `:root` token override |
+| Change one component's fill or border | Its `--cn-*` hook in `:root` |
+| Style one field or element | A class rule |
+| Change a single token at runtime from code | `set_color_override` (see [Dynamic Token Overrides](#dynamic-token-overrides)) |
+
+---
+
 ## Quick Start
 
-### Accessing Theme Tokens
+### Reading Tokens in Rust
+
+Use this for values CSS cannot express, such as canvas painting or computed colours. For ordinary visuals, read the token with `var()` in a rule (see [Tokens as CSS Variables](#tokens-as-css-variables)).
 
 ```rust
 use blinc::theme::{ThemeState, ColorToken};
@@ -305,7 +368,9 @@ When switching between light and dark mode, colors smoothly animate using spring
 1. Theme colors are stored as `AnimatedValue` in the global `ThemeState`
 2. When the scheme changes, target colors animate from current to new values
 3. The animation scheduler drives smooth interpolation
-4. UI rebuilds on each frame with interpolated colors (⚠️ this is the source of current performance issues)
+4. Each frame of the transition requests a full UI rebuild and CSS reparse, so Rust token reads and `var()` references resolve against the interpolated colors. The cost grows with the size of the UI, so a large tree can switch schemes at a lower frame rate than it renders when idle
+
+Only a scheme switch (`set_scheme`, `toggle_scheme`) animates. Installing a bundle with `ThemeState::init` applies its tokens at once and rebuilds the UI one time.
 
 ### Configuration
 
@@ -361,36 +426,16 @@ fn themed_button() -> impl ElementBuilder {
 
 ---
 
-## Default Theme: Catppuccin
+## Built-in Themes
 
-Blinc's default theme is derived from [Catppuccin](https://catppuccin.com/), a community-driven pastel theme:
+| Theme | Character |
+|-------|-----------|
+| `HybridTheme` | An even mix of Apple HIG and Material 3, and the fallback when no platform theme applies. `BlincTheme` and `DefaultTheme` are aliases of it |
+| `RestrainedTheme` | Apple-leaning: quiet motion and tight curves |
+| `ExpressiveTheme` | Material-leaning: bolder radii and longer motion |
+| Platform themes | macOS (Human Interface Guidelines), Windows (Fluent), Linux (Adwaita), iOS, Android (Material You). Web uses Hybrid |
 
-- **Light mode**: Catppuccin Latte
-- **Dark mode**: Catppuccin Mocha
-
-### Latte (Light) Palette
-
-| Role | Color |
-|------|-------|
-| Background | `#EFF1F5` |
-| Surface | `#FFFFFF` |
-| Text Primary | `#4C4F69` |
-| Primary | `#1E66F5` (Blue) |
-| Success | `#40A02B` (Green) |
-| Warning | `#DF8E1D` (Yellow) |
-| Error | `#D20F39` (Red) |
-
-### Mocha (Dark) Palette
-
-| Role | Color |
-|------|-------|
-| Background | `#1E1E2E` |
-| Surface | `#313244` |
-| Text Primary | `#CDD6F4` |
-| Primary | `#89B4FA` (Blue) |
-| Success | `#A6E3A1` (Green) |
-| Warning | `#F9E2AF` (Yellow) |
-| Error | `#F38BA8` (Red) |
+Each has `light()`, `dark()` and `bundle()`, for example `RestrainedTheme::bundle()`. `platform_theme_bundle()` returns the bundle for the current platform, and `ThemeState::init_default()` installs it with the detected colour scheme.
 
 ---
 
@@ -402,7 +447,7 @@ Blinc automatically detects the system's preferred color scheme on supported pla
 |----------|------------------|
 | macOS | `AppleInterfaceStyle` from UserDefaults |
 | Windows | Windows.UI.ViewManagement API |
-| Linux | XDG/GTK settings |
+| Linux | `GTK_THEME` and the GNOME `gsettings` colour scheme; light when neither says otherwise. The XDG desktop portal is not queried, so other desktops should pass the scheme explicitly |
 | iOS | Native UITraitCollection |
 | Android | Configuration.uiMode |
 
@@ -543,6 +588,8 @@ impl Theme for MyTheme {
 }
 ```
 
+`shape()` is optional and defaults to circular corners. `ColorTokens::default()` is the Hybrid light palette, so in a dark variant set every colour rather than relying on `..Default::default()`.
+
 Then install it with `run_with_theme`:
 
 ```rust
@@ -577,6 +624,8 @@ ThemeState::get().remove_color_override(ColorToken::Primary);
 ThemeState::get().clear_overrides();
 ```
 
+Color overrides also appear in the CSS variables, but spacing and radius overrides do not: they change only `radius(token)` and `spacing_value(token)`, not `radii()`, `spacing()` or `--radius-*` and `--space-*`. A bundle swap through `ThemeState::init` clears these overrides. For a change that should persist, put it in a custom `Theme` or in a `:root` override attached to the bundle (see [Overriding a token in `:root`](#overriding-a-token-in-root)).
+
 ### Override Types
 
 | Method | Triggers |
@@ -588,6 +637,8 @@ ThemeState::get().clear_overrides();
 ---
 
 ## Building Themed Components
+
+For fills, borders, radii and text colour, declare the visual in CSS with `var()` (see [Tokens as CSS Variables](#tokens-as-css-variables)). The patterns below are for values that must be computed in Rust.
 
 ### Pattern 1: Direct Token Access
 
@@ -664,17 +715,19 @@ status_badge("Error", ColorToken::Error)
 
 ## Best Practices
 
-1. **Always use semantic tokens** - Use `ColorToken::Primary` instead of hardcoded colors for automatic theme support.
+1. **Prefer CSS variables for visuals** - A rule that reads `var(--text-primary)` follows theme changes and can be overridden in `:root` without touching the component.
 
-2. **Read colors at render time** - Access `ThemeState::get()` inside your component function, not at module level.
+2. **Always use semantic tokens** - Use `ColorToken::Primary` (or `var(--primary)`) instead of hardcoded colors for automatic theme support.
 
-3. **Fetch in callbacks** - For `on_state` and other callbacks, fetch theme colors inside the callback to respond to theme changes.
+3. **Read colors at render time** - When you read tokens in Rust, call `ThemeState::get()` inside your component function, not at module level.
 
-4. **Use spacing scale** - Use `theme.spacing().space_*` for consistent visual rhythm.
+4. **Fetch in callbacks** - For `on_state` and other callbacks that read tokens in Rust, fetch theme colors inside the callback to respond to theme changes.
 
-5. **Match radius to context** - Use smaller radii for small elements, larger for cards and panels.
+5. **Use spacing scale** - Use `theme.spacing().space_*` or `var(--space-*)` for consistent visual rhythm.
 
-6. **Test both themes** - Always verify your UI looks good in both light and dark modes.
+6. **Match radius to context** - Use smaller radii for small elements, larger for cards and panels.
+
+7. **Test both themes** - Always verify your UI looks good in both light and dark modes.
 
 ---
 
