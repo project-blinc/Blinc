@@ -443,7 +443,7 @@ impl FontRegistry {
         } else {
             // Linux has no one UI face. These are the common desktop
             // defaults; anything else falls through to the generic sans.
-            &["Cantarell", "Ubuntu", "Noto Sans", "DejaVu Sans"]
+            blinc_core::system_fonts::LINUX_SANS
         }
     }
 
@@ -1201,6 +1201,32 @@ impl Default for FontRegistry {
 mod tests {
     use super::*;
     use crate::font::FontWeight;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_resolves_the_shared_sans_list() {
+        assert_eq!(
+            FontRegistry::system_ui_families(),
+            blinc_core::system_fonts::LINUX_SANS
+        );
+    }
+
+    /// With the first family of the list missing, the system face is the first listed family
+    /// that is installed, not a substitute the platform picks.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_missing_first_family_falls_through_to_the_next_installed() {
+        let mut registry = FontRegistry::new();
+        let Some(installed) = blinc_core::system_fonts::LINUX_SANS
+            .iter()
+            .find(|name| registry.load_font(name).is_ok())
+        else {
+            return;
+        };
+        let named = registry.load_font(installed).unwrap();
+        let system = registry.load_generic(GenericFont::System).unwrap();
+        assert_eq!(system.family_name(), named.family_name());
+    }
 
     /// The bundled Arial, its OS/2 table claiming `weight`.
     fn arial_at(weight: u16) -> Vec<u8> {

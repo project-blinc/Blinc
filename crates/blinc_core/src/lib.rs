@@ -48,6 +48,7 @@ pub mod reactive;
 pub mod recording;
 pub mod runtime;
 pub mod store;
+pub mod system_fonts;
 pub mod value;
 
 pub use draw::{

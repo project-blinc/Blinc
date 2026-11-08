@@ -2,7 +2,7 @@
 //!
 //! Implements the GNOME Human Interface Guidelines with libadwaita design language:
 //! - Accent colors: GNOME Blue (#3584E4)
-//! - Typography: Cantarell (13px base)
+//! - Typography: the desktop's UI sans (13px base), from `blinc_core::system_fonts::LINUX_SANS`
 //! - Spacing: 6px base unit
 //! - Corner radii: 6px default
 //! - Characteristic Adwaita shadows
@@ -10,6 +10,14 @@
 use crate::theme::{ColorScheme, Theme, ThemeBundle};
 use crate::tokens::*;
 use blinc_core::Color;
+
+/// The UI sans: the first of the shared Linux list as the family, the rest as its fallbacks.
+fn linux_sans() -> FontFamily {
+    use blinc_core::system_fonts::LINUX_SANS;
+    let mut fallbacks = LINUX_SANS[1..].to_vec();
+    fallbacks.extend(["system-ui", "sans-serif"]);
+    FontFamily::new(LINUX_SANS[0], fallbacks)
+}
 
 /// Linux-native theme inspired by GNOME Adwaita (libadwaita/GTK 4)
 #[derive(Clone, Debug)]
@@ -87,10 +95,7 @@ impl LinuxTheme {
                 tooltip_text: Color::from_hex(0xFAFAFA),
             },
             typography: TypographyTokens {
-                font_sans: FontFamily::new(
-                    "Cantarell",
-                    vec!["Ubuntu", "DejaVu Sans", "system-ui", "sans-serif"],
-                ),
+                font_sans: linux_sans(),
                 font_serif: FontFamily::new(
                     "DejaVu Serif",
                     vec!["Liberation Serif", "Georgia", "serif"],
@@ -191,10 +196,7 @@ impl LinuxTheme {
                 tooltip_text: Color::from_hex(0x242424),
             },
             typography: TypographyTokens {
-                font_sans: FontFamily::new(
-                    "Cantarell",
-                    vec!["Ubuntu", "DejaVu Sans", "system-ui", "sans-serif"],
-                ),
+                font_sans: linux_sans(),
                 font_serif: FontFamily::new(
                     "DejaVu Serif",
                     vec!["Liberation Serif", "Georgia", "serif"],
@@ -322,5 +324,21 @@ impl Theme for LinuxTheme {
 
     fn animations(&self) -> &AnimationTokens {
         &self.animations
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use blinc_core::system_fonts::LINUX_SANS;
+
+    #[test]
+    fn both_schemes_name_the_shared_linux_sans_first() {
+        for theme in [LinuxTheme::light(), LinuxTheme::dark()] {
+            let sans = &theme.typography().font_sans;
+            assert_eq!(sans.name, LINUX_SANS[0]);
+            let rest: Vec<&str> = sans.fallbacks.iter().map(String::as_str).collect();
+            assert_eq!(rest[..LINUX_SANS.len() - 1], LINUX_SANS[1..]);
+        }
     }
 }

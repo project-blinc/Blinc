@@ -4,6 +4,9 @@ All notable changes to `blinc_core` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `system_fonts::LINUX_SANS`: the Linux desktop UI sans families, best first, shared by the text registry and the Linux theme.
+
 ### Fixed
 - Keyed initializers can create nested signals and keyed values without holding the graph or hook locks. Nested reactive values retain the persistent key’s lifetime across fresh builds.
 

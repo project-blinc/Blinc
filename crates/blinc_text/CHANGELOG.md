@@ -5,6 +5,7 @@ All notable changes to `blinc_text` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- On Linux the default UI face list is the shared `blinc_core::system_fonts::LINUX_SANS` and now starts with Adwaita Sans, the GNOME 48 interface font, before Cantarell, Ubuntu, Noto Sans and DejaVu Sans.
 - Resolve iOS font files by their native CoreText locations and use Apple’s CJK fallback families for candidate text.
 - Discover Android and iOS system colour-emoji fonts on first emoji use, including CoreText font locations in Simulator. Decode Apple’s compressed colour-emoji strikes through CoreText on iOS.
 
