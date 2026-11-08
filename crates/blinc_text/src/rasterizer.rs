@@ -151,6 +151,19 @@ impl GlyphRasterizer {
                 })
             }
             None => {
+                // Apple's `hvgl` outlines are not readable by swash; CoreText draws them.
+                #[cfg(target_os = "ios")]
+                if swash_font.table(swash::tag_from_bytes(b"hvgl")).is_some()
+                    && let Some(image) = crate::apple::rasterize_outline(
+                        font,
+                        glyph_id,
+                        font_size,
+                        offset_x,
+                        advance.round() as u16,
+                    )
+                {
+                    return Ok(image);
+                }
                 // Empty glyph (like space) - no bitmap but has advance
                 Ok(RasterizedGlyph {
                     bitmap: Vec::new(),

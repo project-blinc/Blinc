@@ -33,6 +33,7 @@ unsafe extern "C" {
         context: *mut c_void,
     );
     fn CTFontCopyAttribute(font: *const c_void, attribute: *const c_void) -> *const c_void;
+    fn CTFontGetGlyphCount(font: *const c_void) -> isize;
 }
 
 #[link(name = "CoreFoundation", kind = "framework")]
@@ -117,6 +118,7 @@ unsafe extern "C" {
         flags: u32,
     ) -> *mut c_void;
     fn CGContextTranslateCTM(context: *mut c_void, x: f64, y: f64);
+    fn CGContextSetShouldSmoothFonts(context: *mut c_void, should_smooth: bool);
     fn CGContextRelease(context: *mut c_void);
 }
 
@@ -129,19 +131,7 @@ pub(crate) fn rasterize(
     use ttf_parser::GlyphId;
     // Apple's compressed sbix strikes require the platform's decoder.
     let face = font.as_ttf_face()?;
-    // Apple's name table may contain only Macintosh-encoded ASCII names.
-    let name = face.names().into_iter().find_map(|entry| {
-        (entry.name_id == ttf_parser::name_id::POST_SCRIPT_NAME)
-            .then(|| {
-                entry.to_string().or_else(|| {
-                    entry
-                        .name
-                        .is_ascii()
-                        .then(|| String::from_utf8_lossy(entry.name).into_owned())
-                })
-            })
-            .flatten()
-    })?;
+    let name = postscript_name(font)?;
     if !matches!(name.as_str(), "AppleColorEmoji" | ".AppleColorEmojiUI")
         || face.tables().sbix.is_none()
         || face
@@ -209,6 +199,100 @@ pub(crate) fn rasterize(
             bearing_y: top as i16,
             advance: advance.width.round() as u16,
             format: GlyphFormat::Rgba,
+        })
+    }
+}
+
+/// The face's PostScript name, which Apple's name table may store only as Macintosh ASCII.
+fn postscript_name(font: &crate::font::FontFace) -> Option<String> {
+    let face = font.as_ttf_face()?;
+    face.names().into_iter().find_map(|entry| {
+        (entry.name_id == ttf_parser::name_id::POST_SCRIPT_NAME)
+            .then(|| {
+                entry.to_string().or_else(|| {
+                    entry
+                        .name
+                        .is_ascii()
+                        .then(|| String::from_utf8_lossy(entry.name).into_owned())
+                })
+            })
+            .flatten()
+    })
+}
+
+/// The CoreText font for `font`'s face at `size`, looked up by PostScript name.
+///
+/// A name that CoreText answers with a different font is refused: glyph ids only mean the same
+/// thing in a font with the same glyph count.
+fn native_font(font: &crate::font::FontFace, size: f32) -> Option<Owned> {
+    let name = CString::new(postscript_name(font)?).ok()?;
+    unsafe {
+        let name = Owned::new(CFStringCreateWithCString(
+            std::ptr::null(),
+            name.as_ptr(),
+            0x08000100,
+        ))?;
+        let native = Owned::new(CTFontCreateWithName(name.0, size as f64, std::ptr::null()))?;
+        (CTFontGetGlyphCount(native.0) == font.glyph_count() as isize).then_some(native)
+    }
+}
+
+/// Draw one glyph of `font` through CoreText into an alpha bitmap.
+///
+/// For faces whose outlines the software rasterizer cannot read. `None` when
+/// CoreText has nothing to draw for the glyph.
+pub(crate) fn rasterize_outline(
+    font: &crate::font::FontFace,
+    glyph: u16,
+    size: f32,
+    offset_x: f32,
+    advance: u16,
+) -> Option<crate::rasterizer::RasterizedGlyph> {
+    use crate::rasterizer::{GlyphFormat, RasterizedGlyph};
+    if !size.is_finite() || size <= 0.0 {
+        return None;
+    }
+    let native = native_font(font, size)?;
+    unsafe {
+        let bounds = CTFontGetBoundingRectsForGlyphs(native.0, 0, &glyph, std::ptr::null_mut(), 1);
+        if bounds.size.width <= 0.0 || bounds.size.height <= 0.0 {
+            return None;
+        }
+        let shift = offset_x as f64;
+        let left = (bounds.origin.x + shift).floor() - 1.0;
+        let bottom = bounds.origin.y.floor() - 1.0;
+        let top = (bounds.origin.y + bounds.size.height).ceil() + 1.0;
+        let right = (bounds.origin.x + bounds.size.width + shift).ceil() + 1.0;
+        let (width, height) = ((right - left) as usize, (top - bottom) as usize);
+        if width == 0 || height == 0 || width > 4096 || height > 4096 {
+            return None;
+        }
+        let mut bitmap = vec![0u8; width * height];
+        // An alpha-only context (kCGImageAlphaOnly) takes no colour space.
+        let context = CGBitmapContextCreate(
+            bitmap.as_mut_ptr().cast(),
+            width,
+            height,
+            8,
+            width,
+            std::ptr::null(),
+            7,
+        );
+        if context.is_null() {
+            return None;
+        }
+        CGContextSetShouldSmoothFonts(context, false);
+        CGContextTranslateCTM(context, shift - left, -bottom);
+        CTFontDrawGlyphs(native.0, &glyph, &Point::default(), 1, context);
+        CGContextRelease(context);
+        Some(RasterizedGlyph {
+            bitmap,
+            width: width as u32,
+            height: height as u32,
+            bearing_x: left as i16,
+            bearing_y: top as i16,
+            advance,
+            format: GlyphFormat::Alpha,
         })
     }
 }
