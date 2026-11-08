@@ -4,6 +4,9 @@ All notable changes to `blinc_theme` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Runtime overrides apply to `ThemeState::colors()`, `spacing()` and `radii()` and to the CSS variable map. Before, spacing and radius overrides changed only `spacing_value(token)` and `radius(token)`, and colour overrides skipped `colors()`, so `--space-*` and `--radius-*` kept the theme's values.
+
 ## [0.6.0] - 2026-11-04
 
 ### Added

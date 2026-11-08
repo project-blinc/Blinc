@@ -43,6 +43,21 @@ impl RadiusTokens {
             RadiusToken::Full => self.radius_full,
         }
     }
+
+    /// Replace the value for `token`; the theme's runtime overrides apply through this.
+    pub(crate) fn set(&mut self, token: RadiusToken, value: f32) {
+        match token {
+            RadiusToken::None => self.radius_none = value,
+            RadiusToken::Sm => self.radius_sm = value,
+            RadiusToken::Default => self.radius_default = value,
+            RadiusToken::Md => self.radius_md = value,
+            RadiusToken::Lg => self.radius_lg = value,
+            RadiusToken::Xl => self.radius_xl = value,
+            RadiusToken::Xxl => self.radius_2xl = value,
+            RadiusToken::Xxxl => self.radius_3xl = value,
+            RadiusToken::Full => self.radius_full = value,
+        }
+    }
 }
 
 impl Default for RadiusTokens {

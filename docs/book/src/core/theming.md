@@ -624,7 +624,7 @@ ThemeState::get().remove_color_override(ColorToken::Primary);
 ThemeState::get().clear_overrides();
 ```
 
-Color overrides also appear in the CSS variables, but spacing and radius overrides do not: they change only `radius(token)` and `spacing_value(token)`, not `radii()`, `spacing()` or `--radius-*` and `--space-*`. A bundle swap through `ThemeState::init` clears these overrides. For a change that should persist, put it in a custom `Theme` or in a `:root` override attached to the bundle (see [Overriding a token in `:root`](#overriding-a-token-in-root)).
+An override shows in every way of reading the token: `color(token)`, `radius(token)` and `spacing_value(token)`, the whole-set accessors `colors()`, `radii()` and `spacing()`, and the CSS variables (`--text-primary`, `--radius-*`, `--space-*`). A `:root` value for the same variable still wins in CSS. A bundle swap through `ThemeState::init` clears these overrides. For a change that should persist, put it in a custom `Theme` or in a `:root` override attached to the bundle (see [Overriding a token in `:root`](#overriding-a-token-in-root)).
 
 ### Override Types
 

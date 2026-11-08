@@ -167,6 +167,50 @@ impl ColorTokens {
         }
     }
 
+    /// Replace the value for `token`; the theme's runtime overrides apply through this.
+    pub(crate) fn set(&mut self, token: ColorToken, value: Color) {
+        match token {
+            ColorToken::Primary => self.primary = value,
+            ColorToken::PrimaryHover => self.primary_hover = value,
+            ColorToken::PrimaryActive => self.primary_active = value,
+            ColorToken::Secondary => self.secondary = value,
+            ColorToken::SecondaryHover => self.secondary_hover = value,
+            ColorToken::SecondaryActive => self.secondary_active = value,
+            ColorToken::Success => self.success = value,
+            ColorToken::SuccessBg => self.success_bg = value,
+            ColorToken::Warning => self.warning = value,
+            ColorToken::WarningBg => self.warning_bg = value,
+            ColorToken::Error => self.error = value,
+            ColorToken::ErrorBg => self.error_bg = value,
+            ColorToken::Info => self.info = value,
+            ColorToken::InfoBg => self.info_bg = value,
+            ColorToken::Background => self.background = value,
+            ColorToken::Surface => self.surface = value,
+            ColorToken::SurfaceElevated => self.surface_elevated = value,
+            ColorToken::SurfaceOverlay => self.surface_overlay = value,
+            ColorToken::TextPrimary => self.text_primary = value,
+            ColorToken::TextSecondary => self.text_secondary = value,
+            ColorToken::TextTertiary => self.text_tertiary = value,
+            ColorToken::TextInverse => self.text_inverse = value,
+            ColorToken::TextLink => self.text_link = value,
+            ColorToken::Border => self.border = value,
+            ColorToken::BorderSecondary => self.border_secondary = value,
+            ColorToken::BorderHover => self.border_hover = value,
+            ColorToken::BorderFocus => self.border_focus = value,
+            ColorToken::BorderError => self.border_error = value,
+            ColorToken::InputBg => self.input_bg = value,
+            ColorToken::InputBgHover => self.input_bg_hover = value,
+            ColorToken::InputBgFocus => self.input_bg_focus = value,
+            ColorToken::InputBgDisabled => self.input_bg_disabled = value,
+            ColorToken::Selection => self.selection = value,
+            ColorToken::SelectionText => self.selection_text = value,
+            ColorToken::Accent => self.accent = value,
+            ColorToken::AccentSubtle => self.accent_subtle = value,
+            ColorToken::TooltipBackground => self.tooltip_bg = value,
+            ColorToken::TooltipText => self.tooltip_text = value,
+        }
+    }
+
     /// Linear interpolation between two color token sets
     pub fn lerp(from: &Self, to: &Self, t: f32) -> Self {
         Self {

@@ -86,6 +86,35 @@ impl SpacingTokens {
         }
     }
 
+    /// Replace the value for `token`; the theme's runtime overrides apply through this.
+    pub(crate) fn set(&mut self, token: SpacingToken, value: f32) {
+        match token {
+            SpacingToken::Space0 => self.space_0 = value,
+            SpacingToken::Space0_5 => self.space_0_5 = value,
+            SpacingToken::Space1 => self.space_1 = value,
+            SpacingToken::Space1_5 => self.space_1_5 = value,
+            SpacingToken::Space2 => self.space_2 = value,
+            SpacingToken::Space2_5 => self.space_2_5 = value,
+            SpacingToken::Space3 => self.space_3 = value,
+            SpacingToken::Space3_5 => self.space_3_5 = value,
+            SpacingToken::Space4 => self.space_4 = value,
+            SpacingToken::Space5 => self.space_5 = value,
+            SpacingToken::Space6 => self.space_6 = value,
+            SpacingToken::Space7 => self.space_7 = value,
+            SpacingToken::Space8 => self.space_8 = value,
+            SpacingToken::Space9 => self.space_9 = value,
+            SpacingToken::Space10 => self.space_10 = value,
+            SpacingToken::Space11 => self.space_11 = value,
+            SpacingToken::Space12 => self.space_12 = value,
+            SpacingToken::Space14 => self.space_14 = value,
+            SpacingToken::Space16 => self.space_16 = value,
+            SpacingToken::Space20 => self.space_20 = value,
+            SpacingToken::Space24 => self.space_24 = value,
+            SpacingToken::Space28 => self.space_28 = value,
+            SpacingToken::Space32 => self.space_32 = value,
+        }
+    }
+
     /// Create spacing tokens with a custom base unit
     pub fn with_base(base: f32) -> Self {
         Self {

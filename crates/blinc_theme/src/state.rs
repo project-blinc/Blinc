@@ -410,9 +410,13 @@ impl ThemeState {
         resolved
     }
 
-    /// Get all color tokens
+    /// Get all color tokens, with runtime overrides applied
     pub fn colors(&self) -> ColorTokens {
-        self.colors.read().unwrap().clone()
+        let mut tokens = self.colors.read().unwrap().clone();
+        for (token, color) in self.color_overrides.read().unwrap().iter() {
+            tokens.set(*token, *color);
+        }
+        tokens
     }
 
     /// Set a color override (triggers repaint only)
@@ -681,7 +685,7 @@ impl ThemeState {
 
         // ===== Radius tokens =====
         {
-            let r = self.radii.read().unwrap();
+            let r = self.radii();
             vars.insert("radius-none".into(), px(r.radius_none));
             vars.insert("radius-sm".into(), px(r.radius_sm));
             vars.insert("radius-default".into(), px(r.radius_default));
@@ -695,7 +699,7 @@ impl ThemeState {
 
         // ===== Spacing tokens (4-px scale) =====
         {
-            let s = self.spacing.read().unwrap();
+            let s = self.spacing();
             vars.insert("space-0".into(), px(s.space_0));
             vars.insert("space-0-5".into(), px(s.space_0_5));
             vars.insert("space-1".into(), px(s.space_1));
@@ -822,9 +826,13 @@ impl ThemeState {
         self.spacing.read().unwrap().get(token)
     }
 
-    /// Get all spacing tokens
+    /// Get all spacing tokens, with runtime overrides applied
     pub fn spacing(&self) -> SpacingTokens {
-        self.spacing.read().unwrap().clone()
+        let mut tokens = self.spacing.read().unwrap().clone();
+        for (token, value) in self.spacing_overrides.read().unwrap().iter() {
+            tokens.set(*token, *value);
+        }
+        tokens
     }
 
     /// Set a spacing override (triggers layout)
@@ -858,9 +866,13 @@ impl ThemeState {
         self.radii.read().unwrap().get(token)
     }
 
-    /// Get all radius tokens
+    /// Get all radius tokens, with runtime overrides applied
     pub fn radii(&self) -> RadiusTokens {
-        self.radii.read().unwrap().clone()
+        let mut tokens = self.radii.read().unwrap().clone();
+        for (token, value) in self.radius_overrides.read().unwrap().iter() {
+            tokens.set(*token, *value);
+        }
+        tokens
     }
 
     /// Set a radius override (triggers repaint - radii don't affect layout)
