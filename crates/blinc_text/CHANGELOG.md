@@ -4,6 +4,9 @@ All notable changes to `blinc_text` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `use_fontconfig_sans()`, opt-in: on Linux it asks `fc-match` for fontconfig's default sans and makes it the face `system-ui` resolves to, through the new `FontRegistry::set_system_ui_family`. Nothing changes unless an app calls it; the default stays the built-in list, which costs nothing at startup. Call it once before drawing text.
+
 ### Fixed
 - `FontRegistry::resolve_styled` takes a font stack, the families of a `font-family` list joined with commas, and uses the first one that is installed before the generic family. A name with no comma resolves as before. `family_stack` splits a stack.
 - On Linux the default UI face list is the shared `blinc_core::system_fonts::LINUX_SANS` and now starts with Adwaita Sans, the GNOME 48 interface font, before Cantarell, Ubuntu, Noto Sans and DejaVu Sans.

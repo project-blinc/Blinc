@@ -28,6 +28,7 @@ mod colr;
 pub mod emoji;
 pub mod fallback;
 pub mod font;
+pub mod fontconfig;
 pub mod layout;
 pub mod rasterizer;
 pub mod registry;
@@ -41,6 +42,7 @@ pub use atlas::{AtlasRegion, ColorGlyphAtlas, GlyphAtlas, GlyphInfo};
 pub use emoji::{EmojiRenderer, EmojiSprite, contains_emoji, is_emoji};
 pub use fallback::{FaceChoice, FallbackFaces, FallbackNeeds};
 pub use font::{Font, FontFace, FontMetrics, FontStyle, FontWeight};
+pub use fontconfig::use_fontconfig_sans;
 
 /// Global shared font registry singleton.
 ///

@@ -172,6 +172,8 @@ pub struct FontRegistry {
     generation: u64,
     /// The full system scan. Replaced in tests with a known set of faces.
     scan_system: fn(&mut Database),
+    /// A family the app asked `system-ui` to resolve to, ahead of the platform's own list.
+    system_ui_override: Option<String>,
 }
 
 impl FontRegistry {
@@ -217,6 +219,7 @@ impl FontRegistry {
             system_fonts_loaded: false,
             generation: 0,
             scan_system: Database::load_system_fonts,
+            system_ui_override: None,
         }
         // Note: We don't preload generic fonts here anymore.
         // They'll be loaded on first use. This avoids triggering a full
@@ -864,9 +867,12 @@ impl FontRegistry {
         // `system-ui` is the platform's own interface face, so try that
         // before the generic sans. Falls through when none is installed.
         let id = if generic == GenericFont::System {
-            Self::system_ui_families()
-                .iter()
-                .find_map(|name| self.find_font_id(name, weight, italic))
+            self.find_system_ui_override(weight, italic)
+                .or_else(|| {
+                    Self::system_ui_families()
+                        .iter()
+                        .find_map(|name| self.find_font_id(name, weight, italic))
+                })
                 .or_else(|| self.find_generic_font_id(family, weight, italic))
         } else {
             self.find_generic_font_id(family, weight, italic)
@@ -922,6 +928,32 @@ impl FontRegistry {
         self.generation += 1;
         self.faces
             .retain(|key, val| !key.starts_with("__generic_") || val.is_some());
+    }
+
+    /// Make `family` the face `system-ui` resolves to, ahead of the platform's own list; `None`
+    /// restores the platform list. Opt-in: nothing sets it unless the app does, for example
+    /// through [`crate::use_fontconfig_sans`].
+    ///
+    /// Call it before text is drawn. Glyphs already cached for a family do not change under it.
+    pub fn set_system_ui_family(&mut self, family: Option<String>) {
+        self.system_ui_override = family;
+        self.faces
+            .retain(|key, _| !key.starts_with("__generic_System"));
+        self.generation += 1;
+    }
+
+    /// The face the app asked `system-ui` to resolve to. A family the preloaded set lacks is
+    /// looked for after the system scan, which the app chose by asking.
+    fn find_system_ui_override(&mut self, weight: u16, italic: bool) -> Option<fontdb::ID> {
+        let name = self.system_ui_override.clone()?;
+        if let Some(id) = self.find_font_id(&name, weight, italic) {
+            return Some(id);
+        }
+        if self.system_fonts_loaded {
+            return None;
+        }
+        self.ensure_system_fonts_loaded();
+        self.find_font_id(&name, weight, italic)
     }
 
     /// Load a font with fallback to generic category
@@ -1307,6 +1339,7 @@ mod tests {
             system_fonts_loaded: false,
             generation: 0,
             scan_system: scan_bold,
+            system_ui_override: None,
         }
     }
 
@@ -1346,6 +1379,36 @@ mod tests {
         // A quoted family may hold a comma, and is one family.
         assert_eq!(family_stack("\"Foo, Bar\", Arial"), ["Foo, Bar", "Arial"]);
         assert_eq!(family_stack("\"Say \\\"hi\\\"\", B"), ["Say \"hi\"", "B"]);
+    }
+
+    /// A "system" holding Fira Code, which the preload lacks.
+    fn scan_fira(db: &mut Database) {
+        let data = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/fonts/FiraCode-Regular.ttf"
+        ))
+        .unwrap();
+        db.load_font_data(data);
+    }
+
+    /// An app that asks for a family as the system UI face gets it, found after the system scan
+    /// when the preload lacks it, and can ask for the platform list back.
+    #[test]
+    fn the_system_ui_face_can_be_set_by_the_app() {
+        let mut registry = regular_only();
+        registry.scan_system = scan_fira;
+        let before = registry.load_generic(GenericFont::System).unwrap();
+        assert_ne!(before.family_name(), "Fira Code");
+        let generation = registry.generation();
+
+        registry.set_system_ui_family(Some("Fira Code".to_string()));
+        assert!(registry.generation() > generation);
+        let set = registry.load_generic(GenericFont::System).unwrap();
+        assert_eq!(set.family_name(), "Fira Code");
+
+        registry.set_system_ui_family(None);
+        let restored = registry.load_generic(GenericFont::System).unwrap();
+        assert_ne!(restored.family_name(), "Fira Code");
     }
 
     #[test]
