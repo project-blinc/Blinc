@@ -47,6 +47,10 @@ pub enum FaceChoice {
     Emoji,
     /// The CJK fallback face at this position in the chain.
     Cjk(u8),
+    /// Part of an emoji sequence that the glyph before it draws whole: a skin
+    /// tone modifier, a joiner, the second half of a flag. It has no advance
+    /// and draws nothing.
+    Joined,
 }
 
 /// The fallback faces available to a layout.
@@ -90,6 +94,22 @@ pub(crate) fn is_cluster_duplicate(
     cluster: usize,
 ) -> bool {
     is_emoji(codepoint) && prev_codepoint == codepoint && prev_cluster == cluster
+}
+
+/// Whether `cluster` is an emoji sequence that joins code points into one picture: a skin
+/// tone modifier, a zero-width joiner, or a pair of regional indicators (a flag). A lone
+/// emoji, with or without a variation selector, needs no joining.
+fn is_joined_emoji(cluster: &str) -> bool {
+    let regional = |c: char| matches!(u32::from(c), 0x1F1E6..=0x1F1FF);
+    let modifier = |c: char| matches!(u32::from(c), 0x1F3FB..=0x1F3FF);
+    let mut chars = cluster.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if regional(first) {
+        return chars.next().is_some_and(regional);
+    }
+    is_emoji(first) && !modifier(first) && chars.any(|c| modifier(c) || is_zwj(c))
 }
 
 /// Whether `c` is Chinese, Japanese or Korean script or its punctuation:
@@ -195,6 +215,7 @@ impl FallbackFaces {
             FaceChoice::Symbol => self.symbol.as_ref(),
             FaceChoice::Emoji => self.emoji.as_ref(),
             FaceChoice::Cjk(i) => self.cjk.get(usize::from(i)).map(|(_, f)| f),
+            FaceChoice::Joined => None,
         }
     }
 
@@ -304,6 +325,10 @@ impl FallbackFaces {
         for i in 0..shaped.glyphs.len() {
             let glyph = shaped.glyphs[i];
             let c = glyph.codepoint;
+            // Already settled as part of an emoji sequence.
+            if glyph.face != FaceChoice::Primary {
+                continue;
+            }
 
             if c.is_whitespace() || is_variation_selector(c) || is_zwj(c) {
                 continue;
@@ -360,6 +385,69 @@ impl FallbackFaces {
                 slot.face = choice;
                 break;
             }
+        }
+    }
+}
+
+impl FallbackFaces {
+    /// [`Self::apply`] for the `text` that `shaped` was shaped from, which also draws each
+    /// skin tone, joined and flag sequence as the one glyph the emoji face has for it.
+    ///
+    /// The primary face has no emoji glyphs, so it shapes a sequence into a glyph per code
+    /// point, all in one cluster. Drawn per code point a skin tone is a hand and a blank, and a
+    /// flag vanishes. A sequence the emoji face does not combine keeps its glyph per code
+    /// point.
+    pub fn apply_to(
+        &self,
+        text: &str,
+        shaped: &mut ShapedText,
+        primary: &FontFace,
+        font_size: f32,
+    ) {
+        self.join_emoji_sequences(text, shaped, font_size);
+        self.apply(shaped, primary, font_size);
+    }
+
+    fn join_emoji_sequences(&self, text: &str, shaped: &mut ShapedText, font_size: f32) {
+        let Some(face) = self.emoji.as_ref() else {
+            return;
+        };
+        let shaper = TextShaper::new();
+        let primary_upem = f32::from(shaped.units_per_em);
+        let face_upem = f32::from(face.metrics().units_per_em);
+        let mut i = 0;
+        while i < shaped.glyphs.len() {
+            // The run of glyphs the shaper reported for one cluster.
+            let cluster = shaped.glyphs[i].cluster;
+            let mut end = i + 1;
+            while end < shaped.glyphs.len() && shaped.glyphs[end].cluster == cluster {
+                end += 1;
+            }
+            let start_byte = cluster as usize;
+            let end_byte = shaped
+                .glyphs
+                .get(end)
+                .map_or(text.len(), |g| g.cluster as usize);
+            let joined = text
+                .get(start_byte..end_byte.max(start_byte))
+                .filter(|c| is_joined_emoji(c));
+            if let Some(sequence) = joined {
+                let one = shaper.shape(sequence, face, font_size);
+                if let [g] = one.glyphs.as_slice()
+                    && g.glyph_id != 0
+                {
+                    let slot = &mut shaped.glyphs[i];
+                    slot.glyph_id = g.glyph_id;
+                    slot.x_advance = (g.x_advance as f32 * primary_upem / face_upem).round() as i32;
+                    slot.face = FaceChoice::Emoji;
+                    for glyph in &mut shaped.glyphs[i + 1..end] {
+                        glyph.x_advance = 0;
+                        glyph.x_offset = 0;
+                        glyph.face = FaceChoice::Joined;
+                    }
+                }
+            }
+            i = end;
         }
     }
 }

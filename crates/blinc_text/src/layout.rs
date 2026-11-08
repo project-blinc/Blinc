@@ -76,6 +76,21 @@ impl Default for LayoutOptions {
     }
 }
 
+/// A glyph's advance with the letter spacing after it. A glyph that belongs to an emoji
+/// sequence gets none: the sequence is one character, spaced once.
+fn tracked_advance(
+    shaped: &crate::shaper::ShapedText,
+    glyph: &crate::shaper::ShapedGlyph,
+    letter_spacing: f32,
+) -> f32 {
+    let spacing = if glyph.face == crate::fallback::FaceChoice::Joined {
+        0.0
+    } else {
+        letter_spacing
+    };
+    shaped.scale(glyph.x_advance) + spacing
+}
+
 /// A positioned glyph ready for rendering
 #[derive(Debug, Clone, Copy)]
 pub struct PositionedGlyph {
@@ -238,7 +253,7 @@ impl TextLayoutEngine {
         // advances in. Every path below reads `shaped`, so this is the one
         // place the substitution has to happen.
         let mut shaped = self.shaper.shape(text, font, font_size);
-        fallbacks.apply(&mut shaped, font, font_size);
+        fallbacks.apply_to(text, &mut shaped, font, font_size);
 
         // If no wrapping AND no explicit newlines, return single line
         if (options.max_width.is_none() || options.line_break == LineBreakMode::None)
@@ -431,7 +446,7 @@ impl TextLayoutEngine {
 
         for glyph in &shaped.glyphs {
             let x_offset = shaped.scale(glyph.x_offset);
-            let advance = shaped.scale(glyph.x_advance) + options.letter_spacing;
+            let advance = tracked_advance(&shaped, &glyph, options.letter_spacing);
 
             glyphs.push(PositionedGlyph {
                 glyph_id: glyph.glyph_id,
@@ -486,7 +501,7 @@ impl TextLayoutEngine {
                 continue; // Don't include the newline glyph itself
             }
 
-            let advance = shaped.scale(glyph.x_advance) + options.letter_spacing;
+            let advance = tracked_advance(&shaped, &glyph, options.letter_spacing);
 
             // Check if this is a word boundary (at a whitespace character)
             let is_word_break = word_breaks.contains(&(glyph.cluster as usize));
@@ -514,7 +529,7 @@ impl TextLayoutEngine {
                             // Recalculate line width
                             line_width = current_line
                                 .iter()
-                                .map(|g| shaped.scale(g.x_advance) + options.letter_spacing)
+                                .map(|g| tracked_advance(&shaped, g, options.letter_spacing))
                                 .sum();
                             last_word_end = 0;
                             last_word_width = 0.0;
@@ -680,7 +695,7 @@ mod tests {
         let mut last_word_end = 0;
 
         for glyph in shaped.glyphs.iter() {
-            let advance = shaped.scale(glyph.x_advance) + options.letter_spacing;
+            let advance = tracked_advance(&shaped, &glyph, options.letter_spacing);
             let is_word_break = word_breaks.contains(&(glyph.cluster as usize));
 
             if line_width + advance > max_width && !current_line.is_empty() {
@@ -698,7 +713,7 @@ mod tests {
 
                     line_width = current_line
                         .iter()
-                        .map(|g| shaped.scale(g.x_advance) + options.letter_spacing)
+                        .map(|g| tracked_advance(&shaped, g, options.letter_spacing))
                         .sum();
                     last_word_end = 0;
                     broke_line = true;
@@ -794,7 +809,7 @@ mod tests {
         fn calc_width(shaped: &ShapedText, options: &LayoutOptions) -> f32 {
             let mut x = 0.0f32;
             for glyph in &shaped.glyphs {
-                let advance = shaped.scale(glyph.x_advance) + options.letter_spacing;
+                let advance = tracked_advance(&shaped, &glyph, options.letter_spacing);
                 x += advance;
             }
             x
@@ -850,7 +865,7 @@ mod tests {
         fn calc_width(shaped: &ShapedText, options: &LayoutOptions) -> f32 {
             let mut x = 0.0f32;
             for glyph in &shaped.glyphs {
-                let advance = shaped.scale(glyph.x_advance) + options.letter_spacing;
+                let advance = tracked_advance(&shaped, &glyph, options.letter_spacing);
                 x += advance;
             }
             x

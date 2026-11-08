@@ -65,3 +65,76 @@ fn the_caret_stands_at_the_end_of_tracked_text() {
         "the caret is at {caret_x} and the drawn text ends at {text_right}"
     );
 }
+
+/// The drawn width, right edge and caret position of a cn input holding `text`.
+fn input_with(text: &str) -> (f32, f32, f32) {
+    let mut ui = Headless::new(480, 100).unwrap();
+    ui.theme(
+        HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
+        ColorScheme::Light,
+    );
+    blur_all_text_inputs();
+    let data = text_input_data();
+    {
+        let mut d = data.lock().unwrap();
+        d.value = text.to_string();
+        d.cursor = text.chars().count();
+    }
+    let bound = data.clone();
+    ui.mount(move |_| {
+        div()
+            .w(480.0)
+            .h(100.0)
+            .items_center()
+            .justify_center()
+            .child(input(&bound).w(440.0))
+    });
+    ui.leave().settle();
+
+    let tree = ui.tree();
+    let (mut text_box, mut caret_x) = (None, None);
+    let mut stack = vec![tree.root().unwrap()];
+    while let Some(id) = stack.pop() {
+        if let (Some(node), Some(b)) = (tree.get_render_node(id), tree.get_absolute_bounds(id)) {
+            if matches!(&node.element_type, ElementType::Text(t) if t.content == text) {
+                text_box = Some((b.width, b.x + b.width));
+            }
+            if b.width == 2.0
+                && let Some(Transform::Affine2D(a)) = &node.props.transform
+            {
+                caret_x = Some(b.x + a.elements[4]);
+            }
+        }
+        stack.extend(tree.layout_tree.children(id));
+    }
+    let (width, right) = text_box.expect("text run");
+    (width, right, caret_x.expect("caret"))
+}
+
+/// A skin tone, a joined family and a flag are one emoji each. Laid out per code point the
+/// modifier took a character of space and drew nothing, and a typed `👋🏾` left a gap before the
+/// next word.
+#[test]
+fn an_emoji_sequence_takes_the_room_of_one_emoji() {
+    if !Headless::available() {
+        eprintln!("no GPU adapter: skipped");
+        return;
+    }
+    let (single, _, _) = input_with("\u{4f60}\u{597d}\u{1F44B}hello");
+    for sequence in [
+        "\u{1F44B}\u{1F3FE}",
+        "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}",
+        "\u{1F1F3}\u{1F1EC}",
+    ] {
+        let text = format!("\u{4f60}\u{597d}{sequence}hello");
+        let (width, right, caret) = input_with(&text);
+        assert!(
+            (width - single).abs() < 1.0,
+            "{sequence:?} makes the text {width}px wide, one emoji makes it {single}px"
+        );
+        assert!(
+            (caret - right).abs() < 1.0,
+            "the caret is at {caret} and the drawn text ends at {right}"
+        );
+    }
+}

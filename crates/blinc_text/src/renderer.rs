@@ -604,7 +604,7 @@ impl TextRenderer {
             Vec::with_capacity(positioned_glyphs.len());
 
         for (i, positioned) in positioned_glyphs.iter().enumerate() {
-            if positioned.codepoint.is_whitespace() {
+            if positioned.codepoint.is_whitespace() || positioned.face == FaceChoice::Joined {
                 glyph_infos.push(None);
                 continue;
             }
@@ -638,7 +638,7 @@ impl TextRenderer {
             // (see `crate::fallback`), so there is nothing left to correct
             // here: no offset accumulates across glyphs.
             let fallback = match positioned.face {
-                FaceChoice::Primary => None,
+                FaceChoice::Primary | FaceChoice::Joined => None,
                 FaceChoice::Symbol => fallbacks
                     .face(FaceChoice::Symbol)
                     .map(|f| (f, symbol_font_id, false)),
@@ -846,7 +846,7 @@ impl TextRenderer {
         // First pass: rasterize all glyphs
         let mut glyph_infos: Vec<Option<GlyphInfo>> = Vec::with_capacity(positioned_glyphs.len());
         for positioned in &positioned_glyphs {
-            if positioned.codepoint.is_whitespace() {
+            if positioned.codepoint.is_whitespace() || positioned.face == FaceChoice::Joined {
                 glyph_infos.push(None);
                 continue;
             }

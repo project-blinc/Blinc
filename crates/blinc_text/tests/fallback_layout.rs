@@ -431,3 +431,96 @@ fn cjk_glyphs_are_rasterized_with_ink() {
         assert!(ink >= 20, "{c:?} rasterized with only {ink} inked pixels");
     }
 }
+
+/// Emoji sequences that the emoji face draws as one picture: a skin tone, a family joined
+/// with zero-width joiners, a flag.
+const SEQUENCES: [&str; 4] = [
+    "\u{1F44B}\u{1F3FE}",
+    "\u{1F44D}\u{1F3FD}",
+    "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}",
+    "\u{1F1F3}\u{1F1EC}",
+];
+
+/// A sequence takes the room of one emoji and draws as one glyph. Laid out per code point it
+/// took one em for every part, and the modifier, joiners and flag halves drew as blanks.
+#[test]
+fn an_emoji_sequence_lays_out_and_draws_as_one_glyph() {
+    let mut renderer = TextRenderer::new();
+    let mut registry = FontRegistry::new();
+    let engine = TextLayoutEngine::new();
+    let opts = LayoutOptions::default();
+    let mut checked = 0;
+
+    for generic in PRIMARIES {
+        let Ok(primary) = registry.load_generic_with_style(generic, 400, false) else {
+            continue;
+        };
+        let width = |registry: &mut FontRegistry, text: &str| {
+            let faces = FallbackFaces::resolve(registry, &primary, text);
+            engine
+                .layout_with_fallbacks(text, &primary, SIZE, &opts, &faces)
+                .width
+        };
+        let single = width(&mut registry, "a\u{1F600}b") - width(&mut registry, "ab");
+
+        for sequence in SEQUENCES {
+            let text = format!("a{sequence}b");
+            let faces = FallbackFaces::resolve(&mut registry, &primary, &text);
+            if faces.face(blinc_text::FaceChoice::Emoji).is_none() {
+                continue;
+            }
+            let delta = width(&mut registry, &text) - width(&mut registry, "ab");
+            assert!(
+                (delta - single).abs() < 1.0,
+                "{generic:?} {sequence:?} takes {delta:.2}px, one emoji takes {single:.2}px"
+            );
+
+            let drawn = renderer
+                .prepare_text_with_style(
+                    &text,
+                    SIZE,
+                    [1.0; 4],
+                    &LayoutOptions::default(),
+                    None,
+                    generic,
+                    400,
+                    false,
+                )
+                .unwrap()
+                .glyphs
+                .len();
+            assert_eq!(drawn, 3, "{generic:?} {sequence:?}: a, one emoji, b");
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "nothing was checked: no emoji face here");
+}
+
+/// A skin tone changes the picture: the toned hand is another glyph than the plain one.
+#[test]
+fn a_skin_tone_modifier_picks_the_toned_glyph() {
+    let mut registry = FontRegistry::new();
+    let engine = TextLayoutEngine::new();
+    let opts = LayoutOptions::default();
+    let Ok(primary) = registry.load_generic_with_style(GenericFont::System, 400, false) else {
+        return;
+    };
+    let emoji_glyph = |registry: &mut FontRegistry, text: &str| {
+        let faces = FallbackFaces::resolve(registry, &primary, text);
+        faces.face(blinc_text::FaceChoice::Emoji)?;
+        let layout = engine.layout_with_fallbacks(text, &primary, SIZE, &opts, &faces);
+        layout.lines[0]
+            .glyphs
+            .iter()
+            .find(|g| g.face == blinc_text::FaceChoice::Emoji)
+            .map(|g| g.glyph_id)
+    };
+    let (Some(plain), Some(toned)) = (
+        emoji_glyph(&mut registry, "\u{1F44B}"),
+        emoji_glyph(&mut registry, "\u{1F44B}\u{1F3FE}"),
+    ) else {
+        eprintln!("SKIP: no emoji face");
+        return;
+    };
+    assert_ne!(plain, toned, "the modifier was ignored");
+}
