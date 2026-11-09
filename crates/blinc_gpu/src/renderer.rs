@@ -290,6 +290,17 @@ fn aabb_intersects(a: [f32; 4], b: [f32; 4]) -> bool {
     ax + aw > bx && bx + bw > ax && ay + ah > by && by + bh > ay
 }
 
+/// The pipeline constants that make the simple core pipeline from `sdf_core.wgsl`: the optional
+/// blocks a plain solid shape never uses, switched off.
+pub(crate) const SIMPLE_CORE_CONSTANTS: &[(&str, f64)] = &[
+    ("FEAT_GRADIENT", 0.0),
+    ("FEAT_MASK", 0.0),
+    ("FEAT_FILTER", 0.0),
+    ("FEAT_SHADOW", 0.0),
+    ("FEAT_3D", 0.0),
+    ("FEAT_CLIP_SHAPE", 0.0),
+];
+
 /// Configuration for creating a renderer
 #[derive(Clone, Debug)]
 pub struct RendererConfig {
@@ -3706,14 +3717,6 @@ impl GpuRenderer {
         // !Send (single-threaded), so build serially there.
         // The simple core pipeline compiles the same module with the optional blocks off. Tiers
         // whose shader has no feature switches share the full pipeline.
-        const SIMPLE_CORE_CONSTANTS: &[(&str, f64)] = &[
-            ("FEAT_GRADIENT", 0.0),
-            ("FEAT_MASK", 0.0),
-            ("FEAT_FILTER", 0.0),
-            ("FEAT_SHADOW", 0.0),
-            ("FEAT_3D", 0.0),
-            ("FEAT_CLIP_SHAPE", 0.0),
-        ];
         #[cfg(not(target_arch = "wasm32"))]
         let (
             (sdf_core, sdf_core_overlay),

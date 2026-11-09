@@ -35,6 +35,8 @@ pub mod particles;
 pub mod path;
 pub mod primitives;
 pub mod renderer;
+#[cfg(test)]
+mod russl_parity;
 pub mod shaders;
 pub mod text;
 

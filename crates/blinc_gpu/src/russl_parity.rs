@@ -1,0 +1,294 @@
+//! The simple core pipeline built from russl's offline specialisation draws the same pixels as
+//! the one wgpu specialises from `sdf_core.wgsl` with `SIMPLE_CORE_CONSTANTS`.
+
+use crate::primitives::GpuPrimitive;
+use crate::renderer::SIMPLE_CORE_CONSTANTS;
+use wgpu::util::DeviceExt;
+
+const SIZE: u32 = 128;
+
+fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
+    let instance = wgpu::Instance::default();
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::default(),
+        force_fallback_adapter: false,
+        compatible_surface: None,
+    }))
+    .ok()?;
+    if adapter
+        .get_downlevel_capabilities()
+        .flags
+        .contains(wgpu::DownlevelFlags::VERTEX_STORAGE)
+    {
+        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
+    } else {
+        None
+    }
+}
+
+fn layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+    let both = wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT;
+    let buffer = |binding, ty| wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: both,
+        ty: wgpu::BindingType::Buffer {
+            ty,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    };
+    let texture = |binding| wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    };
+    let storage = wgpu::BufferBindingType::Storage { read_only: true };
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: None,
+        entries: &[
+            buffer(0, wgpu::BufferBindingType::Uniform),
+            buffer(1, storage),
+            texture(2),
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+            texture(4),
+            buffer(5, storage),
+        ],
+    })
+}
+
+/// Draw `prims` with `source` (specialised by wgpu with `constants`) and read the pixels back.
+fn draw(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    source: &str,
+    constants: &[(&str, f64)],
+    prims: &[GpuPrimitive],
+) -> Vec<u8> {
+    let format = wgpu::TextureFormat::Rgba8Unorm;
+    let bind_layout = layout(device);
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(source.into()),
+    });
+    let options = wgpu::PipelineCompilationOptions {
+        constants,
+        ..Default::default()
+    };
+    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: None,
+        layout: Some(
+            &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[&bind_layout],
+                push_constant_ranges: &[],
+            }),
+        ),
+        vertex: wgpu::VertexState {
+            module: &module,
+            entry_point: Some("vs_main"),
+            buffers: &[],
+            compilation_options: options.clone(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &module,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: options,
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+        cache: None,
+    });
+
+    let uniforms: [f32; 4] = [SIZE as f32, SIZE as f32, 0.0, 0.0];
+    let buffer = |contents: &[u8], usage| {
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents,
+            usage,
+        })
+    };
+    let uniforms = buffer(bytemuck::bytes_of(&uniforms), wgpu::BufferUsages::UNIFORM);
+    let primitives = buffer(bytemuck::cast_slice(prims), wgpu::BufferUsages::STORAGE);
+    let aux = buffer(&[0u8; 16], wgpu::BufferUsages::STORAGE);
+    let atlas = device
+        .create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+        .create_view(&Default::default());
+    let sampler = device.create_sampler(&Default::default());
+    let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &bind_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniforms.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: primitives.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(&atlas),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: wgpu::BindingResource::TextureView(&atlas),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: aux.as_entire_binding(),
+            },
+        ],
+    });
+
+    let target = device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d {
+            width: SIZE,
+            height: SIZE,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let readback = device.create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size: (SIZE * SIZE * 4) as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&Default::default());
+    {
+        let view = target.create_view(&Default::default());
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: None,
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        pass.set_pipeline(&pipeline);
+        pass.set_bind_group(0, &bind, &[]);
+        pass.draw(0..6, 0..prims.len() as u32);
+    }
+    encoder.copy_texture_to_buffer(
+        target.as_image_copy(),
+        wgpu::TexelCopyBufferInfo {
+            buffer: &readback,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(SIZE * 4),
+                rows_per_image: None,
+            },
+        },
+        wgpu::Extent3d {
+            width: SIZE,
+            height: SIZE,
+            depth_or_array_layers: 1,
+        },
+    );
+    queue.submit([encoder.finish()]);
+    let slice = readback.slice(..);
+    slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+    device
+        .poll(wgpu::PollType::Wait)
+        .expect("the copy finishes");
+    slice.get_mapped_range().to_vec()
+}
+
+#[test]
+fn the_offline_simple_pipeline_draws_what_the_runtime_one_draws() {
+    let Some((device, queue)) = device() else {
+        eprintln!("no adapter with vertex storage: skipped");
+        return;
+    };
+    let prims = [
+        GpuPrimitive::rect(8.0, 8.0, 52.0, 40.0)
+            .with_color(0.9, 0.2, 0.1, 1.0)
+            .with_corner_radius(10.0),
+        GpuPrimitive::rect(68.0, 8.0, 52.0, 40.0)
+            .with_color(0.1, 0.4, 0.9, 0.8)
+            .with_border(3.0, 0.0, 0.0, 0.0, 1.0),
+        GpuPrimitive::circle(34.0, 90.0, 26.0).with_color(0.2, 0.8, 0.3, 1.0),
+        GpuPrimitive::rect(64.0, 60.0, 60.0, 60.0)
+            .with_color(0.6, 0.1, 0.7, 1.0)
+            .with_corner_radii(4.0, 16.0, 4.0, 16.0)
+            .with_clip_rounded_rect(70.0, 66.0, 48.0, 48.0, 12.0, 12.0, 12.0, 12.0),
+    ];
+    for p in &prims {
+        assert!(p.is_simple_core(), "{p:?} is not a simple core primitive");
+    }
+    let runtime = draw(
+        &device,
+        &queue,
+        crate::shaders::SDF_CORE_SHADER,
+        SIMPLE_CORE_CONSTANTS,
+        &prims,
+    );
+    let offline = draw(
+        &device,
+        &queue,
+        russl_fixture_blinc_sdf::simple::WGSL,
+        &[],
+        &prims,
+    );
+    assert!(
+        runtime.iter().any(|&b| b != 0),
+        "the runtime pipeline drew nothing"
+    );
+    let differing = runtime
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(offline.as_chunks::<4>().0)
+        .filter(|(a, b)| a != b)
+        .count();
+    assert_eq!(differing, 0, "{differing} of {} pixels differ", SIZE * SIZE);
+}
