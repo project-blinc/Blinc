@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1794137479,"nonce":"gRLuWtIXc2SXIrvuShXykl04cco=","added":["milestone:0.7.0"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794184447,"nonce":"pn7V+LZmMTR+sCUf7NG3Xq31kQ0=","message":"Owner decision 2026-11-09: russl, a Rust-syntax shader language compiled at build time, in its own repository under project-blinc. Plan in be3b505.","files":null}]}
