@@ -9,6 +9,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - The registered iOS Rust builder uses the complete UI build path, including queued core styles, overlays and build-scope cleanup.
 
 ### Changed
+- A desktop window that has drawn nothing for two seconds frees its app's between-frame GPU memory: the window-sized static layer, the offscreen targets and the pooled layer textures (`BlincApp::release_idle_memory`). The next frame paints in full and allocates them again. Not under Wayland keep-alive, which never stops drawing.
 - The desktop app loads its default system font by path, which maps it, instead of reading it into memory: on macOS, SF's `SFNS.ttf` is no longer copied into the heap.
 - Each frame rendered with `render_tree_with_motion_opt`, fast paint or full, calls `GpuRenderer::next_frame`, so an overlay pass that drew only while the app started frees its window-sized texture a second later.
 - The iOS and Android runners present through the compositor as the desktop runner does: a frame with no input, state change, scroll or CSS motion blits the cached static layer and re-records only canvas and overlay content, instead of repainting the tree. Input, text and key events, keyboard insets, rebuilds, stateful updates, scrolling, overlays and CSS state changes request a full paint, and a full paint runs at least once a second. The iOS surface is configured with `COPY_DST`; Android adds it when the surface supports it and otherwise keeps the direct path.

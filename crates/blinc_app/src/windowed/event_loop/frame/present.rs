@@ -789,6 +789,12 @@ pub(super) fn render_and_schedule(
             }
         }
     }
+    // Parked: no frame follows this one. A wake after `IDLE_RELEASE` frees the app's
+    // between-frame GPU memory if nothing has drawn by then (see the `Frame` gate).
+    ws.parked_at = (!any_redraw_signal && !keep_alive).then(std::time::Instant::now);
+    if ws.parked_at.is_some() {
+        wake_proxy_for_pacing.wake_at(crate::windowed::IDLE_RELEASE);
+    }
     t_phase5 = phase5_start.elapsed();
     let t_total = frame_start.elapsed();
     // Feed the rendered-frame wall-clock into the

@@ -3,7 +3,7 @@
 #![allow(unused_variables)]
 
 use super::DesktopLoop;
-use crate::windowed::WindowedContext;
+use crate::windowed::{WindowState, WindowedContext};
 use crate::{ElementBuilder, elapsed_ms};
 use blinc_layout::prelude::*;
 use blinc_platform::{ControlFlow, Event, Window};
@@ -97,6 +97,7 @@ where
                     keep_alive |= ws.wayland_keep_alive;
                 }
                 if !dirty && !stateful_dirty && !keep_alive {
+                    release_when_idle(ws, wake_proxy_for_pacing);
                     return ControlFlow::Continue;
                 }
 
@@ -389,4 +390,23 @@ pub(super) struct FrameVars {
     pub(super) css_only_composite_promotable: bool,
     pub(super) has_visible_overlays: bool,
     pub(super) keep_alive: bool,
+}
+
+/// A frame with nothing to draw: once the window has been parked for `IDLE_RELEASE`, free the
+/// app's between-frame GPU memory. A wake that comes early (the timer keeps the earliest
+/// deadline) asks again for the rest of the wait.
+fn release_when_idle(ws: &mut WindowState, wake: &blinc_platform_desktop::WakeProxy) {
+    let Some(parked_at) = ws.parked_at else {
+        return;
+    };
+    let waited = parked_at.elapsed();
+    if waited < crate::windowed::IDLE_RELEASE {
+        wake.wake_at(crate::windowed::IDLE_RELEASE - waited);
+        return;
+    }
+    ws.parked_at = None;
+    if let Some(app) = ws.app.as_mut() {
+        tracing::debug!("idle: releasing between-frame GPU memory");
+        app.release_idle_memory();
+    }
 }

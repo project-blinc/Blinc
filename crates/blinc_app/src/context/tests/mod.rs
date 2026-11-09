@@ -18,6 +18,7 @@ mod glass_nested_tests;
 mod glass_path_clip_tests;
 mod gpu_pass_group_tests;
 mod grouped_text_tests;
+mod idle_release_tests;
 mod image_group_tests;
 mod image_opacity_tests;
 mod layer_text_clip_tests;

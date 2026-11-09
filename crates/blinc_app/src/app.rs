@@ -548,6 +548,12 @@ impl BlincApp {
         self.ctx.invalidate_render_cache_tagged(source);
     }
 
+    /// Frees the GPU memory kept between frames to draw the next one faster; call it once the
+    /// app has gone idle. See [`crate::context::RenderContext::release_idle_memory`].
+    pub fn release_idle_memory(&mut self) {
+        self.ctx.release_idle_memory();
+    }
+
     /// Drop cached `LayerTexture`s for newly-mounted composite-promoted
     /// subtrees so the next paint re-bakes against fresh GPU `aux_data`.
     /// See [`crate::context::RenderContext::invalidate_overlay_mount_textures`]

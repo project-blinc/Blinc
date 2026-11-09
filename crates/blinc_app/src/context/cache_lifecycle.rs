@@ -26,6 +26,12 @@ impl RenderContext {
         self.invalidate_render_cache_tagged("unspecified");
     }
 
+    /// Frees the GPU memory kept between frames to draw the next one faster (the static layer,
+    /// offscreen targets, pooled layers). Collected content stays; the next frame paints in full.
+    pub fn release_idle_memory(&mut self) {
+        self.renderer.release_idle_memory();
+    }
+
     pub fn invalidate_render_cache_tagged(&mut self, source: &'static str) {
         if self.cached_bg_batch.is_some() {
             tracing::trace!(

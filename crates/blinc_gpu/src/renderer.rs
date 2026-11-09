@@ -28,6 +28,7 @@ use wgpu::util::DeviceExt;
 mod dynamic_image;
 mod foreground;
 mod glass;
+mod idle;
 mod image_blend;
 mod mesh_dispatch;
 mod overlay;
@@ -1138,6 +1139,15 @@ impl LayerTextureCache {
             self.release(texture);
         }
         self.update_named_stats();
+    }
+
+    /// Drop the pooled textures, keeping the named ones.
+    pub fn clear_pools(&mut self) {
+        self.pool_small.clear();
+        self.pool_medium.clear();
+        self.pool_large.clear();
+        self.pool_xlarge.clear();
+        self.update_pool_stats();
     }
 
     /// Clear the entire cache including pool

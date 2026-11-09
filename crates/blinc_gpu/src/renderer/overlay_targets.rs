@@ -34,11 +34,15 @@ pub(super) struct OverlayTargets {
 }
 
 impl OverlayTargets {
+    pub(super) fn clear(&mut self) {
+        self.targets.clear();
+    }
+
     pub(super) fn get(&self, index: usize) -> &OverlayTarget {
         &self.targets[index]
     }
 
-    fn next_frame(&mut self) {
+    pub(super) fn next_frame(&mut self) {
         self.frame += 1;
         let now = self.frame;
         self.targets.retain(|t| now - t.last_use <= IDLE_FRAMES);
@@ -54,12 +58,6 @@ struct CompositeUniforms {
 }
 
 impl GpuRenderer {
-    /// Starts a frame: frees the overlay targets no frame has drawn for a while. Call it once per
-    /// frame; a renderer that is never told keeps its targets.
-    pub fn next_frame(&mut self) {
-        self.overlay_targets.next_frame();
-    }
-
     /// The index of the overlay target for the current viewport at `sample_count`, made if there
     /// is none. It holds until the frame ends.
     pub(super) fn overlay_target(&mut self, sample_count: u32) -> usize {
@@ -223,6 +221,21 @@ mod tests {
         assert!(
             r.overlay_targets.targets.is_empty(),
             "an idle pass kept its target"
+        );
+    }
+
+    #[test]
+    fn a_layer_pool_no_pass_uses_is_flushed_by_frames() {
+        let Some(mut r) = renderer() else { return };
+        let texture = r.layer_texture_cache.acquire(&r.device, (64, 64), false);
+        r.layer_texture_cache.release(texture);
+        assert_eq!(r.layer_texture_cache.pool_small.len(), 1);
+        for _ in 0..=super::super::IDLE_FULL_FLUSH {
+            r.next_frame();
+        }
+        assert!(
+            r.layer_texture_cache.pool_small.is_empty(),
+            "the idle pool kept its texture"
         );
     }
 }

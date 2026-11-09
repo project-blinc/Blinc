@@ -5,7 +5,8 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- `GpuRenderer::next_frame` starts a frame for the renderer's caches: the overlay passes' offscreen targets that no frame has drawn for 60 frames are freed. A renderer never told keeps them.
+- `GpuRenderer::release_idle_memory` frees the static layer, the overlay targets and the pooled layer textures, and maintains the device so wgpu destroys them. `LayerTextureCache::clear_pools` drops the pooled textures and keeps the named ones.
+- `GpuRenderer::next_frame` starts a frame for the renderer's caches: the overlay passes' offscreen targets that no frame has drawn for 60 frames are freed, and the layer texture pool's idle clock moves, so a pool whose layered passes stopped is flushed as it is after 120 idle frames. A renderer never told keeps them.
 - `GpuRenderer::with_offscreen_canvas` shares web surface/device setup with the DOM canvas constructor.
 - `PrimitiveBatch::has_ordered_content` reports the ordered draws a batch holds now (captured groups, ordered images, glass, layer samples, meshes, GPU passes, clipped paths). `has_ordered_draws` is that or the mark left by cross-stream resolution.
 

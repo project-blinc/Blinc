@@ -115,7 +115,13 @@ pub(crate) struct WindowState {
     /// composite-promoted subtrees demote and re-emit at their exact
     /// final state (the fast path never demotes on its own).
     pub prev_css_active: bool,
+    /// When the last frame ended with no further frame asked for. Once the window has stayed
+    /// parked for [`IDLE_RELEASE`], the app frees its between-frame GPU memory.
+    pub parked_at: Option<std::time::Instant>,
 }
+
+/// How long a window stays parked before its app frees the GPU memory kept between frames.
+pub const IDLE_RELEASE: std::time::Duration = std::time::Duration::from_secs(2);
 
 #[cfg(all(feature = "windowed", not(target_os = "android")))]
 impl WindowState {
@@ -153,6 +159,7 @@ impl WindowState {
             #[cfg(target_os = "linux")]
             wayland_keep_alive: false,
             prev_css_active: false,
+            parked_at: None,
         }
     }
 }
