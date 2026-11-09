@@ -43,6 +43,32 @@ selects the direction according to tab order.
 }
 ```
 
+`reorderable` lets the triggers be dragged along the strip. A dragged trigger
+follows the pointer and carries `.cn-tabs-trigger--dragging`; the tabs it
+passes slide aside by the `transform` transition on
+`.cn-tabs-list--reorderable > .cn-tabs-trigger`, and the drop calls back with
+the values in their new order. A press that does not move
+still selects its tab. Keep the order and build the tabs in it:
+
+```rust
+let order = ctx.use_signal(vec!["a".to_string(), "b".to_string()]);
+let mut strip = tabs(tab).reorderable(move |next| order.set(next));
+for value in order.get() {
+    strip = strip.tab(value.clone(), value.clone(), || div());
+}
+```
+
+`closable` gives each trigger a close button (`.cn-tabs-close`) at its end,
+shown on the active trigger and while another is hovered. Pressing it calls back with the tab's
+value without selecting the tab; the app removes the tab:
+
+```rust
+let open = ctx.use_signal(vec!["a".to_string(), "b".to_string()]);
+let strip = tabs(tab).closable(move |value| {
+    open.update(|mut tabs| { tabs.retain(|t| t != value); tabs })
+});
+```
+
 ## Dropdown Menu
 
 Add rows and callbacks directly to the builder:

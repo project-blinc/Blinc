@@ -81,6 +81,9 @@ use blinc_theme::{ColorScheme, ColorToken, RadiusToken, ThemeState};
 use blinc_layout::selector::query_motion;
 use blinc_layout::{InstanceKey, Interaction};
 
+mod close;
+mod reorder;
+
 /// Tabs size variants
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TabsSize {
@@ -313,6 +316,10 @@ struct TabsConfig {
     default_value: Option<String>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
     transition: TabsTransition,
+    /// Set by [`TabsBuilder::reorderable`]: the triggers can be dragged into a new order.
+    on_reorder: Option<reorder::OnReorder>,
+    /// Set by [`TabsBuilder::closable`]: each trigger has a close button.
+    on_close: Option<close::OnClose>,
 }
 
 impl std::fmt::Debug for TabsConfig {
@@ -368,6 +375,8 @@ impl TabsBuilder {
                 default_value: None,
                 on_change: None,
                 transition: TabsTransition::default(),
+                on_reorder: None,
+                on_close: None,
             },
             classes: Vec::new(),
             user_id: None,
@@ -386,6 +395,8 @@ impl TabsBuilder {
                 default_value: None,
                 on_change: None,
                 transition: TabsTransition::default(),
+                on_reorder: None,
+                on_close: None,
             },
             classes: Vec::new(),
             user_id: None,
@@ -472,6 +483,28 @@ impl TabsBuilder {
         self
     }
 
+    /// Let the triggers be dragged along the strip into a new order. The tabs a dragged trigger
+    /// passes slide aside, and dropping calls `on_reorder` with the tabs' values in their new
+    /// order; a press that does not move still selects its tab. The order lasts while the tabs
+    /// live: an app that keeps it builds its tabs in the order it was given.
+    pub fn reorderable<F>(mut self, on_reorder: F) -> Self
+    where
+        F: Fn(Vec<String>) + Send + Sync + 'static,
+    {
+        self.config.on_reorder = Some(Arc::new(on_reorder));
+        self
+    }
+
+    /// Give each trigger a close button, shown on the active trigger and while another is hovered. Pressing it calls
+    /// `on_close` with the tab's value, without selecting the tab; the app removes the tab.
+    pub fn closable<F>(mut self, on_close: F) -> Self
+    where
+        F: Fn(&str) + Send + Sync + 'static,
+    {
+        self.config.on_close = Some(Arc::new(on_close));
+        self
+    }
+
     /// Set the content transition animation
     ///
     /// # Example
@@ -551,7 +584,24 @@ impl TabsBuilder {
             .flex_row()
             .items_center();
 
-        for tab in tabs_for_buttons.iter() {
+        if let Some(on_reorder) = config.on_reorder.clone() {
+            tab_button_area = reorder::strip(
+                trigger_key.clone(),
+                tabs_for_buttons
+                    .iter()
+                    .map(|t| t.menu_item.clone())
+                    .collect(),
+                size,
+                state_for_buttons,
+                on_change.clone(),
+                on_reorder,
+                config.on_close.clone(),
+            );
+        }
+        for tab in tabs_for_buttons
+            .iter()
+            .filter(|_| config.on_reorder.is_none())
+        {
             let value = tab.menu_item.value();
 
             tab_button_area = tab_button_area.child(build_tab_trigger(
@@ -560,6 +610,7 @@ impl TabsBuilder {
                 size,
                 state_for_buttons,
                 on_change.clone(),
+                config.on_close.clone(),
             ));
         }
 
@@ -697,6 +748,7 @@ fn build_tab_trigger(
     size: TabsSize,
     tab_state: Signal<String>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
+    on_close: Option<close::OnClose>,
 ) -> Div {
     let theme = ThemeState::get();
     let value = menu_item.value.clone();
@@ -770,10 +822,12 @@ fn build_tab_trigger(
         })
         .track(&interaction)
         .show(is_active, move || {
+            // Decoration: the pointer goes through it to the trigger and its children.
             div()
                 .class("cn-tabs-indicator")
                 .absolute()
                 .inset(0.0)
+                .pointer_events_none()
                 .animate_bounds(
                     VisualAnimationConfig::all()
                         .with_key(indicator_key.clone())
@@ -783,6 +837,14 @@ fn build_tab_trigger(
         })
         .child(content);
 
+    let close_press = on_close.map(|on_close| {
+        let (button, press) = close::button(trigger_key, &value, on_close);
+        trigger = std::mem::take(&mut trigger)
+            .class("cn-tabs-trigger--closable")
+            .child(button);
+        press
+    });
+
     // Add disabled class
     if disabled {
         trigger = trigger.class("cn-tabs-trigger--disabled");
@@ -791,7 +853,13 @@ fn build_tab_trigger(
     // Clicking the tab that is already selected does nothing.
     if !disabled {
         let value_for_click = value.clone();
-        trigger = trigger.on_click(move |_| {
+        trigger = trigger.on_click(move |ctx| {
+            if close_press
+                .as_ref()
+                .is_some_and(|press| press.took(ctx.mouse_x, ctx.mouse_y))
+            {
+                return;
+            }
             if tab_state.try_get().as_deref() == Some(value_for_click.as_str()) {
                 return;
             }

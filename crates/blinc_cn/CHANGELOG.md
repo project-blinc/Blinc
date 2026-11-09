@@ -5,7 +5,9 @@ All notable changes to `blinc_cn` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `TabsBuilder::closable` gives each trigger a close button, shown on the active trigger and while another is hovered, that reports the tab without selecting it.
 - Tooltips close when their trigger is pressed, and by themselves 5 seconds after opening; `TooltipBuilder::auto_hide_ms` changes the wait. A tooltip whose trigger a click hides no longer stays on screen.
+- `TabsBuilder::reorderable` lets the triggers be dragged into a new order: the dragged trigger follows the pointer and carries `.cn-tabs-trigger--dragging`, the tabs it passes slide aside by a `transform` transition, back and forth while the drag is held, and the drop reports the new order.
 - `ResizablePanelBuilder::visible` shows and hides a panel from a bool, signal or computed, in place: the panel and its handle leave layout and the flexible panels take the space, and the panel returns at its size.
 - `ResizablePanelBuilder::collapsed` folds a fixed panel to a given size, below its minimum and without its handle, in place, and reopens it at the size it had.
 - `ResizableGroupBuilder::handle_hit_padding` sets how far a handle's grab area reaches past its line.
@@ -14,6 +16,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - Typography has a dedicated guide covering all helpers, reactive content, inline composition and CSS class hooks; the gallery embeds that guide.
 
 ### Fixed
+- The pill behind the active tab takes no pointer input, so the desktop runner hovers what is drawn over it, such as a closable tab's close button, however the pointer arrives.
 - A tooltip opens on the side of its trigger that has room in the window, instead of being clamped back over the trigger, and takes no pointer input, so its trigger keeps the hover and the click and leaving it closes the tooltip.
 - Widgets inside a resizable panel keep their handlers when rows change elsewhere: each panel has its id from the first build, so its descendants' stable ids do not change.
 - Tabs give their panel no more height than the tabs have, so a tall panel (a code editor, a long list) scrolls inside it instead of growing past it.

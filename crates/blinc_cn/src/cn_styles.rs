@@ -788,6 +788,37 @@ pub const CN_STYLES: &str = concat!(
     color: var(--text-primary) !important;
     font-weight: 500;
 }
+/* In a reorderable strip a trigger the held one passes slides into its new place. */
+.cn-tabs-list--reorderable > .cn-tabs-trigger {
+    transition: color var(--duration-fast) var(--ease-state), transform var(--duration-normal) var(--ease-out);
+}
+/* A trigger being dragged into a new place: lifted above the ones sliding aside. */
+.cn-tabs-trigger--dragging {
+    z-index: 1;
+    color: var(--text-primary);
+    background: var(--surface);
+    border-radius: var(--radius-default);
+    box-shadow: var(--shadow-md);
+    cursor: grabbing;
+}
+/* A closable trigger's close button: shown on the active trigger and while a trigger is hovered. */
+.cn-tabs-close {
+    /* Centred on the label's lowercase letters rather than its line box. */
+    position: relative;
+    top: 2px;
+    margin-left: var(--space-1);
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-state);
+}
+.cn-tabs-trigger:hover > .cn-tabs-close,
+.cn-tabs-trigger--active > .cn-tabs-close { opacity: 1; }
+.cn-tabs-close:hover {
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--text-primary) 18%, transparent);
+}
 /* The pill behind the active trigger, raised to --surface over the
    --surface-overlay tray. It slides to the next trigger on a switch. */
 .cn-tabs-indicator {
@@ -866,6 +897,10 @@ pub const CN_STYLES: &str = concat!(
 .cn-tabs-trigger--sm { padding: var(--space-1) var(--space-3); font-size: var(--text-sm); }
 .cn-tabs-trigger--md { padding: var(--space-1-5) var(--space-4); font-size: var(--text-sm); }
 .cn-tabs-trigger--lg { padding: var(--space-2) var(--space-5); font-size: var(--text-lg); }
+/* A closable trigger ends at its close button, which carries its own padding. */
+.cn-tabs-trigger--sm.cn-tabs-trigger--closable { padding: var(--space-1) var(--space-1-5) var(--space-1) var(--space-3); }
+.cn-tabs-trigger--md.cn-tabs-trigger--closable { padding: var(--space-1-5) var(--space-1-5) var(--space-1-5) var(--space-4); }
+.cn-tabs-trigger--lg.cn-tabs-trigger--closable { padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5); }
 
 /* ============================================================================
    Select
