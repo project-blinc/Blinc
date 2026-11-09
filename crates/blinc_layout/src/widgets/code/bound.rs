@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use blinc_core::reactive::computed;
 
-use super::{CodeConfig, build_gutter, build_styled_line};
+use super::{CodeConfig, build_gutter, build_styled_line, scroll_sideways};
 use crate::binding::Reactive;
 use crate::div::{Div, div};
 use crate::styled_text::{StyledLine, StyledText};
@@ -78,7 +78,7 @@ pub(super) fn structure(
     }
 
     let line_config = config.clone();
-    container.child(
+    container.child(scroll_sideways(
         div()
             .flex_col()
             .flex_grow()
@@ -87,5 +87,5 @@ pub(super) fn structure(
             .for_each(lines, line_key, move |(_, line): Line| {
                 build_styled_line(&line, &line_config, line_height_px, plain)
             }),
-    )
+    ))
 }

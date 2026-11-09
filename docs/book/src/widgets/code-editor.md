@@ -17,6 +17,10 @@ code(r#"fn main() { println!("Hello"); }"#)
     .w_full()
 ```
 
+The lines scroll sideways in their own scroll container while the gutter stays
+put. In a vertical `scroll()`, give the block `.w_full()` (after the other
+setters) so it is as wide as the scroll and its long lines scroll inside it.
+
 `Code::bound` takes a signal or computed of the text instead, and follows it in
 place: a change rebuilds only the lines it touched, so a block showing a
 compiler's output or a log keeps the rest of its rows.

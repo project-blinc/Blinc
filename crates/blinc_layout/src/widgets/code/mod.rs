@@ -1469,7 +1469,7 @@ impl Code {
             ));
         }
 
-        container.child(code_area)
+        container.child(scroll_sideways(code_area))
     }
 
     // Shadowed Div methods
@@ -2408,6 +2408,15 @@ impl ElementBuilder for CodeEditor {
 const FOLD_COLLAPSED_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5z" fill="currentColor"/></svg>"#;
 /// SVG for fold chevron (down-pointing = expanded)
 const FOLD_EXPANDED_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M3 6l5 5 5-5z" fill="currentColor"/></svg>"#;
+
+/// A block's lines in their own horizontal scroll container, so the gutter beside them stays put
+/// while they scroll sideways.
+fn scroll_sideways(code_area: Div) -> crate::widgets::scroll::Scroll {
+    crate::widgets::scroll::Scroll::new()
+        .direction(crate::scroll::ScrollDirection::Horizontal)
+        .flex_grow()
+        .child(code_area.class("blinc-code-area"))
+}
 
 fn build_gutter(
     visible_lines: &[usize],

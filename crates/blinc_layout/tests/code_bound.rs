@@ -32,12 +32,12 @@ fn frame(tree: &mut RenderTree) {
     tree.compute_layout(600.0, 400.0);
 }
 
-/// The gutter's region and the lines' column, as the block lays them out.
+/// The gutter's region and the lines' column, which sits in the block's sideways scroll.
 fn parts(tree: &RenderTree) -> (LayoutNodeId, LayoutNodeId) {
     let root = tree.root().unwrap();
     let block = tree.layout_tree.children(root)[0];
     let kids = tree.layout_tree.children(block);
-    (kids[0], kids[1])
+    (kids[0], tree.layout_tree.children(kids[1])[0])
 }
 
 fn height(tree: &RenderTree, node: LayoutNodeId) -> f32 {
