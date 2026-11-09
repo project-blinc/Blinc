@@ -19,12 +19,21 @@ fn sheet() -> Stylesheet {
 /// under the cn stylesheet. Returns the tree and the tooltip's node.
 fn hover_open(side: TooltipSide) -> (RenderTree, LayoutNodeId) {
     init();
-    let widget = blinc_cn::tooltip(|| blinc_layout::div::div().w(80.0).h(24.0))
-        .text("Copy")
-        .side(side)
-        .open_delay_ms(0);
+    // Centred, so the tooltip has room on every side and opens on the one asked for.
+    let widget = blinc_layout::div::div()
+        .w(400.0)
+        .h(300.0)
+        .flex_row()
+        .items_center()
+        .justify_center()
+        .child(
+            blinc_cn::tooltip(|| blinc_layout::div::div().w(80.0).h(24.0))
+                .text("Copy")
+                .side(side)
+                .open_delay_ms(0),
+        );
     let mut harness = Harness::new(Box::new(widget), Vec::new(), |_, _, _| {});
-    harness.move_to((20.0, 12.0));
+    harness.move_to((200.0, 150.0));
     let layer = overlay_stack().lock().unwrap().build_overlay_layer();
 
     let mut tree = RenderTree::from_element(&layer);

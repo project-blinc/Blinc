@@ -1007,6 +1007,9 @@ impl OverlayStack {
             if let Some(ref exit) = entry.motion_exit {
                 motion_wrapper = motion_wrapper.exit_animation(exit.clone());
             }
+            if entry.kind == OverlayKind::Tooltip {
+                motion_wrapper = motion_wrapper.pointer_events_none();
+            }
             let positioned = position_wrapper(
                 motion_wrapper.child(content),
                 &entry.position,
@@ -1030,7 +1033,13 @@ fn continue_content(layer: &mut Div, entry: &OverlayEntry, viewport: (f32, f32))
     let Some(css) = &entry.css_motion else {
         return;
     };
-    let mut motion = css.element(Div::new().flex_col());
+    let base = Div::new().flex_col();
+    let base = if entry.kind == OverlayKind::Tooltip {
+        base.pointer_events_none()
+    } else {
+        base
+    };
+    let mut motion = css.element(base);
     // As `motion()` does: content-sized where the position centres or
     // anchors the panel by its own size, filling along an edge.
     motion = match entry.position {

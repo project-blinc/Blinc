@@ -11,8 +11,9 @@ pub(super) fn scope(div: Div, key: String, kind: OverlayKind) -> Div {
     } else {
         div
     };
+    // A tooltip takes no input: the pointer stays on its trigger, which it may overlap.
     if kind == OverlayKind::Tooltip {
-        div.attr("data-focus-passive", "true")
+        div.attr("data-focus-passive", "true").pointer_events_none()
     } else {
         div
     }

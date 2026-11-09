@@ -87,6 +87,8 @@ pub struct TooltipBuilder {
     open_delay_ms: u32,
     /// Delay before closing (ms)
     close_delay_ms: u32,
+    /// How long an open tooltip stays before it closes by itself (ms)
+    auto_hide_ms: u64,
     /// Offset from trigger (pixels)
     offset: f32,
     /// Unique instance key
@@ -125,6 +127,7 @@ impl TooltipBuilder {
             align: TooltipAlign::Center,
             open_delay_ms: 400, // Default 400ms delay before showing
             close_delay_ms: 0,  // Default 0ms delay - hide immediately
+            auto_hide_ms: 5_000,
             offset: 6.0,
             key,
             classes: Vec::new(),
@@ -164,6 +167,14 @@ impl TooltipBuilder {
         self
     }
 
+    /// Close the tooltip by itself this long after it opens, even with the pointer still on
+    /// the trigger (default 5000 ms), so one whose trigger went away without a leave does not
+    /// linger.
+    pub fn auto_hide_ms(mut self, ms: u64) -> Self {
+        self.auto_hide_ms = ms;
+        self
+    }
+
     /// Set the offset from the trigger (in pixels)
     pub fn offset(mut self, offset: f32) -> Self {
         self.offset = offset;
@@ -198,6 +209,7 @@ impl TooltipBuilder {
         let align = self.align;
         let offset = self.offset;
         let close_delay_ms = self.close_delay_ms;
+        let auto_hide_ms = self.auto_hide_ms;
         let tooltip_text = self.text.as_ref().map(clone_reactive);
         let trigger_builder = self.trigger.clone();
 
@@ -205,6 +217,7 @@ impl TooltipBuilder {
         let stored_for_leave = overlay_handle_state;
         let stored_for_open = overlay_handle_state;
         let stored_for_close = overlay_handle_state;
+        let stored_for_press = overlay_handle_state;
 
         let trigger_content = (trigger_builder)();
 
@@ -230,6 +243,20 @@ impl TooltipBuilder {
                     stored_for_enter.set(None);
                 }
 
+                // The side asked for, or the opposite one when the window has no room there:
+                // a tooltip clamped back into the window would cover its trigger.
+                let (vw, vh) = BlincContextState::get().viewport_size();
+                let side = fitting_side(
+                    side,
+                    (
+                        ctx.bounds_x,
+                        ctx.bounds_y,
+                        ctx.bounds_width,
+                        ctx.bounds_height,
+                    ),
+                    offset,
+                    (vw, vh),
+                );
                 // Compute anchor in viewport coords from the trigger's bounds.
                 let (x, y) = calculate_tooltip_position(
                     ctx.bounds_x,
@@ -283,6 +310,7 @@ impl TooltipBuilder {
                     .size(280.0, 32.0)
                     .anchor_direction(anchor_dir)
                     .dismissable_by_mouse_leave(true, close_delay_ms)
+                    .auto_dismiss_after_ms(auto_hide_ms)
                     // No motion_enter/_exit on the builder: the enter is the
                     // `cn-tooltip-enter` keyframes on `.cn-tooltip` in
                     // cn_styles.rs, and the tooltip closes at once.
@@ -291,19 +319,29 @@ impl TooltipBuilder {
                     })
                     // Fill, text colour, radius and shadow are `.cn-tooltip` rules.
                     .content(move || {
+                        // It takes no input, so the pointer stays on the trigger.
                         div()
                             .class("cn-tooltip")
                             .class(side_class)
                             .flex_row()
                             .items_center()
+                            .pointer_events_none()
                             .child(
                                 blinc_layout::text::Text::bound(clone_reactive(&text_owned))
                                     .size(font_size)
-                                    .no_wrap(),
+                                    .no_wrap()
+                                    .pointer_events_none(),
                             )
                     })
                     .show();
                 stored_open.set(Some(handle.raw()));
+            })
+            // Pressing the trigger acts on it, so its tooltip has said what it had to say. This
+            // also closes one whose trigger the press hides, which gets no leave.
+            .on_mouse_down(move |_| {
+                if let Some(raw) = stored_for_press.get() {
+                    OverlayHandle::from_raw(raw).close();
+                }
             })
             .on_hover_leave(move |_| {
                 if let Some(raw) = stored_for_leave.get() {
@@ -329,6 +367,34 @@ impl TooltipBuilder {
 }
 
 /// Calculate position for tooltip based on trigger bounds
+/// The tooltip's rough size, for choosing a side; `size(280, 32)` is only its clamp box.
+const TOOLTIP_ESTIMATE: (f32, f32) = (100.0, 32.0);
+
+/// `side`, unless the viewport has no room for the tooltip there and has room on the opposite
+/// side. An unknown viewport or trigger keeps `side`.
+fn fitting_side(
+    side: TooltipSide,
+    (x, y, w, h): (f32, f32, f32, f32),
+    offset: f32,
+    (vw, vh): (f32, f32),
+) -> TooltipSide {
+    if w <= 0.0 && h <= 0.0 {
+        return side;
+    }
+    let (tw, th) = TOOLTIP_ESTIMATE;
+    let above = y - offset * 6.0 - th >= 0.0;
+    let below = vh <= 0.0 || y + h + offset + th <= vh;
+    let left = x - offset - tw >= 0.0;
+    let right = vw <= 0.0 || x + w + offset + tw <= vw;
+    match side {
+        TooltipSide::Top if !above && below => TooltipSide::Bottom,
+        TooltipSide::Bottom if !below && above => TooltipSide::Top,
+        TooltipSide::Left if !left && right => TooltipSide::Right,
+        TooltipSide::Right if !right && left => TooltipSide::Left,
+        side => side,
+    }
+}
+
 fn calculate_tooltip_position(
     trigger_x: f32,
     trigger_y: f32,

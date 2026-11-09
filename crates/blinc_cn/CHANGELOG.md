@@ -5,6 +5,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Tooltips close when their trigger is pressed, and by themselves 5 seconds after opening; `TooltipBuilder::auto_hide_ms` changes the wait. A tooltip whose trigger a click hides no longer stays on screen.
 - `ResizablePanelBuilder::visible` shows and hides a panel from a bool, signal or computed, in place: the panel and its handle leave layout and the flexible panels take the space, and the panel returns at its size.
 - `ResizablePanelBuilder::collapsed` folds a fixed panel to a given size, below its minimum and without its handle, in place, and reopens it at the size it had.
 - `ResizableGroupBuilder::handle_hit_padding` sets how far a handle's grab area reaches past its line.
@@ -13,6 +14,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - Typography has a dedicated guide covering all helpers, reactive content, inline composition and CSS class hooks; the gallery embeds that guide.
 
 ### Fixed
+- A tooltip opens on the side of its trigger that has room in the window, instead of being clamped back over the trigger, and takes no pointer input, so its trigger keeps the hover and the click and leaving it closes the tooltip.
 - Widgets inside a resizable panel keep their handlers when rows change elsewhere: each panel has its id from the first build, so its descendants' stable ids do not change.
 - Tabs give their panel no more height than the tabs have, so a tall panel (a code editor, a long list) scrolls inside it instead of growing past it.
 - Dragging a resizable handle starts from the sizes the panels are laid out at, so a drag beside a flexible panel with a minimum no longer throws the fixed panel to the wrong size.

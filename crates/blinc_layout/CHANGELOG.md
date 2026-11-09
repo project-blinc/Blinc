@@ -15,6 +15,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - `DivRef::bounds`, `ElementHandle::bounds` and the context's bounds query report an element's position in the window, scrolled as drawn, as pointer events do; they gave it relative to its parent. Reordering tabs away from the window's left edge works in both directions.
 - A node built after the first stylesheet pass (a region's new row, say) keeps the layout its class rules give it when a bound class leaves it: a tab added to a strip no longer loses its padding when it stops being the active one.
 - A read-only code block's lines scroll sideways in their own scroll container, so its gutter no longer scrolls away with them.
+- A tooltip overlay's wrappers take no pointer input.
 - A scroll goes to the nearest container under the pointer that scrolls its axis: a horizontal scroller inside a vertical one takes sideways scrolls and lets vertical ones by to its parent.
 - A code editor's `on_change` runs after the editor is unlocked, so a callback that reads or edits the editor no longer deadlocks the thread that delivers input.
 - A class or attribute bound with `class_when` or `attr_when` is matched only against the rules that name it, and its descendants only when a rule names it in an ancestor position, so building a tree with bound classes no longer matches the whole stylesheet against each one's subtree.
