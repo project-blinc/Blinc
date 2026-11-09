@@ -20,17 +20,24 @@ struct Scene {
     tree: RenderTree,
     router: EventRouter,
     collapsed: State<bool>,
+    /// The flag the "Inspector" toggle item follows.
+    inspector: State<bool>,
 }
 
 fn scene() -> Scene {
     init();
     let collapsed = State::new(signal(false), global_graph(), global_dirty_flag());
+    let inspector = State::new(signal(false), global_graph(), global_dirty_flag());
+    let flag = inspector.clone();
     let bar = blinc_cn::sidebar(collapsed.signal())
         .show_toggle(true)
         .section("Mail")
         .item_active("Inbox", ICON, || {})
         .item("Drafts", ICON, || {})
-        .item("Archive", ICON, || {});
+        .item("Archive", ICON, || {})
+        .toggle_item("Inspector", ICON, inspector.signal(), move || {
+            flag.update(|on| !on)
+        });
     let host = div().w(600.0).h(400.0).child(bar);
     let mut tree = RenderTree::from_element(&host);
     // cn's rules size the rail; the test's rule marks the active item.
@@ -44,6 +51,7 @@ fn scene() -> Scene {
         tree,
         router: EventRouter::new(),
         collapsed,
+        inspector,
     }
 }
 
@@ -125,12 +133,46 @@ fn choosing_an_item_moves_the_active_mark() {
     guarded(|| {
         let mut s = scene();
         let items = s.find_class("cn-sidebar-item");
-        assert_eq!(items.len(), 3);
+        assert_eq!(items.len(), 4);
         assert!(s.active(items[0]), "the item marked active is not");
         assert!(!s.active(items[1]));
 
         s.click(items[1]);
         assert!(s.active(items[1]), "the chosen item is not marked active");
         assert!(!s.active(items[0]), "the old item is still marked active");
+    })
+}
+
+#[test]
+fn a_toggle_item_follows_its_flag_and_leaves_the_selection() {
+    guarded(|| {
+        let mut s = scene();
+        let items = s.find_class("cn-sidebar-item");
+        let toggle = items[3];
+        assert!(
+            !s.active(toggle),
+            "the toggle is active while its flag is off"
+        );
+
+        s.click(toggle);
+        assert!(
+            s.inspector.get(),
+            "pressing the toggle did not run its action"
+        );
+        assert!(
+            s.active(toggle),
+            "the toggle is not active while its flag is on"
+        );
+        assert!(s.active(items[0]), "pressing the toggle took the selection");
+
+        s.click(toggle);
+        assert!(
+            !s.active(toggle),
+            "the toggle stayed active after its flag went off"
+        );
+
+        s.inspector.set(true);
+        s.frame();
+        assert!(s.active(toggle), "the toggle did not follow its flag");
     })
 }

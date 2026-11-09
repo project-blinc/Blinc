@@ -9,7 +9,9 @@
 //! holds stays laid out as it is, clipped by the narrowing width: labels fade
 //! and group titles fold away by rule.
 //!
-//! Items carry `data-active` while they are the selection.
+//! Items carry `data-active` while they are the selection. A toggle item, added
+//! with [`SidebarBuilder::toggle_item`], carries it while its bound flag holds
+//! instead, and is never the selection.
 //!
 //! # Example
 //!
@@ -47,6 +49,7 @@ use std::sync::Arc;
 use blinc_core::reactive::Signal;
 use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_layout::InstanceKey;
+use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId};
 use blinc_layout::prelude::*;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
@@ -66,6 +69,8 @@ pub struct SidebarItem {
     on_click: Arc<dyn Fn() + Send + Sync>,
     /// Whether this item is active/selected
     is_active: bool,
+    /// Active while this holds, in place of the selection.
+    active_when: Option<Reactive<bool>>,
 }
 
 impl SidebarItem {
@@ -80,6 +85,7 @@ impl SidebarItem {
             icon: icon.into(),
             on_click: Arc::new(on_click),
             is_active: false,
+            active_when: None,
         }
     }
 
@@ -219,12 +225,17 @@ impl Sidebar {
 fn item_row(item: &SidebarItem, active_menu: Signal<Option<SidebarItem>>, font_size: f32) -> Div {
     let label = item.label.clone();
     let initially_active = item.is_active;
-    let active = computed(
-        move |g: &ReactiveGraph| match g.get(active_menu).flatten() {
+    let active_when = item.active_when.clone();
+    let toggles = active_when.is_some();
+    let active = computed(move |g: &ReactiveGraph| {
+        if let Some(on) = &active_when {
+            return on.read(g).unwrap_or(false);
+        }
+        match g.get(active_menu).flatten() {
             Some(selected) => selected.label == label,
             None => initially_active,
-        },
-    );
+        }
+    });
     let chosen = item.clone();
     div()
         .class("cn-sidebar-item")
@@ -252,7 +263,9 @@ fn item_row(item: &SidebarItem, active_menu: Signal<Option<SidebarItem>>, font_s
                 .pointer_events_none(),
         )
         .on_click(move |_| {
-            active_menu.set(Some(chosen.clone()));
+            if !toggles {
+                active_menu.set(Some(chosen.clone()));
+            }
             (chosen.on_click)();
         })
 }
@@ -368,6 +381,26 @@ impl SidebarBuilder {
         F: Fn() + Send + Sync + 'static,
     {
         let item = SidebarItem::new(label, icon, on_click).active(true);
+        if let Some(section) = self.sections.last_mut() {
+            section.items.push(item);
+        }
+        self
+    }
+
+    /// Add an item that toggles something rather than navigating: active
+    /// while `on` holds, and pressing it leaves the selection as it is.
+    pub fn toggle_item<F>(
+        mut self,
+        label: impl Into<String>,
+        icon: impl Into<String>,
+        on: impl IntoReactive<bool>,
+        on_click: F,
+    ) -> Self
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let mut item = SidebarItem::new(label, icon, on_click);
+        item.active_when = Some(on.into_reactive());
         if let Some(section) = self.sections.last_mut() {
             section.items.push(item);
         }

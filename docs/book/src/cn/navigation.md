@@ -246,6 +246,15 @@ sidebar(collapsed)
 
 The built-in toggle and external writes to `collapsed` control the same rail.
 Clicking an item marks it active. `.show_toggle(false)` hides the toggle.
+An item that opens and closes something rather than navigating is a
+`toggle_item`: it is active while its bool, signal or computed holds, and
+pressing it leaves the selection alone.
+
+```rust
+sidebar(collapsed).toggle_item("Inspector", icon, inspector_open, move || {
+    inspector_open.update(|open| !open)
+})
+```
 The content builder runs once; its argument is the selection at construction,
 so use bindings or `show`/`for_each` regions for subsequent page changes.
 

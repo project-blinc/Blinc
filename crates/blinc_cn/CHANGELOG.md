@@ -6,6 +6,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 
 ### Added
 - `TabsBuilder::closable` gives each trigger a close button, shown on the active trigger and while another is hovered, that reports the tab without selecting it.
+- `SidebarBuilder::toggle_item` adds an item that is active while a bool, signal or computed holds, for an item that opens a panel rather than navigating; pressing it leaves the selection alone.
 - Tooltips close when their trigger is pressed, and by themselves 5 seconds after opening; `TooltipBuilder::auto_hide_ms` changes the wait. A tooltip whose trigger a click hides no longer stays on screen.
 - `TabsBuilder::reorderable` lets the triggers be dragged into a new order: the dragged trigger follows the pointer and carries `.cn-tabs-trigger--dragging`, the tabs it passes slide aside by a `transform` transition, back and forth while the drag is held, and the drop reports the new order.
 - `ResizablePanelBuilder::visible` shows and hides a panel from a bool, signal or computed, in place: the panel and its handle leave layout and the flexible panels take the space, and the panel returns at its size.
