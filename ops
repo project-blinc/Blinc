@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794252921,"nonce":"nGYcaUIuRyoAjfgPlIEJTu7fYQ0=","message":"Fixed in 005f164b78f7d7286d80c91ad45731fb645b93e6. Option 3 (draw straight into the target) not done.","files":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1794252921,"nonce":"EUO0lrB8n35IPxczcpw0iYk3lo8=","status":2}]}
