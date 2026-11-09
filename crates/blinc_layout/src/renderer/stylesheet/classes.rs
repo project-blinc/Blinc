@@ -15,6 +15,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use crate::css_parser::{ComplexSelector, SelectorPart};
 use crate::element_style::ElementStyle;
 use crate::tree::LayoutNodeId;
 
@@ -271,10 +272,17 @@ impl RenderTree {
         stylesheet: &crate::css_parser::Stylesheet,
         ease: bool,
     ) {
-        let descendants = self.descendants_of(node);
+        // Only a rule that names the class in a compound before its subject can change what a
+        // descendant matches; with none, the descendants are left alone.
+        let reach = rules_naming(stylesheet, &class, Position::Ancestor);
+        let descendants = if reach.is_empty() {
+            Vec::new()
+        } else {
+            self.descendants_of(node)
+        };
         let before: Vec<Vec<usize>> = descendants
             .iter()
-            .map(|d| self.matching_base_rules(*d, stylesheet))
+            .map(|d| self.matching_rules_among(*d, &reach))
             .collect();
 
         let own = node;
@@ -287,12 +295,17 @@ impl RenderTree {
         // descendants match may have.
         let rules = stylesheet.complex_rules();
         for (descendant, before) in descendants.into_iter().zip(before) {
-            let after = self.matching_base_rules(descendant, stylesheet);
-            let added: Vec<usize> = after.into_iter().filter(|i| !before.contains(i)).collect();
+            let after = self.matching_rules_among(descendant, &reach);
+            let added: Vec<usize> = after
+                .iter()
+                .copied()
+                .filter(|i| !before.contains(i))
+                .collect();
             if added.is_empty() {
                 continue;
             }
-            let styles = Self::layer_rules(&before, added, rules);
+            let all_before = self.matched_before(descendant, stylesheet, &before, &after, &added);
+            let styles = Self::layer_rules(&all_before, added, rules);
             self.eased(descendant, stylesheet, ease, |tree| {
                 tree.keep_snapshots(descendant);
                 tree.dynamic_classes
@@ -371,6 +384,42 @@ impl RenderTree {
             .collect()
     }
 
+    /// Which of the `rules` (indices into the stylesheet's rules) match the node now.
+    fn matching_rules_among(
+        &self,
+        node: LayoutNodeId,
+        rules: &[(usize, &ComplexSelector)],
+    ) -> Vec<usize> {
+        let none: HashSet<LayoutNodeId> = HashSet::new();
+        rules
+            .iter()
+            .filter(|(_, selector)| {
+                self.complex_selector_matches(selector, node, &none, &none, None)
+            })
+            .map(|(i, _)| *i)
+            .collect()
+    }
+
+    /// Every base rule the node matched before a class changed, from what it matches now: the
+    /// rules the change could reach were `before` and are `after`, and `added` it gained.
+    fn matched_before(
+        &self,
+        node: LayoutNodeId,
+        stylesheet: &crate::css_parser::Stylesheet,
+        before: &[usize],
+        after: &[usize],
+        added: &[usize],
+    ) -> Vec<usize> {
+        let mut all: Vec<usize> = self
+            .matching_base_rules(node, stylesheet)
+            .into_iter()
+            .filter(|i| !added.contains(i))
+            .collect();
+        all.extend(before.iter().copied().filter(|i| !after.contains(i)));
+        all.sort_unstable();
+        all
+    }
+
     /// The layer a class brings: the rules it `added`, and with them every
     /// rule the node matched `before` that sits later in the cascade than the
     /// first of those. The layer goes over the snapshot, which already holds
@@ -408,7 +457,9 @@ impl RenderTree {
         class: Arc<str>,
         stylesheet: &crate::css_parser::Stylesheet,
     ) {
-        let before = self.matching_base_rules(node, stylesheet);
+        // Only a rule that names the class in its subject can start or stop matching the node.
+        let reach = rules_naming(stylesheet, &class, Position::Subject);
+        let before = self.matching_rules_among(node, &reach);
 
         let mut classes = self.element_registry.get_classes(node).unwrap_or_default();
         if !classes.contains(&class) {
@@ -416,9 +467,18 @@ impl RenderTree {
         }
         self.set_registered_classes(node, classes);
 
-        let after = self.matching_base_rules(node, stylesheet);
-        let added: Vec<usize> = after.into_iter().filter(|i| !before.contains(i)).collect();
-        let styles = Self::layer_rules(&before, added, stylesheet.complex_rules());
+        let after = self.matching_rules_among(node, &reach);
+        let added: Vec<usize> = after
+            .iter()
+            .copied()
+            .filter(|i| !before.contains(i))
+            .collect();
+        let styles = if added.is_empty() {
+            Vec::new()
+        } else {
+            let all_before = self.matched_before(node, stylesheet, &before, &after, &added);
+            Self::layer_rules(&all_before, added, stylesheet.complex_rules())
+        };
 
         // What the node is without the class's rules, kept so it can be put
         // back. It is kept already when a state rule has applied to the node.
@@ -482,4 +542,55 @@ impl RenderTree {
     pub(crate) fn forget_dynamic_classes(&mut self, node: LayoutNodeId) {
         self.dynamic_classes.remove(&node);
     }
+}
+
+/// Where in a selector a class is named.
+#[derive(Clone, Copy, PartialEq)]
+enum Position {
+    /// In the compound the rule applies to.
+    Subject,
+    /// In a compound before it, as an ancestor or sibling.
+    Ancestor,
+}
+
+/// The stateless rules that name `class` at `position`, with their indices. An attribute is
+/// held as a `name=value` class, so a rule naming the attribute names it. A rule with
+/// `:not`, `:is`, `:has` or a state read from attributes there is counted, since it may
+/// depend on it.
+fn rules_naming<'a>(
+    stylesheet: &'a crate::css_parser::Stylesheet,
+    class: &str,
+    position: Position,
+) -> Vec<(usize, &'a ComplexSelector)> {
+    let attribute = class.split('=').next().unwrap_or(class);
+    let names = |part: &SelectorPart| match part {
+        SelectorPart::Class(c) => c == class,
+        SelectorPart::Attribute { name, .. } => name == attribute,
+        SelectorPart::Not(_) | SelectorPart::Is(_) | SelectorPart::Has(_) => true,
+        // `:checked`, `:disabled` and the like read the element's attributes.
+        SelectorPart::State(state) => !state.is_pointer_driven(),
+        _ => false,
+    };
+    stylesheet
+        .complex_rules()
+        .iter()
+        .enumerate()
+        .filter(|(_, (selector, _))| !selector.has_state())
+        .filter(|(_, (selector, _))| {
+            let last = selector.segments.len().saturating_sub(1);
+            selector
+                .segments
+                .iter()
+                .enumerate()
+                .any(|(i, (compound, _))| {
+                    let here = if i == last {
+                        Position::Subject
+                    } else {
+                        Position::Ancestor
+                    };
+                    here == position && compound.parts.iter().any(names)
+                })
+        })
+        .map(|(i, (selector, _))| (i, selector))
+        .collect()
 }
