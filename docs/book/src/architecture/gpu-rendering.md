@@ -216,17 +216,20 @@ scaffolded but gated behind `BLINC_DAMAGE_RECT=1` while it's finished off.
 
 ## Viewport culling
 
-Scroll containers can opt into culling:
+Scroll containers cull by default (`.viewport_cull(false)` turns it off):
 
 ```rust
-scroll().viewport_cull(true).child(big_list)
+scroll().child(big_list)
 ```
 
-When set, children outside the container's bounds (plus a 200 px overscan
-band) emit zero primitives during the walker. They don't enter the static
-batch, the dynamic batch, or any damage rect.
+A child whose subtree lies outside the container's on-screen rect (plus a
+200 px overscan band) emits zero primitives during the walker and is skipped
+by element collection and hit testing. The test covers the child's whole
+subtree, stopping at descendants that clip, so content overflowing into view
+is kept. It does not see past transforms, motions, layout animations, or
+fixed and sticky children, which are always walked.
 
-Fixed and sticky children opt out.
+A node that clips and has no area skips its children entirely.
 
 For animation gating, the same viewport intersection clips the set of
 animating nodes Phase 5 considers when deciding whether to re-arm the next

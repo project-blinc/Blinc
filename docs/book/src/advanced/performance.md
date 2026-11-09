@@ -121,7 +121,6 @@ element, and nothing around the list is rebuilt:
 ```rust
 scroll()
     .h(500.0)
-    .viewport_cull(true)
     .child(
         div()
             .flex_col()
@@ -237,27 +236,23 @@ Emoji images (`emoji()` and `emoji_sized()`) are automatically lazy-loaded.
 The ~180MB system emoji font is only loaded when emoji characters actually
 appear on screen.
 
-## Cull off-screen content in long scrolls
+## What is not drawn
 
-For scroll containers with hundreds or thousands of children, opt into
-viewport culling:
+A scroll container culls what is outside it: a child that, with everything
+under it, lies outside the container's on-screen rect (plus a 200 px overscan
+band) emits **zero primitives**, text, SVGs and images included. It doesn't
+enter the static batch, the dynamic batch, or any damage rect, and it takes
+no pointer events. Animations on off-screen children still tick but don't
+request the next frame. A descendant that overflows its row into view keeps
+the row drawn.
 
-```rust
-scroll()
-    .h(600.0)
-    .viewport_cull(true)
-    .child(
-        items.iter().map(|item| render_item(item))
-    )
-```
+Culling stops below anything that places its content apart from layout (a
+CSS or bound transform, a motion, a layout animation) and at fixed and sticky
+children. `.viewport_cull(false)` turns it off for one container.
 
-With `viewport_cull(true)`, children outside the container's bounds (plus
-a 200 px overscan band) emit **zero primitives**. They don't enter the
-static batch, the dynamic batch, or any damage rect. Animations on
-off-screen children still tick on the background thread but don't request
-the next frame.
-
-Fixed and sticky children opt out automatically.
+A clip with no area draws nothing beneath it, so a closed collapsible,
+accordion section or tree group costs no primitives, though its content is
+still built and laid out. A tab that is not selected is not built at all.
 
 ## Avoid the slow path
 
@@ -337,7 +332,7 @@ samply record target/release/examples/cn_profile
 |----|-------|
 | Prefer CSS `:hover` / `:focus`, then bound properties, then `Stateful` | Branch on a signal read to flip a visual property |
 | Animate `transform`, `opacity`, colours, radii, shadow | Animate `width` / `height` / `padding` / `gap` |
-| Opt long scrolls into `viewport_cull(true)` | Render thousands of children unconditionally |
+| Put long content in a `scroll()`, which culls what is off screen | Lay out thousands of children in a plain `div` that clips them |
 | Use `for_each` keyed by identity for lists that change | Rebuild a list's container to change one row |
 | Batch signal updates | Update signals one at a time |
 | Use `Arc::clone()` | Clone large data into closures |

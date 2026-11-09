@@ -122,6 +122,7 @@ impl RenderContext {
                 None, // No composite-promoted ancestor at root
                 None, // No inherited text path at root
                 [0.0; 4],
+                None, // No culling scroll container above the root
             );
         }
 
@@ -190,6 +191,9 @@ impl RenderContext {
         nearest_composite_ancestor: Option<blinc_layout::tree::StableNodeId>,
         inherited_text_path: Option<Arc<text_clip::CollectedTextPath>>,
         inherited_text_fade: [f32; 4],
+        // The on-screen rect of the nearest culling scroll container, in the space of `bounds`;
+        // `None` where culling is off.
+        cull_view: Option<[f32; 4]>,
     ) {
         // Use animated bounds if this node has layout animation, otherwise use layout bounds
         // This ensures children are positioned correctly during layout animation transitions
@@ -658,7 +662,40 @@ impl RenderContext {
             inside_3d_layer.clone()
         };
 
-        for child_id in tree.layout().children(node) {
+        // Culling follows the paint walk: inside a culling scroll container, a child that draws
+        // wholly outside its rect is skipped. Content placed by a CSS or motion transform or a
+        // 3D layer is positioned apart from `bounds`, so culling stops there.
+        let positioned_apart = node_css_affine.is_some()
+            || child_3d_layer.is_some()
+            || effective_motion_translate != (0.0, 0.0)
+            || effective_motion_scale != (1.0, 1.0)
+            || tree.moves_its_content(node);
+        let children_cull_view = if tree.is_viewport_cull_scroll(node) && !positioned_apart {
+            Some([abs_x, abs_y, bounds.width, bounds.height])
+        } else if positioned_apart {
+            None
+        } else {
+            cull_view
+        };
+        // Children sit at their layout position moved by `new_offset`'s scroll and motion.
+        let cull_shift = tree
+            .layout()
+            .get_absolute_bounds(node)
+            .map(|a| (new_offset.0 - a.x, new_offset.1 - a.y));
+        // A clip with no area shows nothing beneath it (a closed collapsible, say).
+        let clip_is_empty = should_clip && (bounds.width <= 0.0 || bounds.height <= 0.0);
+        let children = if clip_is_empty {
+            Vec::new()
+        } else {
+            tree.layout().children(node)
+        };
+
+        for child_id in children {
+            if let (Some(view), Some(shift)) = (children_cull_view, cull_shift)
+                && tree.draws_outside(child_id, shift, view)
+            {
+                continue;
+            }
             self.collect_elements_recursive(
                 tree,
                 child_id,
@@ -692,6 +729,7 @@ impl RenderContext {
                 tree.get_render_node(node)
                     .filter(|n| should_clip && !n.props.overflow_fade.is_none())
                     .map_or(inherited_text_fade, |n| n.props.overflow_fade.to_array()),
+                children_cull_view,
             );
         }
 

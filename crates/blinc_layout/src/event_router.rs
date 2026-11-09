@@ -1789,18 +1789,15 @@ impl EventRouter {
             // are neither painted nor hit-testable. Visible nested scrolls are
             // still walked and remain the first scroll target in the hit chain.
             if let Some((cx, cy, cw, ch)) = cull_viewport
-                && !child_is_fixed
-                && !child_is_sticky
                 && !child_is_fg
-                && let Some(cb) = tree.layout().get_bounds(child, child_offset)
+                && let Some(abs) = tree.layout().get_absolute_bounds(node)
+                && tree.draws_outside(
+                    child,
+                    (child_offset.0 - abs.x, child_offset.1 - abs.y),
+                    [cx, cy, cw, ch],
+                )
             {
-                let intersects = cb.x + cb.width > cx
-                    && cb.x < cx + cw
-                    && cb.y + cb.height > cy
-                    && cb.y < cy + ch;
-                if !intersects {
-                    continue;
-                }
+                continue;
             }
 
             if let Some(mut result) = self.hit_test_node(
@@ -2027,18 +2024,15 @@ impl EventRouter {
                 let child_is_fg = child_render
                     .map(|n| n.props.layer == crate::element::RenderLayer::Foreground)
                     .unwrap_or(false);
-                if !child_is_fixed
-                    && !child_is_sticky
-                    && !child_is_fg
-                    && let Some(cb) = tree.layout().get_bounds(child, child_offset)
+                if !child_is_fg
+                    && let Some(abs) = tree.layout().get_absolute_bounds(node)
+                    && tree.draws_outside(
+                        child,
+                        (child_offset.0 - abs.x, child_offset.1 - abs.y),
+                        [cx, cy, cw, ch],
+                    )
                 {
-                    let intersects = cb.x + cb.width > cx
-                        && cb.x < cx + cw
-                        && cb.y + cb.height > cy
-                        && cb.y < cy + ch;
-                    if !intersects {
-                        continue;
-                    }
+                    continue;
                 }
             }
 

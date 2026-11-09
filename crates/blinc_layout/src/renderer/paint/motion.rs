@@ -1901,8 +1901,21 @@ impl RenderTree {
                 abs.height,
             )));
         }
+        // Below a node that moves its content, layout bounds are not where things draw.
+        let leaves_cull =
+            !entered_cull && prev_cull_viewport.is_some() && self.moves_its_content(node);
+        if leaves_cull {
+            self.cull_viewport.set(None);
+        }
+        // A clip with no area shows nothing beneath it (a closed collapsible, say).
+        let clip_is_empty = clips_content && (bounds.width <= 0.0 || bounds.height <= 0.0);
+        let children = if clip_is_empty {
+            Vec::new()
+        } else {
+            self.layout_tree.children(node)
+        };
 
-        for child_id in self.layout_tree.children(node) {
+        for child_id in children {
             // Skip 3D children of a group node — they're composed into the group SDF
             if is_3d_group && group_3d_children.contains(&child_id) {
                 continue;
@@ -1912,29 +1925,12 @@ impl RenderTree {
             let child_is_fixed = child_render.map(|n| n.props.is_fixed).unwrap_or(false);
             let child_is_sticky = child_render.map(|n| n.props.is_sticky).unwrap_or(false);
 
-            // Viewport cull: skip painting children whose on-screen
-            // position falls outside the active cull viewport. Fixed and
-            // sticky children opt out: scroll alone does not place them.
+            // Viewport cull: skip a child that, with everything under it, draws outside the
+            // nearest culling scroll container's on-screen rect.
             if let Some((cx, cy, cw, ch)) = self.cull_viewport.get()
-                && !child_is_fixed
-                && !child_is_sticky
-                && let Some(cb) = self.layout_tree.get_absolute_bounds(child_id)
+                && self.draws_outside(child_id, child_paint_scroll, [cx, cy, cw, ch])
             {
-                // 200 px overscan on each axis so a smooth scroll
-                // doesn't pop content in/out at the viewport edge.
-                const OVERSCAN: f32 = 200.0;
-                let vx0 = cx - OVERSCAN;
-                let vy0 = cy - OVERSCAN;
-                let vx1 = cx + cw + OVERSCAN;
-                let vy1 = cy + ch + OVERSCAN;
-                let bx0 = cb.x + child_paint_scroll.0;
-                let by0 = cb.y + child_paint_scroll.1;
-                let bx1 = bx0 + cb.width;
-                let by1 = by0 + cb.height;
-                let intersects = bx1 > vx0 && bx0 < vx1 && by1 > vy0 && by0 < vy1;
-                if !intersects {
-                    continue;
-                }
+                continue;
             }
 
             // Fixed: push counter-scroll to cancel ALL accumulated scroll
@@ -1999,7 +1995,7 @@ impl RenderTree {
         // Restore the parent scope's cull viewport and scroll now that
         // this subtree is fully rendered. Pairs with the `set`s above.
         self.paint_scroll.set(prev_paint_scroll);
-        if entered_cull {
+        if entered_cull || leaves_cull {
             self.cull_viewport.set(prev_cull_viewport);
         }
 

@@ -821,8 +821,9 @@ impl RenderTree {
         self.scroll_physics.contains_key(&node_id)
     }
 
-    /// Check if a scroll container opted into viewport-culling descendants.
-    pub(crate) fn is_viewport_cull_scroll(&self, node_id: LayoutNodeId) -> bool {
+    /// Whether this scroll container culls descendants outside its on-screen rect
+    /// (`Scroll::viewport_cull`, on by default).
+    pub fn is_viewport_cull_scroll(&self, node_id: LayoutNodeId) -> bool {
         self.viewport_cull_scrolls.contains(&node_id)
     }
 

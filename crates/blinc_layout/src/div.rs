@@ -5246,10 +5246,8 @@ pub trait ElementBuilder {
         None
     }
 
-    /// Whether this element opts in to viewport culling for its
-    /// descendants. The renderer skips painting any descendant whose
-    /// post-scroll bounds don't intersect the visible viewport (plus a
-    /// small overscan buffer). Only meaningful on scroll containers.
+    /// Whether this element culls descendants that draw wholly outside its on-screen rect.
+    /// Only scroll containers do (`Scroll::viewport_cull`, on by default).
     fn viewport_cull(&self) -> bool {
         false
     }

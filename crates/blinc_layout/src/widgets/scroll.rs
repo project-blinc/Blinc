@@ -1852,11 +1852,8 @@ pub struct Scroll {
     handlers: EventHandlers,
     /// Optional scroll reference for programmatic control
     scroll_ref: Option<ScrollRef>,
-    /// When true, the renderer skips painting any descendant whose
-    /// post-scroll bounds don't intersect the visible viewport (plus a
-    /// small overscan buffer). Saves GPU primitive memory and draw calls
-    /// for long scrolls with many off-screen children. Layout is still
-    /// computed for all children — this only culls paint.
+    /// Skip descendants that draw wholly outside the viewport (plus an overscan band) in
+    /// paint, element collection and hit testing. On by default; layout still runs for all.
     viewport_cull: bool,
 }
 
@@ -1901,7 +1898,7 @@ impl Scroll {
             physics,
             handlers,
             scroll_ref: None,
-            viewport_cull: false,
+            viewport_cull: true,
         }
     }
 
@@ -1920,7 +1917,7 @@ impl Scroll {
             physics,
             handlers,
             scroll_ref: None,
-            viewport_cull: false,
+            viewport_cull: true,
         }
     }
 
@@ -1938,7 +1935,7 @@ impl Scroll {
             physics,
             handlers,
             scroll_ref: None,
-            viewport_cull: false,
+            viewport_cull: true,
         }
     }
 
@@ -2491,11 +2488,9 @@ impl Scroll {
         self.content(child)
     }
 
-    /// Cull descendants whose post-scroll bounds fall outside the
-    /// visible viewport (with a small overscan buffer for smooth scroll
-    /// preroll). Skips paint only — layout is still computed for every
-    /// child. Use for scroll containers with many children where most
-    /// are off-screen at any time (long lists, dashboards).
+    /// Whether to skip descendants that, with everything under them, draw wholly outside the
+    /// viewport (plus an overscan band): they are not painted, collected or hit-tested. On by
+    /// default; `false` walks every child. Layout is still computed for every child.
     pub fn viewport_cull(mut self, on: bool) -> Self {
         self.viewport_cull = on;
         self

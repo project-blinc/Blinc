@@ -8,6 +8,8 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 
 ### Changed
+- Scroll containers cull by default: `Scroll::viewport_cull` is on unless set `false`. A child is culled only when its whole subtree, stopping at descendants that clip, lies outside the viewport and overscan, so content overflowing into view stays drawn and clickable; culling does not see past transforms, motions, layout animations, or fixed and sticky children. Culled children are now also left out of text, SVG and image collection and hit testing, not only SDF paint. `RenderTree::draws_outside`, `moves_its_content` and `is_viewport_cull_scroll` are public.
+- A node that clips and has no area paints none of its children, so a closed collapsible, accordion section or tree group draws nothing of its content.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
