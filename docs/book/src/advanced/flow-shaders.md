@@ -381,6 +381,15 @@ clock.seek(2.5);        // jump to 2.5 s
 clock.play();           // run from here, at clock.set_rate(0.5) for half speed
 ```
 
+`Canvas::flow` also takes a signal or computed of an `Arc<FlowShader>`. The canvas draws whichever shader it holds when it paints, and a new one repaints it in place, with no rebuild, which suits shaders compiled at run time:
+
+```rust
+let shader = signal(Arc::new(flow_shader(source)?));
+canvas(|_, _| {}).flow(shader).w(300.0).h(300.0)
+// later
+shader.set(Arc::new(flow_shader(edited)?));
+```
+
 The shader carries its own name, and the GPU pipeline cache keys on it. A flow that does not parse or generate is a compile error at the `flow!` call. The expansion names `::blinc_core`, so the calling crate depends on it.
 
 ### Steps and colours

@@ -162,3 +162,67 @@ fn a_canvas_flow_reads_the_cursor_as_its_pointer() {
     pixel(&page, (100, 50), [0, 255, 0, 255]);
     pixel(&page, (140, 50), [0, 0, 255, 255]);
 }
+
+#[test]
+#[ignore] // Requires GPU
+fn a_bound_flow_draws_the_shader_its_signal_holds() {
+    blinc_theme::ThemeState::init(
+        blinc_theme::HybridTheme::bundle(),
+        blinc_theme::ColorScheme::Light,
+    );
+    let solid = |name: &str, rgb: &str| {
+        Arc::new(
+            blinc_layout::flow_shader(&format!(
+                "@flow {name} {{ target: fragment; output color = vec4({rgb}, 1.0); }}"
+            ))
+            .expect("flow parses"),
+        )
+    };
+    let shader = blinc_core::reactive::signal(solid("red", "1.0, 0.0, 0.0"));
+    let ui = div()
+        .w(80.0)
+        .h(80.0)
+        .child(canvas(|_, _| {}).w(80.0).h(80.0).flow(shader));
+    let mut app = BlincApp::with_config(BlincConfig {
+        sample_count: 1,
+        ..Default::default()
+    })
+    .expect("offscreen GPU required");
+    let mut tree = RenderTree::from_element(&ui);
+    tree.compute_layout(80.0, 80.0);
+    let state = RenderState::new(Arc::new(Mutex::new(AnimationScheduler::new())));
+    let texture = app.device().create_texture(&wgpu::TextureDescriptor {
+        label: Some("Bound flow surface"),
+        size: wgpu::Extent3d {
+            width: 80,
+            height: 80,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: app.texture_format(),
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&Default::default());
+    let mut paint = |app: &mut BlincApp, tree: &RenderTree| {
+        app.render_tree_with_motion_opt(tree, &state, &view, None, 80, 80, false)
+            .unwrap();
+        read_rendered_pixels(app.device(), app.queue(), &texture, 80, 80)
+    };
+    pixel(&paint(&mut app, &tree), (40, 40), [255, 0, 0, 255]);
+
+    shader.set(solid("green", "0.0, 1.0, 0.0"));
+    assert!(
+        !blinc_layout::stateful::has_pending_subtree_rebuilds(),
+        "a new shader queued a rebuild"
+    );
+    let updates = blinc_layout::take_pending_partial_prop_updates();
+    assert!(
+        !updates.is_empty(),
+        "a new shader did not ask for a repaint"
+    );
+    tree.apply_partial_property_updates(updates);
+    pixel(&paint(&mut app, &tree), (40, 40), [0, 255, 0, 255]);
+}

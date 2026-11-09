@@ -17,6 +17,17 @@ code(r#"fn main() { println!("Hello"); }"#)
     .w_full()
 ```
 
+`Code::bound` takes a signal or computed of the text instead, and follows it in
+place: a change rebuilds only the lines it touched, so a block showing a
+compiler's output or a log keeps the rest of its rows.
+
+```rust
+let output = signal(String::new());
+Code::bound(output)
+    .syntax(SyntaxConfig::new(RustHighlighter::new()))
+    .line_numbers(true)
+```
+
 ## Editable Code Editor
 
 Full editor with Stateful incremental updates:

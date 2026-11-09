@@ -35,6 +35,8 @@ pub enum PropertyId {
     Color,
     Filter,
     AccentColor,
+    /// A value the element reads when it paints, such as a canvas's flow shader: it repaints.
+    Paint,
 
     // ── layout-affecting (Tier 2) ────────────────────────────────────
     Width,
@@ -155,7 +157,7 @@ impl PropertyId {
         match self {
             // visual cells — patched in RenderProps, no layout / text work
             Background | BorderColor | Opacity | Transform | Shadow | Outline | Color | Filter
-            | AccentColor => SideEffects::VISUAL,
+            | AccentColor | Paint => SideEffects::VISUAL,
 
             // border width affects content rect → layout
             BorderWidth => SideEffects::LAYOUT,

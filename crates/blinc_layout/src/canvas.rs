@@ -38,8 +38,14 @@ use std::rc::Rc;
 use blinc_core::DrawContext;
 use taffy::prelude::*;
 
+use std::sync::Arc;
+
+use blinc_core::FlowShader;
+
+use crate::binding::{IntoReactive, PendingBinding, Reactive, TypedPendingBinding};
 use crate::div::{ElementBuilder, ElementTypeId};
 use crate::element::{RenderLayer, RenderProps};
+use crate::property::PropertyId;
 use crate::tree::{LayoutNodeId, LayoutTree};
 
 /// Bounds passed to canvas render callback.
@@ -146,8 +152,8 @@ pub struct Canvas {
     layer: RenderLayer,
     /// When frames are wanted; `None` wants one every frame it is visible.
     redraw_while: Option<CanvasRedrawFn>,
-    /// A flow shader drawn over the canvas's bounds.
-    flow: Option<std::sync::Arc<blinc_core::FlowShader>>,
+    /// A flow shader drawn over the canvas's bounds, read when the canvas paints.
+    flow: Option<Reactive<Arc<FlowShader>>>,
     /// When the flow asks for frames.
     flow_loop: FlowLoop,
     /// Corner radius of the flow shader's rounded rectangle.
@@ -226,8 +232,11 @@ impl Canvas {
     ///     output color = vec4(wave, wave, wave, 1.0);
     /// }))
     /// ```
-    pub fn flow(mut self, shader: impl Into<std::sync::Arc<blinc_core::FlowShader>>) -> Self {
-        self.flow = Some(shader.into());
+    ///
+    /// A signal or computed of a shader is followed in place: the canvas draws the shader it
+    /// holds when it paints, and repaints when it changes, with no rebuild.
+    pub fn flow(mut self, shader: impl FlowSource) -> Self {
+        self.flow = Some(shader.into_flow());
         self
     }
 
@@ -337,7 +346,20 @@ impl Default for Canvas {
 
 impl ElementBuilder for Canvas {
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        tree.create_node(self.style.clone())
+        let node = tree.create_node(self.style.clone());
+        // A bound shader is read at paint time; its binding only asks for the repaint.
+        let repaint = |_: &mut RenderProps, _: Arc<FlowShader>| {};
+        match &self.flow {
+            Some(Reactive::Bound(state)) => {
+                TypedPendingBinding::new(state.clone(), PropertyId::Paint, repaint).register(node)
+            }
+            Some(Reactive::Computed(computed)) => {
+                TypedPendingBinding::from_computed(computed.clone(), PropertyId::Paint, repaint)
+                    .register(node)
+            }
+            _ => {}
+        }
+        node
     }
 
     fn render_props(&self) -> RenderProps {
@@ -358,7 +380,7 @@ impl ElementBuilder for Canvas {
     }
 
     fn canvas_render_info(&self) -> Option<CanvasRenderFn> {
-        let Some(shader) = self.flow.clone() else {
+        let Some(source) = self.flow.clone() else {
             return self.render_fn.clone();
         };
         // The shader draws over the canvas's bounds after the callback, through the same
@@ -367,6 +389,12 @@ impl ElementBuilder for Canvas {
         let corner_radius = self.flow_radius;
         let flow_loop = self.flow_loop.clone();
         Some(Rc::new(move |ctx, bounds| {
+            let Some(shader) = source.now() else {
+                if let Some(callback) = &callback {
+                    callback(ctx, bounds);
+                }
+                return;
+            };
             let inputs = blinc_core::ShaderInputs {
                 corner_radius,
                 time: match &flow_loop {
@@ -474,6 +502,43 @@ where
     F: Fn(&mut dyn DrawContext, CanvasBounds) + 'static,
 {
     Canvas::with_render(render_fn)
+}
+
+/// What [`Canvas::flow`] takes: a shader, or a signal or computed of one, which the canvas
+/// follows in place.
+pub trait FlowSource {
+    /// The shader as the canvas holds it.
+    fn into_flow(self) -> Reactive<Arc<FlowShader>>;
+}
+
+impl FlowSource for FlowShader {
+    fn into_flow(self) -> Reactive<Arc<FlowShader>> {
+        Reactive::Const(Arc::new(self))
+    }
+}
+
+impl FlowSource for Arc<FlowShader> {
+    fn into_flow(self) -> Reactive<Arc<FlowShader>> {
+        Reactive::Const(self)
+    }
+}
+
+impl FlowSource for blinc_core::Signal<Arc<FlowShader>> {
+    fn into_flow(self) -> Reactive<Arc<FlowShader>> {
+        self.into_reactive()
+    }
+}
+
+impl FlowSource for blinc_core::reactive::Computed<Arc<FlowShader>> {
+    fn into_flow(self) -> Reactive<Arc<FlowShader>> {
+        self.into_reactive()
+    }
+}
+
+impl FlowSource for Reactive<Arc<FlowShader>> {
+    fn into_flow(self) -> Reactive<Arc<FlowShader>> {
+        self
+    }
 }
 
 #[cfg(test)]

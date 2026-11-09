@@ -67,6 +67,7 @@ use crate::widgets::text_input::{
     decrement_focus_count, increment_focus_count, request_continuous_redraw_pub,
 };
 
+mod bound;
 mod diagnostics;
 mod ime;
 mod search;
@@ -1305,6 +1306,8 @@ fn order_positions(a: TextPosition, b: TextPosition) -> (TextPosition, TextPosit
 pub struct Code {
     inner: Div,
     content: String,
+    /// The text to follow, for a block made with [`Code::bound`].
+    source: Option<crate::binding::Reactive<String>>,
     config: CodeConfig,
     highlighter: Option<Arc<dyn SyntaxHighlighter>>,
 }
@@ -1329,11 +1332,27 @@ impl Code {
         let mut code = Self {
             inner: Div::new(),
             content,
+            source: None,
             config,
             highlighter: None,
         };
         code.rebuild_inner();
         code
+    }
+
+    /// A block that shows the text `source` holds, followed in place: a change rebuilds only
+    /// the lines it touched, and the gutter follows the line count.
+    pub fn bound(source: impl crate::binding::IntoReactive<String>) -> Self {
+        use crate::binding::Reactive;
+        match source.into_reactive() {
+            Reactive::Const(text) => Self::new(text),
+            source => {
+                let mut code = Self::new(String::new());
+                code.source = Some(source);
+                code.rebuild_inner();
+                code
+            }
+        }
     }
 
     fn rebuild_inner(&mut self) {
@@ -1395,10 +1414,6 @@ impl Code {
     }
 
     fn create_visual_structure(&self) -> Div {
-        let styled = self.get_styled_content();
-        let line_height_px = self.config.font_size * self.config.line_height;
-        let num_lines = styled.line_count().max(1);
-
         let mut container = div()
             .class("blinc-code")
             .flex_row()
@@ -1407,6 +1422,18 @@ impl Code {
         if let Some(bg) = self.config.bg_color {
             container = container.bg(bg);
         }
+        if let Some(source) = &self.source {
+            return bound::structure(
+                source.clone(),
+                self.highlighter.clone(),
+                &self.config,
+                container,
+            );
+        }
+
+        let styled = self.get_styled_content();
+        let line_height_px = self.config.font_size * self.config.line_height;
+        let num_lines = styled.line_count().max(1);
 
         if self.config.line_numbers {
             let visible: Vec<usize> = (0..num_lines).collect();
