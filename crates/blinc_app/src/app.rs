@@ -97,10 +97,7 @@ impl BlincApp {
         // Load system default font
         for font_path in crate::system_font_paths() {
             let path = std::path::Path::new(font_path);
-            if path.exists()
-                && let Ok(data) = std::fs::read(path)
-            {
-                let _ = text_ctx.load_font_data(data);
+            if path.exists() && text_ctx.load_font(path).is_ok() {
                 break;
             }
         }
@@ -792,11 +789,8 @@ impl BlincApp {
         // Load system default font
         for font_path in crate::system_font_paths() {
             let path = std::path::Path::new(font_path);
-            if path.exists() {
-                if let Ok(data) = std::fs::read(path) {
-                    let _ = text_ctx.load_font_data(data);
-                    break;
-                }
+            if path.exists() && text_ctx.load_font(path).is_ok() {
+                break;
             }
         }
 

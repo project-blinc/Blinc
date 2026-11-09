@@ -41,6 +41,10 @@ tracing = { workspace = true }
 rustc-hash = { workspace = true }
 lru = { workspace = true }
 
+# Font files are mapped, not read, so their pages stay clean and shared.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+memmap2 = "0.9"
+
 [dev-dependencies]
 
 [[test]]

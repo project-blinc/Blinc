@@ -245,11 +245,23 @@ impl FontFace {
         })
     }
 
-    /// Load a font from a file path
+    /// Load a font from a file path. The file is memory-mapped where the platform has files, so
+    /// a large system font is not copied into the heap.
     pub fn from_file(path: &std::path::Path) -> Result<Self> {
-        let data = std::fs::read(path)
-            .map_err(|e| TextError::FontLoadError(format!("Failed to read file: {}", e)))?;
-        Self::from_data(data)
+        let failed =
+            |e: std::io::Error| TextError::FontLoadError(format!("Failed to read file: {}", e));
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let file = std::fs::File::open(path).map_err(failed)?;
+            // SAFETY: the map is read-only; a font file changed under it reads as changed bytes,
+            // which the parser treats as any malformed font.
+            let map = unsafe { memmap2::Mmap::map(&file) }.map_err(failed)?;
+            Self::from_font_data(FontData::from_mapped(Arc::new(map)), 0)
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            Self::from_data(std::fs::read(path).map_err(failed)?)
+        }
     }
 
     /// Get font metrics

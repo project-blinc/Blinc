@@ -8,6 +8,9 @@ All notable changes to `blinc_text` will be documented in this file.
 - `FaceChoice::Joined` and `FallbackFaces::apply_to`; see the emoji sequence fix below. A `match` on `FaceChoice` needs the new arm.
 - `use_fontconfig_sans()`, opt-in: on Linux it asks `fc-match` for fontconfig's default sans and makes it the face `system-ui` resolves to, through the new `FontRegistry::set_system_ui_family`. Nothing changes unless an app calls it; the default stays the built-in list, which costs nothing at startup. Call it once before drawing text.
 
+### Changed
+- `FontFace::from_file` memory-maps the file instead of reading it, so a loaded system font is clean, shared memory rather than a heap copy. New dependency off wasm: `memmap2`.
+
 ### Fixed
 - An emoji sequence is one glyph. A skin tone (`👋🏾`), a joined family and a flag drew as the plain base emoji followed by a blank advance, one em per extra code point, and a typed one left a gap before the next word. `FallbackFaces::apply_to(text, ..)` shapes each such cluster with the emoji face and keeps the single glyph it returns; the other code points become `FaceChoice::Joined`, which has no advance and draws nothing, and the layout engine spaces letters once per sequence. `apply` is unchanged. A sequence the face does not combine keeps a glyph per code point.
 - iOS draws glyphs from faces that keep their outlines in Apple's `hvgl` table, which the software rasterizer cannot read, through CoreText. Pinyin and other CJK text in PingFang no longer renders as blank space.
