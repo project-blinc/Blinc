@@ -13,6 +13,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- A region that builds rows in the same update as a bound class or attribute change elsewhere no longer applies that change unseen: a subtree's style pass syncs bound classes only within the subtree, so the other node's transition still runs. Opening a collapsible built on first open turned its caret at once.
 - A CSS `transform` transition slides a moved element (FLIP) when it carries an identity transform, as a bound transform at rest does, and an element moved again mid-slide carries on from where it is drawn instead of jumping to its last laid-out place.
 - `DivRef::bounds`, `ElementHandle::bounds` and the context's bounds query report an element's position in the window, scrolled as drawn, as pointer events do; they gave it relative to its parent. Reordering tabs away from the window's left edge works in both directions.
 - A node built after the first stylesheet pass (a region's new row, say) keeps the layout its class rules give it when a bound class leaves it: a tab added to a strip no longer loses its padding when it stops being the active one.

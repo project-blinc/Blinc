@@ -171,7 +171,7 @@ impl RenderTree {
         }
 
         // Classes that follow a signal take the rules they match now.
-        self.sync_dynamic_classes();
+        self.sync_dynamic_classes(None);
 
         // Update Stateful base_render_props with CSS-applied values.
         // This ensures that state changes (hover, press) start from CSS-enhanced
@@ -500,8 +500,9 @@ impl RenderTree {
             }
         }
 
-        // Classes that follow a signal take the rules they match now.
-        self.sync_dynamic_classes();
+        // Classes that follow a signal take the rules they match now, in this subtree.
+        let styled: HashSet<LayoutNodeId> = subtree_nodes.iter().copied().collect();
+        self.sync_dynamic_classes(Some(&styled));
 
         // Propagate inherited text properties (color, text-decoration,
         // etc.) down the rebuilt subtree, seeded from what the subtree's

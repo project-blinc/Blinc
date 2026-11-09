@@ -61,11 +61,16 @@ impl RenderTree {
     /// have each node match what its sources hold now. Run at the end of the
     /// passes that apply base styles, which is when the nodes are new or have
     /// been rebuilt.
-    pub(crate) fn sync_dynamic_classes(&mut self) {
+    ///
+    /// `within` limits it to the nodes a subtree pass styled: a node outside it keeps what it
+    /// has, so a change it is easing in the same update is not applied twice, unseen.
+    pub(crate) fn sync_dynamic_classes(&mut self, within: Option<&HashSet<LayoutNodeId>>) {
         let _tree_scope = self.layout_tree.enter_scope();
         let toggles = crate::binding::with_registry(|registry| registry.class_toggles());
         for (node, infos) in toggles {
-            if !self.render_nodes.contains_key(&node) {
+            if !self.render_nodes.contains_key(&node)
+                || within.is_some_and(|set| !set.contains(&node))
+            {
                 continue;
             }
             let entry = self.dynamic_classes.entry(node).or_default();
