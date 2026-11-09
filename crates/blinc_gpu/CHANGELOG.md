@@ -5,6 +5,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `GpuRenderer::next_frame` starts a frame for the renderer's caches: the overlay passes' offscreen targets that no frame has drawn for 60 frames are freed. A renderer never told keeps them.
 - `GpuRenderer::with_offscreen_canvas` shares web surface/device setup with the DOM canvas constructor.
 - `PrimitiveBatch::has_ordered_content` reports the ordered draws a batch holds now (captured groups, ordered images, glass, layer samples, meshes, GPU passes, clipped paths). `has_ordered_draws` is that or the mark left by cross-stream resolution.
 
@@ -17,6 +18,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - On iOS and Android the end-of-frame `GpuRenderer::poll` no longer waits for the GPU to go idle. The CPU encodes the next frame while the GPU draws the last, and the swapchain paces the loop. Desktop keeps the wait.
 
 ### Fixed
+- The overlay passes keep a target per viewport size instead of one shared slot, so a frame that draws the window and a layer of another size no longer rebuilds two window-sized textures each time it switches. A pass at one sample no longer allocates a multisampled texture it never draws into.
 - `draw_shadow` emits nothing for a shadow whose colour has no alpha. The primitive painted nothing but the shader still ran over its whole blurred area, about a screen of fragments for each large card whose `box-shadow` was `none`.
 - The WebGL2 SDF shaders (`sdf_core_dt` and `sdf_core_vb`) composite a border over the fill with source-over alpha, as `sdf_core` does. A semi-transparent border no longer leaks the page through the ring, which drew a dim stroke with a dotted line along rounded corners.
 - Web renderer setup probes for a WebGPU adapter first and uses the WebGL2 backend when there is none. Browsers that expose `navigator.gpu` but return no adapter no longer fail with "No suitable GPU adapter found".

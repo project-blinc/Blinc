@@ -20,6 +20,8 @@ impl RenderContext {
         target_texture: Option<&wgpu::Texture>,
         try_fast_paint: bool,
     ) -> Result<()> {
+        // Once per frame, fast paint or full: frees offscreen targets no recent frame drew.
+        self.renderer.next_frame();
         self.render_tree_frame(
             tree,
             Some(render_state),

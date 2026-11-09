@@ -31,6 +31,7 @@ mod glass;
 mod image_blend;
 mod mesh_dispatch;
 mod overlay;
+mod overlay_targets;
 use image_blend::ImageBlend;
 mod text;
 
@@ -600,23 +601,6 @@ struct BindGroups {
     glass: Option<wgpu::BindGroup>,
     /// Bind group for path pipeline
     path: wgpu::BindGroup,
-}
-
-/// Cached MSAA textures and resources for overlay rendering
-struct CachedMsaaTextures {
-    msaa_texture: wgpu::Texture,
-    msaa_view: wgpu::TextureView,
-    resolve_texture: wgpu::Texture,
-    resolve_view: wgpu::TextureView,
-    width: u32,
-    height: u32,
-    sample_count: u32,
-    /// Sampler for compositing (reused across frames)
-    sampler: wgpu::Sampler,
-    /// Uniform buffer for compositing (reused across frames)
-    composite_uniform_buffer: wgpu::Buffer,
-    /// Bind group for compositing (recreated when textures change)
-    composite_bind_group: wgpu::BindGroup,
 }
 
 /// Cached glass resources to avoid per-frame allocations
@@ -1281,7 +1265,7 @@ pub struct GpuRenderer {
     /// GPU texture memory budget and tracking
     memory_budget: GpuMemoryBudget,
     /// Cached MSAA textures for overlay rendering (avoids per-frame allocation)
-    cached_msaa: Option<CachedMsaaTextures>,
+    overlay_targets: overlay_targets::OverlayTargets,
     overlay_alpha: Option<overlay::AlphaPass>,
     /// Cached glass resources (avoids per-frame allocation)
     cached_glass: Option<CachedGlassResources>,
@@ -2801,7 +2785,7 @@ impl GpuRenderer {
             image_pipeline: None,
             mesh_pipeline: None,
             custom_passes: crate::custom_pass::CustomPassManager::new(),
-            cached_msaa: None,
+            overlay_targets: overlay_targets::OverlayTargets::default(),
             overlay_alpha: None,
             cached_glass: None,
             placeholder_glyph_atlas_view,
@@ -8145,114 +8129,7 @@ impl GpuRenderer {
 
         let (width, height) = self.viewport_size;
 
-        // Check if we need to recreate cached MSAA textures
-        let need_new_textures = match &self.cached_msaa {
-            Some(cached) => {
-                cached.width != width
-                    || cached.height != height
-                    || cached.sample_count != sample_count
-            }
-            None => true,
-        };
-
-        if need_new_textures {
-            // Create MSAA texture for rendering
-            let msaa_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("Overlay MSAA Texture"),
-                size: wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count,
-                dimension: wgpu::TextureDimension::D2,
-                format: self.texture_format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
-            let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-            // Create resolve texture
-            let resolve_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("Overlay Resolve Texture"),
-                size: wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: self.texture_format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            let resolve_view = resolve_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-            // Create sampler (reused across frames)
-            let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
-                label: Some("Overlay Blend Sampler"),
-                mag_filter: wgpu::FilterMode::Linear,
-                min_filter: wgpu::FilterMode::Linear,
-                ..Default::default()
-            });
-
-            // Create composite uniforms (opacity=1.0, blend_mode=normal)
-            #[repr(C)]
-            #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-            struct CompositeUniforms {
-                opacity: f32,
-                blend_mode: u32,
-                _padding: [f32; 2],
-            }
-            let composite_uniforms = CompositeUniforms {
-                opacity: 1.0,
-                blend_mode: 0,
-                _padding: [0.0; 2],
-            };
-            let composite_uniform_buffer =
-                self.device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Composite Uniforms Buffer"),
-                        contents: bytemuck::bytes_of(&composite_uniforms),
-                        usage: wgpu::BufferUsages::UNIFORM,
-                    });
-
-            // Create bind group for compositing
-            let composite_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Overlay Composite Bind Group"),
-                layout: &self.bind_group_layouts.composite,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: composite_uniform_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&resolve_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&sampler),
-                    },
-                ],
-            });
-
-            self.cached_msaa = Some(CachedMsaaTextures {
-                msaa_texture,
-                msaa_view,
-                resolve_texture,
-                resolve_view,
-                width,
-                height,
-                sample_count,
-                sampler,
-                composite_uniform_buffer,
-                composite_bind_group,
-            });
-        }
+        let overlay = self.overlay_target(sample_count);
 
         // Update uniforms. `_padding.x = 1.0` signals the SDF fragment
         // shader that hardware multisample coverage is driving
@@ -8292,7 +8169,7 @@ impl GpuRenderer {
         }
 
         // Get references to the cached textures (after mutable borrows are done)
-        let cached = self.cached_msaa.as_ref().unwrap();
+        let cached = self.overlay_targets.get(overlay);
 
         let mut encoder = self
             .device
@@ -8315,12 +8192,12 @@ impl GpuRenderer {
         // `resolve_target: None`. When sample_count > 1, use the
         // multisampled `msaa_view` with a resolve into `resolve_view`
         // as before.
-        let (pass1_view, pass1_resolve, pass1_store) = if sample_count > 1 {
+        let (pass1_view, pass1_resolve, pass1_store) = if let Some(msaa_view) = &cached.msaa_view {
             // Multisampled: keep the resolved single-sample texture,
             // discard the MSAA texture (we only wanted its resolved
             // output, not the per-sample content).
             (
-                &cached.msaa_view,
+                msaa_view,
                 Some(&cached.resolve_view),
                 wgpu::StoreOp::Discard,
             )
@@ -8459,114 +8336,7 @@ impl GpuRenderer {
 
         let (width, height) = self.viewport_size;
 
-        // Check if we need to recreate cached MSAA textures
-        let need_new_textures = match &self.cached_msaa {
-            Some(cached) => {
-                cached.width != width
-                    || cached.height != height
-                    || cached.sample_count != sample_count
-            }
-            None => true,
-        };
-
-        if need_new_textures {
-            // Create MSAA texture for rendering
-            let msaa_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("Path MSAA Texture"),
-                size: wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count,
-                dimension: wgpu::TextureDimension::D2,
-                format: self.texture_format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
-            let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-            // Create resolve texture
-            let resolve_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("Path Resolve Texture"),
-                size: wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: self.texture_format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            let resolve_view = resolve_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-            // Create sampler
-            let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
-                label: Some("Path Blend Sampler"),
-                mag_filter: wgpu::FilterMode::Linear,
-                min_filter: wgpu::FilterMode::Linear,
-                ..Default::default()
-            });
-
-            // Create composite uniforms
-            #[repr(C)]
-            #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-            struct CompositeUniforms {
-                opacity: f32,
-                blend_mode: u32,
-                _padding: [f32; 2],
-            }
-            let composite_uniforms = CompositeUniforms {
-                opacity: 1.0,
-                blend_mode: 0,
-                _padding: [0.0; 2],
-            };
-            let composite_uniform_buffer =
-                self.device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Path Composite Uniforms Buffer"),
-                        contents: bytemuck::bytes_of(&composite_uniforms),
-                        usage: wgpu::BufferUsages::UNIFORM,
-                    });
-
-            // Create bind group for compositing
-            let composite_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Path Composite Bind Group"),
-                layout: &self.bind_group_layouts.composite,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: composite_uniform_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&resolve_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&sampler),
-                    },
-                ],
-            });
-
-            self.cached_msaa = Some(CachedMsaaTextures {
-                msaa_texture,
-                msaa_view,
-                resolve_texture,
-                resolve_view,
-                width,
-                height,
-                sample_count,
-                sampler,
-                composite_uniform_buffer,
-                composite_bind_group,
-            });
-        }
+        let overlay = self.overlay_target(sample_count);
 
         // Update uniforms
         let uniforms = Uniforms {
@@ -8582,7 +8352,7 @@ impl GpuRenderer {
         self.update_path_buffers(batch);
 
         // Get references to the cached textures
-        let cached = self.cached_msaa.as_ref().unwrap();
+        let cached = self.overlay_targets.get(overlay);
 
         let mut encoder = self
             .device
@@ -8596,9 +8366,9 @@ impl GpuRenderer {
         // constraint is that `resolveTarget` must be None when the
         // color attachment is single-sampled (WebGPU spec). Safari
         // enforces this; Chrome accepts a stray `Some(...)` silently.
-        let (pass1_view, pass1_resolve, pass1_store) = if sample_count > 1 {
+        let (pass1_view, pass1_resolve, pass1_store) = if let Some(msaa_view) = &cached.msaa_view {
             (
-                &cached.msaa_view,
+                msaa_view,
                 Some(&cached.resolve_view),
                 wgpu::StoreOp::Discard,
             )
@@ -8717,112 +8487,7 @@ impl GpuRenderer {
 
         let (width, height) = self.viewport_size;
 
-        // Reuse the shared MSAA texture cache used by the paths / overlay
-        // MSAA paths. When the viewport or sample count changes we rebuild
-        // it; otherwise every MSAA pass this frame shares the same
-        // texture pair + composite bind group.
-        let need_new_textures = match &self.cached_msaa {
-            Some(cached) => {
-                cached.width != width
-                    || cached.height != height
-                    || cached.sample_count != sample_count
-            }
-            None => true,
-        };
-
-        if need_new_textures {
-            let msaa_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("Primitives MSAA Texture"),
-                size: wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count,
-                dimension: wgpu::TextureDimension::D2,
-                format: self.texture_format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
-            let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-            let resolve_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("Primitives Resolve Texture"),
-                size: wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: self.texture_format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            let resolve_view = resolve_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-            let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
-                label: Some("Primitives Blend Sampler"),
-                mag_filter: wgpu::FilterMode::Linear,
-                min_filter: wgpu::FilterMode::Linear,
-                ..Default::default()
-            });
-
-            #[repr(C)]
-            #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-            struct CompositeUniforms {
-                opacity: f32,
-                blend_mode: u32,
-                _padding: [f32; 2],
-            }
-            let composite_uniforms = CompositeUniforms {
-                opacity: 1.0,
-                blend_mode: 0,
-                _padding: [0.0; 2],
-            };
-            let composite_uniform_buffer =
-                self.device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Primitives Composite Uniforms Buffer"),
-                        contents: bytemuck::bytes_of(&composite_uniforms),
-                        usage: wgpu::BufferUsages::UNIFORM,
-                    });
-
-            let composite_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Primitives Composite Bind Group"),
-                layout: &self.bind_group_layouts.composite,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: composite_uniform_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&resolve_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&sampler),
-                    },
-                ],
-            });
-
-            self.cached_msaa = Some(CachedMsaaTextures {
-                msaa_texture,
-                msaa_view,
-                resolve_texture,
-                resolve_view,
-                width,
-                height,
-                sample_count,
-                sampler,
-                composite_uniform_buffer,
-                composite_bind_group,
-            });
-        }
+        let overlay = self.overlay_target(sample_count);
 
         // Update viewport uniform for this pass.
         //
@@ -8848,7 +8513,7 @@ impl GpuRenderer {
         // exactly the way `render_primitives_overlay` does.
         let sdf_ranges = self.upload_sorted_primitives(primitives);
 
-        let cached = self.cached_msaa.as_ref().unwrap();
+        let cached = self.overlay_targets.get(overlay);
 
         let mut encoder = self
             .device
@@ -8859,9 +8524,9 @@ impl GpuRenderer {
         // Pass 1: draw into MSAA (or single-sampled resolve) texture.
         // WebGPU: `resolve_target` must be None when the color
         // attachment is single-sampled, so branch on `sample_count`.
-        let (pass1_view, pass1_resolve, pass1_store) = if sample_count > 1 {
+        let (pass1_view, pass1_resolve, pass1_store) = if let Some(msaa_view) = &cached.msaa_view {
             (
-                &cached.msaa_view,
+                msaa_view,
                 Some(&cached.resolve_view),
                 wgpu::StoreOp::Discard,
             )
