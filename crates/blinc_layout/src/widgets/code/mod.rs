@@ -1833,6 +1833,8 @@ impl CodeEditor {
                     return;
                 }
                 ime::commit(&data_for_text);
+                // Called once the editor is unlocked: a callback may read or edit it.
+                let mut changed: Option<(OnChangeCallback, String)> = None;
                 let needs_refresh = {
                     let mut d = match data_for_text.lock() {
                         Ok(d) => d,
@@ -1856,15 +1858,16 @@ impl CodeEditor {
                             d.insert(&c.to_string());
                             d.reset_cursor_blink();
                             d.ensure_cursor_visible();
-                            if let Some(ref cb) = d.on_change {
-                                cb(&d.value());
-                            }
+                            changed = d.on_change.clone().map(|cb| (cb, d.value()));
                         }
                         true
                     } else {
                         false
                     }
                 };
+                if let Some((cb, value)) = changed {
+                    cb(&value);
+                }
                 if needs_refresh {
                     refresh_stateful(&shared_for_text);
                 }
@@ -1876,6 +1879,8 @@ impl CodeEditor {
                 {
                     ime::commit(&data_for_key);
                 }
+                // Called once the editor is unlocked: a callback may read or edit it.
+                let mut changed: Option<(OnChangeCallback, String)> = None;
                 let needs_refresh = {
                     let mut d = match data_for_key.lock() {
                         Ok(d) => d,
@@ -2084,14 +2089,17 @@ impl CodeEditor {
                         d.reset_cursor_blink();
                         d.ensure_cursor_visible();
                     }
-                    if text_changed && let Some(ref cb) = d.on_change {
-                        cb(&d.value());
+                    if text_changed {
+                        changed = d.on_change.clone().map(|cb| (cb, d.value()));
                     }
                     let should_open_search = d.search_active && d.search_overlay_handle.is_none();
                     let needs_editor_refresh =
                         cursor_changed || text_changed || needs_visual_refresh;
                     (needs_editor_refresh, should_open_search)
                 };
+                if let Some((cb, value)) = changed {
+                    cb(&value);
+                }
                 if needs_refresh.1 {
                     // Open search overlay — don't refresh editor for this
                     open_search_overlay(&data_for_key, &format!("{}:search", "code_editor"));

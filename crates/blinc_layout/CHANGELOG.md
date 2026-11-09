@@ -11,6 +11,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- A code editor's `on_change` runs after the editor is unlocked, so a callback that reads or edits the editor no longer deadlocks the thread that delivers input.
 - A class or attribute bound with `class_when` or `attr_when` is matched only against the rules that name it, and its descendants only when a rule names it in an ancestor position, so building a tree with bound classes no longer matches the whole stylesheet against each one's subtree.
 - The scroll offset a frame paints is rounded to whole device pixels instead of whole points. At 3x a coasting scroll advanced two points a frame, then one, which read as judder as it slowed; it now moves in thirds of a point. Hit testing keeps the exact offset.
 - A finger that rests for more than 100 ms before lifting no longer launches a fling from the speed of its last movement.
