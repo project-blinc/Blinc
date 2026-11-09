@@ -290,17 +290,6 @@ fn aabb_intersects(a: [f32; 4], b: [f32; 4]) -> bool {
     ax + aw > bx && bx + bw > ax && ay + ah > by && by + bh > ay
 }
 
-/// The pipeline constants that make the simple core pipeline from `sdf_core.wgsl`: the optional
-/// blocks a plain solid shape never uses, switched off.
-pub(crate) const SIMPLE_CORE_CONSTANTS: &[(&str, f64)] = &[
-    ("FEAT_GRADIENT", 0.0),
-    ("FEAT_MASK", 0.0),
-    ("FEAT_FILTER", 0.0),
-    ("FEAT_SHADOW", 0.0),
-    ("FEAT_3D", 0.0),
-    ("FEAT_CLIP_SHAPE", 0.0),
-];
-
 /// Configuration for creating a renderer
 #[derive(Clone, Debug)]
 pub struct RendererConfig {
@@ -2535,6 +2524,14 @@ impl GpuRenderer {
             label: Some("SDF Core Shader"),
             source: wgpu::ShaderSource::Wgsl(sdf_core_source.into()),
         });
+        // `sdf_core` with the optional blocks off, specialised when the crate is built. Like the
+        // compact shader below it reads the primitive in the vertex stage: full tier only.
+        let sdf_core_simple_shader = has_vertex_storage.then(|| {
+            device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("SDF Core Simple Shader"),
+                source: wgpu::ShaderSource::Wgsl(crate::sdf_russl::simple::WGSL.into()),
+            })
+        });
         // The compact shader reads the primitive in the vertex stage, so it needs the full tier.
         let sdf_simple_shader = has_vertex_storage.then(|| {
             device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -2590,6 +2587,7 @@ impl GpuRenderer {
             &bind_group_layouts,
             &sdf_shader,
             &sdf_core_shader,
+            sdf_core_simple_shader.as_ref(),
             sdf_simple_shader.as_ref(),
             &sdf_shadow_shader,
             &sdf_3d_shader,
@@ -3536,6 +3534,7 @@ impl GpuRenderer {
         layouts: &BindGroupLayouts,
         sdf_shader: &wgpu::ShaderModule,
         sdf_core_shader: &wgpu::ShaderModule,
+        sdf_core_simple_shader: Option<&wgpu::ShaderModule>,
         sdf_simple_shader: Option<&wgpu::ShaderModule>,
         sdf_shadow_shader: &wgpu::ShaderModule,
         sdf_3d_shader: &wgpu::ShaderModule,
@@ -3715,8 +3714,8 @@ impl GpuRenderer {
         // handles are Send+Sync there); Vulkan drivers overlap the compiles,
         // trimming cold first-launch pipeline build. wasm32 wgpu types are
         // !Send (single-threaded), so build serially there.
-        // The simple core pipeline compiles the same module with the optional blocks off. Tiers
-        // whose shader has no feature switches share the full pipeline.
+        // The simple core pipeline is `sdf_core` with the optional blocks off, specialised at build
+        // time. Tiers without it share the full pipeline.
         #[cfg(not(target_arch = "wasm32"))]
         let (
             (sdf_core, sdf_core_overlay),
@@ -3728,14 +3727,8 @@ impl GpuRenderer {
         ) = std::thread::scope(|s| {
             let h_core =
                 s.spawn(|| make_sdf_pipeline_pair(sdf_core_shader, "SDF Core Pipeline", &[]));
-            let h_simple = has_vertex_storage.then(|| {
-                s.spawn(|| {
-                    make_sdf_pipeline_pair(
-                        sdf_core_shader,
-                        "SDF Core Simple Pipeline",
-                        SIMPLE_CORE_CONSTANTS,
-                    )
-                })
+            let h_simple = sdf_core_simple_shader.map(|shader| {
+                s.spawn(|| make_sdf_pipeline_pair(shader, "SDF Core Simple Pipeline", &[]))
             });
             let h_plain = sdf_simple_shader.map(|shader| {
                 s.spawn(|| make_sdf_pipeline_pair(shader, "SDF Plain Pipeline", &[]))
@@ -3765,13 +3758,8 @@ impl GpuRenderer {
             (sdf_notch, sdf_notch_overlay),
         ) = (
             make_sdf_pipeline_pair(sdf_core_shader, "SDF Core Pipeline", &[]),
-            has_vertex_storage.then(|| {
-                make_sdf_pipeline_pair(
-                    sdf_core_shader,
-                    "SDF Core Simple Pipeline",
-                    SIMPLE_CORE_CONSTANTS,
-                )
-            }),
+            sdf_core_simple_shader
+                .map(|shader| make_sdf_pipeline_pair(shader, "SDF Core Simple Pipeline", &[])),
             sdf_simple_shader
                 .map(|shader| make_sdf_pipeline_pair(shader, "SDF Plain Pipeline", &[])),
             make_sdf_pipeline_pair(sdf_shadow_shader, "SDF Shadow Pipeline", &[]),

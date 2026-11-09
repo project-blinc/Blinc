@@ -65,6 +65,7 @@ wgpu-hal.workspace = true
 gpu-alloc.workspace = true
 naga.workspace = true
 bytemuck.workspace = true
+russl.workspace = true
 
 # Windowing (optional - only needed for desktop)
 winit = { workspace = true, optional = true }
@@ -83,10 +84,6 @@ pollster.workspace = true
 
 # Path tessellation
 lyon.workspace = true
-
-[dev-dependencies]
-# Blinc's SDF core shader built offline by russl, checked against the runtime-specialised one.
-russl_fixture_blinc_sdf = { git = "https://github.com/project-blinc/russl", rev = "16baae097fd32d4ee6b385dc827b1ce818021e08" }
 
 # Browser-only deps for the `with_canvas` constructor — kept under a
 # wasm32 target gate so desktop / mobile builds don't pull `web-sys`

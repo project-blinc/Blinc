@@ -119,6 +119,8 @@ struct Primitive {
 // Feature switches, set per pipeline. The default pipeline keeps every feature; the simple
 // pipeline turns off the ones a plain solid shape never uses, so the compiler does not size
 // the shader's registers for them. Which primitives take it is `GpuPrimitive::is_simple_core`.
+// The simple pipeline is built from the russl copy in `src/sdf_russl`, so a change here goes
+// there too; `russl_parity` fails when the two draw different pixels.
 override FEAT_GRADIENT: bool = true;
 override FEAT_BORDER: bool = true;
 override FEAT_MASK: bool = true;

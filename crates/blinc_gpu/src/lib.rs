@@ -37,6 +37,7 @@ pub mod primitives;
 pub mod renderer;
 #[cfg(test)]
 mod russl_parity;
+mod sdf_russl;
 pub mod shaders;
 pub mod text;
 

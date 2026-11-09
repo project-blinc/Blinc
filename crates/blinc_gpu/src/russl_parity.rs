@@ -1,11 +1,21 @@
-//! The simple core pipeline built from russl's offline specialisation draws the same pixels as
-//! the one wgpu specialises from `sdf_core.wgsl` with `SIMPLE_CORE_CONSTANTS`.
+//! The simple core pipeline, specialised at build time by russl, draws the same pixels as
+//! `sdf_core.wgsl` specialised by wgpu with the same feature switches. The full pipeline is built
+//! from that WGSL, so this keeps the two copies of the shader in step.
 
 use crate::primitives::GpuPrimitive;
-use crate::renderer::SIMPLE_CORE_CONSTANTS;
 use wgpu::util::DeviceExt;
 
 const SIZE: u32 = 128;
+
+/// The switches `sdf_russl::simple` fixes, as wgpu pipeline constants.
+const SIMPLE_CORE_CONSTANTS: &[(&str, f64)] = &[
+    ("FEAT_GRADIENT", 0.0),
+    ("FEAT_MASK", 0.0),
+    ("FEAT_FILTER", 0.0),
+    ("FEAT_SHADOW", 0.0),
+    ("FEAT_3D", 0.0),
+    ("FEAT_CLIP_SHAPE", 0.0),
+];
 
 fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
     let instance = wgpu::Instance::default();
@@ -272,13 +282,7 @@ fn the_offline_simple_pipeline_draws_what_the_runtime_one_draws() {
         SIMPLE_CORE_CONSTANTS,
         &prims,
     );
-    let offline = draw(
-        &device,
-        &queue,
-        russl_fixture_blinc_sdf::simple::WGSL,
-        &[],
-        &prims,
-    );
+    let offline = draw(&device, &queue, crate::sdf_russl::simple::WGSL, &[], &prims);
     assert!(
         runtime.iter().any(|&b| b != 0),
         "the runtime pipeline drew nothing"
