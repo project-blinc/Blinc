@@ -4,10 +4,19 @@ All notable changes to `blinc_cn` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `ResizablePanelBuilder::visible` shows and hides a panel from a bool, signal or computed, in place: the panel and its handle leave layout and the flexible panels take the space, and the panel returns at its size.
+- `ResizablePanelBuilder::collapsed` folds a fixed panel to a given size, below its minimum and without its handle, in place, and reopens it at the size it had.
+- `ResizableGroupBuilder::handle_hit_padding` sets how far a handle's grab area reaches past its line.
+
 ### Documentation
 - Typography has a dedicated guide covering all helpers, reactive content, inline composition and CSS class hooks; the gallery embeds that guide.
 
 ### Fixed
+- Widgets inside a resizable panel keep their handlers when rows change elsewhere: each panel has its id from the first build, so its descendants' stable ids do not change.
+- Tabs give their panel no more height than the tabs have, so a tall panel (a code editor, a long list) scrolls inside it instead of growing past it.
+- Dragging a resizable handle starts from the sizes the panels are laid out at, so a drag beside a flexible panel with a minimum no longer throws the fixed panel to the wrong size.
+- A flexible resizable panel shares the space the fixed panels leave, whatever its content's width: wide content no longer narrows the fixed panels beside it.
 - Sliders expose a labelled adjustable control with a live value. Assistive increment/decrement uses the existing step, bounds and change callback without requiring keyboard focus.
 - Checkbox builders forward their semantic type and row event handlers, exposing one named accessible control whose label and row activate the checkbox.
 - Input labels also name the underlying accessible text field. `InputBuilder::on_submit` forwards Enter/Shift+Enter submission to the core input.

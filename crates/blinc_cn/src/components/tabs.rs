@@ -610,10 +610,13 @@ impl TabsBuilder {
                     .collect::<Vec<String>>()
             });
 
+            // No taller than the share of the tabs it is given, whatever its panel holds, so a
+            // tall panel (a code editor, a list) scrolls inside it.
             div()
                 .w_full()
                 .mt(content_margin)
                 .flex_grow()
+                .min_h(0.0)
                 .relative()
                 .for_each(
                     &shown,

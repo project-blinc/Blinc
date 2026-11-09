@@ -267,3 +267,213 @@ fn a_vertical_group_resizes_heights() {
         assert_eq!(height(&s), 150.0);
     })
 }
+
+#[test]
+fn a_hidden_panel_leaves_its_space_to_the_flexible_one_in_place() {
+    guarded(|| {
+        init();
+        let open = blinc_core::reactive::signal(true);
+        let group = resizable_group()
+            .key("rz_visible")
+            .horizontal()
+            .panel(
+                resizable_panel()
+                    .default_size(200.0)
+                    .visible(open)
+                    .child(div().w_full().h_full()),
+            )
+            .panel(resizable_panel().flex_grow().child(div().w_full().h_full()));
+        let host = div().w(600.0).h(200.0).child(group);
+        let mut s = Scene {
+            tree: RenderTree::from_element(&host),
+            router: EventRouter::new(),
+        };
+        s.tree.compute_layout(600.0, 200.0);
+        let flexible = |s: &Scene| {
+            let panel = s.tree.layout_tree.children(s.group())[2];
+            s.tree.get_absolute_bounds(panel).unwrap().width
+        };
+        let handle = |s: &Scene| {
+            let (node, _) = s.handle();
+            s.tree.get_absolute_bounds(node).unwrap().width
+        };
+        let shown = flexible(&s);
+        assert_eq!(s.first_panel_width(), 200.0);
+
+        open.set(false);
+        s.deliver(Vec::new(), 0.0, 0.0);
+        assert_eq!(
+            flexible(&s),
+            600.0,
+            "the flexible panel did not take the space"
+        );
+        assert_eq!(handle(&s), 0.0, "the handle stayed beside a hidden panel");
+
+        open.set(true);
+        s.deliver(Vec::new(), 0.0, 0.0);
+        assert_eq!(s.first_panel_width(), 200.0);
+        assert_eq!(flexible(&s), shown);
+    })
+}
+
+#[test]
+fn a_collapsed_panel_folds_to_its_size_and_opens_at_the_size_it_had() {
+    guarded(|| {
+        init();
+        let folded = blinc_core::reactive::signal(false);
+        let group = resizable_group()
+            .key("rz_collapsed")
+            .horizontal()
+            .panel(
+                resizable_panel()
+                    .default_size(200.0)
+                    .min_size(120.0)
+                    .collapsed(folded, 40.0)
+                    .child(div().w_full().h_full()),
+            )
+            .panel(resizable_panel().flex_grow().child(div().w_full().h_full()));
+        let host = div().w(600.0).h(200.0).child(group);
+        let mut s = Scene {
+            tree: RenderTree::from_element(&host),
+            router: EventRouter::new(),
+        };
+        s.tree.compute_layout(600.0, 200.0);
+        let handle = |s: &Scene| {
+            let (node, _) = s.handle();
+            s.tree.get_absolute_bounds(node).unwrap().width
+        };
+
+        let (x, y) = s.handle_centre();
+        s.move_to(x, y);
+        s.press(x, y);
+        s.move_to(x + 30.0, y);
+        s.release(x + 30.0, y);
+        assert_eq!(s.first_panel_width(), 230.0);
+
+        folded.set(true);
+        s.deliver(Vec::new(), 0.0, 0.0);
+        assert_eq!(
+            s.first_panel_width(),
+            40.0,
+            "below its minimum, at its folded size"
+        );
+        assert_eq!(handle(&s), 0.0, "a folded panel kept its handle");
+
+        folded.set(false);
+        s.deliver(Vec::new(), 0.0, 0.0);
+        assert_eq!(
+            s.first_panel_width(),
+            230.0,
+            "it did not open at the size it had"
+        );
+        assert!(handle(&s) > 0.0);
+    })
+}
+
+#[test]
+fn wide_content_in_the_flexible_panel_leaves_the_fixed_one_its_size() {
+    guarded(|| {
+        init();
+        let group = resizable_group()
+            .key("rz_wide")
+            .horizontal()
+            .panel(resizable_panel().flex_grow().child(div().w(900.0).h(20.0)))
+            .panel(
+                resizable_panel()
+                    .default_size(200.0)
+                    .child(div().w_full().h_full()),
+            );
+        let host = div().w(600.0).h(200.0).child(group);
+        let mut s = Scene {
+            tree: RenderTree::from_element(&host),
+            router: EventRouter::new(),
+        };
+        s.tree.compute_layout(600.0, 200.0);
+        let fixed = s.tree.layout_tree.children(s.group())[2];
+        assert_eq!(s.tree.get_absolute_bounds(fixed).unwrap().width, 200.0);
+    })
+}
+
+#[test]
+fn a_drag_beside_a_flexible_panel_starts_from_its_laid_out_size() {
+    guarded(|| {
+        init();
+        let group = resizable_group()
+            .key("rz_flex_min")
+            .horizontal()
+            .panel(
+                resizable_panel()
+                    .default_size(200.0)
+                    .min_size(100.0)
+                    .child(div().w_full().h_full()),
+            )
+            .panel(
+                resizable_panel()
+                    .flex_grow()
+                    .min_size(300.0)
+                    .child(div().w_full().h_full()),
+            );
+        let host = div().w(600.0).h(200.0).child(group);
+        let mut s = Scene {
+            tree: RenderTree::from_element(&host),
+            router: EventRouter::new(),
+        };
+        s.tree.compute_layout(600.0, 200.0);
+        let (x, y) = s.handle_centre();
+        s.move_to(x, y);
+        s.press(x, y);
+        s.move_to(x + 50.0, y);
+        s.release(x + 50.0, y);
+        assert_eq!(s.first_panel_width(), 250.0, "the panel jumped");
+    })
+}
+
+#[test]
+fn a_panel_keeps_its_handlers_when_rows_change_elsewhere() {
+    guarded(|| {
+        init();
+        let clicks = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = std::sync::Arc::clone(&clicks);
+        let rows = blinc_core::reactive::signal(vec![1u32]);
+        let group =
+            resizable_group()
+                .key("rz_handlers")
+                .horizontal()
+                .panel(resizable_panel().default_size(200.0).child(
+                    div().w(100.0).h(40.0).on_click(move |_| {
+                        counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    }),
+                ))
+                .panel(
+                    resizable_panel()
+                        .flex_grow()
+                        .child(div().w_full().h_full().for_each(
+                            rows,
+                            |n: &u32| *n,
+                            |n: u32| div().h(n as f32 * 10.0),
+                        )),
+                );
+        let host = div().w(600.0).h(200.0).child(group);
+        let mut s = Scene {
+            tree: RenderTree::from_element(&host),
+            router: EventRouter::new(),
+        };
+        s.tree.compute_layout(600.0, 200.0);
+        let click = |s: &mut Scene| {
+            s.move_to(50.0, 20.0);
+            s.press(50.0, 20.0);
+            s.release(50.0, 20.0);
+        };
+        click(&mut s);
+        assert_eq!(clicks.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+        rows.set(vec![2]);
+        s.deliver(Vec::new(), 0.0, 0.0);
+        click(&mut s);
+        assert_eq!(
+            clicks.load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "a row change elsewhere took the panel's click handler"
+        );
+    })
+}

@@ -232,8 +232,37 @@ resizable_group().vertical()
     .panel(resizable_panel().flex_grow().child(text("Bottom panel")))
 ```
 
+A panel's `visible` takes a bool, a signal or a computed. While it is false the
+panel and the handle beside it leave layout and the flexible panels take the
+space, in place with no rebuild. Shown again, the panel has the size it had,
+which is how a collapsible bottom panel or sidebar is built:
+
+```rust
+let panel_open = signal(true);
+resizable_group().vertical()
+    .panel(resizable_panel().flex_grow().child(text("Editor area")))
+    .panel(resizable_panel().default_size(160.0).visible(panel_open)
+        .child(text("Output area")))
+```
+
+A fixed panel's `collapsed(when, size)` folds it to `size` pixels instead, below
+its minimum and without its handle, and opens it again at the size it had. A
+sidebar that folds to its icon rail is one panel holding both:
+
+```rust
+let inspector_open = signal(true);
+resizable_group().horizontal()
+    .panel(resizable_panel().default_size(340.0).min_size(260.0)
+        .collapsed(computed(move |g| !g.get(inspector_open).unwrap_or(true)), 43.0)
+        .child(div().flex_row().child(rail).child(inspector.visible(inspector_open))))
+    .panel(resizable_panel().flex_grow().child(text("Main area")))
+```
+
 The `.cn-resizable-handle` contains `.cn-resizable-line`. Its hover and
-`data-state="dragging"` rules control the line's appearance. There is no
+`data-state="dragging"` rules control the line's appearance. `handle_thickness`
+sets the line's width and `handle_hit_padding` how far the grab area reaches
+past it on each side; the gap between two panels is the line plus twice the
+padding. There is no
 standalone `resizable_handle()` builder.
 
 ## Split Pane Example

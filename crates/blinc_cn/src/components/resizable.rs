@@ -52,6 +52,7 @@ use blinc_core::context_state::BlincContextState;
 use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_core::{Signal, State};
 use blinc_layout::InstanceKey;
+use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::{Div, ElementBuilder};
 use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::prelude::*;
@@ -120,6 +121,10 @@ struct ResizablePanelConfig {
     content: Option<Box<dyn ElementBuilder>>,
     /// Unique ID for this panel
     id: String,
+    /// Whether the panel is shown; `None` is always.
+    visible: Option<Reactive<bool>>,
+    /// While it holds, the panel is the given size and has no handle.
+    collapsed: Option<(Reactive<bool>, f32)>,
 }
 
 impl Default for ResizablePanelConfig {
@@ -132,6 +137,8 @@ impl Default for ResizablePanelConfig {
             flex_grow: 1.0,
             content: None,
             id: String::new(),
+            visible: None,
+            collapsed: None,
         }
     }
 }
@@ -185,6 +192,22 @@ impl ResizablePanelBuilder {
     pub fn flex(mut self, factor: f32) -> Self {
         self.config.is_flex = true;
         self.config.flex_grow = factor;
+        self
+    }
+
+    /// Show the panel while `visible` is true. A signal or computed is followed in place: the
+    /// panel and its handle leave layout and the flexible panels take its space, with no
+    /// rebuild, and it comes back at the size it had.
+    pub fn visible(mut self, visible: impl IntoReactive<bool>) -> Self {
+        self.config.visible = Some(visible.into_reactive());
+        self
+    }
+
+    /// Fold a fixed panel to `size` pixels while `collapsed` is true, below its minimum, with
+    /// its handle hidden: a sidebar folded to its icon rail. A signal or computed is followed in
+    /// place, and the panel opens again at the size it had. A flexible panel ignores it.
+    pub fn collapsed(mut self, collapsed: impl IntoReactive<bool>, size: f32) -> Self {
+        self.config.collapsed = Some((collapsed.into_reactive(), size));
         self
     }
 
@@ -303,6 +326,31 @@ impl ResizableGroup {
             }
         }
 
+        // A panel can be dragged while it is shown and open; the handle between two panels is
+        // shown while both can.
+        let draggable: Vec<Option<Reactive<bool>>> = config
+            .panels
+            .iter()
+            .map(|p| {
+                let open = p.collapsed.as_ref().filter(|_| !p.is_flex).map(|(c, _)| {
+                    let c = c.clone();
+                    Reactive::Computed(computed(move |g| !c.read(g).unwrap_or(false)))
+                });
+                both(p.visible.clone(), open)
+            })
+            .collect();
+        let handle_shown = |i: usize| both(draggable[i].clone(), draggable[i + 1].clone());
+
+        // Each panel's element, so a drag starts from the sizes the panels are laid out at: a
+        // flexible panel's size lives only in layout. Each panel is given its id here, from the
+        // group's key, so it has it from the first build: an id is part of every descendant's
+        // stable id, and one assigned later would rename them all.
+        let panel_refs: Vec<blinc_layout::selector::DivRef> = config
+            .panels
+            .iter()
+            .map(|_| blinc_layout::selector::DivRef::new())
+            .collect();
+
         // Build panels with handles between them
         let panel_count = config.panels.len();
         for (i, panel_config) in config.panels.into_iter().enumerate() {
@@ -313,8 +361,12 @@ impl ResizableGroup {
             let max_size = panel_config.max_size;
 
             let panel_wrapper: Div = if is_flex {
-                // Flex panel - grows to fill available space
-                let mut wrapper = div().overflow_clip().flex_grow_value(flex_grow_factor);
+                // A flexible panel shares the space the fixed ones leave, whatever its
+                // content's width: its basis is zero, not its content.
+                let mut wrapper = div()
+                    .overflow_clip()
+                    .flex_1()
+                    .flex_grow_value(flex_grow_factor);
                 match direction {
                     ResizeDirection::Horizontal => {
                         wrapper = wrapper.h_full();
@@ -345,9 +397,23 @@ impl ResizableGroup {
                 // A fixed panel's size is bound to its state, so a drag
                 // patches it in place and runs layout, with no rebuild.
                 let mut sized = div().overflow_clip().relative();
+                // Folded, the panel is its collapsed size; open, the size its handle set.
+                let (size, min_size): (Reactive<f32>, f32) = match panel_config.collapsed.clone() {
+                    None => (size_state.into_reactive(), min_size),
+                    Some((folded, folded_size)) => (
+                        Reactive::Computed(computed(move |g| {
+                            if folded.read(g).unwrap_or(false) {
+                                folded_size
+                            } else {
+                                g.get(size_state).unwrap_or(folded_size)
+                            }
+                        })),
+                        min_size.min(folded_size),
+                    ),
+                };
                 match direction {
                     ResizeDirection::Horizontal => {
-                        sized = sized.w(size_state).h_full();
+                        sized = sized.w(size).h_full();
                         if min_size > 0.0 {
                             sized = sized.min_w(min_size);
                         }
@@ -356,7 +422,7 @@ impl ResizableGroup {
                         }
                     }
                     ResizeDirection::Vertical => {
-                        sized = sized.h(size_state).w_full();
+                        sized = sized.h(size).w_full();
                         if min_size > 0.0 {
                             sized = sized.min_h(min_size);
                         }
@@ -381,6 +447,13 @@ impl ResizableGroup {
                 sized
             };
 
+            let panel_wrapper = panel_wrapper
+                .id(&format!("{key}__panel_{i}"))
+                .bind(&panel_refs[i]);
+            let panel_wrapper = match panel_config.visible {
+                Some(visible) => panel_wrapper.visible(visible),
+                None => panel_wrapper,
+            };
             container = container.child(panel_wrapper);
 
             // Add resize handle after each panel except the last
@@ -393,6 +466,7 @@ impl ResizableGroup {
                     direction,
                     &handle_config,
                     &panel_sizes,
+                    &panel_refs,
                     left_constraints,
                     right_constraints,
                     drag_index,
@@ -400,6 +474,10 @@ impl ResizableGroup {
                     drag_start_sizes,
                     config.on_resize.clone(),
                 );
+                let handle = match handle_shown(i) {
+                    Some(visible) => handle.visible(visible),
+                    None => handle,
+                };
                 container = container.child(handle);
             }
         }
@@ -421,6 +499,7 @@ impl ResizableGroup {
         direction: ResizeDirection,
         handle_config: &ResizeHandleConfig,
         panel_sizes: &[Signal<f32>],
+        panel_refs: &[blinc_layout::selector::DivRef],
         left_constraints: PanelConstraints,
         right_constraints: PanelConstraints,
         drag_index: Signal<i32>,
@@ -459,6 +538,7 @@ impl ResizableGroup {
         let drag_start_sizes_for_down = drag_start_sizes;
         let drag_start_sizes_for_drag = drag_start_sizes;
         let panel_sizes_for_down: Vec<Signal<f32>> = panel_sizes.to_vec();
+        let panel_refs_for_down: Vec<blinc_layout::selector::DivRef> = panel_refs.to_vec();
         let panel_sizes_for_drag: Vec<Signal<f32>> = panel_sizes.to_vec();
 
         let left_min = left_constraints.min_size;
@@ -480,7 +560,21 @@ impl ResizableGroup {
                     ResizeDirection::Vertical => event.mouse_y,
                 };
                 drag_start_pos_for_down.set(pos);
-                let sizes: Vec<f32> = panel_sizes_for_down.iter().map(|s| s.get()).collect();
+                // The laid-out sizes, where the panels have been laid out.
+                let sizes: Vec<f32> = panel_sizes_for_down
+                    .iter()
+                    .zip(&panel_refs_for_down)
+                    .map(|(size, element)| {
+                        element
+                            .bounds()
+                            .map(|b| match direction {
+                                ResizeDirection::Horizontal => b.width,
+                                ResizeDirection::Vertical => b.height,
+                            })
+                            .filter(|laid_out| *laid_out > 0.0)
+                            .unwrap_or_else(|| size.get())
+                    })
+                    .collect();
                 drag_start_sizes_for_down.set(sizes);
             })
             .on_drag(move |event| {
@@ -615,6 +709,13 @@ impl ResizableGroupBuilder {
         self
     }
 
+    /// Set how far the handle's grab area reaches past its line on each side, in pixels. The
+    /// gap between two panels is the line and twice this.
+    pub fn handle_hit_padding(mut self, padding: f32) -> Self {
+        self.config.handle.hit_area_padding = padding;
+        self
+    }
+
     /// Set a unique key for state persistence
     pub fn key(mut self, key: impl Into<String>) -> Self {
         self.config.key = key.into();
@@ -704,6 +805,17 @@ impl ElementBuilder for ResizableGroupBuilder {
 
     fn element_id(&self) -> Option<&str> {
         self.get_or_build().inner.element_id()
+    }
+}
+
+/// True while both hold; `None` is always true.
+fn both(a: Option<Reactive<bool>>, b: Option<Reactive<bool>>) -> Option<Reactive<bool>> {
+    match (a, b) {
+        (None, None) => None,
+        (Some(one), None) | (None, Some(one)) => Some(one),
+        (Some(a), Some(b)) => Some(Reactive::Computed(computed(move |g| {
+            a.read(g).unwrap_or(true) && b.read(g).unwrap_or(true)
+        }))),
     }
 }
 
