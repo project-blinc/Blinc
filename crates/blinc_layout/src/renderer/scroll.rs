@@ -361,6 +361,15 @@ impl RenderTree {
             }
         }
 
+        let cross = (
+            if handles_x { 0.0 } else { delta_x },
+            if handles_y { 0.0 } else { delta_y },
+        );
+        if has_scroll_physics && self.pass_cross_axis(node_id, (mouse_x, mouse_y), cross, now_ms) {
+            delta_x = 0.0;
+            delta_y = 0.0;
+        }
+
         // If the target didn't handle an axis (direction mismatch), let
         // that axis return as unconsumed so a caller that cares about
         // "nothing handled this wheel event" (e.g. a horizontal-only
@@ -480,6 +489,16 @@ impl RenderTree {
             }
         }
 
+        let cross = (
+            if handles_x { 0.0 } else { delta_x },
+            if handles_y { 0.0 } else { delta_y },
+        );
+        if has_scroll_physics
+            && self.pass_cross_axis(node_id, (mouse_x, mouse_y), cross, scroll_time)
+        {
+            return (0.0, 0.0);
+        }
+
         // Mark handled axes consumed; cross-axis falls through unchanged.
         if handles_x {
             remaining_dx = 0.0;
@@ -489,6 +508,37 @@ impl RenderTree {
         }
 
         (remaining_dx, remaining_dy)
+    }
+
+    /// Give the axis a physics container does not scroll to its own scroll handler, when it
+    /// has one: a code editor's container scrolls its lines, and the editor scrolls its code
+    /// area sideways. Whether a handler took it.
+    fn pass_cross_axis(
+        &mut self,
+        node_id: LayoutNodeId,
+        mouse: (f32, f32),
+        cross: (f32, f32),
+        time: f64,
+    ) -> bool {
+        if cross.0.abs() <= 0.001 && cross.1.abs() <= 0.001 {
+            return false;
+        }
+        let Some(stable) = self.stable_id(node_id) else {
+            return false;
+        };
+        if !self
+            .handler_registry
+            .has_handler(stable, blinc_core::events::event_types::SCROLL)
+        {
+            return false;
+        }
+        let mut ctx = self
+            .scroll_context(node_id, mouse, cross)
+            .with_scroll_time(time);
+        (ctx.scroll_gesture, ctx.scroll_momentum) = self.scroll_gesture_now();
+        ctx.stable_id = stable;
+        self.handler_registry.dispatch(&ctx);
+        true
     }
 
     /// Dispatch a pinch event to the first handler in the hit chain (leaf -> root)

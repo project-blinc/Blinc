@@ -69,6 +69,7 @@ use crate::widgets::text_input::{
 
 mod bound;
 mod diagnostics;
+mod hscroll;
 mod ime;
 mod search;
 
@@ -257,6 +258,8 @@ pub struct CodeEditorData {
     pub folded_regions: Vec<(usize, usize)>,
     /// Diagnostics shown inline; see [`set_code_diagnostics`].
     pub diagnostics: Vec<CodeDiagnostic>,
+    /// How far the code area is scrolled right, in pixels; the gutter does not move.
+    pub scroll_x: f32,
 }
 
 /// A foldable region detected from bracket matching
@@ -322,6 +325,7 @@ pub fn code_editor_state(content: impl Into<String>) -> SharedCodeEditorState {
         search_signal_id: None,
         editor_stateful: None,
         diagnostics: Vec::new(),
+        scroll_x: 0.0,
         search_matches: Vec::new(),
         search_match_idx: 0,
         scroll_physics: Arc::new(Mutex::new(ScrollPhysics::default())),
@@ -1209,6 +1213,7 @@ impl CodeEditorData {
     /// Ensure cursor is within the visible scroll viewport.
     /// Only scrolls when cursor would be outside the visible area.
     pub fn ensure_cursor_visible(&mut self) {
+        self.keep_caret_in_view_x();
         let line_height = self.config.font_size * self.config.line_height;
         let pad = self.config.padding;
         if self.viewport_height <= 0.0 {
@@ -1570,6 +1575,8 @@ impl CodeEditor {
         let shared_for_drag = Arc::clone(&shared_state);
         let shared_for_key = Arc::clone(&shared_state);
         let shared_for_text = Arc::clone(&shared_state);
+        let data_for_scroll = Arc::clone(state);
+        let shared_for_scroll = Arc::clone(&shared_state);
 
         let mut inner = Stateful::with_shared_state(Arc::clone(&shared_state))
             .on_mouse_down(move |ctx| {
@@ -1670,7 +1677,8 @@ impl CodeEditor {
                         // Don't touch cursor, selection, or drag state
                     } else {
                         // Code area click — position cursor
-                        let adjusted_x = (click_x - gutter_w - d.config.padding).max(0.0);
+                        let adjusted_x =
+                            (click_x - gutter_w - d.config.padding).max(0.0) + d.scroll_x;
                         d.cursor_from_click(adjusted_x, adjusted_y);
 
                         // Double-click detection: select word
@@ -1787,7 +1795,8 @@ impl CodeEditor {
                 } else {
                     0.0
                 };
-                let adjusted_x = (ctx.local_x - gutter_offset - d.config.padding).max(0.0);
+                let adjusted_x =
+                    (ctx.local_x - gutter_offset - d.config.padding).max(0.0) + d.scroll_x;
                 let scroll_offset = d.scroll_physics.lock().map(|p| -p.offset_y).unwrap_or(0.0);
                 let adjusted_y = (ctx.local_y - d.config.padding + scroll_offset).max(0.0);
 
@@ -2136,6 +2145,26 @@ impl CodeEditor {
             })
             .on_blur(move |_ctx| {
                 // Blur handled by FSM transition
+            })
+            .on_scroll(move |ctx| {
+                // The container scrolls the lines; the sideways part of the wheel (Shift with
+                // the wheel, on macOS) comes here and scrolls the code area.
+                if ctx.scroll_delta_x.abs() <= 0.0 {
+                    return;
+                }
+                let dx = -ctx.scroll_delta_x;
+                let moved = data_for_scroll.lock().is_ok_and(|mut d| {
+                    d.editor_bounds = (
+                        ctx.bounds_x,
+                        ctx.bounds_y,
+                        ctx.bounds_width,
+                        ctx.bounds_height,
+                    );
+                    d.scroll_x_by(dx)
+                });
+                if moved {
+                    refresh_stateful(&shared_for_scroll);
+                }
             })
             .class("blinc-code")
             .overflow_y_scroll()
@@ -2794,6 +2823,8 @@ fn build_editor_content(
     instance_key: &str,
 ) -> Div {
     let styled = data.get_styled_content();
+    data.clamp_scroll_x();
+    let (content_w, scroll_x) = (data.content_width(), data.scroll_x);
     // Diagnostics measure text, which needs the editor mutably, before its config is borrowed.
     let diagnostic_overlays = {
         let (lh, pad) = (
@@ -3087,8 +3118,21 @@ fn build_editor_content(
             pad,
         ));
     }
-    // Search bar is rendered as an overlay (not inside scroll content)
-    container = container.child(code_area);
+    // Search bar is rendered as an overlay (not inside scroll content). The code area is at
+    // least as wide as its widest line and shifts left inside a clip, so the gutter stays.
+    container = container.child(
+        div()
+            .flex_grow()
+            .min_w(0.0)
+            .relative()
+            .overflow_clip()
+            .child(
+                code_area
+                    .class("blinc-code-area")
+                    .min_w(content_w)
+                    .left(-scroll_x),
+            ),
+    );
     container
 }
 
