@@ -67,8 +67,11 @@ use crate::widgets::text_input::{
     decrement_focus_count, increment_focus_count, request_continuous_redraw_pub,
 };
 
+mod diagnostics;
 mod ime;
 mod search;
+
+pub use diagnostics::{CodeDiagnostic, DiagnosticSeverity, set_code_diagnostics};
 
 use search::*;
 
@@ -201,6 +204,8 @@ pub struct CodeEditorData {
     mono_char_width: f32,
     /// Font size that mono_char_width was computed for
     mono_char_width_font_size: f32,
+    /// Face that mono_char_width was computed in
+    mono_char_width_family: Option<String>,
     /// Cached per-line syntax highlight results. Indexed by line number.
     /// Cleared when content changes on that line.
     highlight_cache: Vec<Option<crate::styled_text::StyledLine>>,
@@ -249,6 +254,8 @@ pub struct CodeEditorData {
     /// start_line is the line with `{` and end_line is the matching `}`.
     /// Lines start_line+1..end_line are hidden when folded.
     pub folded_regions: Vec<(usize, usize)>,
+    /// Diagnostics shown inline; see [`set_code_diagnostics`].
+    pub diagnostics: Vec<CodeDiagnostic>,
 }
 
 /// A foldable region detected from bracket matching
@@ -295,6 +302,7 @@ pub fn code_editor_state(content: impl Into<String>) -> SharedCodeEditorState {
         ime: Default::default(),
         mono_char_width: 0.0,
         mono_char_width_font_size: 0.0,
+        mono_char_width_family: None,
         highlight_cache: vec![None; num_lines],
         drag_anchor: None,
         last_click_time: 0.0,
@@ -312,6 +320,7 @@ pub fn code_editor_state(content: impl Into<String>) -> SharedCodeEditorState {
         editor_bounds: (0.0, 0.0, 800.0, 300.0),
         search_signal_id: None,
         editor_stateful: None,
+        diagnostics: Vec::new(),
         search_matches: Vec::new(),
         search_match_idx: 0,
         scroll_physics: Arc::new(Mutex::new(ScrollPhysics::default())),
@@ -334,6 +343,7 @@ impl CodeEditorData {
     /// Measure text width using monospace font options (matches rendered text).
     pub fn measure_mono(&self, text: &str) -> f32 {
         let opts = crate::text_measure::TextLayoutOptions {
+            font_name: code_font_family(),
             generic_font: crate::div::GenericFont::Monospace,
             ..crate::text_measure::TextLayoutOptions::new()
         };
@@ -343,9 +353,14 @@ impl CodeEditorData {
     /// Get the cached monospace character width, recomputing if font size changed.
     pub fn char_width(&mut self) -> f32 {
         let fs = self.config.font_size;
-        if (self.mono_char_width_font_size - fs).abs() > 0.01 || self.mono_char_width <= 0.0 {
+        let family = code_font_family();
+        if (self.mono_char_width_font_size - fs).abs() > 0.01
+            || self.mono_char_width <= 0.0
+            || self.mono_char_width_family != family
+        {
             self.mono_char_width = self.measure_mono("M");
             self.mono_char_width_font_size = fs;
+            self.mono_char_width_family = family;
         }
         self.mono_char_width
     }
@@ -1401,6 +1416,7 @@ impl Code {
                 &self.config,
                 &[],
                 &[],
+                None,
                 self.config.padding,
             ));
         }
@@ -2356,17 +2372,20 @@ fn build_gutter(
     config: &CodeConfig,
     fold_regions: &[FoldRegion],
     folded_starts: &[usize],
+    diagnostics: Option<&[CodeDiagnostic]>,
     pad: f32,
 ) -> Div {
     let has_fold = config.code_folding;
 
     let mut col = div().flex_col().justify_start().padding_y_px(pad);
     let number = |line_idx: usize| {
-        let txt = text(format!("{}", line_idx + 1))
-            .class("blinc-code-line-number")
-            .size(config.font_size)
-            .monospace()
-            .no_wrap();
+        let txt = code_face(
+            text(format!("{}", line_idx + 1))
+                .class("blinc-code-line-number")
+                .size(config.font_size),
+            config,
+        )
+        .no_wrap();
         match config.line_number_color {
             Some(c) => txt.color(c),
             None => txt,
@@ -2375,6 +2394,10 @@ fn build_gutter(
 
     for &line_idx in visible_lines {
         let mut row = div().h(line_height_px).flex_row().items_center();
+        // An editor keeps a slot for diagnostic marks, so numbers do not move when one appears.
+        if let Some(diagnostics) = diagnostics {
+            row = row.child(diagnostics::gutter_mark(diagnostics, line_idx, config));
+        }
 
         // Line number — monospace, right-aligned, flex_grow to fill available space
         row = row.child(
@@ -2429,6 +2452,28 @@ fn build_gutter(
         .child(div().flex_grow()) // fill remaining height (no bg)
 }
 
+/// The face code is set in: `--blinc-code-font-family`, the first family it lists, else the
+/// generic monospace face. Drawing and caret measurement both read it, so they cannot differ.
+fn code_font_family() -> Option<String> {
+    crate::ua_styles::stylesheet_variable("blinc-code-font-family").and_then(|v| {
+        let first = v
+            .split(',')
+            .next()?
+            .trim()
+            .trim_matches(['"', '\''])
+            .to_string();
+        (!first.is_empty() && first != "monospace").then_some(first)
+    })
+}
+
+/// Text in the code face.
+fn code_face(txt: crate::text::Text, _config: &CodeConfig) -> crate::text::Text {
+    match code_font_family() {
+        Some(family) => txt.font_with_fallback(family, crate::div::GenericFont::Monospace),
+        None => txt.monospace(),
+    }
+}
+
 /// A line of code. `plain` text without a configured colour takes the
 /// container rule's by inheritance; highlighted spans keep their own.
 fn build_styled_line(
@@ -2452,7 +2497,7 @@ fn build_styled_line(
             if span.bold {
                 txt = txt.bold();
             }
-            txt = txt.monospace();
+            txt = code_face(txt, config);
             line_div = line_div.child(txt);
         }
     }
@@ -2714,6 +2759,15 @@ fn build_editor_content(
     instance_key: &str,
 ) -> Div {
     let styled = data.get_styled_content();
+    // Diagnostics measure text, which needs the editor mutably, before its config is borrowed.
+    let diagnostic_overlays = {
+        let (lh, pad) = (
+            data.config.font_size * data.config.line_height,
+            data.config.padding,
+        );
+        let visible = data.visible_lines();
+        diagnostics::overlays(data, &visible, lh, pad)
+    };
     let config = &data.config;
     let line_height_px = config.font_size * config.line_height;
     let visible_lines = data.visible_lines();
@@ -2873,6 +2927,10 @@ fn build_editor_content(
         }
     }
 
+    for overlay in diagnostic_overlays {
+        code_area = code_area.child(overlay);
+    }
+
     // Text lines in a padded wrapper (only visible lines)
     let mut text_wrapper = div()
         .flex_col()
@@ -2889,14 +2947,19 @@ fn build_editor_content(
             );
             // Show fold indicator on fold start lines
             if config.code_folding && data.is_fold_start(line_idx) {
-                let hint = text(" ...")
-                    .class("blinc-code-fold-hint")
-                    .size(config.font_size * 0.85)
-                    .monospace();
+                let hint = code_face(
+                    text(" ...")
+                        .class("blinc-code-fold-hint")
+                        .size(config.font_size * 0.85),
+                    config,
+                );
                 ld = ld.child(match config.line_number_color {
                     Some(c) => hint.color(c),
                     None => hint,
                 });
+            }
+            if let Some(lens) = diagnostics::message(&data.diagnostics, line_idx, config) {
+                ld = ld.child(lens);
             }
             ld
         } else {
@@ -2985,6 +3048,7 @@ fn build_editor_content(
             config,
             &fold_regions,
             &folded_starts,
+            Some(&data.diagnostics),
             pad,
         ));
     }

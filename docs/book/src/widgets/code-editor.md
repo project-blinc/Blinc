@@ -104,12 +104,45 @@ default stylesheet's rules, so it follows the theme:
 | `blinc-code-find-match` | a search match, `data-active` for the current one | `--warning` at 25%, 50% when current |
 | `blinc-code-minimap`, `-slider`, `-line` | the minimap, its viewport, a plain line | `--border` edge, `--text-primary` tints |
 
-The caret is drawn in `--blinc-code-caret`, the accent when unset:
+The caret is drawn in `--blinc-code-caret`, the accent when unset, and code is
+set in `--blinc-code-font-family`, the generic monospace face when unset. The
+editor measures the caret and selection in the same face, so a family it does
+not have falls back to monospace for both:
 
 ```css
-:root { --blinc-code-caret: #f59e0b; }
+:root {
+    --blinc-code-caret: #f59e0b;
+    --blinc-code-font-family: "JetBrains Mono", monospace;
+}
 .blinc-code-selection { background: rgba(245, 158, 11, 0.3); }
 ```
+
+A face that is not installed is registered first, with `blinc_app::register_font`.
+
+### Diagnostics
+
+A compiler or linter marks problems in the editor with `set_code_diagnostics`.
+Each `CodeDiagnostic` is a span on one line (lines and columns from 0), a
+`DiagnosticSeverity` (`Error`, `Warning`, `Info`, `Hint`) and a message. The
+editor underlines each span, tints its line, puts a dot in the gutter, and shows
+the line's most severe message after its text. It keeps them until the next
+call; an empty list clears them.
+
+```rust
+set_code_diagnostics(&state, vec![
+    CodeDiagnostic::new(1, 12, 13, DiagnosticSeverity::Error, "expected an expression, found `;`"),
+    CodeDiagnostic::new(2, 8, 9, DiagnosticSeverity::Warning, "unused variable: `y`"),
+]);
+```
+
+Each part is a class per severity, coloured from the theme:
+
+| Class | Part | Default |
+|-------|------|---------|
+| `blinc-code-underline-{error,warning,info,hint}` | the underline | `--error`, `--warning`, `--info`, `--text-tertiary` |
+| `blinc-code-mark-{severity}` | the gutter dot | as the underline |
+| `blinc-code-line-{error,warning,info}` | the line's tint | the colour at 6 to 9% |
+| `blinc-code-lens-{severity}` | the message after the line | as the underline |
 
 A syntax theme colours the text, fill and line numbers itself, and a colour
 given to the editor (`code_bg`, `text_color`, a `CodeConfig` colour) is set on

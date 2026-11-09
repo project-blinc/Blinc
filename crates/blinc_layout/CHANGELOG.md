@@ -29,6 +29,8 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Overlay focus returns to stable trigger identities on dismissal, and nested scopes constrain Tab to the topmost active popup. Pointer focus persists without a keyboard ring. Menu roles support roving focus, submenu keys and keyboard context-menu activation.
 
 ### Added
+- The code editor shows diagnostics inline: `set_code_diagnostics` with `CodeDiagnostic`s (a span, a `DiagnosticSeverity` and a message) underlines each span, tints its line, marks the gutter, and shows the line's most severe message after its text, styled by `blinc-code-{underline,mark,line,lens}-{severity}` rules from the theme's `--error`, `--warning`, `--info` and `--text-tertiary`. `CodeEditorData` gains a public `diagnostics` field.
+- Code blocks and the code editor are set in `--blinc-code-font-family` when the stylesheet gives one, the generic monospace face otherwise; the caret and selection are measured in the same face.
 - `text_measure::TextFace` (family, weight, italic, letter spacing), `TextInputConfig::face` and `TextAreaConfig::face`, and `TextInputData::cursor_position_from_x_with`. Exhaustive struct literals of the two configs must initialize `face`; builder and `..Default::default()` construction remain valid.
 - `RenderProps` carries optional `important_colors` metadata. Initialize it to `None` in exhaustive literals or use `..Default::default()`.
 - CSS `:focus-visible` distinguishes keyboard focus from pointer focus.

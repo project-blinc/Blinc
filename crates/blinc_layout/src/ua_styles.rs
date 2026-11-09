@@ -209,7 +209,8 @@ pub const UA_STYLES: &str = concat!(
 
 /* Code blocks and the code editor. Syntax themes colour the text, fill and
    line numbers inline; these are the plain look. The caret is drawn in
-   `--blinc-code-caret`, the accent when unset. */
+   `--blinc-code-caret`, the accent when unset, and code is set in
+   `--blinc-code-font-family`, the generic monospace face when unset. */
 .blinc-code { background: var(--surface); color: var(--text-primary); }
 .blinc-code-line-number, .blinc-code-fold, .blinc-code-fold-hint { color: var(--text-tertiary); }
 .blinc-code-active-line { background: color-mix(in srgb, var(--primary) 5%, transparent); }
@@ -224,6 +225,18 @@ pub const UA_STYLES: &str = concat!(
     border: 1px solid var(--warning);
 }
 .blinc-code-find-match[data-active] { background: color-mix(in srgb, var(--warning) 50%, transparent); }
+/* Inline diagnostics: underline, line tint, gutter mark and end-of-line message. */
+.blinc-code-underline-error, .blinc-code-mark-error { background: var(--error); }
+.blinc-code-underline-warning, .blinc-code-mark-warning { background: var(--warning); }
+.blinc-code-underline-info, .blinc-code-mark-info { background: var(--info); }
+.blinc-code-underline-hint, .blinc-code-mark-hint { background: var(--text-tertiary); }
+.blinc-code-line-error { background: color-mix(in srgb, var(--error) 9%, transparent); }
+.blinc-code-line-warning { background: color-mix(in srgb, var(--warning) 7%, transparent); }
+.blinc-code-line-info { background: color-mix(in srgb, var(--info) 6%, transparent); }
+.blinc-code-lens-error { color: var(--error); }
+.blinc-code-lens-warning { color: var(--warning); }
+.blinc-code-lens-info { color: var(--info); }
+.blinc-code-lens-hint { color: var(--text-tertiary); }
 .blinc-code-minimap { border-left: 1px solid var(--border); }
 .blinc-code-minimap-slider { background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
 .blinc-code-minimap-line { background: color-mix(in srgb, var(--text-primary) 40%, transparent); }
@@ -318,6 +331,13 @@ pub(crate) fn stylesheet_color(css: &str, fallback: blinc_theme::ColorToken) -> 
         .and_then(|sheet| sheet.resolve_color(css))
         .or_else(|| blinc_theme::ThemeState::try_get().map(|theme| theme.color(fallback)))
         .unwrap_or(blinc_core::Color::WHITE)
+}
+
+/// The value the active stylesheet gives the custom property `--{name}`, for what code reads
+/// rather than draws through a rule.
+pub(crate) fn stylesheet_variable(name: &str) -> Option<String> {
+    crate::css_parser::active_stylesheet()
+        .and_then(|sheet| sheet.get_variable(name).map(|v| v.trim().to_string()))
 }
 
 /// Queue [`UA_STYLES`] for the runner to register, once per process. The
