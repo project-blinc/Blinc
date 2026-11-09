@@ -4,6 +4,9 @@ All notable changes to `blinc_cn` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- A collapsible, `collapsible_section`, accordion section and tree group builds its content the first time it opens, and keeps it: closing folds it without tearing it down. A section never opened builds nothing. `collapsible_section` takes its content as `Fn` rather than `FnOnce`.
+
 ### Added
 - `TabsBuilder::closable` gives each trigger a close button, shown on the active trigger and while another is hovered, that reports the tab without selecting it.
 - `SidebarBuilder::toggle_item` adds an item that is active while a bool, signal or computed holds, for an item that opens a panel rather than navigating; pressing it leaves the selection alone.

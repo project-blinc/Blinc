@@ -313,7 +313,8 @@ impl AccordionBuilder {
                     is_open.set(opening);
                 });
 
-            // Keep caller content laid out while the height animation clips it.
+            // Built when the section first opens and kept, so the height animation has it to
+            // clip while it eases shut.
             let section_content = div()
                 .class("cn-accordion-content")
                 .attr_when("data-state", "open", &open)
@@ -327,7 +328,10 @@ impl AccordionBuilder {
                         .clip_to_animated()
                         .theme_timed(),
                 )
-                .child((item.content)());
+                .show(super::collapsible::opened_once(is_open), {
+                    let content = Arc::clone(&item.content);
+                    move || content()
+                });
 
             // Sections and separators below an opening one move with it.
             content = content.child(

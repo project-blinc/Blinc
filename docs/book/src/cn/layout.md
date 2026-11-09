@@ -135,7 +135,7 @@ let open = ctx.use_signal(false);
 div().flex_col()
     .child(CollapsibleTrigger::new("Show details", open))
     .child(collapsible(open).content(|| {
-        div().child(text("Details remain mounted while this section folds."))
+        div().child(text("Built when the section first opens, then kept."))
     }))
 ```
 
@@ -150,8 +150,10 @@ collapsible_section("Details", open, || {
 })
 ```
 
-There are no separate `collapsible_trigger()` or `collapsible_content()`
-functions. The parts are `.cn-collapsible-trigger`, `.cn-collapsible-content`
+The body is built the first time the section opens and kept after: closing
+folds it without tearing it down, so it keeps its state and eases shut, and a
+section that is never opened costs nothing. There are no separate
+`collapsible_trigger()` or `collapsible_content()` functions. The parts are `.cn-collapsible-trigger`, `.cn-collapsible-content`
 and `.cn-chevron`; their `data-state` is `open` or `closed`. CSS sets the
 closed height and chevron transform, with theme-timed expansion.
 
@@ -170,6 +172,8 @@ accordion()
         div().child(text("Blinc 0.6 requires Rust 1.89 or newer."))
     })
 ```
+
+As with a collapsible, a section's body is built when it first opens and kept.
 
 `.multi_open()` allows several sections to stay open:
 

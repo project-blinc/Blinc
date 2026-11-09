@@ -1,6 +1,7 @@
 #![cfg(feature = "headless")]
 //! What nobody can see is not drawn: a scroll view skips rows outside its viewport, unless
-//! something under a row reaches into it, and a closed collapsible draws none of its content.
+//! something under a row reaches into it, and a collapsible builds its content when it first
+//! opens and keeps it, drawing none of it while closed.
 
 use std::sync::{Arc, Mutex};
 
@@ -114,7 +115,7 @@ fn a_scroll_view_draws_the_rows_in_view_and_what_reaches_into_it() {
 }
 
 #[test]
-fn a_closed_collapsible_draws_none_of_its_content() {
+fn a_collapsible_builds_its_content_when_it_first_opens_and_keeps_it() {
     let Some(mut ui) = session() else { return };
     let open = signal(false);
     ui.mount(move |_| {
@@ -124,11 +125,18 @@ fn a_closed_collapsible_draws_none_of_its_content() {
             .child(collapsible(open).content(rows))
     });
     ui.settle();
+    let nodes = |ui: &Headless| ui.tree().layout().len();
+    assert!(
+        nodes(&ui) < 20,
+        "the closed collapsible built {} nodes",
+        nodes(&ui)
+    );
     let closed = draw_commands(&ui);
     assert!(closed < 60, "the closed collapsible drew {closed} commands");
 
     open.set(true);
     ui.advance(600).settle();
+    assert!(nodes(&ui) > ROWS * 2, "opening did not build the rows");
     assert!(
         draw_commands(&ui) > ROWS * 2,
         "the open collapsible did not draw its rows"
@@ -141,5 +149,13 @@ fn a_closed_collapsible_draws_none_of_its_content() {
     assert!(
         near(px[0], 0) && near(px[1], 128),
         "row 0 is not drawn when open: {px:?}"
+    );
+
+    open.set(false);
+    ui.advance(600).settle();
+    assert!(nodes(&ui) > ROWS * 2, "closing tore the rows down");
+    assert!(
+        draw_commands(&ui) < 60,
+        "the closed collapsible still draws its rows"
     );
 }

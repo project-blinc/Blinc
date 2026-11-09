@@ -264,7 +264,8 @@ div().flex_col().gap(2.0)
     .child(Text::bound(chosen.into_reactive()))
 ```
 
-`.selected(..)` sets an initial key. `.on_select(..)` reports subsequent
+A group's rows are built when it first opens and kept after, so a large tree
+costs only what has been opened. `.selected(..)` sets an initial key. `.on_select(..)` reports subsequent
 selection; it does not bind the tree's selection to an external signal.
 
 Clicking a row selects it and opens or closes it. Once the tree has been

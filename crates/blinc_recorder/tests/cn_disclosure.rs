@@ -127,15 +127,12 @@ fn the_keys_walk_a_tree() {
     };
     assert!(!ringed(&ui).contains(&true), "a click shows no ring");
 
+    // The rows of a group are built when it first opens: docs is shut, so README.md is not.
     ui.key(DOWN).key(DOWN).settle();
-    assert_eq!(ringed(&ui), [false, false, true, false, false], "on lib.rs");
+    assert_eq!(ringed(&ui), [false, false, true, false], "on lib.rs");
 
     ui.key(LEFT).settle();
-    assert_eq!(
-        ringed(&ui),
-        [true, false, false, false, false],
-        "back on src"
-    );
+    assert_eq!(ringed(&ui), [true, false, false, false], "back on src");
     ui.key(LEFT).settle();
     let group = all(&ui, "cn-tree-group")[0];
     let height = ui.tree().get_absolute_bounds(group).unwrap().height;

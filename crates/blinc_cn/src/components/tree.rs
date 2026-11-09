@@ -558,7 +558,7 @@ fn item(node: &TreeNodeConfig, parts: &Parts) -> Div {
             shell
                 .attr_when("data-state", "open", &open)
                 .attr_when("data-state", "closed", &closed);
-        // Always laid out, so there is a height to ease to and from; a
+        // Laid out once built, so there is a height to ease to and from; a
         // closed group is at no height by rule.
         let mut group = div()
             .class("cn-tree-group")
@@ -586,9 +586,15 @@ fn item(node: &TreeNodeConfig, parts: &Parts) -> Div {
                     .bottom(0.0)
                     .w(1.0),
             );
-        for child in &node.children {
-            group = group.child(item(child, parts));
-        }
+        // The rows below a group are built when it first opens and kept.
+        let (children, rows_parts) = (node.children.clone(), parts.clone());
+        group = group.show(super::collapsible::opened_once(expanded), move || {
+            children
+                .iter()
+                .fold(div().flex_col().gap(0.25), |rows, child| {
+                    rows.child(item(child, &rows_parts))
+                })
+        });
         shell = shell.child(group);
     }
     shell

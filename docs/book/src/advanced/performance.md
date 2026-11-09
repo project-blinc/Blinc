@@ -250,9 +250,11 @@ Culling stops below anything that places its content apart from layout (a
 CSS or bound transform, a motion, a layout animation) and at fixed and sticky
 children. `.viewport_cull(false)` turns it off for one container.
 
-A clip with no area draws nothing beneath it, so a closed collapsible,
-accordion section or tree group costs no primitives, though its content is
-still built and laid out. A tab that is not selected is not built at all.
+A clip with no area draws nothing beneath it. A collapsible, accordion section
+or tree group builds its content the first time it opens and keeps it, so one
+never opened costs nothing and a closed one draws nothing. A tab that is not
+selected is not built at all, and `show(when, ..)` builds nothing while `when`
+is false.
 
 ## Avoid the slow path
 

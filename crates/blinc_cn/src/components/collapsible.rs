@@ -3,10 +3,12 @@
 //! A primitive that shows and hides content, the foundation for the accordion
 //! and other expand/collapse patterns.
 //!
-//! The content is always laid out. It carries `data-state="open"` or
-//! `"closed"`, and the `.cn-collapsible-content[data-state="closed"]` rule
-//! lays it out at no height; the change of size eases over the theme's
-//! normal duration. Restyle it with rules of your own.
+//! The content is built the first time it opens, and kept: closing does not
+//! tear it down, so it keeps its state and eases shut. It carries
+//! `data-state="open"` or `"closed"`, and the
+//! `.cn-collapsible-content[data-state="closed"]` rule lays it out at no
+//! height; the change of size eases over the theme's normal duration.
+//! Restyle it with rules of your own.
 //!
 //! # Example
 //!
@@ -93,9 +95,24 @@ fn open_and_closed(is_open: Signal<bool>) -> (Computed<bool>, Computed<bool>) {
     )
 }
 
-/// The folding part: the content, always laid out, at no height while closed
-/// by rule, its size change eased by a token-timed layout animation.
-fn fold_body(content: impl ElementBuilder + 'static, is_open: Signal<bool>) -> Div {
+/// True from the first time `is_open` holds. Content shown on it is built when its section
+/// first opens and kept after, for the close animation and the content's own state.
+pub(crate) fn opened_once(is_open: Signal<bool>) -> Computed<bool> {
+    let opened = std::sync::atomic::AtomicBool::new(false);
+    computed(move |g: &ReactiveGraph| {
+        if g.get(is_open).unwrap_or(false) {
+            opened.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        opened.load(std::sync::atomic::Ordering::Relaxed)
+    })
+}
+
+/// The folding part: the content, built when it first opens, at no height while closed by
+/// rule, its size change eased by a token-timed layout animation.
+fn fold_body<E: ElementBuilder + 'static>(
+    content: impl Fn() -> E + 'static,
+    is_open: Signal<bool>,
+) -> Div {
     let (open, closed) = open_and_closed(is_open);
     div()
         .class("cn-collapsible-content")
@@ -110,7 +127,7 @@ fn fold_body(content: impl ElementBuilder + 'static, is_open: Signal<bool>) -> D
                 .clip_to_animated()
                 .theme_timed(),
         )
-        .child(content)
+        .show(opened_once(is_open), content)
 }
 
 /// Builder for a collapsible bound to an open signal.
@@ -134,7 +151,8 @@ impl CollapsibleBuilder {
     /// Get or build the inner Collapsible
     fn get_or_build(&self) -> &Collapsible {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            let body = self.content.as_ref().map_or_else(div, |f| f());
+            let content = self.content.clone();
+            let body = move || content.as_ref().map_or_else(div, |f| f());
             Collapsible {
                 inner: div()
                     .class("cn-collapsible")
@@ -145,7 +163,7 @@ impl CollapsibleBuilder {
         })
     }
 
-    /// Set the content, built once with the section.
+    /// Set the content, built the first time the section opens.
     pub fn content<F>(mut self, content: F) -> Self
     where
         F: Fn() -> Div + Send + Sync + 'static,
@@ -291,7 +309,7 @@ pub fn collapsible_section<F, E>(
     content: F,
 ) -> Div
 where
-    F: FnOnce() -> E,
+    F: Fn() -> E + 'static,
     E: ElementBuilder + 'static,
 {
     div()
@@ -300,5 +318,5 @@ where
         .w_full()
         .overflow_clip()
         .child(CollapsibleTrigger::new(trigger_label, is_open))
-        .child(fold_body(content(), is_open))
+        .child(fold_body(content, is_open))
 }
