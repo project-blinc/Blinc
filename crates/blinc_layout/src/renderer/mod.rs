@@ -2625,7 +2625,8 @@ impl RenderTree {
     /// Cache element bounds for all elements with string IDs
     ///
     /// This populates the ElementRegistry's bounds cache so that
-    /// `ElementHandle.bounds()` can return computed bounds.
+    /// `ElementHandle.bounds()` can return computed bounds. They are in window
+    /// coordinates, scrolled as drawn, as pointer events report positions.
     fn cache_element_bounds(&self) {
         // Clear the previous cache
         self.element_registry.clear_bounds();
@@ -2633,7 +2634,7 @@ impl RenderTree {
         // Iterate through all render nodes and cache bounds for those with string IDs
         for (node_id, _render_node) in &self.render_nodes {
             if let Some(string_id) = self.element_registry.get_id(*node_id)
-                && let Some(bounds) = self.get_bounds(*node_id)
+                && let Some(bounds) = self.get_absolute_bounds(*node_id)
             {
                 self.element_registry.update_bounds(
                     &string_id,

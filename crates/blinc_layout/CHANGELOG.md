@@ -11,6 +11,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- `DivRef::bounds`, `ElementHandle::bounds` and the context's bounds query report an element's position in the window, scrolled as drawn, as pointer events do; they gave it relative to its parent. Reordering tabs away from the window's left edge works in both directions.
 - A node built after the first stylesheet pass (a region's new row, say) keeps the layout its class rules give it when a bound class leaves it: a tab added to a strip no longer loses its padding when it stops being the active one.
 - A read-only code block's lines scroll sideways in their own scroll container, so its gutter no longer scrolls away with them.
 - A scroll goes to the nearest container under the pointer that scrolls its axis: a horizontal scroller inside a vertical one takes sideways scrolls and lets vertical ones by to its parent.
