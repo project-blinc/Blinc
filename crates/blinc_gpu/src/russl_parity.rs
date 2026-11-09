@@ -1,21 +1,12 @@
 //! The simple core pipeline, specialised at build time by russl, draws the same pixels as
-//! `sdf_core.wgsl` specialised by wgpu with the same feature switches. The full pipeline is built
-//! from that WGSL, so this keeps the two copies of the shader in step.
+//! `sdf_core.wgsl` specialised by wgpu with the constants russl built it with. The full pipeline
+//! is built from that WGSL, so this keeps the two copies of the shader in step. The CPU's
+//! `GpuPrimitive` must hold the bytes the shader's `Primitive` reads, which the layout test checks.
 
 use crate::primitives::GpuPrimitive;
 use wgpu::util::DeviceExt;
 
 const SIZE: u32 = 128;
-
-/// The switches `sdf_russl::simple` fixes, as wgpu pipeline constants.
-const SIMPLE_CORE_CONSTANTS: &[(&str, f64)] = &[
-    ("FEAT_GRADIENT", 0.0),
-    ("FEAT_MASK", 0.0),
-    ("FEAT_FILTER", 0.0),
-    ("FEAT_SHADOW", 0.0),
-    ("FEAT_3D", 0.0),
-    ("FEAT_CLIP_SHAPE", 0.0),
-];
 
 fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
     let instance = wgpu::Instance::default();
@@ -279,7 +270,7 @@ fn the_offline_simple_pipeline_draws_what_the_runtime_one_draws() {
         &device,
         &queue,
         crate::shaders::SDF_CORE_SHADER,
-        SIMPLE_CORE_CONSTANTS,
+        crate::sdf_russl::simple::CONSTANTS,
         &prims,
     );
     let offline = draw(&device, &queue, crate::sdf_russl::simple::WGSL, &[], &prims);
@@ -295,4 +286,58 @@ fn the_offline_simple_pipeline_draws_what_the_runtime_one_draws() {
         .filter(|(a, b)| a != b)
         .count();
     assert_eq!(differing, 0, "{differing} of {} pixels differ", SIZE * SIZE);
+}
+
+#[test]
+fn the_cpu_primitive_lays_out_as_the_shader_reads_it() {
+    use crate::sdf_russl::sdf_core::Primitive;
+    use std::mem::{offset_of, size_of};
+    assert_eq!(size_of::<GpuPrimitive>(), Primitive::SIZE);
+    macro_rules! same_offsets {
+        ($($field:ident),* $(,)?) => {
+            $(
+                assert_eq!(
+                    offset_of!(GpuPrimitive, $field),
+                    offset_of!(Primitive, $field),
+                    concat!("`", stringify!($field), "` sits elsewhere in the shader"),
+                );
+            )*
+        };
+    }
+    same_offsets!(
+        bounds,
+        corner_radius,
+        color,
+        color2,
+        border,
+        border_color,
+        shadow,
+        shadow_color,
+        clip_bounds,
+        clip_radius,
+        clip_corner_shape,
+        gradient_params,
+        rotation,
+        local_affine,
+        perspective,
+        sdf_3d,
+        light,
+        filter_a,
+        filter_b,
+        mask_params,
+        mask_info,
+        corner_shape,
+        clip_fade,
+        type_info,
+        side_color_top,
+        side_color_right,
+        side_color_bottom,
+        side_color_left,
+        gradient_table,
+        local_clip_bounds,
+        local_clip_radius,
+        clip_fade_bounds,
+        notch_info,
+        clip_shape,
+    );
 }

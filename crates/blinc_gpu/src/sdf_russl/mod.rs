@@ -4,7 +4,7 @@
 
 mod clip;
 mod common;
-mod sdf_core;
+pub(crate) mod sdf_core;
 
 pub(crate) mod simple {
     russl::russl! {
