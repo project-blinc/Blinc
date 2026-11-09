@@ -142,6 +142,17 @@ impl RenderTree {
             }
         }
 
+        // A node that took up its bound classes or a state rule before this pass holds a
+        // snapshot of itself without them, and the rules applied here belong to that snapshot:
+        // fold them in, then lay the classes and states over it again below.
+        let mut snapshotted: Vec<LayoutNodeId> = Vec::new();
+        for (node_id, es) in &overrides {
+            if let Some(base) = self.base_taffy_styles.get_mut(node_id) {
+                Self::apply_element_style_to_taffy(base, es);
+                snapshotted.push(*node_id);
+            }
+        }
+
         for (node_id, es) in overrides {
             let Some(mut style) = self.layout_tree.get_style(node_id) else {
                 continue;
@@ -341,6 +352,11 @@ impl RenderTree {
             }
 
             self.layout_tree.set_style(node_id, style);
+        }
+        snapshotted.sort_unstable();
+        snapshotted.dedup();
+        for node in snapshotted {
+            self.refold_node(node);
         }
 
         // Auto-create scroll physics for any nodes with overflow: scroll

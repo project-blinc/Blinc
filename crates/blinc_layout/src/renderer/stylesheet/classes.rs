@@ -507,7 +507,7 @@ impl RenderTree {
 
     /// The node as it is under the snapshot with every layer on it: the
     /// classes' rules, then the state rules that apply.
-    fn refold_node(&mut self, node: LayoutNodeId) {
+    pub(super) fn refold_node(&mut self, node: LayoutNodeId) {
         let class_layers: Vec<ElementStyle> = self
             .dynamic_classes
             .get(&node)
