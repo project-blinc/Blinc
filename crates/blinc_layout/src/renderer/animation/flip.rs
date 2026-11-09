@@ -61,16 +61,23 @@ impl RenderTree {
         let mut moved: Vec<(String, f32, f32, crate::tree::LayoutNodeId)> = Vec::new();
 
         for (node_id, render_node) in &self.render_nodes {
-            // Skip elements that already have a transform set by the app (e.g. the dragged item).
-            // FLIP should only animate elements whose position changed passively due to reflow,
-            // not elements being actively positioned via Transform::translate().
-            if render_node.props.transform.is_some() {
-                continue;
-            }
-
             let Some(element_id) = self.element_registry.get_id(*node_id) else {
                 continue;
             };
+            // Skip elements that already have a transform set by the app (e.g. the dragged item).
+            // FLIP should only animate elements whose position changed passively due to reflow,
+            // not elements being actively positioned via Transform::translate(). An identity
+            // transform positions nothing, and a running slide's own offset is not the app's.
+            if !self.flip_animations.contains_key(&element_id)
+                && render_node
+                    .props
+                    .transform
+                    .as_ref()
+                    .is_some_and(|t| !is_identity(t))
+            {
+                continue;
+            }
+
             let Some(old_bounds) = self.flip_previous_bounds.get(&element_id) else {
                 continue;
             };
@@ -153,9 +160,19 @@ impl RenderTree {
             // Create a CSS transition from translate(dx, dy) to translate(0, 0)
             use blinc_animation::{FillMode, KeyframeProperties, MultiKeyframeAnimation};
 
+            // Moved again while still sliding: start from where it is drawn now, not from where
+            // it was laid out, so a reversal carries on from the running offset.
+            let (run_x, run_y) = self
+                .flip_animations
+                .get(element_id)
+                .map(|a| {
+                    let p = &a.current_properties;
+                    (p.translate_x.unwrap_or(0.0), p.translate_y.unwrap_or(0.0))
+                })
+                .unwrap_or((0.0, 0.0));
             let from = KeyframeProperties {
-                translate_x: Some(*dx),
-                translate_y: Some(*dy),
+                translate_x: Some(*dx + run_x),
+                translate_y: Some(*dy + run_y),
                 ..Default::default()
             };
 
@@ -244,4 +261,9 @@ impl RenderTree {
                 .is_some_and(|nid| painted.contains(&nid))
         })
     }
+}
+
+/// Whether `t` leaves an element where it is.
+fn is_identity(t: &blinc_core::Transform) -> bool {
+    matches!(t, blinc_core::Transform::Affine2D(a) if *a == blinc_core::Affine2D::IDENTITY)
 }
