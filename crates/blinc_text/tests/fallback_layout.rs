@@ -12,7 +12,7 @@
 
 use blinc_text::layout::{LayoutOptions, TextLayoutEngine};
 use blinc_text::registry::{FontRegistry, GenericFont};
-use blinc_text::{FallbackFaces, TextRenderer};
+use blinc_text::{FallbackFaces, TextRenderer, TextShaper};
 
 const SIZE: f32 = 16.0;
 
@@ -432,8 +432,8 @@ fn cjk_glyphs_are_rasterized_with_ink() {
     }
 }
 
-/// Emoji sequences that the emoji face draws as one picture: a skin tone, a family joined
-/// with zero-width joiners, a flag.
+/// Emoji sequences an emoji face can draw as one picture: a skin tone, a family joined with
+/// zero-width joiners, a flag. The tests check only those the face at hand combines.
 const SEQUENCES: [&str; 4] = [
     "\u{1F44B}\u{1F3FE}",
     "\u{1F44D}\u{1F3FD}",
@@ -466,7 +466,12 @@ fn an_emoji_sequence_lays_out_and_draws_as_one_glyph() {
         for sequence in SEQUENCES {
             let text = format!("a{sequence}b");
             let faces = FallbackFaces::resolve(&mut registry, &primary, &text);
-            if faces.face(blinc_text::FaceChoice::Emoji).is_none() {
+            let Some(emoji) = faces.face(blinc_text::FaceChoice::Emoji) else {
+                continue;
+            };
+            // Only a sequence the face itself draws as one glyph (Segoe UI Emoji has no flags
+            // and draws some families as separate people).
+            if TextShaper::new().shape(sequence, emoji, SIZE).glyphs.len() != 1 {
                 continue;
             }
             let delta = width(&mut registry, &text) - width(&mut registry, "ab");

@@ -8,6 +8,8 @@ use blinc_layout::div::div;
 use blinc_layout::renderer::ElementType;
 use blinc_layout::widgets::text_input::{blur_all_text_inputs, text_input_data};
 use blinc_recorder::Headless;
+use blinc_text::TextShaper;
+use blinc_text::registry::{FontRegistry, GenericFont};
 use blinc_theme::{ColorScheme, HybridTheme};
 
 const TEXT: &str = "the quick brown fox jumps over the lazy dog";
@@ -121,11 +123,21 @@ fn an_emoji_sequence_takes_the_room_of_one_emoji() {
         return;
     }
     let (single, _, _) = input_with("\u{4f60}\u{597d}\u{1F44B}hello");
+    let mut registry = FontRegistry::new();
+    let Ok(emoji) = registry.load_generic_with_style(GenericFont::Emoji, 400, false) else {
+        eprintln!("no emoji face: skipped");
+        return;
+    };
     for sequence in [
         "\u{1F44B}\u{1F3FE}",
         "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}",
         "\u{1F1F3}\u{1F1EC}",
     ] {
+        // Only a sequence the emoji face itself draws as one glyph (Segoe UI Emoji has no flags
+        // and draws some families as separate people).
+        if TextShaper::new().shape(sequence, &emoji, 16.0).glyphs.len() != 1 {
+            continue;
+        }
         let text = format!("\u{4f60}\u{597d}{sequence}hello");
         let (width, right, caret) = input_with(&text);
         assert!(

@@ -30,4 +30,5 @@ tracing.workspace = true
 [dev-dependencies]
 blinc_cn = { path = "../blinc_cn", version = "0.6.0" }
 blinc_theme = { path = "../blinc_theme", version = "0.6.0" }
+blinc_text = { path = "../blinc_text", version = "0.6.0" }
 blinc_layout = { path = "../blinc_layout", version = "0.6.0", features = ["recorder"] }
