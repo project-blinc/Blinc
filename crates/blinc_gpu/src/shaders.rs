@@ -125,10 +125,10 @@ pub const SIMPLE_GLASS_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/si
 pub const COMPOSITE_SHADER: &str = crate::shaders_russl::composite::WGSL;
 
 /// Shader for tessellated path rendering (triangles with per-vertex colors)
-pub const PATH_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/path.wgsl"));
+pub const PATH_SHADER: &str = crate::sdf_russl::path::WGSL;
 
 /// Path shader using a data texture for auxiliary clips.
-pub const PATH_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/path_dt.wgsl"));
+pub const PATH_DT_SHADER: &str = crate::sdf_russl::path_dt::WGSL;
 
 /// Shader for image rendering
 ///

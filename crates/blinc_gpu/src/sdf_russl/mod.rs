@@ -54,6 +54,20 @@ pub(crate) mod image_dt {
     }
 }
 
+/// The path shader: storage tier and data texture tier, the auxiliary data at slot 7.
+#[path = "shared/path.rs"]
+pub(crate) mod path_source;
+pub(crate) mod path {
+    russl::russl! { #![specialize(super::path_source)] const AUX_SLOT: u32 = 7; }
+}
+pub(crate) mod path_dt {
+    russl::russl! {
+        #![specialize(super::path_source)]
+        const TIER: u32 = 2;
+        const AUX_SLOT: u32 = 7;
+    }
+}
+
 /// The core shader: storage tier, vertex buffer tier and data texture tier, and `simple`, the
 /// storage tier with the blocks plain solid shapes never use switched off.
 #[path = "shared/sdf_core.rs"]

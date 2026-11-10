@@ -1,7 +1,7 @@
 //! The glyph shader draws what its formulas say, on the storage tier and the data texture tier:
 //! the same glyphs give the same pixels on both, and probes match the shader's maths on the CPU.
 
-use wgpu::util::DeviceExt;
+use crate::parity_harness::{self as harness, AuxData};
 
 const SIZE: u32 = 128;
 const GLYPH_ATLAS: u32 = 64;
@@ -66,56 +66,6 @@ impl Glyph {
         }
         out
     }
-}
-
-fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
-    let instance = wgpu::Instance::default();
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-        power_preference: wgpu::PowerPreference::default(),
-        force_fallback_adapter: false,
-        compatible_surface: None,
-    }))
-    .ok()?;
-    pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
-}
-
-fn texture(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    size: (u32, u32),
-    format: wgpu::TextureFormat,
-    texel_bytes: u32,
-    bytes: &[u8],
-) -> wgpu::TextureView {
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: None,
-        size: wgpu::Extent3d {
-            width: size.0,
-            height: size.1,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
-    queue.write_texture(
-        texture.as_image_copy(),
-        bytes,
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(size.0 * texel_bytes),
-            rows_per_image: Some(size.1),
-        },
-        wgpu::Extent3d {
-            width: size.0,
-            height: size.1,
-            depth_or_array_layers: 1,
-        },
-    );
-    texture.create_view(&Default::default())
 }
 
 /// The glyph atlas coverage at texel `(x, y)`.
@@ -189,7 +139,7 @@ fn draw(
                 B::Sampler(wgpu::SamplerBindingType::Filtering),
             ),
             entry(4, S::FRAGMENT, float(true)),
-            entry(5, S::FRAGMENT, data),
+            entry(5, S::FRAGMENT, AuxData::binding_type(data_texture)),
         ],
     });
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -241,28 +191,16 @@ fn draw(
         cache: None,
     });
 
-    let buffer = |contents: &[u8], usage| {
-        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents,
-            usage,
-        })
-    };
-    let uniforms = buffer(
+    let uniforms = harness::buffer(
+        device,
         bytemuck::bytes_of(&[SIZE as f32, SIZE as f32, 0.0, 0.0]),
         wgpu::BufferUsages::UNIFORM,
     );
     let glyph_floats: Vec<f32> = glyphs.iter().flat_map(|g| g.floats()).collect();
-    let mut aux = aux.to_vec();
-    if aux.is_empty() {
-        aux.push([0.0; 4]);
-    }
     let glyph_buffer;
-    let aux_buffer;
     let glyph_view;
-    let aux_view;
-    let (glyph_binding, aux_binding) = if data_texture {
-        glyph_view = texture(
+    let glyph_binding = if data_texture {
+        glyph_view = harness::texture(
             device,
             queue,
             (6, glyphs.len() as u32),
@@ -270,35 +208,20 @@ fn draw(
             16,
             bytemuck::cast_slice(&glyph_floats),
         );
-        let rows = aux.len().div_ceil(1024);
-        aux.resize(rows * 1024, [0.0; 4]);
-        aux_view = texture(
-            device,
-            queue,
-            (1024, rows as u32),
-            wgpu::TextureFormat::Rgba32Float,
-            16,
-            bytemuck::cast_slice(&aux),
-        );
-        (
-            wgpu::BindingResource::TextureView(&glyph_view),
-            wgpu::BindingResource::TextureView(&aux_view),
-        )
+        wgpu::BindingResource::TextureView(&glyph_view)
     } else {
-        glyph_buffer = buffer(
+        glyph_buffer = harness::buffer(
+            device,
             bytemuck::cast_slice(&glyph_floats),
             wgpu::BufferUsages::STORAGE,
         );
-        aux_buffer = buffer(bytemuck::cast_slice(&aux), wgpu::BufferUsages::STORAGE);
-        (
-            glyph_buffer.as_entire_binding(),
-            aux_buffer.as_entire_binding(),
-        )
+        glyph_buffer.as_entire_binding()
     };
+    let aux = AuxData::new(device, queue, data_texture, aux);
     let atlas_bytes: Vec<u8> = (0..GLYPH_ATLAS)
         .flat_map(|y| (0..GLYPH_ATLAS).map(move |x| coverage(x, y)))
         .collect();
-    let atlas = texture(
+    let atlas = harness::texture(
         device,
         queue,
         (GLYPH_ATLAS, GLYPH_ATLAS),
@@ -309,7 +232,7 @@ fn draw(
     let emoji_bytes: Vec<u8> = (0..COLOR_ATLAS)
         .flat_map(|y| (0..COLOR_ATLAS).flat_map(move |x| emoji_texel(x, y)))
         .collect();
-    let emoji = texture(
+    let emoji = harness::texture(
         device,
         queue,
         (COLOR_ATLAS, COLOR_ATLAS),
@@ -348,81 +271,16 @@ fn draw(
             },
             wgpu::BindGroupEntry {
                 binding: 5,
-                resource: aux_binding,
+                resource: aux.resource(),
             },
         ],
     });
 
-    let target = device.create_texture(&wgpu::TextureDescriptor {
-        label: None,
-        size: wgpu::Extent3d {
-            width: SIZE,
-            height: SIZE,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
-    let readback = device.create_buffer(&wgpu::BufferDescriptor {
-        label: None,
-        size: (SIZE * SIZE * 4) as u64,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-    let mut encoder = device.create_command_encoder(&Default::default());
-    {
-        let view = target.create_view(&Default::default());
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: None,
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 64.0 / 255.0,
-                        g: 128.0 / 255.0,
-                        b: 191.0 / 255.0,
-                        a: 1.0,
-                    }),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
+    harness::render(device, queue, SIZE, CLEAR, |pass| {
         pass.set_pipeline(&pipeline);
         pass.set_bind_group(0, &bind, &[]);
         pass.draw(0..6, 0..glyphs.len() as u32);
-    }
-    encoder.copy_texture_to_buffer(
-        target.as_image_copy(),
-        wgpu::TexelCopyBufferInfo {
-            buffer: &readback,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(SIZE * 4),
-                rows_per_image: None,
-            },
-        },
-        wgpu::Extent3d {
-            width: SIZE,
-            height: SIZE,
-            depth_or_array_layers: 1,
-        },
-    );
-    queue.submit([encoder.finish()]);
-    let slice = readback.slice(..);
-    slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-    device
-        .poll(wgpu::PollType::Wait)
-        .expect("the copy finishes");
-    slice.get_mapped_range().to_vec()
+    })
 }
 
 /// Grayscale and colour glyphs, a rectangular clip with fades, and rounded rect and ellipse
@@ -483,13 +341,12 @@ fn scene() -> (Vec<Glyph>, Vec<[f32; 4]>) {
 }
 
 fn pixel(pixels: &[u8], x: u32, y: u32) -> [u8; 4] {
-    let i = ((y * SIZE + x) * 4) as usize;
-    [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]]
+    harness::pixel(pixels, SIZE, x, y)
 }
 
 #[test]
 fn the_data_texture_tier_draws_the_pixels_the_storage_tier_draws() {
-    let Some((device, queue)) = device() else {
+    let Some((device, queue)) = harness::device() else {
         eprintln!("no adapter: skipped");
         return;
     };
@@ -568,7 +425,7 @@ fn assert_emoji(pixels: &[u8], at: (u32, u32), texel: (u32, u32), clip: f32) {
 /// formulas can be evaluated on the CPU.
 #[test]
 fn glyphs_draw_the_atlas_texel_through_the_formulas() {
-    let Some((device, queue)) = device() else {
+    let Some((device, queue)) = harness::device() else {
         eprintln!("no adapter: skipped");
         return;
     };

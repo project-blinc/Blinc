@@ -33,8 +33,12 @@ pub use mesh_pipeline::{DirectionalLight, MAX_DIR_LIGHTS};
 #[cfg(test)]
 mod image_parity;
 pub mod paint;
+#[cfg(test)]
+mod parity_harness;
 pub mod particles;
 pub mod path;
+#[cfg(test)]
+mod path_parity;
 pub mod primitives;
 pub mod renderer;
 #[cfg(test)]
