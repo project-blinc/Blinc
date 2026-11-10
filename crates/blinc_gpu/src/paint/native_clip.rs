@@ -1,5 +1,6 @@
 //! Path clips for draws consumed by the native primitive pipelines.
-use super::{ClipData, ClipShape, ClipType, GpuPaintContext, GpuPrimitive};
+use super::{ClipData, ClipShape, GpuPaintContext};
+use crate::primitives::{ClipType, GpuGlassPrimitive, GpuPrimitive};
 
 impl GpuPaintContext<'_> {
     /// Append prepared screen-space glyphs to the active batch's separate text
@@ -110,7 +111,7 @@ impl GpuPaintContext<'_> {
                 .push_path_with_brush_info(path, bounds, radius, kind, brush);
         }
     }
-    pub(super) fn emit_native_glass(&mut self, mut glass: super::GpuGlassPrimitive, nested: bool) {
+    pub(super) fn emit_native_glass(&mut self, mut glass: GpuGlassPrimitive, nested: bool) {
         if let Some((bounds, pointer)) = self.native_primitive_path_clip() {
             glass.clip_bounds = bounds;
             glass.clip_radius = [pointer, 0.0, 0.0, -1.0];

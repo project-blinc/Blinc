@@ -1,6 +1,7 @@
 //! Clip stack: pushing clips and resolving them into per-primitive clip data.
 
-use super::{ClipData, GpuPaintContext, PolygonClipData};
+use super::aux_data::PolygonClipData;
+use super::{ClipData, GpuPaintContext};
 use crate::primitives::ClipType;
 use blinc_core::{Affine2D, ClipShape, CornerRadius, FillRule, Point, Rect};
 
