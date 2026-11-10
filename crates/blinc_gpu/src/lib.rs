@@ -42,6 +42,8 @@ pub mod paint;
 #[cfg(test)]
 mod parity_harness;
 pub mod particles;
+#[cfg(test)]
+mod particles_parity;
 pub mod path;
 #[cfg(test)]
 mod path_parity;

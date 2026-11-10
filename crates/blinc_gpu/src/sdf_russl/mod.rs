@@ -123,6 +123,21 @@ pub(crate) mod mesh;
 #[path = "shared/mesh_dt.rs"]
 pub(crate) mod mesh_dt;
 
+/// The particle shaders' particle.
+#[path = "shared/particle_data.rs"]
+pub(crate) mod particle_data;
+
+/// The particle render shader: storage tier and data texture tier.
+#[path = "shared/particle_render.rs"]
+pub(crate) mod particle_render;
+pub(crate) mod particle_render_dt {
+    russl::russl! { #![specialize(super::particle_render)] const TIER: u32 = 2; }
+}
+
+/// The particle simulation.
+#[path = "shared/particle_compute.rs"]
+pub(crate) mod particle_compute;
+
 /// The core shader: storage tier, vertex buffer tier and data texture tier, and `simple`, the
 /// storage tier with the blocks plain solid shapes never use switched off.
 #[path = "shared/sdf_core.rs"]
