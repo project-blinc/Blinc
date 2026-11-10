@@ -6,10 +6,7 @@ pub(crate) mod access;
 mod clip;
 #[path = "../shared/common.rs"]
 mod common;
-#[path = "../shared/notch.rs"]
-mod notch;
 #[path = "../shared/primitive.rs"]
 pub(crate) mod primitive;
 
 pub(crate) mod sdf_core;
-pub(crate) mod sdf_notch;

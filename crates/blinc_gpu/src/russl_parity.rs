@@ -724,6 +724,136 @@ fn the_3d_pipeline_raymarches_shapes_and_groups() {
     assert_ne!(grouped, empty, "the group does not read its shapes");
 }
 
+/// A scene of notches: concave corners, every edge modifier, a border, shadows, gradients, a turn
+/// with a clip, a mask and filter, the ABI's mode, and a polygon clip whose vertices are read from
+/// the auxiliary data at index 1600.
+fn scene_notch() -> (Vec<GpuPrimitive>, Vec<[f32; 4]>) {
+    // `corners`: 1 for a concave corner (TL, TR, BR, BL); `top` and `bottom`: (type, width,
+    // height, corner radius) of the edge modifier, type 1 scoop, 2 bulge, 3 cut, 4 peak.
+    let notch = |x: f32, y: f32, corners: [f32; 4], top: [f32; 4], bottom: [f32; 4]| {
+        let mut p = GpuPrimitive::rect(x, y, 44.0, 40.0)
+            .with_color(0.2, 0.6, 0.8, 1.0)
+            .with_corner_radius(8.0);
+        p.type_info[0] = 8;
+        p.light = corners;
+        p.perspective = top;
+        p.sdf_3d = bottom;
+        p
+    };
+    let none = [0.0; 4];
+    let mut prims = vec![
+        notch(6.0, 8.0, [1.0, 1.0, 0.0, 0.0], none, none).with_border(2.0, 1.0, 1.0, 1.0, 1.0),
+        notch(
+            66.0,
+            8.0,
+            [0.0; 4],
+            [2.0, 20.0, 8.0, 3.0],
+            [1.0, 20.0, 8.0, 3.0],
+        ),
+        notch(
+            6.0,
+            62.0,
+            [0.0; 4],
+            [3.0, 20.0, 8.0, 0.0],
+            [4.0, 20.0, 8.0, 0.0],
+        )
+        .with_linear_gradient(1.0, 0.8, 0.1, 1.0, 0.1, 0.2, 0.9, 1.0),
+        notch(
+            66.0,
+            62.0,
+            [0.0, 0.0, 1.0, 1.0],
+            [1.0, 16.0, 10.0, 4.0],
+            none,
+        )
+        .with_shadow(2.0, 3.0, 6.0, 1.0, 0.0, 0.0, 0.0, 0.6),
+    ];
+    let mut conic = notch(30.0, 30.0, [1.0, 0.0, 0.0, 1.0], none, none);
+    conic.type_info[1] = 3;
+    conic.color2 = [0.9, 0.1, 0.4, 1.0];
+    conic.gradient_params = [52.0, 50.0, 0.3, 0.0];
+    prims.push(conic);
+    let mut turned = notch(
+        66.0,
+        30.0,
+        [1.0, 1.0, 0.0, 0.0],
+        [2.0, 14.0, 6.0, 2.0],
+        none,
+    )
+    .with_clip_rounded_rect(60.0, 24.0, 60.0, 50.0, 8.0, 8.0, 8.0, 8.0);
+    turned.local_affine = [0.94, 0.34, -0.34, 0.94];
+    prims.push(turned);
+    let mut masked = notch(6.0, 84.0, [0.0, 1.0, 1.0, 0.0], none, none);
+    masked.mask_info = [1.0, 1.0, 0.0, 0.0];
+    masked.mask_params = [0.0, 0.0, 1.0, 1.0];
+    masked.filter_a = [0.5, 0.0, 0.2, 0.0];
+    masked.filter_b = [1.1, 0.9, 1.0, 0.0];
+    prims.push(masked);
+    let mut abi = notch(
+        60.0,
+        80.0,
+        [1.0, 0.0, 0.0, 1.0],
+        [2.0, 18.0, 6.0, 2.0],
+        none,
+    );
+    abi.notch_info = [2.0, 0.0, 0.0, 0.0];
+    prims.push(abi.with_border(1.5, 0.0, 0.0, 0.0, 1.0));
+    let mut abi_shadow = notch(6.0, 6.0, [1.0, 1.0, 1.0, 1.0], none, none);
+    abi_shadow.notch_info = [2.0, 1.0, 0.0, 0.0];
+    abi_shadow.shadow = [2.0, 2.0, 6.0, 1.0];
+    abi_shadow.shadow_color = [0.0, 0.0, 0.0, 0.7];
+    prims.push(abi_shadow);
+    let mut polygon = notch(
+        40.0,
+        56.0,
+        [1.0, 1.0, 0.0, 0.0],
+        [2.0, 16.0, 6.0, 2.0],
+        none,
+    );
+    polygon.type_info[2] = 4;
+    polygon.clip_bounds = [0.0, 0.0, 128.0, 128.0];
+    polygon.clip_radius = [0.0, 0.0, 3.0, 1600.0];
+    prims.push(polygon);
+    let mut aux = vec![[0.0; 4]; 1600];
+    aux.extend([[-10.0, -10.0, 60.0, -10.0], [25.0, 50.0, 0.0, 0.0]]);
+    (prims, aux)
+}
+
+#[test]
+fn the_notch_fallback_tiers_draw_what_the_storage_tier_draws() {
+    let Some((device, queue)) = device() else {
+        eprintln!("no adapter with vertex storage: skipped");
+        return;
+    };
+    let (prims, aux) = scene_notch();
+    let storage = draw_in_tier(
+        &device,
+        &queue,
+        Tier::Storage,
+        crate::sdf_russl::sdf_notch::WGSL,
+        &[],
+        &prims,
+        &aux,
+    );
+    assert!(
+        storage.iter().any(|&p| p != 0),
+        "the storage tier drew nothing"
+    );
+    for (tier, source) in [
+        (Tier::VertexBuffer, crate::sdf_russl::sdf_notch_vb::WGSL),
+        (Tier::DataTexture, crate::sdf_russl::sdf_notch_dt::WGSL),
+    ] {
+        let other = draw_in_tier(&device, &queue, tier, source, &[], &prims, &aux);
+        let differing = storage
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(other.as_chunks::<4>().0)
+            .filter(|(a, b)| a != b)
+            .count();
+        assert_eq!(differing, 0, "{differing} of {} pixels differ", SIZE * SIZE);
+    }
+}
+
 #[test]
 fn the_notch_pipeline_fills_the_top_slot_for_bulges_and_peaks_and_hollows_it_for_scoops_and_cuts() {
     let Some((device, queue)) = device() else {
@@ -738,7 +868,7 @@ fn the_notch_pipeline_fills_the_top_slot_for_bulges_and_peaks_and_hollows_it_for
         p.perspective = [kind, 20.0, 10.0, 0.0];
         p
     };
-    let wgsl = crate::sdf_russl::storage::sdf_notch::WGSL;
+    let wgsl = crate::sdf_russl::sdf_notch::WGSL;
     for (kind, name, filled) in [
         (1.0, "scoop", false),
         (2.0, "bulge", true),

@@ -27,14 +27,6 @@ const SHADERS: &[(&str, &str)] = &[
         "sdf_core_vb",
         include_str!("../src/shaders/sdf_core_vb.wgsl"),
     ),
-    (
-        "sdf_notch_dt",
-        include_str!("../src/shaders/sdf_notch_dt.wgsl"),
-    ),
-    (
-        "sdf_notch_vb",
-        include_str!("../src/shaders/sdf_notch_vb.wgsl"),
-    ),
 ];
 
 /// `(name, wgsl_type)` in declaration order.

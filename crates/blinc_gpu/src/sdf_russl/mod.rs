@@ -3,8 +3,8 @@
 //! The sources live in `shared`. A shader written once serves every device tier: `TIER` is a
 //! pipeline constant (0 storage buffers, 1 a vertex buffer for the vertex stage, 2 data
 //! textures), `#if` in the source chooses what each tier declares and reads, and a one-line
-//! specialisation builds the variant. `sdf_core`, `simple` and `sdf_notch` are still written for
-//! the storage tier in `storage`, and `simple` is `sdf_core` with the blocks plain solid shapes
+//! specialisation builds the variant. `sdf_core` and `simple` are still written for the storage
+//! tier in `storage`, and `simple` is `sdf_core` with the blocks plain solid shapes
 //! never use switched off. `russl_parity` checks that simple and full draw the same pixels for the
 //! shapes `simple` takes, and that each tier draws what the storage tier draws.
 
@@ -17,6 +17,8 @@ pub(crate) mod access;
 mod clip;
 #[path = "shared/common.rs"]
 mod common;
+#[path = "shared/notch.rs"]
+mod notch;
 #[path = "shared/primitive.rs"]
 pub(crate) mod primitive;
 #[path = "shared/shadow.rs"]
@@ -36,6 +38,16 @@ pub(crate) mod sdf_shadow_vb {
 }
 pub(crate) mod sdf_shadow_dt {
     russl::russl! { #![specialize(super::sdf_shadow)] const TIER: u32 = 2; }
+}
+
+/// The notch shader: the same three tiers.
+#[path = "shared/sdf_notch.rs"]
+pub(crate) mod sdf_notch;
+pub(crate) mod sdf_notch_vb {
+    russl::russl! { #![specialize(super::sdf_notch)] const TIER: u32 = 1; }
+}
+pub(crate) mod sdf_notch_dt {
+    russl::russl! { #![specialize(super::sdf_notch)] const TIER: u32 = 2; }
 }
 
 /// The 3D shader: the same three tiers.

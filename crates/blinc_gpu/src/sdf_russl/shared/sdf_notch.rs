@@ -1,12 +1,15 @@
 //! The SDF notch shader: rounded rects with concave corners and edge modifiers, and the ABI's
-//! notch shapes with their shadows.
+//! notch shapes with their shadows. Tier 0 reads the instance fields the vertex stage needs from
+//! the storage buffer; the other tiers have no storage buffer in the vertex stage and read them
+//! from the vertex buffer.
 
 russl::russl! {
-    use super::primitive::{Uniforms, Primitive};
-    use super::access::{UNIFORMS, PRIMITIVES, GLYPH_ATLAS, GLYPH_SAMPLER, COLOR_GLYPH_ATLAS, AUX_DATA};
+    use super::access::{UNIFORMS, prim};
     use super::clip::{calculate_clip_alpha, calculate_polygon_clip_alpha, gradient_table_color, abi_shape_clip_alpha};
     use super::common::{erf, apply_css_filter, quarter_ellipse_sdf, sd_shaped_rect};
     use super::notch::{sd_notch, sd_abi_notch};
+
+    #[pipeline] const TIER: u32 = 0;
 
     // ============================================================================
     // Blinc SDF Notch Primitive Shader
@@ -38,20 +41,40 @@ russl::russl! {
     fn vs_main(
         #[builtin(vertex_index)] vertex_index: u32,
         #[builtin(instance_index)] instance_index: u32,
+        #if TIER >= 1
+            #[location(0)] instance_bounds: Vec4,
+            #[location(1)] instance_shadow: Vec4,
+            #[location(3)] instance_perspective: Vec4,
+            #[location(4)] instance_sdf_3d: Vec4,
+            #[location(5)] instance_local_affine: Vec4,
+            #[location(6)] instance_corner_radius: Vec4,
+            #[location(7)] instance_light: Vec4,
+            #[location(8)] instance_notch_info: Vec4,
+        #endif
     ) -> VertexOutput {
         let mut out: VertexOutput;
 
-        let prim = PRIMITIVES[instance_index];
+        #if TIER == 0
+            let p = prim(instance_index);
+            let instance_bounds = p.bounds;
+            let instance_shadow = p.shadow;
+            let instance_perspective = p.perspective;
+            let instance_sdf_3d = p.sdf_3d;
+            let instance_local_affine = p.local_affine;
+            let instance_corner_radius = p.corner_radius;
+            let instance_light = p.light;
+            let instance_notch_info = p.notch_info;
+        #endif
 
         // Expand bounds for shadow blur
-        let mut blur_expand = prim.shadow.z * 3.0 + abs(prim.shadow.x) + abs(prim.shadow.y);
-        if prim.notch_info.x > 0.0 && prim.notch_info.y > 0.5 {
-            let la = prim.local_affine;
-            blur_expand = (prim.shadow.z * 3.0 + abs(prim.shadow.x) + abs(prim.shadow.y) + abs(prim.shadow.w))
+        let mut blur_expand = instance_shadow.z * 3.0 + abs(instance_shadow.x) + abs(instance_shadow.y);
+        if instance_notch_info.x > 0.0 && instance_notch_info.y > 0.5 {
+            let la = instance_local_affine;
+            blur_expand = (instance_shadow.z * 3.0 + abs(instance_shadow.x) + abs(instance_shadow.y) + abs(instance_shadow.w))
                 * max(abs(la.x) + abs(la.z), abs(la.y) + abs(la.w));
         }
 
-        let la = prim.local_affine; // [a, b, c, d] of normalized 2x2 affine
+        let la = instance_local_affine; // [a, b, c, d] of normalized 2x2 affine
         // Check if local_affine is non-identity (rotation, skew, or non-uniform scale)
         let has_local_affine = abs(la.x - 1.0) > 0.0001 || abs(la.y) > 0.0001
                             || abs(la.z) > 0.0001 || abs(la.w - 1.0) > 0.0001;
@@ -60,9 +83,9 @@ russl::russl! {
         if has_local_affine {
             // General 2D affine (rotation, skew, non-uniform scale):
             // Transform the 4 corners of the local rect by the local_affine to find AABB
-            let center = prim.bounds.xy + prim.bounds.zw * 0.5;
-            let hw = prim.bounds.z * 0.5;
-            let hh = prim.bounds.w * 0.5;
+            let center = instance_bounds.xy + instance_bounds.zw * 0.5;
+            let hw = instance_bounds.z * 0.5;
+            let hh = instance_bounds.w * 0.5;
             // Transform corners: la * (±hw, ±hh)
             // new_x = la.x * cx + la.z * cy, new_y = la.y * cx + la.w * cy
             let c0x = la.x * hw + la.z * hh;
@@ -87,8 +110,8 @@ russl::russl! {
             let mut notch_right = 0.0;
             let mut notch_bottom = 0.0;
 
-            let ct = prim.light; // (TL, TR, BR, BL) corner type flags
-            let cr = prim.corner_radius;
+            let ct = instance_light; // (TL, TR, BR, BL) corner type flags
+            let cr = instance_corner_radius;
             // Concave corners extend the shape outward by `radius` along the
             // two edges they touch.
             if ct.x > 0.5 { // TL concave
@@ -109,22 +132,22 @@ russl::russl! {
             }
             // Top / bottom modifiers: bulge (2) and peak (4) both extend the
             // shape by `height` past the base edge.
-            let top_type = prim.perspective.x;
-            let top_height = prim.perspective.z;
+            let top_type = instance_perspective.x;
+            let top_height = instance_perspective.z;
             if (top_type > 1.5 && top_type < 2.5) || (top_type > 3.5 && top_type < 4.5) {
                 notch_top = max(notch_top, top_height);
             }
-            let bot_type = prim.sdf_3d.x;
-            let bot_height = prim.sdf_3d.z;
+            let bot_type = instance_sdf_3d.x;
+            let bot_height = instance_sdf_3d.z;
             if (bot_type > 1.5 && bot_type < 2.5) || (bot_type > 3.5 && bot_type < 4.5) {
                 notch_bottom = max(notch_bottom, bot_height);
             }
 
             bounds = Vec4::new(
-                prim.bounds.x - blur_expand - notch_left,
-                prim.bounds.y - blur_expand - notch_top,
-                prim.bounds.z + blur_expand * 2.0 + notch_left + notch_right,
-                prim.bounds.w + blur_expand * 2.0 + notch_top + notch_bottom
+                instance_bounds.x - blur_expand - notch_left,
+                instance_bounds.y - blur_expand - notch_top,
+                instance_bounds.z + blur_expand * 2.0 + notch_left + notch_right,
+                instance_bounds.w + blur_expand * 2.0 + notch_top + notch_bottom
             );
         }
 
@@ -180,7 +203,7 @@ russl::russl! {
     #[fragment]
     #[location(0)]
     fn fs_main(input: VertexOutput) -> Vec4 {
-        let prim = PRIMITIVES[input.instance_index];
+        let prim = prim(input.instance_index);
         let p = input.uv;
 
         // Screen-space derivative magnitude, computed up-front *outside*

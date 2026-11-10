@@ -43,7 +43,7 @@ pub const SDF_3D_SHADER: &str = crate::sdf_russl::sdf_3d::WGSL;
 ///
 /// Handles concave corners with edge modifiers (scoop, bulge, cut, peak).
 /// Full border, gradient, filter, and mask support.
-pub const SDF_NOTCH_SHADER: &str = crate::sdf_russl::storage::sdf_notch::WGSL;
+pub const SDF_NOTCH_SHADER: &str = crate::sdf_russl::sdf_notch::WGSL;
 
 /// Vertex-buffer fallback: Core shapes (no VERTEX_STORAGE needed)
 ///
@@ -58,7 +58,7 @@ pub const SDF_SHADOW_VB_SHADER: &str = crate::sdf_russl::sdf_shadow_vb::WGSL;
 pub const SDF_3D_VB_SHADER: &str = crate::sdf_russl::sdf_3d_vb::WGSL;
 
 /// Vertex-buffer fallback: Notch primitives
-pub const SDF_NOTCH_VB_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_notch_vb.wgsl"));
+pub const SDF_NOTCH_VB_SHADER: &str = crate::sdf_russl::sdf_notch_vb::WGSL;
 
 /// Data-texture fallback: Core shapes (no storage buffers needed — WebGL2)
 ///
@@ -73,7 +73,7 @@ pub const SDF_SHADOW_DT_SHADER: &str = crate::sdf_russl::sdf_shadow_dt::WGSL;
 pub const SDF_3D_DT_SHADER: &str = crate::sdf_russl::sdf_3d_dt::WGSL;
 
 /// Data-texture fallback: Notch primitives
-pub const SDF_NOTCH_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_notch_dt.wgsl"));
+pub const SDF_NOTCH_DT_SHADER: &str = crate::sdf_russl::sdf_notch_dt::WGSL;
 
 /// Data-texture fallback: Text rendering (no storage buffers — WebGL2)
 ///
