@@ -51,6 +51,7 @@ mod cull;
 mod cursor;
 mod events;
 mod keyboard_nav;
+mod owners;
 mod paint;
 mod queries;
 mod registries;
@@ -727,6 +728,8 @@ pub struct RenderTree {
     /// intersect the viewport (plus a small overscan buffer). Layout
     /// is still computed for every child — only paint is culled.
     viewport_cull_scrolls: std::collections::HashSet<LayoutNodeId>,
+    /// What rebuilding each node's subtree created, held while it is in place.
+    subtree_owners: owners::SubtreeOwners,
     /// Active cull rect, in screen space, for the current paint walk. Set
     /// when a viewport-cull scroll is entered, restored on exit. Read by
     /// the child recursion in `render_layer_with_motion` to skip subtrees
@@ -1154,6 +1157,7 @@ impl RenderTree {
             scroll_offsets: HashMap::new(),
             scroll_physics: HashMap::new(),
             viewport_cull_scrolls: std::collections::HashSet::new(),
+            subtree_owners: owners::SubtreeOwners::default(),
             cull_viewport: Cell::new(None),
             paint_scroll: Cell::new((0.0, 0.0)),
             visible_anim_active: Cell::new(false),

@@ -188,6 +188,18 @@ impl BuildScope {
     }
 }
 
+impl Drop for BuildScope {
+    /// The runner is gone (its window closed): so is what its builds created.
+    fn drop(&mut self) {
+        if let Some(current) = self.current.take() {
+            current.dispose();
+        }
+        for kept in self.kept.drain(..) {
+            kept.dispose();
+        }
+    }
+}
+
 fn with_current(f: impl FnOnce(&mut Owned)) {
     CURRENT.with(|stack| {
         if let Some(top) = stack.borrow().last() {
@@ -388,6 +400,35 @@ mod tests {
             writes.load(Ordering::SeqCst) - before,
             1,
             "only the last build's effect is left"
+        );
+    }
+
+    #[test]
+    fn dropping_a_build_scope_disposes_its_builds() {
+        let _guard = serial();
+        let runs = Arc::new(AtomicUsize::new(0));
+        let source = signal(0_i32);
+        let mut scope = BuildScope::new();
+        for keep in [false, true] {
+            let pass = scope.begin();
+            let counted = Arc::clone(&runs);
+            effect(move |g| {
+                let _ = g.get(source);
+                counted.fetch_add(1, Ordering::SeqCst);
+            });
+            if keep {
+                scope.keep(pass);
+            } else {
+                scope.finish(pass);
+            }
+        }
+        drop(scope);
+        let before = runs.load(Ordering::SeqCst);
+        source.set(1);
+        assert_eq!(
+            runs.load(Ordering::SeqCst),
+            before,
+            "an effect outlived its scope"
         );
     }
 

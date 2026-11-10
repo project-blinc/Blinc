@@ -544,6 +544,9 @@ pub struct PendingSubtreeRebuild {
     /// Build epoch `parent_id` was minted in, per the crate-private
     /// `BUILD_EPOCH` counter.
     pub epoch: u64,
+    /// What building `new_child` created, if it was built in its own scope. The tree holds it
+    /// for as long as what it applies is in place, and disposes it after.
+    pub owner: Option<blinc_core::owner::Owner>,
 }
 
 impl PendingSubtreeRebuild {
@@ -561,8 +564,22 @@ impl PendingSubtreeRebuild {
 // Safety: PendingSubtreeRebuild is only accessed from the main thread
 unsafe impl Send for PendingSubtreeRebuild {}
 
-/// Queue a subtree rebuild for a node (with layout recomputation)
-pub fn queue_subtree_rebuild(parent_id: LayoutNodeId, new_child: crate::div::Div) {
+impl Drop for PendingSubtreeRebuild {
+    /// A rebuild dropped without being applied (stale, superseded, discarded) gives back what
+    /// building it created. Applying takes the owner first.
+    fn drop(&mut self) {
+        if let Some(owner) = self.owner.take() {
+            owner.dispose();
+        }
+    }
+}
+
+fn queue_rebuild(
+    parent_id: LayoutNodeId,
+    new_child: crate::div::Div,
+    kind: RebuildKind,
+    owner: Option<blinc_core::owner::Owner>,
+) {
     PENDING_SUBTREE_REBUILDS
         .lock()
         .unwrap()
@@ -570,9 +587,25 @@ pub fn queue_subtree_rebuild(parent_id: LayoutNodeId, new_child: crate::div::Div
             tree_scope: crate::tree::scope::current(),
             parent_id,
             new_child,
-            kind: RebuildKind::Structural,
+            kind,
             epoch: current_build_epoch(),
+            owner,
         });
+}
+
+/// Queue a subtree rebuild for a node (with layout recomputation)
+pub fn queue_subtree_rebuild(parent_id: LayoutNodeId, new_child: crate::div::Div) {
+    queue_rebuild(parent_id, new_child, RebuildKind::Structural, None);
+}
+
+/// [`queue_subtree_rebuild`] for children built inside `owner`: the tree disposes it when
+/// the children are replaced or removed.
+pub fn queue_subtree_rebuild_owned(
+    parent_id: LayoutNodeId,
+    new_child: crate::div::Div,
+    owner: blinc_core::owner::Owner,
+) {
+    queue_rebuild(parent_id, new_child, RebuildKind::Structural, Some(owner));
 }
 
 /// Queue a visual-only subtree rebuild (no layout recomputation)
@@ -580,16 +613,7 @@ pub fn queue_subtree_rebuild(parent_id: LayoutNodeId, new_child: crate::div::Div
 /// Used for hover/press state changes where children's visual props change
 /// but the tree structure remains the same.
 pub fn queue_visual_subtree_rebuild(parent_id: LayoutNodeId, new_child: crate::div::Div) {
-    PENDING_SUBTREE_REBUILDS
-        .lock()
-        .unwrap()
-        .push(PendingSubtreeRebuild {
-            tree_scope: crate::tree::scope::current(),
-            parent_id,
-            new_child,
-            kind: RebuildKind::Visual,
-            epoch: current_build_epoch(),
-        });
+    queue_rebuild(parent_id, new_child, RebuildKind::Visual, None);
 }
 
 /// Queue a layout-prop subtree rebuild: patch taffy `Style` on existing
@@ -600,16 +624,7 @@ pub fn queue_visual_subtree_rebuild(parent_id: LayoutNodeId, new_child: crate::d
 /// Spring animations bound to `.w()` / `.h()` / `.left()` etc. land
 /// here.
 pub fn queue_layout_prop_subtree_rebuild(parent_id: LayoutNodeId, new_child: crate::div::Div) {
-    PENDING_SUBTREE_REBUILDS
-        .lock()
-        .unwrap()
-        .push(PendingSubtreeRebuild {
-            tree_scope: crate::tree::scope::current(),
-            parent_id,
-            new_child,
-            kind: RebuildKind::LayoutProps,
-            epoch: current_build_epoch(),
-        });
+    queue_rebuild(parent_id, new_child, RebuildKind::LayoutProps, None);
 }
 
 /// Take all queued subtree work. Window runners use their tree's scoped drain.
@@ -3871,7 +3886,10 @@ impl<S: StateTransitions> Stateful<S> {
             } else {
                 Div::new()
             };
-            callback(&state_copy, &mut temp_div);
+            // What the callback creates belongs to this refresh; the tree disposes it when a
+            // later refresh supersedes it.
+            let owner = blinc_core::owner::Owner::default();
+            owner.run(|| callback(&state_copy, &mut temp_div));
             let callback_props = temp_div.render_props();
 
             // Start from base props and merge callback changes on top
@@ -3879,6 +3897,7 @@ impl<S: StateTransitions> Stateful<S> {
             final_props.merge_from(&callback_props);
 
             // Queue the prop update for this node
+            let mut owner = Some(owner);
             if let Some(nid) = cached_node_id {
                 queue_prop_update(nid, final_props);
 
@@ -3886,8 +3905,11 @@ impl<S: StateTransitions> Stateful<S> {
                 // This uses a non-destructive update that walks existing children
                 // and updates their render props without removing/rebuilding them
                 if !temp_div.children_builders().is_empty() {
-                    queue_visual_subtree_rebuild(nid, temp_div);
+                    queue_rebuild(nid, temp_div, RebuildKind::Visual, owner.take());
                 }
+            }
+            if let Some(unused) = owner {
+                unused.dispose();
             }
 
             // Clear current event after callback completes
@@ -3971,7 +3993,10 @@ impl<S: StateTransitions> Stateful<S> {
         } else {
             Div::new()
         };
-        callback(&state_copy, &mut temp_div);
+        // What the callback creates belongs to this refresh; the tree holds it while what it
+        // built is in place.
+        let owner = blinc_core::owner::Owner::default();
+        owner.run(|| callback(&state_copy, &mut temp_div));
 
         // Re-seed container-level classes/id from the Stateful's builder methods.
         // The on_state callback returns its own Div which becomes temp_div, but it
@@ -4031,13 +4056,16 @@ impl<S: StateTransitions> Stateful<S> {
                 g.previous_structural_hash = Some(new_structural_hash);
             }
 
-            if topology_changed {
-                queue_subtree_rebuild(cached_node_id, temp_div);
+            let kind = if topology_changed {
+                RebuildKind::Structural
             } else if structural_changed {
-                queue_layout_prop_subtree_rebuild(cached_node_id, temp_div);
+                RebuildKind::LayoutProps
             } else {
-                queue_visual_subtree_rebuild(cached_node_id, temp_div);
-            }
+                RebuildKind::Visual
+            };
+            queue_rebuild(cached_node_id, temp_div, kind, Some(owner));
+        } else {
+            owner.dispose();
         }
 
         // Register for animation-driven refresh if there are active animations

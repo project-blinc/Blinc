@@ -194,8 +194,14 @@ pub(super) fn check_rebuild(
                 overlay_node_id
             );
             // Build the new overlay content and queue the subtree rebuild
-            let overlay_content = windowed_ctx.overlay_manager.build_overlay_layer();
-            blinc_layout::queue_subtree_rebuild(overlay_node_id, overlay_content);
+            // What the overlays create goes when the layer is rebuilt next.
+            let owner = blinc_core::owner::Owner::default();
+            let overlay_content = owner.run(|| windowed_ctx.overlay_manager.build_overlay_layer());
+            blinc_layout::stateful::queue_subtree_rebuild_owned(
+                overlay_node_id,
+                overlay_content,
+                owner,
+            );
         } else {
             tracing::warn!(
                 "Overlay changed but node '{}' not found in registry - will rebuild on next frame",

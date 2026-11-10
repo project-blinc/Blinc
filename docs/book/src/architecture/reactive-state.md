@@ -256,6 +256,20 @@ owner disposes them and runs any cleanups registered with
 `Owner::on_cleanup`. Keyed state (`use_state_keyed`) is meant to outlive a
 rebuild and is never owned.
 
+Every build is owned the same way:
+
+- A full rebuild owns what it creates until the next fresh tree replaces it.
+- An overlay layer, rebuilt when an overlay opens or closes, owns what its
+  overlays create until the layer is rebuilt again.
+- A Stateful refresh owns what its callback creates. A refresh that rebuilds
+  the children keeps it until the next one does; one that patches the
+  children in place keeps it until the next patch.
+
+A subtree's owners go when the node is removed, and a runner's when its
+window closes. A signal a callback makes without a key therefore lasts only
+until the next refresh; keep state that must outlive it in keyed state or
+outside the build.
+
 See the [Reactive Property Bindings](../core/state.md#reactive-property-bindings)
 section for the call-site surface.
 

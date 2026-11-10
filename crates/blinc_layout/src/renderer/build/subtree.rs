@@ -219,6 +219,7 @@ impl RenderTree {
         // uses the stable id (mapping looked up before we drop the
         // mapping below) so the registry stays in sync.
         let stable_for_remove = self.stable_id(node_id);
+        self.subtree_owners.remove(node_id);
         self.render_nodes.swap_remove(&node_id);
         if let Some(stable) = stable_for_remove {
             self.handler_registry.remove(stable);
@@ -388,7 +389,7 @@ impl RenderTree {
             })
             .collect();
 
-        for (idx, rebuild) in pending.into_iter().enumerate() {
+        for (idx, mut rebuild) in pending.into_iter().enumerate() {
             // Drop work queued against a tree this one replaced.
             // `node_exists` can't catch it: the layout slotmap starts
             // over on a full rebuild, so the entry's id names a live
@@ -560,6 +561,8 @@ impl RenderTree {
                 // this a rebuilt node loses its class padding (accordion
                 // trigger collapse, menubar submenu-row shift).
                 self.apply_stylesheet_layout_overrides_for_subtree(rebuild.parent_id);
+                self.subtree_owners
+                    .built(rebuild.parent_id, rebuild.owner.take());
             } else if matches!(rebuild.kind, crate::stateful::RebuildKind::LayoutProps) {
                 // Layout-prop update — patch taffy `Style` + render
                 // props on every existing layout node, then mark the
@@ -569,10 +572,14 @@ impl RenderTree {
                 // `.w()` / `.h()` / `.left()` take.
                 needs_layout = true;
                 self.update_subtree_layout_recursive(rebuild.parent_id, &rebuild.new_child, router);
+                self.subtree_owners
+                    .refreshed(rebuild.parent_id, rebuild.owner.take());
             } else {
                 // Visual-only update - just update render props of existing children
                 // Don't remove/rebuild, just walk the tree and update props
                 self.update_subtree_props_recursive(rebuild.parent_id, &rebuild.new_child, router);
+                self.subtree_owners
+                    .refreshed(rebuild.parent_id, rebuild.owner.take());
             }
         }
 

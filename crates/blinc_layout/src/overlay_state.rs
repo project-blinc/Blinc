@@ -105,7 +105,10 @@ pub fn rebuild_overlay_subtree_if_dirty(
         );
         return false;
     };
-    crate::queue_subtree_rebuild(node_id, build());
+    // The layer is built afresh: what its overlays create goes when the layer is rebuilt next.
+    let owner = blinc_core::owner::Owner::default();
+    let layer = owner.run(build);
+    crate::stateful::queue_subtree_rebuild_owned(node_id, layer, owner);
     true
 }
 
