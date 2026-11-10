@@ -26,6 +26,9 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - The WebGL2 SDF shaders (`sdf_core_dt` and `sdf_core_vb`) composite a border over the fill with source-over alpha, as `sdf_core` does. A semi-transparent border no longer leaks the page through the ring, which drew a dim stroke with a dotted line along rounded corners.
 - Web renderer setup probes for a WebGPU adapter first and uses the WebGL2 backend when there is none. Browsers that expose `navigator.gpu` but return no adapter no longer fail with "No suitable GPU adapter found".
 
+### Removed
+- `SDF_SHADER`, the monolithic SDF shader. Nothing has drawn with it since the split pipelines replaced it; `SDF_CORE_SHADER`, `SDF_SHADOW_SHADER`, `SDF_3D_SHADER` and `SDF_NOTCH_SHADER` (and their `_VB` and `_DT` variants) are the shaders the renderer uses.
+
 ## [0.6.0] - 2026-11-04
 
 ### Added
