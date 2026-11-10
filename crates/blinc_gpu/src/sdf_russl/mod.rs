@@ -79,6 +79,38 @@ pub(crate) mod backdrop {
     }
 }
 
+/// What the glass shaders share: the uniforms, the primitive and the backdrop.
+#[path = "shared/glass_data.rs"]
+pub(crate) mod glass_data;
+
+/// The liquid glass shader: storage tier and data texture tier, the auxiliary data at slot 4.
+#[path = "shared/glass.rs"]
+mod glass_source;
+pub(crate) mod glass {
+    russl::russl! { #![specialize(super::glass_source)] const AUX_SLOT: u32 = 4; }
+}
+pub(crate) mod glass_dt {
+    russl::russl! {
+        #![specialize(super::glass_source)]
+        const TIER: u32 = 2;
+        const AUX_SLOT: u32 = 4;
+    }
+}
+
+/// The simple frosted glass shader: the same tiers and slot.
+#[path = "shared/simple_glass.rs"]
+mod simple_glass_source;
+pub(crate) mod simple_glass {
+    russl::russl! { #![specialize(super::simple_glass_source)] const AUX_SLOT: u32 = 4; }
+}
+pub(crate) mod simple_glass_dt {
+    russl::russl! {
+        #![specialize(super::simple_glass_source)]
+        const TIER: u32 = 2;
+        const AUX_SLOT: u32 = 4;
+    }
+}
+
 /// The core shader: storage tier, vertex buffer tier and data texture tier, and `simple`, the
 /// storage tier with the blocks plain solid shapes never use switched off.
 #[path = "shared/sdf_core.rs"]

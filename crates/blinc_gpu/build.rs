@@ -133,23 +133,15 @@ fn main() {
         .map(|e| e.path())
         .filter(|p| {
             p.extension().is_some_and(|x| x == "wgsl")
-                && p.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
-                    n.starts_with("sdf_")
-                        || n == "canvas.wgsl"
-                        || matches!(
-                            n,
-                            "glass.wgsl"
-                                | "simple_glass.wgsl"
-                                | "glass_dt.wgsl"
-                                | "simple_glass_dt.wgsl"
-                        )
-                })
+                && p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n == "canvas.wgsl")
         })
         .collect();
     paths.sort();
     assert!(
         !paths.is_empty(),
-        "no sdf_*.wgsl found — did src/shaders move?"
+        "no canvas.wgsl found — did src/shaders move?"
     );
 
     for path in paths {

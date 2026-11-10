@@ -82,11 +82,10 @@ pub const SDF_NOTCH_DT_SHADER: &str = crate::sdf_russl::sdf_notch_dt::WGSL;
 pub const TEXT_DT_SHADER: &str = crate::sdf_russl::text_dt::WGSL;
 
 /// Data-texture fallback: Glass effects (no storage buffers — WebGL2)
-pub const GLASS_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/glass_dt.wgsl"));
+pub const GLASS_DT_SHADER: &str = crate::sdf_russl::glass_dt::WGSL;
 
 /// Data-texture fallback: Simple glass effects (no storage buffers — WebGL2)
-pub const SIMPLE_GLASS_DT_SHADER: &str =
-    include_str!(concat!(env!("OUT_DIR"), "/simple_glass_dt.wgsl"));
+pub const SIMPLE_GLASS_DT_SHADER: &str = crate::sdf_russl::simple_glass_dt::WGSL;
 
 /// Data-texture fallback: Mesh rendering with joint matrices as texture (WebGL2)
 pub const MESH_DT_SHADER: &str = include_str!("shaders/mesh_dt.wgsl");
@@ -105,7 +104,7 @@ pub const TEXT_SHADER: &str = crate::sdf_russl::text::WGSL;
 /// 2. Applying a tint color
 /// 3. Adding optional noise for texture
 /// 4. Compositing with the shape mask
-pub const GLASS_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/glass.wgsl"));
+pub const GLASS_SHADER: &str = crate::sdf_russl::glass::WGSL;
 
 /// Simple frosted glass shader - pure backdrop blur without liquid glass effects
 ///
@@ -119,7 +118,7 @@ pub const GLASS_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/glass.wgs
 /// - Edge bevels or refraction
 /// - Light reflections
 /// - Liquid glass distortion
-pub const SIMPLE_GLASS_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/simple_glass.wgsl"));
+pub const SIMPLE_GLASS_SHADER: &str = crate::sdf_russl::simple_glass::WGSL;
 
 /// Shader for compositing layers with blend modes
 pub const COMPOSITE_SHADER: &str = crate::shaders_russl::composite::WGSL;
