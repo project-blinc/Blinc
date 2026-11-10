@@ -4,8 +4,20 @@
 
 pub(crate) mod backdrop_rows;
 pub(crate) mod bloom;
+pub(crate) mod blur;
 pub(crate) mod clear_quad;
+pub(crate) mod color_matrix;
+pub(crate) mod composite;
+pub(crate) mod drop_shadow;
+#[cfg(test)]
+mod effect_tests;
 mod fullscreen;
+pub(crate) mod glow;
+#[cfg(test)]
+mod harness;
+pub(crate) mod layer_composite;
+mod layer_quad;
+pub(crate) mod mask_image;
 pub(crate) mod oit_composite;
 pub(crate) mod shadow_depth;
 pub(crate) mod skybox;
