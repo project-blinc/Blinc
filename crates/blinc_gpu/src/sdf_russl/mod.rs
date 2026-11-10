@@ -31,6 +31,13 @@ mod three_d;
 #[path = "shared/sdf_simple.rs"]
 pub(crate) mod sdf_simple;
 
+/// The glyph shader: storage tier and data texture tier.
+#[path = "shared/text.rs"]
+pub(crate) mod text;
+pub(crate) mod text_dt {
+    russl::russl! { #![specialize(super::text)] const TIER: u32 = 2; }
+}
+
 /// The core shader: storage tier, vertex buffer tier and data texture tier, and `simple`, the
 /// storage tier with the blocks plain solid shapes never use switched off.
 #[path = "shared/sdf_core.rs"]

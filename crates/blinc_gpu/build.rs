@@ -141,9 +141,7 @@ fn main() {
                         || n == "path.wgsl"
                         || matches!(
                             n,
-                            "text.wgsl"
-                                | "text_dt.wgsl"
-                                | "glass.wgsl"
+                            "glass.wgsl"
                                 | "simple_glass.wgsl"
                                 | "glass_dt.wgsl"
                                 | "simple_glass_dt.wgsl"

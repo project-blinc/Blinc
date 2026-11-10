@@ -79,7 +79,7 @@ pub const SDF_NOTCH_DT_SHADER: &str = crate::sdf_russl::sdf_notch_dt::WGSL;
 ///
 /// Glyph data packed into Rgba32Float texture (width=6, height=max_glyphs).
 /// Same visual output as TEXT_SHADER.
-pub const TEXT_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/text_dt.wgsl"));
+pub const TEXT_DT_SHADER: &str = crate::sdf_russl::text_dt::WGSL;
 
 /// Data-texture fallback: Glass effects (no storage buffers — WebGL2)
 pub const GLASS_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/glass_dt.wgsl"));
@@ -96,7 +96,7 @@ pub const MESH_DT_SHADER: &str = include_str!("shaders/mesh_dt.wgsl");
 /// Supports both grayscale text glyphs and color emoji:
 /// - Grayscale: samples R channel from glyph_atlas, multiplies with color
 /// - Color emoji: samples RGBA from color_atlas, uses texture color directly
-pub const TEXT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/text.wgsl"));
+pub const TEXT_SHADER: &str = crate::sdf_russl::text::WGSL;
 
 /// Shader for glass/vibrancy effects (Apple Glass UI style)
 ///

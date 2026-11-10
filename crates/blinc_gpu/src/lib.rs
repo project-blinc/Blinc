@@ -41,6 +41,8 @@ mod sdf_russl;
 pub mod shaders;
 mod shaders_russl;
 pub mod text;
+#[cfg(test)]
+mod text_parity;
 
 pub use backbuffer::{Backbuffer, BackbufferConfig, FrameContext};
 pub use custom_pass::{
