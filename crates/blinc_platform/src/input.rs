@@ -127,6 +127,22 @@ pub struct KeyboardEvent {
     pub state: KeyState,
     /// Modifier keys held during this event
     pub modifiers: Modifiers,
+    /// Text the platform produced for this key press under the active layout
+    /// and modifiers (AltGr, dead keys, caps lock included); `None` when the
+    /// platform supplies none.
+    pub text: Option<String>,
+}
+
+impl KeyboardEvent {
+    /// The character this press typed, from the platform's layout-aware text.
+    /// Control characters (Enter, Backspace, Ctrl chords) are not text.
+    pub fn typed_char(&self) -> Option<char> {
+        self.text
+            .as_deref()?
+            .chars()
+            .next()
+            .filter(|c| !c.is_control())
+    }
 }
 
 /// Key press/release state
@@ -351,5 +367,34 @@ impl TouchEvent {
             TouchEvent::Ended { x, y, .. } => Some((*x, *y)),
             TouchEvent::Cancelled { .. } => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod typed_char_tests {
+    use super::*;
+
+    fn ev(text: Option<&str>) -> KeyboardEvent {
+        KeyboardEvent {
+            key: Key::Num2,
+            state: KeyState::Pressed,
+            modifiers: Modifiers::default(),
+            text: text.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn layout_text_is_typed() {
+        assert_eq!(ev(Some("@")).typed_char(), Some('@'));
+        assert_eq!(ev(Some("+")).typed_char(), Some('+'));
+        assert_eq!(ev(Some("ä")).typed_char(), Some('ä'));
+    }
+
+    #[test]
+    fn control_and_missing_text_is_not_typed() {
+        assert_eq!(ev(Some("\r")).typed_char(), None);
+        assert_eq!(ev(Some("\u{8}")).typed_char(), None);
+        assert_eq!(ev(Some("")).typed_char(), None);
+        assert_eq!(ev(None).typed_char(), None);
     }
 }
