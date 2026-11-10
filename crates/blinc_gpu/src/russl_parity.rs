@@ -75,6 +75,18 @@ fn draw(
     constants: &[(&str, f64)],
     prims: &[GpuPrimitive],
 ) -> Vec<u8> {
+    draw_with_aux(device, queue, source, constants, prims, &[[0.0; 4]])
+}
+
+/// `draw` with the auxiliary data buffer `aux` bound.
+fn draw_with_aux(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    source: &str,
+    constants: &[(&str, f64)],
+    prims: &[GpuPrimitive],
+    aux: &[[f32; 4]],
+) -> Vec<u8> {
     let format = wgpu::TextureFormat::Rgba8Unorm;
     let bind_layout = layout(device);
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -127,7 +139,7 @@ fn draw(
     };
     let uniforms = buffer(bytemuck::bytes_of(&uniforms), wgpu::BufferUsages::UNIFORM);
     let primitives = buffer(bytemuck::cast_slice(prims), wgpu::BufferUsages::STORAGE);
-    let aux = buffer(&[0u8; 16], wgpu::BufferUsages::STORAGE);
+    let aux = buffer(bytemuck::cast_slice(aux), wgpu::BufferUsages::STORAGE);
     let atlas = device
         .create_texture(&wgpu::TextureDescriptor {
             label: None,
@@ -273,11 +285,12 @@ fn assert_same_pixels(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     prims: &[GpuPrimitive],
+    aux: &[[f32; 4]],
     a: &str,
     b: &str,
 ) {
-    let a = draw(device, queue, a, &[], prims);
-    let b = draw(device, queue, b, &[], prims);
+    let a = draw_with_aux(device, queue, a, &[], prims, aux);
+    let b = draw_with_aux(device, queue, b, &[], prims, aux);
     assert!(a.iter().any(|&p| p != 0), "the first pipeline drew nothing");
     let differing = a
         .as_chunks::<4>()
@@ -295,6 +308,7 @@ fn same_pixels(device: &wgpu::Device, queue: &wgpu::Queue, prims: &[GpuPrimitive
         device,
         queue,
         prims,
+        &[[0.0; 4]],
         crate::sdf_russl::sdf_core::WGSL,
         crate::sdf_russl::simple::WGSL,
     );
@@ -371,6 +385,68 @@ fn the_shadow_pipeline_grows_corners_and_edges_the_way_css_does() {
         (100..160).contains(&a),
         "the unblurred edge is not antialiased: {a}"
     );
+}
+
+#[test]
+fn the_3d_pipeline_raymarches_shapes_and_groups() {
+    let Some((device, queue)) = device() else {
+        eprintln!("no adapter with vertex storage: skipped");
+        return;
+    };
+    let shape = |kind: f32, x: f32, y: f32| {
+        GpuPrimitive::rect(x, y, 36.0, 36.0)
+            .with_color(0.8, 0.5, 0.3, 1.0)
+            .with_corner_radius(6.0)
+            .with_3d_rotation(0.5, 0.6, 300.0)
+            .with_3d_shape(kind, 24.0)
+            .with_light([0.3, -0.5, 0.8], 0.9)
+            .with_3d_material(0.2, 32.0)
+    };
+    // Each shape draws something and leaves the corner of the target untouched.
+    for (kind, name) in [
+        (1.0, "box"),
+        (2.0, "sphere"),
+        (3.0, "cylinder"),
+        (4.0, "torus"),
+        (5.0, "capsule"),
+    ] {
+        let pixels = draw(
+            &device,
+            &queue,
+            crate::sdf_russl::sdf_3d::WGSL,
+            &[],
+            &[shape(kind, 46.0, 46.0)],
+        );
+        let any_drawn = pixels.as_chunks::<4>().0.iter().any(|px| px[3] > 0);
+        assert!(any_drawn, "the {name} drew nothing");
+        assert_eq!(alpha(&pixels, 2, 2), 0, "the {name} drew past its bounds");
+    }
+
+    // A group reads its shapes from the aux buffer: with them it draws, with zeros it does not.
+    let mut group = GpuPrimitive::rect(30.0, 44.0, 70.0, 36.0)
+        .with_3d_rotation(0.3, 0.4, 300.0)
+        .with_3d_shape(6.0, 24.0)
+        .with_light([0.3, -0.5, 0.8], 0.9)
+        .with_3d_material(0.2, 32.0);
+    group.border = [0.0, 2.0, 0.0, 24.0];
+    let aux = [
+        [-12.0, 0.0, 0.0, 4.0],
+        [1.0, 24.0, 0.0, 0.0],
+        [14.0, 14.0, 12.0, 0.0],
+        [0.9, 0.3, 0.2, 1.0],
+        [14.0, 0.0, 0.0, 0.0],
+        [2.0, 24.0, 3.0, 6.0],
+        [14.0, 14.0, 12.0, 0.0],
+        [0.2, 0.4, 0.9, 1.0],
+    ];
+    let wgsl = crate::sdf_russl::sdf_3d::WGSL;
+    let grouped = draw_with_aux(&device, &queue, wgsl, &[], &[group], &aux);
+    let empty = draw_with_aux(&device, &queue, wgsl, &[], &[group], &[[0.0; 4]]);
+    assert!(
+        grouped.as_chunks::<4>().0.iter().any(|px| px[3] > 0),
+        "the group drew nothing"
+    );
+    assert_ne!(grouped, empty, "the group does not read its shapes");
 }
 
 #[test]

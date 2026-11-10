@@ -2266,7 +2266,7 @@ pub const SDF_SHADOW_SHADER: &str = crate::sdf_russl::sdf_shadow::WGSL;
 ///
 /// Handles primitives with shape_type > 0 (3D box, sphere, cylinder,
 /// torus, capsule, group). 32-step raymarching with Blinn-Phong lighting.
-pub const SDF_3D_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_3d.wgsl"));
+pub const SDF_3D_SHADER: &str = crate::sdf_russl::sdf_3d::WGSL;
 
 /// Split SDF shader: Notch primitives (prim_type 8)
 ///
