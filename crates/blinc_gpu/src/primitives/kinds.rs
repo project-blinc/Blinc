@@ -92,7 +92,7 @@ pub enum SdfPipelineCategory {
     /// without those blocks. See [`GpuPrimitive::is_simple_core`](super::GpuPrimitive::is_simple_core).
     CoreSimple = 5,
     /// A `CoreSimple` rect or circle with nothing but circular corners, a uniform border and
-    /// a rounded rect clip. Drawn by the compact `sdf_simple.wgsl`. See
+    /// a rounded rect clip. Drawn by the compact `sdf_simple` shader. See
     /// [`GpuPrimitive::is_plain_core`](super::GpuPrimitive::is_plain_core).
     CorePlain = 6,
 }

@@ -27,6 +27,10 @@ mod shapes3d;
 #[path = "shared/three_d.rs"]
 mod three_d;
 
+/// The compact shader for plain rects and circles, storage tier only.
+#[path = "shared/sdf_simple.rs"]
+pub(crate) mod sdf_simple;
+
 /// The core shader: storage tier, vertex buffer tier and data texture tier, and `simple`, the
 /// storage tier with the blocks plain solid shapes never use switched off.
 #[path = "shared/sdf_core.rs"]

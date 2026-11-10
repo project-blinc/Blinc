@@ -434,6 +434,109 @@ fn same_pixels(device: &wgpu::Device, queue: &wgpu::Queue, prims: &[GpuPrimitive
     );
 }
 
+/// Plain rects and circles: solid fills, circular and squircle corners, uniform borders, rounded
+/// rect clips.
+fn plain_scene() -> Vec<GpuPrimitive> {
+    let mut squircle = GpuPrimitive::rect(8.0, 56.0, 44.0, 32.0)
+        .with_color(0.95, 0.75, 0.1, 1.0)
+        .with_corner_radius(14.0)
+        .with_border(2.0, 0.1, 0.1, 0.1, 1.0);
+    squircle.corner_shape = [2.0; 4];
+    let mut mixed = GpuPrimitive::rect(60.0, 56.0, 40.0, 40.0)
+        .with_color(0.3, 0.3, 0.9, 1.0)
+        .with_corner_radii(18.0, 4.0, 18.0, 16.0);
+    mixed.corner_shape = [3.0, 1.0, 0.7, 1.4];
+    vec![
+        GpuPrimitive::rect(4.0, 4.0, 52.0, 40.0)
+            .with_color(0.9, 0.2, 0.1, 1.0)
+            .with_corner_radius(10.0),
+        GpuPrimitive::rect(64.0, 4.0, 56.0, 40.0)
+            .with_color(0.1, 0.4, 0.9, 0.8)
+            .with_corner_radius(12.0)
+            .with_border(3.0, 1.0, 1.0, 1.0, 0.6),
+        squircle,
+        mixed,
+        // A radius past half the short side is limited to it.
+        GpuPrimitive::rect(8.0, 96.0, 60.0, 24.0)
+            .with_color(0.1, 0.7, 0.6, 1.0)
+            .with_corner_radius(40.0),
+        GpuPrimitive::circle(94.0, 108.0, 14.0).with_color(0.2, 0.8, 0.3, 0.9),
+        GpuPrimitive::rect(100.0, 56.0, 24.0, 40.0)
+            .with_color(0.6, 0.1, 0.7, 1.0)
+            .with_corner_radii(4.0, 16.0, 4.0, 16.0)
+            .with_clip_rounded_rect(102.0, 60.0, 14.0, 30.0, 6.0, 6.0, 6.0, 6.0),
+    ]
+}
+
+/// The compact shader draws plain primitives the way the core shader does, to within two levels
+/// of a channel: the two compute the edge from the same distance but not in the same order.
+#[test]
+fn the_compact_shader_matches_the_core_shader_on_plain_primitives() {
+    let Some((device, queue)) = device() else {
+        eprintln!("no adapter with vertex storage: skipped");
+        return;
+    };
+    let prims = plain_scene();
+    for p in &prims {
+        assert!(p.is_plain_core(), "{p:?} is not a plain core primitive");
+    }
+    let core = draw(
+        &device,
+        &queue,
+        crate::sdf_russl::sdf_core::WGSL,
+        &[],
+        &prims,
+    );
+    let plain = draw(
+        &device,
+        &queue,
+        crate::sdf_russl::sdf_simple::WGSL,
+        &[],
+        &prims,
+    );
+    assert!(
+        plain.iter().any(|&p| p != 0),
+        "the compact shader drew nothing"
+    );
+    let worst = core
+        .iter()
+        .zip(&plain)
+        .map(|(a, b)| a.abs_diff(*b))
+        .max()
+        .unwrap();
+    assert!(worst <= 2, "the shaders differ by {worst} levels");
+}
+
+/// The compact shader's border on a circle runs all the way round, on the diagonals as well as at
+/// the four extremes.
+#[test]
+fn the_compact_shader_draws_a_circle_border_all_round() {
+    let Some((device, queue)) = device() else {
+        eprintln!("no adapter with vertex storage: skipped");
+        return;
+    };
+    let circle = GpuPrimitive::circle(64.0, 64.0, 30.0)
+        .with_color(0.2, 0.8, 0.3, 1.0)
+        .with_border(4.0, 0.0, 0.0, 0.0, 1.0);
+    assert!(circle.is_plain_core());
+    let pixels = draw(
+        &device,
+        &queue,
+        crate::sdf_russl::sdf_simple::WGSL,
+        &[],
+        &[circle],
+    );
+    let rgb = |x: u32, y: u32| {
+        let i = ((y * SIZE + x) * 4) as usize;
+        [pixels[i], pixels[i + 1], pixels[i + 2]]
+    };
+    // On the ring at 45 degrees, 28 px from the centre: the border colour. At 20 px: the fill.
+    let diagonal = std::f32::consts::FRAC_1_SQRT_2;
+    let (on_ring, inside) = (64.0 - 28.0 * diagonal, 64.0 - 20.0 * diagonal);
+    assert_eq!(rgb(on_ring as u32, on_ring as u32), [0, 0, 0]);
+    assert_eq!(rgb(inside as u32, inside as u32), [51, 204, 77]);
+}
+
 /// The alpha of the pixel at `(x, y)` in `draw`'s output.
 fn alpha(pixels: &[u8], x: u32, y: u32) -> u8 {
     pixels[((y * SIZE + x) * 4 + 3) as usize]

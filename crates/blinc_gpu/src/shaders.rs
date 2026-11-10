@@ -25,7 +25,7 @@ pub const SDF_CORE_SHADER: &str = crate::sdf_russl::sdf_core::WGSL;
 
 /// Split SDF shader: plain Rect and Circle (solid fill, circular corners, uniform border,
 /// rounded rect clip). Only for tiers with storage buffers in the vertex stage.
-pub const SDF_SIMPLE_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_simple.wgsl"));
+pub const SDF_SIMPLE_SHADER: &str = crate::sdf_russl::sdf_simple::WGSL;
 
 /// Split SDF shader: Shadow primitives
 ///
