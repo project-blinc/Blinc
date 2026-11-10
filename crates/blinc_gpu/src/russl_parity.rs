@@ -429,7 +429,7 @@ fn same_pixels(device: &wgpu::Device, queue: &wgpu::Queue, prims: &[GpuPrimitive
         queue,
         prims,
         &[[0.0; 4]],
-        crate::sdf_russl::storage::sdf_core::WGSL,
+        crate::sdf_russl::sdf_core::WGSL,
         crate::sdf_russl::simple::WGSL,
     );
 }
@@ -889,9 +889,159 @@ fn the_notch_pipeline_fills_the_top_slot_for_bulges_and_peaks_and_hollows_it_for
     }
 }
 
+/// A scene for the core shader: fills, borders, shadows, rotation and 3D tilt, clips (including a
+/// polygon whose vertices are read from the auxiliary data at index 1600), a mask and a filter,
+/// and with `mesh` triangles with per-vertex colours, whose data sits at index 1700.
+fn scene_core(mesh: bool) -> (Vec<GpuPrimitive>, Vec<[f32; 4]>) {
+    let mut conic = GpuPrimitive::rect(72.0, 6.0, 48.0, 36.0).with_color(0.9, 0.3, 0.1, 1.0);
+    conic.type_info[1] = 3;
+    conic.color2 = [0.1, 0.4, 0.9, 1.0];
+    conic.gradient_params = [96.0, 24.0, 0.2, 0.0];
+    let mut masked = GpuPrimitive::rect(6.0, 88.0, 44.0, 32.0).with_color(0.9, 0.9, 0.2, 1.0);
+    masked.mask_info = [1.0, 1.0, 0.0, 0.0];
+    masked.mask_params = [0.0, 0.0, 1.0, 1.0];
+    masked.filter_a = [0.4, 0.0, 0.2, 0.0];
+    masked.filter_b = [1.1, 0.9, 1.0, 0.0];
+    // A turn in the primitive's own frame grows the quad the vertex stage draws.
+    masked.local_affine = [0.94, 0.34, -0.34, 0.94];
+    let mut polygon = GpuPrimitive::rect(54.0, 88.0, 36.0, 34.0).with_color(0.3, 0.8, 0.5, 1.0);
+    polygon.type_info[2] = 4;
+    polygon.clip_bounds = [0.0, 0.0, 128.0, 128.0];
+    polygon.clip_radius = [0.0, 0.0, 3.0, 1600.0];
+    let mut prims = vec![
+        GpuPrimitive::rect(6.0, 6.0, 52.0, 36.0)
+            .with_color(0.9, 0.2, 0.1, 1.0)
+            .with_corner_radius(10.0)
+            .with_border(3.0, 0.0, 0.0, 0.0, 1.0)
+            .with_shadow(2.0, 3.0, 6.0, 1.0, 0.0, 0.0, 0.0, 0.5),
+        conic,
+        GpuPrimitive::rect(6.0, 48.0, 40.0, 34.0)
+            .with_linear_gradient(1.0, 0.8, 0.1, 1.0, 0.1, 0.2, 0.9, 1.0)
+            .with_corner_radii(4.0, 14.0, 4.0, 14.0),
+        GpuPrimitive::circle(70.0, 66.0, 18.0)
+            .with_radial_gradient(1.0, 1.0, 1.0, 1.0, 0.1, 0.5, 0.2, 1.0)
+            .with_clip_circle(70.0, 66.0, 14.0),
+        GpuPrimitive::rect(96.0, 48.0, 28.0, 34.0)
+            .with_color(0.4, 0.4, 0.9, 1.0)
+            .with_3d_rotation(0.4, 0.5, 300.0)
+            .with_rotation(0.2)
+            .with_clip_rounded_rect(96.0, 48.0, 28.0, 30.0, 6.0, 6.0, 6.0, 6.0),
+        masked,
+        polygon,
+    ];
+    let mut aux = vec![[0.0; 4]; 1600];
+    aux.extend([[-10.0, -10.0, 60.0, -10.0], [25.0, 50.0, 0.0, 0.0]]);
+    if mesh {
+        // Two triangles, one drawn with its three vertex colours and silhouette flags set.
+        let triangle = |bounds: [f32; 4], offset: f32, corners: [f32; 2], colors: bool| {
+            let mut p = GpuPrimitive::rect(bounds[0], bounds[1], bounds[2], bounds[3]);
+            p.type_info[0] = 9;
+            p.type_info[3] = u32::from(colors);
+            p.border = [0.0, 1.0, offset, 0.0];
+            p.corner_radius = [1.0, 1.0, 1.0, corners[0] + corners[1]];
+            p.color = [0.2, 0.7, 0.9, 1.0];
+            p
+        };
+        aux.resize(1700, [0.0; 4]);
+        aux.extend([
+            [60.0, 90.0, 120.0, 98.0],
+            [96.0, 124.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0, 1.0],
+            [8.0, 96.0, 44.0, 126.0],
+            [20.0, 112.0, 0.0, 0.0],
+            [0.0; 4],
+            [0.0; 4],
+            [0.0; 4],
+            // A degenerate triangle: its vertices are on a line.
+            [100.0, 4.0, 110.0, 14.0],
+            [120.0, 24.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0, 1.0],
+        ]);
+        prims.push(triangle([100.0, 4.0, 22.0, 22.0], 1710.0, [0.0, 0.0], true));
+        prims.push(triangle([60.0, 90.0, 60.0, 34.0], 1700.0, [0.0, 0.0], true));
+        prims.push(triangle([8.0, 96.0, 36.0, 30.0], 1705.0, [0.0, 0.0], false));
+    }
+    (prims, aux)
+}
+
+#[test]
+fn the_core_fallback_tiers_draw_what_the_storage_tier_draws() {
+    let Some((device, queue)) = device() else {
+        eprintln!("no adapter with vertex storage: skipped");
+        return;
+    };
+    // Without mesh triangles: the storage tier feathers their silhouette edges and the other
+    // tiers test them per fragment, so they differ there by design.
+    let (prims, aux) = scene_core(false);
+    let storage = draw_in_tier(
+        &device,
+        &queue,
+        Tier::Storage,
+        crate::sdf_russl::sdf_core::WGSL,
+        &[],
+        &prims,
+        &aux,
+    );
+    assert!(
+        storage.iter().any(|&p| p != 0),
+        "the storage tier drew nothing"
+    );
+    for (tier, source) in [
+        (Tier::VertexBuffer, crate::sdf_russl::sdf_core_vb::WGSL),
+        (Tier::DataTexture, crate::sdf_russl::sdf_core_dt::WGSL),
+    ] {
+        let other = draw_in_tier(&device, &queue, tier, source, &[], &prims, &aux);
+        let differing = storage
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(other.as_chunks::<4>().0)
+            .filter(|(a, b)| a != b)
+            .count();
+        assert_eq!(differing, 0, "{differing} of {} pixels differ", SIZE * SIZE);
+    }
+}
+
+#[test]
+fn the_fallback_tiers_draw_mesh_triangles_with_their_vertex_colours() {
+    let Some((device, queue)) = device() else {
+        eprintln!("no adapter with vertex storage: skipped");
+        return;
+    };
+    let (prims, aux) = scene_core(true);
+    for (tier, source) in [
+        (Tier::VertexBuffer, crate::sdf_russl::sdf_core_vb::WGSL),
+        (Tier::DataTexture, crate::sdf_russl::sdf_core_dt::WGSL),
+    ] {
+        let pixels = draw_in_tier(&device, &queue, tier, source, &[], &prims, &aux);
+        // The coloured triangle blends its red, green and blue corners and the plain one is the
+        // primitive's colour; the degenerate one has no area, so nothing off its line is drawn.
+        let at = |x: u32, y: u32| {
+            let i = ((y * SIZE + x) * 4) as usize;
+            [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]]
+        };
+        let coloured = at(92, 104);
+        assert!(
+            coloured[3] > 0 && (coloured[0] > 0 || coloured[1] > 0 || coloured[2] > 0),
+            "the coloured triangle is not drawn: {coloured:?}"
+        );
+        // The probe is next to the triangle's centroid, where each corner weighs a third.
+        assert!(
+            coloured[..3].iter().all(|c| c.abs_diff(85) <= 6),
+            "the corner colours are not weighted evenly at the centroid: {coloured:?}"
+        );
+        assert!(at(24, 112)[3] > 0, "the plain triangle is not drawn");
+        assert_eq!(at(121, 10)[3], 0, "a degenerate triangle drew something");
+    }
+}
+
 #[test]
 fn the_cpu_primitive_lays_out_as_the_shader_reads_it() {
-    use crate::sdf_russl::storage::primitive::Primitive;
+    use crate::sdf_russl::primitive::Primitive;
     use std::mem::{offset_of, size_of};
     assert_eq!(size_of::<GpuPrimitive>(), Primitive::SIZE);
     macro_rules! same_offsets {

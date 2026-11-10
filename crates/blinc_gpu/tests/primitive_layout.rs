@@ -17,17 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Every shader that declares the struct, by the path `include_str!`
 /// would use. Kept explicit so a new shader has to be added here too.
-const SHADERS: &[(&str, &str)] = &[
-    ("sdf_simple", include_str!("../src/shaders/sdf_simple.wgsl")),
-    (
-        "sdf_core_dt",
-        include_str!("../src/shaders/sdf_core_dt.wgsl"),
-    ),
-    (
-        "sdf_core_vb",
-        include_str!("../src/shaders/sdf_core_vb.wgsl"),
-    ),
-];
+const SHADERS: &[(&str, &str)] = &[("sdf_simple", include_str!("../src/shaders/sdf_simple.wgsl"))];
 
 /// `(name, wgsl_type)` in declaration order.
 fn primitive_fields(src: &str) -> Vec<(String, String)> {

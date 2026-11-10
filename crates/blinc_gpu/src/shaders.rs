@@ -21,7 +21,7 @@ pub const CLEAR_QUAD_SHADER: &str = crate::shaders_russl::clear_quad::WGSL;
 /// Handles prim_type 0-2 with full features: borders, gradients,
 /// CSS filters, mask gradients, perspective, clip regions.
 /// Part of the multi-pipeline SDF split for driver compatibility.
-pub const SDF_CORE_SHADER: &str = crate::sdf_russl::storage::sdf_core::WGSL;
+pub const SDF_CORE_SHADER: &str = crate::sdf_russl::sdf_core::WGSL;
 
 /// Split SDF shader: plain Rect and Circle (solid fill, circular corners, uniform border,
 /// rounded rect clip). Only for tiers with storage buffers in the vertex stage.
@@ -49,7 +49,7 @@ pub const SDF_NOTCH_SHADER: &str = crate::sdf_russl::sdf_notch::WGSL;
 ///
 /// Same as SDF_CORE_SHADER but vs_main reads instance attributes
 /// from a vertex buffer instead of the storage buffer.
-pub const SDF_CORE_VB_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_core_vb.wgsl"));
+pub const SDF_CORE_VB_SHADER: &str = crate::sdf_russl::sdf_core_vb::WGSL;
 
 /// Vertex-buffer fallback: Shadow primitives
 pub const SDF_SHADOW_VB_SHADER: &str = crate::sdf_russl::sdf_shadow_vb::WGSL;
@@ -64,7 +64,7 @@ pub const SDF_NOTCH_VB_SHADER: &str = crate::sdf_russl::sdf_notch_vb::WGSL;
 ///
 /// Replaces storage buffer reads with textureLoad from RGBA32F data textures.
 /// Also uses vertex buffer instance attributes (inherits from VB variant).
-pub const SDF_CORE_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_core_dt.wgsl"));
+pub const SDF_CORE_DT_SHADER: &str = crate::sdf_russl::sdf_core_dt::WGSL;
 
 /// Data-texture fallback: Shadow primitives
 pub const SDF_SHADOW_DT_SHADER: &str = crate::sdf_russl::sdf_shadow_dt::WGSL;

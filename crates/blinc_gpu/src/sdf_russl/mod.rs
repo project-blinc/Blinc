@@ -3,8 +3,7 @@
 //! The sources live in `shared`. A shader written once serves every device tier: `TIER` is a
 //! pipeline constant (0 storage buffers, 1 a vertex buffer for the vertex stage, 2 data
 //! textures), `#if` in the source chooses what each tier declares and reads, and a one-line
-//! specialisation builds the variant. `sdf_core` and `simple` are still written for the storage
-//! tier in `storage`, and `simple` is `sdf_core` with the blocks plain solid shapes
+//! specialisation builds the variant. `simple` is `sdf_core` with the blocks plain solid shapes
 //! never use switched off. `russl_parity` checks that simple and full draw the same pixels for the
 //! shapes `simple` takes, and that each tier draws what the storage tier draws.
 
@@ -28,9 +27,18 @@ mod shapes3d;
 #[path = "shared/three_d.rs"]
 mod three_d;
 
-pub(crate) mod storage;
+/// The core shader: storage tier, vertex buffer tier and data texture tier, and `simple`, the
+/// storage tier with the blocks plain solid shapes never use switched off.
+#[path = "shared/sdf_core.rs"]
+pub(crate) mod sdf_core;
+pub(crate) mod sdf_core_vb {
+    russl::russl! { #![specialize(super::sdf_core)] const TIER: u32 = 1; }
+}
+pub(crate) mod sdf_core_dt {
+    russl::russl! { #![specialize(super::sdf_core)] const TIER: u32 = 2; }
+}
 
-/// The shadow shader: storage tier, vertex buffer tier and data texture tier.
+/// The shadow shader: the same three tiers.
 #[path = "shared/sdf_shadow.rs"]
 pub(crate) mod sdf_shadow;
 pub(crate) mod sdf_shadow_vb {
@@ -62,7 +70,7 @@ pub(crate) mod sdf_3d_dt {
 
 pub(crate) mod simple {
     russl::russl! {
-        #![specialize(super::storage::sdf_core)]
+        #![specialize(super::sdf_core)]
         const FEAT_GRADIENT: bool = false;
         const FEAT_MASK: bool = false;
         const FEAT_FILTER: bool = false;

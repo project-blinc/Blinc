@@ -1,12 +1,17 @@
 //! The SDF core shader: rects, circles and ellipses, with borders, shadows, gradients,
 //! masks, CSS filters, clips and CSS perspective. The `FEAT_*` pipeline constants switch the
-//! optional blocks; `simple` turns off the ones a plain solid shape never uses.
+//! optional blocks; `simple` turns off the ones a plain solid shape never uses. `TIER` builds it
+//! for the other device tiers.
 
 russl::russl! {
     use super::common::{sd_circle, sd_ellipse, sd_shaped_rect, quarter_ellipse_sdf, erf, apply_css_filter, border_side_color};
-    use super::primitive::{Uniforms, Primitive};
-    use super::access::{UNIFORMS, PRIMITIVES, GLYPH_ATLAS, GLYPH_SAMPLER, COLOR_GLYPH_ATLAS, AUX_DATA};
+    use super::access::{UNIFORMS, GLYPH_ATLAS, GLYPH_SAMPLER, COLOR_GLYPH_ATLAS, prim, aux};
     use super::clip::{calculate_clip_alpha, calculate_polygon_clip_alpha, gradient_table_color, abi_shape_clip_alpha};
+
+    // The device tier: 0 reads storage buffers and draws mesh triangles through the vertex stage;
+    // 1 and 2 have no storage buffer in the vertex stage (instance fields come from a vertex
+    // buffer) and 2 reads data textures; both test the mesh triangle per fragment instead.
+    #[pipeline] const TIER: u32 = 0;
 
     // ============================================================================
     // Blinc SDF Core Shader — Rect, Circle, Ellipse
@@ -19,12 +24,14 @@ russl::russl! {
         #[builtin(position)] position: Vec4,
         #[location(0)] uv: Vec2,
         #[location(1)] #[flat] instance_index: u32,
+        #if TIER == 0
         // Per-vertex barycentric weights; PRIM_MESH vertex stage emits
         // (1,0,0), (0,1,0), (0,0,1) for triangle corners 0/1/2 so the
         // hardware-interpolated value at any fragment tells us how far
         // that fragment is from each of the triangle's three edges. The
         // fragment shader then feathers alpha at silhouette edges only.
         #[location(2)] mesh_bary: Vec3,
+        #endif
     }
 
 
@@ -67,23 +74,39 @@ russl::russl! {
     fn vs_main(
         #[builtin(vertex_index)] vertex_index: u32,
         #[builtin(instance_index)] instance_index: u32,
+        #if TIER >= 1
+            #[location(0)] instance_bounds: Vec4,
+            #[location(1)] instance_shadow: Vec4,
+            #[location(2)] instance_rotation: Vec4,
+            #[location(3)] instance_perspective: Vec4,
+            #[location(4)] instance_sdf_3d: Vec4,
+            #[location(5)] instance_local_affine: Vec4,
+        #endif
     ) -> VertexOutput {
         let mut out: VertexOutput;
 
-        let prim = PRIMITIVES[instance_index];
+        #if TIER == 0
+            let p = prim(instance_index);
+            let instance_bounds = p.bounds;
+            let instance_shadow = p.shadow;
+            let instance_rotation = p.rotation;
+            let instance_perspective = p.perspective;
+            let instance_sdf_3d = p.sdf_3d;
+            let instance_local_affine = p.local_affine;
+        #endif
 
         // Expand bounds for shadow blur
-        let blur_expand = prim.shadow.z * 3.0 + abs(prim.shadow.x) + abs(prim.shadow.y);
+        let blur_expand = instance_shadow.z * 3.0 + abs(instance_shadow.x) + abs(instance_shadow.y);
 
         // Check for rotation, skew, and 3D transforms.
-        let sin_rz = prim.rotation.x;
-        let cos_rz = prim.rotation.y;
-        let sin_ry = prim.rotation.z;
-        let cos_ry = prim.rotation.w;
-        let sin_rx = prim.perspective.x;
-        let cos_rx = prim.perspective.y;
-        let persp_d = prim.perspective.z;
-        let la = prim.local_affine; // [a, b, c, d] of normalized 2x2 affine
+        let sin_rz = instance_rotation.x;
+        let cos_rz = instance_rotation.y;
+        let sin_ry = instance_rotation.z;
+        let cos_ry = instance_rotation.w;
+        let sin_rx = instance_perspective.x;
+        let cos_rx = instance_perspective.y;
+        let persp_d = instance_perspective.z;
+        let la = instance_local_affine; // [a, b, c, d] of normalized 2x2 affine
         let has_3d = abs(sin_ry) > 0.0001 || abs(sin_rx) > 0.0001 || persp_d > 0.001;
         // Check if local_affine is non-identity (rotation, skew, or non-uniform scale)
         let has_local_affine = abs(la.x - 1.0) > 0.0001 || abs(la.y) > 0.0001
@@ -92,9 +115,9 @@ russl::russl! {
         let mut bounds: Vec4;
         if has_3d {
             // 3D perspective: project all 8 corners of the 3D bounding box to find AABB
-            let ctr = prim.bounds.xy + prim.bounds.zw * 0.5;
-            let half = prim.bounds.zw * 0.5;
-            let half_d = prim.sdf_3d.x * 0.5; // half-depth
+            let ctr = instance_bounds.xy + instance_bounds.zw * 0.5;
+            let half = instance_bounds.zw * 0.5;
+            let half_d = instance_sdf_3d.x * 0.5; // half-depth
             let corners3d = [
                 Vec3::new(-half.x, -half.y, -half_d),
                 Vec3::new( half.x, -half.y, -half_d),
@@ -132,9 +155,9 @@ russl::russl! {
         } else if has_local_affine {
             // General 2D affine (rotation, skew, non-uniform scale):
             // Transform the 4 corners of the local rect by the local_affine to find AABB
-            let center = prim.bounds.xy + prim.bounds.zw * 0.5;
-            let hw = prim.bounds.z * 0.5;
-            let hh = prim.bounds.w * 0.5;
+            let center = instance_bounds.xy + instance_bounds.zw * 0.5;
+            let hw = instance_bounds.z * 0.5;
+            let hh = instance_bounds.w * 0.5;
             // Transform corners: la * (±hw, ±hh)
             // new_x = la.x * cx + la.z * cy, new_y = la.y * cx + la.w * cy
             let c0x = la.x * hw + la.z * hh;
@@ -146,10 +169,10 @@ russl::russl! {
             bounds = Vec4::new(center.x - aabb_hw, center.y - aabb_hh, aabb_hw * 2.0, aabb_hh * 2.0);
         } else {
             bounds = Vec4::new(
-                prim.bounds.x - blur_expand,
-                prim.bounds.y - blur_expand,
-                prim.bounds.z + blur_expand * 2.0,
-                prim.bounds.w + blur_expand * 2.0
+                instance_bounds.x - blur_expand,
+                instance_bounds.y - blur_expand,
+                instance_bounds.z + blur_expand * 2.0,
+                instance_bounds.w + blur_expand * 2.0
             );
         }
 
@@ -185,6 +208,7 @@ russl::russl! {
             bounds.y + uv.y * bounds.w
         );
 
+        #if TIER == 0
         // PRIM_MESH replaces the quad geometry with the triangle's
         // three corners pulled from AUX_DATA. Vertex indices 0..2
         // emit the real triangle; 3..5 collapse onto vertex 0 so
@@ -203,10 +227,10 @@ russl::russl! {
         // shader can feather alpha at outer edges only and leave
         // interior tessellation seams fully opaque.
         let mut mesh_bary = Vec3::splat(0.0);
-        if prim.type_info.x == 9u32 {
-            let aux_off = ((prim.border.z) as u32);
-            let pack0 = AUX_DATA[aux_off];
-            let pack1 = AUX_DATA[aux_off + 1u32];
+        if p.type_info.x == 9u32 {
+            let aux_off = ((p.border.z) as u32);
+            let pack0 = aux(aux_off);
+            let pack1 = aux(aux_off + 1u32);
             match vertex_index {
                 0u32 => { pos = pack0.xy; mesh_bary = Vec3::new(1.0, 0.0, 0.0); }
                 1u32 => { pos = pack0.zw; mesh_bary = Vec3::new(0.0, 1.0, 0.0); }
@@ -215,6 +239,7 @@ russl::russl! {
             }
         }
         out.mesh_bary = mesh_bary;
+        #endif
 
         // Convert to clip space (-1 to 1)
         let clip_pos = Vec2::new(
@@ -236,15 +261,17 @@ russl::russl! {
     #[fragment]
     #[location(0)]
     fn fs_main(input: VertexOutput) -> Vec4 {
-        let prim = PRIMITIVES[input.instance_index];
+        let prim = prim(input.instance_index);
         let p = input.uv;
 
+        #if TIER == 0
         // Mesh-triangle barycentric derivatives, read only by `prim_type == 9` below. WGSL
         // requires derivatives in uniform control flow, so they are taken here, before any
         // `discard!()` or early return that depends on the non-uniform `prim_type` or
         // `clip_alpha`. See https://www.w3.org/TR/WGSL/#uniformity.
         let mb_uniform = input.mesh_bary;
         let mb_fw_uniform = fwidth(mb_uniform);
+        #endif
 
         let prim_type = prim.type_info.x;
         let fill_type = prim.type_info.y;
@@ -406,7 +433,24 @@ russl::russl! {
                 // below, after `fill_alpha` is computed — see the
                 // comment on `fill_alpha` and the `mesh_bary`
                 // smoothstep block.
+                #if TIER == 0
                 d = -1.0;
+                #else
+                // The vertex stage cannot read the triangle here, so the quad covers its
+                // bounding box and each fragment tests whether it is inside.
+                let aux_off = ((prim.border.z) as u32);
+                let pack0 = aux(aux_off);
+                let pack1 = aux(aux_off + 1u32);
+                let v0 = pack0.xy;
+                let v1 = pack0.zw;
+                let v2 = pack1.xy;
+                let s0 = (v1.x - v0.x) * (sp.y - v0.y) - (v1.y - v0.y) * (sp.x - v0.x);
+                let s1 = (v2.x - v1.x) * (sp.y - v1.y) - (v2.y - v1.y) * (sp.x - v1.x);
+                let s2 = (v0.x - v2.x) * (sp.y - v2.y) - (v0.y - v2.y) * (sp.x - v2.x);
+                let inside = (s0 >= 0.0 && s1 >= 0.0 && s2 >= 0.0)
+                          || (s0 <= 0.0 && s1 <= 0.0 && s2 <= 0.0);
+                d = if inside { -1.0 } else { 1.0 };
+                #endif
             }
             7u32 /* PRIM_TEXT */ => {
                 // `gradient_params` holds atlas PIXEL coords for text
@@ -512,6 +556,7 @@ russl::russl! {
         let aa_width = 0.5;
         let mut fill_alpha = 1.0 - smoothstep(-aa_width, aa_width, d);
 
+        #if TIER == 0
         // Mesh primitive silhouette AA. `mesh_bary` is (1,0,0) at v0,
         // (0,1,0) at v1, (0,0,1) at v2 — so the component opposite
         // each edge drops to 0 on that edge. `prim.corner_radius`
@@ -577,6 +622,7 @@ russl::russl! {
                 fill_alpha = min(m_x, min(m_y, m_z));
             }
         }
+        #endif
 
         if fill_alpha < 0.001 {
             return result;
@@ -593,11 +639,26 @@ russl::russl! {
         // stays the precise per-fragment default.
         if prim.type_info.x == 9u32 && prim.type_info.w == 1u32 {
             let aux_off = ((prim.border.z) as u32);
-            let c0 = AUX_DATA[aux_off + 2u32];
-            let c1 = AUX_DATA[aux_off + 3u32];
-            let c2 = AUX_DATA[aux_off + 4u32];
+            let c0 = aux(aux_off + 2u32);
+            let c1 = aux(aux_off + 3u32);
+            let c2 = aux(aux_off + 4u32);
+            #if TIER == 0
             let mb = input.mesh_bary;
             fill_color = c0 * mb.x + c1 * mb.y + c2 * mb.z;
+            #else
+            // Barycentric weights from the fragment's position in the triangle.
+            let pack0 = aux(aux_off);
+            let pack1 = aux(aux_off + 1u32);
+            let v0 = pack0.xy;
+            let v1 = pack0.zw;
+            let v2 = pack1.xy;
+            let denom = (v1.y - v2.y) * (v0.x - v2.x) + (v2.x - v1.x) * (v0.y - v2.y);
+            let safe_denom = if denom.abs() < 1e-6 { 1e-6 } else { denom };
+            let w0 = ((v1.y - v2.y) * (sp.x - v2.x) + (v2.x - v1.x) * (sp.y - v2.y)) / safe_denom;
+            let w1 = ((v2.y - v0.y) * (sp.x - v2.x) + (v0.x - v2.x) * (sp.y - v2.y)) / safe_denom;
+            let w2 = 1.0 - w0 - w1;
+            fill_color = c0 * w0 + c1 * w1 + c2 * w2;
+            #endif
         } else {
             match if FEAT_GRADIENT { fill_type } else { 0u32 } {
                 0u32 /* FILL_SOLID */ => {
