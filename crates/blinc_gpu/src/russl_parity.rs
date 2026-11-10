@@ -584,6 +584,96 @@ fn the_shadow_fallback_tiers_draw_what_the_storage_tier_draws() {
     }
 }
 
+/// A scene of 3D shapes and a group, as a test draws it: the group's shapes are read from the
+/// auxiliary data at index 1600, in the second row of the data texture tier's aux texture.
+fn scene_3d() -> (Vec<GpuPrimitive>, Vec<[f32; 4]>) {
+    let shape = |kind: f32, x: f32, y: f32| {
+        GpuPrimitive::rect(x, y, 36.0, 36.0)
+            .with_color(0.8, 0.5, 0.3, 1.0)
+            .with_corner_radius(6.0)
+            .with_3d_rotation(0.5, 0.6, 300.0)
+            .with_3d_shape(kind, 24.0)
+            .with_light([0.3, -0.5, 0.8], 0.9)
+            .with_3d_material(0.2, 32.0)
+    };
+    let mut prims = vec![
+        shape(1.0, 4.0, 4.0),
+        shape(2.0, 46.0, 4.0),
+        shape(3.0, 88.0, 4.0),
+        shape(4.0, 4.0, 46.0),
+        shape(5.0, 46.0, 46.0),
+        shape(1.0, 88.0, 46.0)
+            .with_linear_gradient(1.0, 0.1, 0.1, 1.0, 0.1, 0.1, 1.0, 1.0)
+            .with_clip_rounded_rect(88.0, 46.0, 30.0, 30.0, 8.0, 8.0, 8.0, 8.0),
+        shape(2.0, 4.0, 88.0)
+            .with_radial_gradient(1.0, 1.0, 0.2, 1.0, 0.2, 0.1, 0.6, 1.0)
+            .with_clip_circle(22.0, 106.0, 14.0),
+    ];
+    prims[5].gradient_params = [88.0, 46.0, 118.0, 76.0];
+    prims[6].gradient_params = [22.0, 106.0, 20.0, 0.0];
+    let mut group = GpuPrimitive::rect(46.0, 88.0, 70.0, 36.0)
+        .with_3d_rotation(0.3, 0.4, 300.0)
+        .with_3d_shape(6.0, 24.0)
+        .with_light([0.3, -0.5, 0.8], 0.9)
+        .with_3d_material(0.2, 32.0);
+    group.border = [0.0, 2.0, 1600.0, 24.0];
+    prims.push(group);
+    let mut aux = vec![[0.0; 4]; 1600];
+    aux.extend([
+        [-12.0, 0.0, 0.0, 4.0],
+        [1.0, 24.0, 0.0, 0.0],
+        [14.0, 14.0, 12.0, 0.0],
+        [0.9, 0.3, 0.2, 1.0],
+        [14.0, 0.0, 0.0, 0.0],
+        [2.0, 24.0, 3.0, 6.0],
+        [14.0, 14.0, 12.0, 0.0],
+        [0.2, 0.4, 0.9, 1.0],
+    ]);
+    (prims, aux)
+}
+
+#[test]
+fn the_3d_fallback_tiers_draw_what_the_storage_tier_draws() {
+    let Some((device, queue)) = device() else {
+        eprintln!("no adapter with vertex storage: skipped");
+        return;
+    };
+    let (prims, aux) = scene_3d();
+    let storage = draw_in_tier(
+        &device,
+        &queue,
+        Tier::Storage,
+        crate::sdf_russl::storage::sdf_3d::WGSL,
+        &[],
+        &prims,
+        &aux,
+    );
+    assert!(
+        storage.iter().any(|&p| p != 0),
+        "the storage tier drew nothing"
+    );
+    for (tier, source) in [
+        (
+            Tier::VertexBuffer,
+            crate::sdf_russl::vertex_buffer::sdf_3d::WGSL,
+        ),
+        (
+            Tier::DataTexture,
+            crate::sdf_russl::data_texture::sdf_3d::WGSL,
+        ),
+    ] {
+        let other = draw_in_tier(&device, &queue, tier, source, &[], &prims, &aux);
+        let differing = storage
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(other.as_chunks::<4>().0)
+            .filter(|(a, b)| a != b)
+            .count();
+        assert_eq!(differing, 0, "{differing} of {} pixels differ", SIZE * SIZE);
+    }
+}
+
 #[test]
 fn the_3d_pipeline_raymarches_shapes_and_groups() {
     let Some((device, queue)) = device() else {

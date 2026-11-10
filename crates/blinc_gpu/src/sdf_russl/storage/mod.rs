@@ -14,6 +14,8 @@ pub(crate) mod primitive;
 mod shadow;
 #[path = "../shared/shapes3d.rs"]
 mod shapes3d;
+#[path = "../shared/three_d.rs"]
+mod three_d;
 
 pub(crate) mod sdf_3d;
 pub(crate) mod sdf_core;

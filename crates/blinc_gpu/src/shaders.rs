@@ -55,7 +55,7 @@ pub const SDF_CORE_VB_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf
 pub const SDF_SHADOW_VB_SHADER: &str = crate::sdf_russl::vertex_buffer::sdf_shadow::WGSL;
 
 /// Vertex-buffer fallback: 3D raymarched shapes
-pub const SDF_3D_VB_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_3d_vb.wgsl"));
+pub const SDF_3D_VB_SHADER: &str = crate::sdf_russl::vertex_buffer::sdf_3d::WGSL;
 
 /// Vertex-buffer fallback: Notch primitives
 pub const SDF_NOTCH_VB_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_notch_vb.wgsl"));
@@ -70,7 +70,7 @@ pub const SDF_CORE_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf
 pub const SDF_SHADOW_DT_SHADER: &str = crate::sdf_russl::data_texture::sdf_shadow::WGSL;
 
 /// Data-texture fallback: 3D raymarched shapes
-pub const SDF_3D_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_3d_dt.wgsl"));
+pub const SDF_3D_DT_SHADER: &str = crate::sdf_russl::data_texture::sdf_3d::WGSL;
 
 /// Data-texture fallback: Notch primitives
 pub const SDF_NOTCH_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_notch_dt.wgsl"));
