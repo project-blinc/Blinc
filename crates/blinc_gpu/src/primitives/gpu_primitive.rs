@@ -18,7 +18,7 @@ impl GpuPrimitive {
     /// Whether a rect, circle or ellipse needs only the core shader's basic path: a solid fill
     /// with an optional border, corner shape and rect or rounded clip.
     ///
-    /// Each test mirrors the condition that enables the matching block in `sdf_core.wgsl`, so a
+    /// Each test mirrors the condition that enables the matching block in the `sdf_core` shader, so a
     /// primitive that passes draws the same pixels in the simple pipeline. A NaN fails every
     /// test and takes the full shader.
     pub fn is_simple_core(&self) -> bool {

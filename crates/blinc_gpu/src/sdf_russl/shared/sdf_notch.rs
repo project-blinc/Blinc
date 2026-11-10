@@ -221,7 +221,7 @@ russl::russl! {
         if prim_type != 8u32 { discard!(); }
 
         // Early clip test - discard if completely outside clip region (screen space).
-        // Polygon shape test deferred until sp is known — see sdf_core.wgsl.
+        // Polygon shape test deferred until sp is known — see `sdf_core`.
         let mut clip_alpha = calculate_clip_alpha(p, prim.clip_bounds, prim.clip_radius, prim.clip_corner_shape, clip_type, prim.clip_fade, prim.clip_fade_bounds);
         clip_alpha = clip_alpha * abi_shape_clip_alpha(p, prim.clip_shape.x);
         if clip_alpha < 0.001 {
