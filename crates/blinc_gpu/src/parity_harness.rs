@@ -140,76 +140,135 @@ pub(crate) fn render(
     clear: [u8; 4],
     draw: impl FnOnce(&mut wgpu::RenderPass<'_>),
 ) -> Vec<u8> {
-    let target = device.create_texture(&wgpu::TextureDescriptor {
-        label: None,
-        size: wgpu::Extent3d {
-            width: size,
-            height: size,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
+    let clear = clear.map(|c| c as f64 / 255.0);
+    render_targets(
+        device,
+        queue,
+        size,
+        &[(wgpu::TextureFormat::Rgba8Unorm, 4, clear)],
+        draw,
+    )
+    .remove(0)
+}
+
+/// Clear one `size` square target for each of `targets` (its format, its bytes a pixel and its
+/// clear colour), let `draw` record into them, and read each back with its rows unpadded.
+pub(crate) fn render_targets(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    size: u32,
+    targets: &[(wgpu::TextureFormat, u32, [f64; 4])],
+    draw: impl FnOnce(&mut wgpu::RenderPass<'_>),
+) -> Vec<Vec<u8>> {
+    let textures: Vec<wgpu::Texture> = targets
+        .iter()
+        .map(|(format, _, _)| {
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: None,
+                size: wgpu::Extent3d {
+                    width: size,
+                    height: size,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: *format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            })
+        })
+        .collect();
     // A copy's rows are padded to the alignment the API requires.
-    let padded = (size * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-    let readback = device.create_buffer(&wgpu::BufferDescriptor {
-        label: None,
-        size: (padded * size) as u64,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
+    let padded: Vec<u32> = targets
+        .iter()
+        .map(|(_, bytes, _)| (size * bytes).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT))
+        .collect();
+    let readbacks: Vec<wgpu::Buffer> = padded
+        .iter()
+        .map(|padded| {
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: (padded * size) as u64,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            })
+        })
+        .collect();
     let mut encoder = device.create_command_encoder(&Default::default());
     {
-        let view = target.create_view(&Default::default());
-        let [r, g, b, a] = clear.map(|c| c as f64 / 255.0);
+        let views: Vec<wgpu::TextureView> = textures
+            .iter()
+            .map(|t| t.create_view(&Default::default()))
+            .collect();
+        let attachments: Vec<Option<wgpu::RenderPassColorAttachment>> = views
+            .iter()
+            .zip(targets)
+            .map(|(view, (_, _, [r, g, b, a]))| {
+                Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: *r,
+                            g: *g,
+                            b: *b,
+                            a: *a,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })
+            })
+            .collect();
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color { r, g, b, a }),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
+            color_attachments: &attachments,
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
         });
         draw(&mut pass);
     }
-    encoder.copy_texture_to_buffer(
-        target.as_image_copy(),
-        wgpu::TexelCopyBufferInfo {
-            buffer: &readback,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded),
-                rows_per_image: None,
+    for ((texture, readback), padded) in textures.iter().zip(&readbacks).zip(&padded) {
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(*padded),
+                    rows_per_image: None,
+                },
             },
-        },
-        wgpu::Extent3d {
-            width: size,
-            height: size,
-            depth_or_array_layers: 1,
-        },
-    );
+            wgpu::Extent3d {
+                width: size,
+                height: size,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
     queue.submit([encoder.finish()]);
-    let slice = readback.slice(..);
-    slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+    for readback in &readbacks {
+        readback
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+    }
     device
         .poll(wgpu::PollType::Wait)
-        .expect("the copy finishes");
-    let mapped = slice.get_mapped_range();
-    mapped
-        .chunks_exact(padded as usize)
-        .flat_map(|row| &row[..(size * 4) as usize])
-        .copied()
+        .expect("the copies finish");
+    readbacks
+        .iter()
+        .zip(targets)
+        .zip(&padded)
+        .map(|((readback, (_, bytes, _)), padded)| {
+            let mapped = readback.slice(..).get_mapped_range();
+            mapped
+                .chunks_exact(*padded as usize)
+                .flat_map(|row| &row[..(size * bytes) as usize])
+                .copied()
+                .collect()
+        })
         .collect()
 }
 

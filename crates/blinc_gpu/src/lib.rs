@@ -36,6 +36,8 @@ mod backdrop_parity;
 mod glass_parity;
 #[cfg(test)]
 mod image_parity;
+#[cfg(test)]
+mod mesh_parity;
 pub mod paint;
 #[cfg(test)]
 mod parity_harness;

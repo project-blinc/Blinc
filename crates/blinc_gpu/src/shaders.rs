@@ -88,7 +88,10 @@ pub const GLASS_DT_SHADER: &str = crate::sdf_russl::glass_dt::WGSL;
 pub const SIMPLE_GLASS_DT_SHADER: &str = crate::sdf_russl::simple_glass_dt::WGSL;
 
 /// Data-texture fallback: Mesh rendering with joint matrices as texture (WebGL2)
-pub const MESH_DT_SHADER: &str = include_str!("shaders/mesh_dt.wgsl");
+pub const MESH_DT_SHADER: &str = crate::sdf_russl::mesh_dt::WGSL;
+
+/// PBR mesh rendering: Cook-Torrance, textures, shadows, skinning and morph targets.
+pub const MESH_SHADER: &str = crate::sdf_russl::mesh::WGSL;
 
 /// Shader for text rendering with SDF glyphs
 ///

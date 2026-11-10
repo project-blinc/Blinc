@@ -111,6 +111,18 @@ pub(crate) mod simple_glass_dt {
     }
 }
 
+/// What the mesh shaders share.
+#[path = "shared/mesh_common.rs"]
+pub(crate) mod mesh_common;
+
+/// The PBR mesh shader, the full one with storage buffers.
+#[path = "shared/mesh.rs"]
+pub(crate) mod mesh;
+
+/// The reduced mesh shader for devices without storage buffers.
+#[path = "shared/mesh_dt.rs"]
+pub(crate) mod mesh_dt;
+
 /// The core shader: storage tier, vertex buffer tier and data texture tier, and `simple`, the
 /// storage tier with the blocks plain solid shapes never use switched off.
 #[path = "shared/sdf_core.rs"]

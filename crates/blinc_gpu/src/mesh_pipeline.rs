@@ -47,7 +47,7 @@ pub(crate) struct MeshBufferCacheEntry {
 }
 
 /// Upper bound on directional lights the mesh shader will sample.
-/// Matches the `DirLight` array size in mesh.wgsl.
+/// Matches the `DirLight` array size in the mesh shaders.
 pub const MAX_DIR_LIGHTS: usize = 4;
 
 /// A single directional light for the mesh shader. `direction`
@@ -220,7 +220,7 @@ pub(crate) struct MeshPipeline {
 // semantics, just a different file.
 
 use crate::renderer::{GpuRenderer, SHADOW_MAP_SIZE, mat4_inverse_flat};
-use crate::shaders::MESH_DT_SHADER;
+use crate::shaders::{MESH_DT_SHADER, MESH_SHADER};
 
 impl MeshPipeline {
     /// Drop the window-sized targets (depth, HDR, OIT, bloom); the next mesh draw makes them
@@ -249,7 +249,7 @@ impl GpuRenderer {
 
         // ── Main mesh shader ─────────────────────────────────────────────
         let shader_src = if self.has_storage_buffers {
-            include_str!("shaders/mesh.wgsl")
+            MESH_SHADER
         } else {
             MESH_DT_SHADER
         };
@@ -802,7 +802,7 @@ impl GpuRenderer {
         //                             112 bytes total.
         //
         // Must match `MaterialGpu` in the write path below AND
-        // `MaterialUniforms` in mesh.wgsl / mesh_dt.wgsl exactly —
+        // `MaterialUniforms` in the mesh shaders exactly —
         // wgpu validates the buffer size against the write, so a
         // missed bump here panics at the first `write_buffer` call
         // (seen with the 96 → 112 jump when KHR_texture_transform
@@ -1797,7 +1797,7 @@ impl GpuRenderer {
         ];
 
         /// One directional light in WGSL std140 layout: vec3 + f32
-        /// pair, then vec3 + f32. Matches `DirLight` in mesh.wgsl.
+        /// pair, then vec3 + f32. Matches `DirLight` in the mesh shaders.
         #[repr(C)]
         #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
         struct ShaderDirLight {
@@ -1903,7 +1903,7 @@ impl GpuRenderer {
 
         // ── Upload material ──────────────────────────────────────────────
         //
-        // Layout must match `MaterialUniforms` in mesh.wgsl. WGSL's
+        // Layout must match `MaterialUniforms` in the mesh shaders. WGSL's
         // std140-like alignment puts the vec3 on a 16-byte boundary, so
         // `emissive` is followed by 4 bytes of implicit padding before
         // `unlit` — we represent that explicitly with `emissive_pad` to
