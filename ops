@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1794293037,"nonce":"EtBQbyC2O7KfPgUcbAknRfTf9BA=","added":["debt","area:gpu"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794293942,"nonce":"k5IppTm9KXlCD63wHE94QSc367c=","message":"Fixed in 2ca5f509e73600e7629f70d827b4f2850f5f9eb9. naga heap in hello world 4.88 -\u003e 4.16 MB. composite is read; only its stale allow was removed.","files":null}]}
