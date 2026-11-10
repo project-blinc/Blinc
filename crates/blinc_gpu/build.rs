@@ -135,7 +135,6 @@ fn main() {
             p.extension().is_some_and(|x| x == "wgsl")
                 && p.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
                     n.starts_with("sdf_")
-                        || n == "backdrop.wgsl"
                         || n == "canvas.wgsl"
                         || matches!(
                             n,
@@ -160,7 +159,7 @@ fn main() {
             .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
 
         // Clip helpers read bindings, so they follow declarations and precede the fragment entry.
-        let clip = if name.contains("_dt") || name == "backdrop.wgsl" || name == "canvas.wgsl" {
+        let clip = if name.contains("_dt") || name == "canvas.wgsl" {
             clip_src.replace("aux_data[index]", "load_aux(index)")
         } else {
             clip_src.clone()

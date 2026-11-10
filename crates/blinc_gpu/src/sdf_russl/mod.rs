@@ -68,6 +68,17 @@ pub(crate) mod path_dt {
     }
 }
 
+/// The ABI backdrop composite: always the auxiliary data in a texture at slot 3.
+#[path = "shared/backdrop.rs"]
+pub(crate) mod backdrop_source;
+pub(crate) mod backdrop {
+    russl::russl! {
+        #![specialize(super::backdrop_source)]
+        const TIER: u32 = 2;
+        const AUX_SLOT: u32 = 3;
+    }
+}
+
 /// The core shader: storage tier, vertex buffer tier and data texture tier, and `simple`, the
 /// storage tier with the blocks plain solid shapes never use switched off.
 #[path = "shared/sdf_core.rs"]

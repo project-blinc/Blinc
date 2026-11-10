@@ -31,6 +31,8 @@ pub mod image;
 pub mod mesh_pipeline;
 pub use mesh_pipeline::{DirectionalLight, MAX_DIR_LIGHTS};
 #[cfg(test)]
+mod backdrop_parity;
+#[cfg(test)]
 mod image_parity;
 pub mod paint;
 #[cfg(test)]

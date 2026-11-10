@@ -61,61 +61,9 @@ fn linear(device: &wgpu::Device) -> wgpu::Sampler {
     })
 }
 
-/// The directory of this machine's goldens, `.blinc/snapshots/blinc_gpu/<os>` at the workspace
-/// root (`BLINC_SNAPSHOT_DIR` replaces `.blinc/snapshots`), as the recorder's snapshots keep
-/// theirs: per machine and untracked, because adapters differ in how they round.
-fn golden_dir() -> std::path::PathBuf {
-    let root = std::env::var_os("BLINC_SNAPSHOT_DIR")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| {
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .ancestors()
-                .nth(2)
-                .expect("the workspace root")
-                .join(".blinc/snapshots")
-        });
-    root.join("blinc_gpu").join(std::env::consts::OS)
-}
-
-/// `russl` draws `pass` to what the golden `name` holds, the output of the shader it replaced:
-/// every channel within two levels, on all but a few pixels. `BLINC_SNAPSHOT=bless` records the
-/// golden; without goldens on this machine nothing is compared.
+/// `russl` draws `pass` to what the golden `name` holds, the output of the shader it replaced.
 fn check(device: &wgpu::Device, queue: &wgpu::Queue, name: &str, russl: &str, pass: &Pass) {
-    let dir = golden_dir();
-    let path = dir.join(format!("{name}.png"));
-    let bless = std::env::var("BLINC_SNAPSHOT").is_ok_and(|v| v == "bless");
-    let recorded = std::fs::read_dir(&dir).is_ok_and(|entries| {
-        entries
-            .flatten()
-            .any(|e| e.path().extension().is_some_and(|x| x == "png"))
-    });
-    if !bless && !recorded {
-        eprintln!("golden `{name}` skipped: no goldens for this platform");
-        return;
-    }
-    let got = render(device, queue, russl, pass);
-    if bless {
-        std::fs::create_dir_all(&dir).unwrap();
-        image::save_buffer(&path, &got, SIZE, SIZE, image::ColorType::Rgba8).unwrap();
-        return;
-    }
-    let want = image::open(&path)
-        .unwrap_or_else(|e| panic!("golden {name}: {e}"))
-        .into_rgba8()
-        .into_raw();
-    assert_eq!(got.len(), want.len(), "the golden {name} has another size");
-    let differing = got
-        .as_chunks::<4>()
-        .0
-        .iter()
-        .zip(want.as_chunks::<4>().0)
-        .filter(|(g, w)| g.iter().zip(w.iter()).any(|(g, w)| g.abs_diff(*w) > 2))
-        .count();
-    assert!(
-        differing <= 8,
-        "{name}: {differing} of {} pixels differ from the golden",
-        SIZE * SIZE
-    );
+    crate::parity_harness::check_golden(name, SIZE, || render(device, queue, russl, pass));
 }
 
 #[test]

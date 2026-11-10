@@ -154,9 +154,11 @@ pub(crate) fn render(
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
+    // A copy's rows are padded to the alignment the API requires.
+    let padded = (size * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
     let readback = device.create_buffer(&wgpu::BufferDescriptor {
         label: None,
-        size: (size * size * 4) as u64,
+        size: (padded * size) as u64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         mapped_at_creation: false,
     });
@@ -187,7 +189,7 @@ pub(crate) fn render(
             buffer: &readback,
             layout: wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(size * 4),
+                bytes_per_row: Some(padded),
                 rows_per_image: None,
             },
         },
@@ -203,11 +205,73 @@ pub(crate) fn render(
     device
         .poll(wgpu::PollType::Wait)
         .expect("the copy finishes");
-    slice.get_mapped_range().to_vec()
+    let mapped = slice.get_mapped_range();
+    mapped
+        .chunks_exact(padded as usize)
+        .flat_map(|row| &row[..(size * 4) as usize])
+        .copied()
+        .collect()
 }
 
 /// The pixel at `(x, y)` of `pixels`, rows `size` wide.
 pub(crate) fn pixel(pixels: &[u8], size: u32, x: u32, y: u32) -> [u8; 4] {
     let i = ((y * size + x) * 4) as usize;
     [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]]
+}
+
+/// The directory of this machine's goldens, `.blinc/snapshots/blinc_gpu/<os>` at the workspace
+/// root (`BLINC_SNAPSHOT_DIR` replaces `.blinc/snapshots`), as the recorder's snapshots keep
+/// theirs: per machine and untracked, because adapters differ in how they round.
+pub(crate) fn golden_dir() -> std::path::PathBuf {
+    let root = std::env::var_os("BLINC_SNAPSHOT_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .ancestors()
+                .nth(2)
+                .expect("the workspace root")
+                .join(".blinc/snapshots")
+        });
+    root.join("blinc_gpu").join(std::env::consts::OS)
+}
+
+/// `render`'s pixels, `size` square, against the golden `name` of this machine: every channel
+/// within two levels, on all but a few pixels. `BLINC_SNAPSHOT=bless` records the golden; without
+/// goldens on this machine nothing is compared.
+pub(crate) fn check_golden(name: &str, size: u32, render: impl FnOnce() -> Vec<u8>) {
+    let dir = golden_dir();
+    let path = dir.join(format!("{name}.png"));
+    let bless = std::env::var("BLINC_SNAPSHOT").is_ok_and(|v| v == "bless");
+    let recorded = std::fs::read_dir(&dir).is_ok_and(|entries| {
+        entries
+            .flatten()
+            .any(|e| e.path().extension().is_some_and(|x| x == "png"))
+    });
+    if !bless && !recorded {
+        eprintln!("golden `{name}` skipped: no goldens for this platform");
+        return;
+    }
+    let got = render();
+    if bless {
+        std::fs::create_dir_all(&dir).unwrap();
+        image::save_buffer(&path, &got, size, size, image::ColorType::Rgba8).unwrap();
+        return;
+    }
+    let want = image::open(&path)
+        .unwrap_or_else(|e| panic!("golden {name}: {e}"))
+        .into_rgba8()
+        .into_raw();
+    assert_eq!(got.len(), want.len(), "the golden {name} has another size");
+    let differing = got
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(want.as_chunks::<4>().0)
+        .filter(|(g, w)| g.iter().zip(w.iter()).any(|(g, w)| g.abs_diff(*w) > 2))
+        .count();
+    assert!(
+        differing <= 8,
+        "{name}: {differing} of {} pixels differ from the golden",
+        size * size
+    );
 }
