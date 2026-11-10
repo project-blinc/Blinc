@@ -1,7 +1,6 @@
 //! Executable spec for the box-shadow edge rules in the SDF shadow shaders.
 //!
-//! `spread_radius` is a port of `shadow_spread_radius` in
-//! `shaders/common/sdf_common.wgsl`. The renderer grows a shadow by its
+//! `spread_radius` is a port of `shadow_spread_radius` in `sdf_russl/shared/common.rs`. The renderer grows a shadow by its
 //! spread and CSS grows a corner by the spread only as far as the corner is
 //! already round, so a square corner stays square.
 //!
