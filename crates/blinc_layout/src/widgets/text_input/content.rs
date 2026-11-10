@@ -61,8 +61,12 @@ pub(super) fn caret_x(d: &mut TextInputData, cfg: &TextInputConfig) -> f32 {
     d.ensure_cursor_visible(cfg);
     let shown = shown_text(d, cfg);
     let before = if d.cursor > 0 && !d.value.is_empty() {
-        let text_before: String = shown.chars().take(d.cursor).collect();
-        cfg.face.measure(&text_before, cfg.font_size).width
+        if d.ime.composing.is_some() {
+            let text_before: String = shown.chars().take(d.cursor).collect();
+            cfg.face.measure(&text_before, cfg.font_size).width
+        } else {
+            cfg.face.caret_x(&shown, d.cursor, cfg.font_size)
+        }
     } else {
         0.0
     };

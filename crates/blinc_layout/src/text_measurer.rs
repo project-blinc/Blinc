@@ -513,4 +513,56 @@ mod tests {
         let wide = EstimatedTextMeasurer.measure_with_options("WWWWWW", 32.0, &opts);
         assert_eq!(narrow.width, wide.width);
     }
+
+    /// A caret after any character stands where the next glyph is drawn in the whole text's layout, kerning included.
+    #[test]
+    fn a_caret_stands_where_the_next_glyph_is_drawn() {
+        init_text_measurer();
+        let registry = Arc::new(Mutex::new(FontRegistry::new()));
+        registry.lock().unwrap().preload_generic_fonts();
+        let measurer = FontTextMeasurer::with_shared_registry(registry.clone());
+        let opts = TextLayoutOptions::new();
+        let font = match registry
+            .lock()
+            .unwrap()
+            .resolve_styled(None, GenericFont::System, 400, false)
+        {
+            Some(font) => font,
+            None => {
+                eprintln!("no system font resolved; skipping");
+                return;
+            }
+        };
+        for text in ["M\u{fc}ller Wilhelm lilli \u{c4}\u{d6}\u{dc}", "\u{f6}\u{df}\u{e4}\u{fc} mmm iii", "AVATAR To Wa"] {
+            for size in [12.0_f32, 14.0, 28.0] {
+                let fallbacks = measurer.fallbacks_for(&font, text);
+                let probe = LayoutOptions {
+                    max_width: None,
+                    line_break: blinc_text::LineBreakMode::None,
+                    ..LayoutOptions::default()
+                };
+                let laid = measurer
+                    .layout_engine
+                    .lock()
+                    .unwrap()
+                    .layout_with_fallbacks(text, &font, size, &probe, &fallbacks);
+                let glyphs = &laid.lines[0].glyphs;
+                let mut chars = text.char_indices().peekable();
+                while let Some((at, _)) = chars.next() {
+                    let drawn = match glyphs.iter().find(|g| g.byte_offset == at) {
+                        Some(g) => g.x,
+                        None => continue,
+                    };
+                    let chars = text[..at].chars().count();
+                    let measured = crate::text_measure::TextFace::default().caret_x(text, chars, size);
+                    assert!(
+                        (measured - drawn).abs() <= 0.5,
+                        "{text:?} at {size}px, byte {at}: caret {measured}, glyph drawn at {drawn}"
+                    );
+                }
+                let whole = measurer.measure_with_options(text, size, &opts).width;
+                assert!((whole - laid.width).abs() <= 0.01, "{text:?} at {size}px");
+            }
+        }
+    }
 }
