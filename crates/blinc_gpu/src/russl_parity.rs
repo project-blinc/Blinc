@@ -457,7 +457,7 @@ fn the_shadow_pipeline_grows_corners_and_edges_the_way_css_does() {
         draw(
             &device,
             &queue,
-            crate::sdf_russl::storage::sdf_shadow::WGSL,
+            crate::sdf_russl::sdf_shadow::WGSL,
             &[],
             &[p],
         )
@@ -553,7 +553,7 @@ fn the_shadow_fallback_tiers_draw_what_the_storage_tier_draws() {
         &device,
         &queue,
         Tier::Storage,
-        crate::sdf_russl::storage::sdf_shadow::WGSL,
+        crate::sdf_russl::sdf_shadow::WGSL,
         &[],
         &prims,
         &aux,
@@ -563,14 +563,8 @@ fn the_shadow_fallback_tiers_draw_what_the_storage_tier_draws() {
         "the storage tier drew nothing"
     );
     for (tier, source) in [
-        (
-            Tier::VertexBuffer,
-            crate::sdf_russl::vertex_buffer::sdf_shadow::WGSL,
-        ),
-        (
-            Tier::DataTexture,
-            crate::sdf_russl::data_texture::sdf_shadow::WGSL,
-        ),
+        (Tier::VertexBuffer, crate::sdf_russl::sdf_shadow_vb::WGSL),
+        (Tier::DataTexture, crate::sdf_russl::sdf_shadow_dt::WGSL),
     ] {
         let other = draw_in_tier(&device, &queue, tier, source, &[], &prims, &aux);
         let differing = storage
@@ -643,7 +637,7 @@ fn the_3d_fallback_tiers_draw_what_the_storage_tier_draws() {
         &device,
         &queue,
         Tier::Storage,
-        crate::sdf_russl::storage::sdf_3d::WGSL,
+        crate::sdf_russl::sdf_3d::WGSL,
         &[],
         &prims,
         &aux,
@@ -653,14 +647,8 @@ fn the_3d_fallback_tiers_draw_what_the_storage_tier_draws() {
         "the storage tier drew nothing"
     );
     for (tier, source) in [
-        (
-            Tier::VertexBuffer,
-            crate::sdf_russl::vertex_buffer::sdf_3d::WGSL,
-        ),
-        (
-            Tier::DataTexture,
-            crate::sdf_russl::data_texture::sdf_3d::WGSL,
-        ),
+        (Tier::VertexBuffer, crate::sdf_russl::sdf_3d_vb::WGSL),
+        (Tier::DataTexture, crate::sdf_russl::sdf_3d_dt::WGSL),
     ] {
         let other = draw_in_tier(&device, &queue, tier, source, &[], &prims, &aux);
         let differing = storage
@@ -700,7 +688,7 @@ fn the_3d_pipeline_raymarches_shapes_and_groups() {
         let pixels = draw(
             &device,
             &queue,
-            crate::sdf_russl::storage::sdf_3d::WGSL,
+            crate::sdf_russl::sdf_3d::WGSL,
             &[],
             &[shape(kind, 46.0, 46.0)],
         );
@@ -726,7 +714,7 @@ fn the_3d_pipeline_raymarches_shapes_and_groups() {
         [14.0, 14.0, 12.0, 0.0],
         [0.2, 0.4, 0.9, 1.0],
     ];
-    let wgsl = crate::sdf_russl::storage::sdf_3d::WGSL;
+    let wgsl = crate::sdf_russl::sdf_3d::WGSL;
     let grouped = draw_with_aux(&device, &queue, wgsl, &[], &[group], &aux);
     let empty = draw_with_aux(&device, &queue, wgsl, &[], &[group], &[[0.0; 4]]);
     assert!(

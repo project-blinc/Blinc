@@ -112,7 +112,7 @@ wgpu = "=26.0.1"
 wgpu-hal = "=26.0.5"
 naga = "=26.0.0"
 # Shaders in Rust syntax, compiled at build time; same naga as above.
-russl = "0.3"
+russl = "0.3.1"
 # `gpu-alloc 0.6.1` was published as a patch but introduces a
 # breaking `AsRef<MD>` bound on `GpuAllocator::{alloc,dealloc,cleanup}`
 # that `wgpu-hal 26.0.5` (authored against 0.6.0) does not satisfy.
