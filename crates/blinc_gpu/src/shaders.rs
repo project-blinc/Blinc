@@ -14,7 +14,7 @@
 /// it zeros the damaged region of the static cache so the
 /// subsequent SDF dispatch can re-paint without ghosting on
 /// anti-aliased / semi-transparent edges.
-pub const CLEAR_QUAD_SHADER: &str = include_str!("shaders/clear_quad.wgsl");
+pub const CLEAR_QUAD_SHADER: &str = crate::shaders_russl::clear_quad::WGSL;
 
 /// Split SDF shader: Core shapes (Rect, Circle, Ellipse)
 ///

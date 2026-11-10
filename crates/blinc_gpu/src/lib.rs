@@ -39,6 +39,7 @@ pub mod renderer;
 mod russl_parity;
 mod sdf_russl;
 pub mod shaders;
+mod shaders_russl;
 pub mod text;
 
 pub use backbuffer::{Backbuffer, BackbufferConfig, FrameContext};

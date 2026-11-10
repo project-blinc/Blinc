@@ -670,7 +670,7 @@ impl GpuRenderer {
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("OIT Composite Shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/oit_composite.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(crate::shaders_russl::oit_composite::WGSL.into()),
             });
         let oit_composite_bind_group_layout =
             self.device
@@ -961,7 +961,7 @@ impl GpuRenderer {
         };
 
         // ── Shadow pipeline ──────────────────────────────────────────────
-        let shadow_shader_src = include_str!("shaders/shadow.wgsl");
+        let shadow_shader_src = crate::shaders_russl::shadow_depth::WGSL;
         let shadow_shader = self
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -1180,7 +1180,7 @@ impl GpuRenderer {
         let skybox_pipeline = crate::custom_pass::create_fullscreen_pipeline(
             &self.device,
             "Skybox Pipeline",
-            include_str!("shaders/skybox.wgsl"),
+            crate::shaders_russl::skybox::WGSL,
             wgpu::TextureFormat::Rgba16Float,
             &skybox_bind_group_layout,
         );
@@ -1230,7 +1230,7 @@ impl GpuRenderer {
         let tonemap_pipeline = crate::custom_pass::create_fullscreen_pipeline(
             &self.device,
             "Tonemap Pipeline",
-            include_str!("shaders/tonemap.wgsl"),
+            crate::shaders_russl::tonemap::WGSL,
             self.texture_format,
             &tonemap_bind_group_layout,
         );
@@ -1280,7 +1280,7 @@ impl GpuRenderer {
         let bloom_pipeline = crate::custom_pass::create_fullscreen_pipeline(
             &self.device,
             "Bloom Pipeline",
-            include_str!("shaders/bloom.wgsl"),
+            crate::shaders_russl::bloom::WGSL,
             wgpu::TextureFormat::Rgba16Float,
             &bloom_bind_group_layout,
         );
