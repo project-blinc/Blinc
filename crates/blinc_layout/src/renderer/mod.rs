@@ -3737,6 +3737,34 @@ mod tests {
         assert!(node_is_red(&tree, "panel"));
     }
 
+    /// A CSS layout rule keeps applying through a visual-only update followed by a relayout, as
+    /// a hover or press does.
+    #[test]
+    fn css_layout_survives_a_visual_only_update_and_a_relayout() {
+        let ui = |c: Color| {
+            div()
+                .w(400.0)
+                .h(200.0)
+                .child(div().id("wide").class("wide").h(30.0))
+                .child(div().id("button").bg(c).w(80.0).h(30.0))
+        };
+        let mut tree = RenderTree::from_element(&ui(Color::BLUE));
+        tree.set_stylesheet(Stylesheet::parse(".wide { width: 123px; }").expect("css"));
+        tree.apply_all_stylesheet_styles();
+        tree.compute_layout(400.0, 200.0);
+        let wide = tree.query_by_id("wide").unwrap();
+        let width = |tree: &RenderTree| tree.get_bounds(wide).unwrap().width;
+        assert_eq!(width(&tree), 123.0);
+
+        assert_eq!(
+            tree.incremental_update(&ui(Color::GREEN)),
+            UpdateResult::VisualOnly
+        );
+        tree.restyle_replaced_nodes(None);
+        tree.compute_layout(400.0, 200.0);
+        assert_eq!(width(&tree), 123.0);
+    }
+
     /// A node that changes while carrying a class gets the class style back.
     #[test]
     fn a_replaced_node_takes_its_class_style_again() {

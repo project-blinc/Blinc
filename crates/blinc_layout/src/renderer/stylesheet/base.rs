@@ -500,6 +500,9 @@ impl RenderTree {
         };
         self.invalidate_mouse_move_pipeline_cache();
         self.apply_base_rules_to_nodes(&stylesheet, &nodes);
+        // The replaced taffy styles carry no layout rules from the stylesheet.
+        let replaced: std::collections::HashSet<LayoutNodeId> = nodes.iter().copied().collect();
+        self.apply_stylesheet_layout_overrides_filtered(Some(&replaced));
         for &node_id in &nodes {
             let seed = self
                 .element_registry

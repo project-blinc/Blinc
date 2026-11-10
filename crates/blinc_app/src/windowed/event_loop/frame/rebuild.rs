@@ -23,9 +23,8 @@ use std::sync::{Arc, Mutex};
 ///
 /// The update replaces node props with the new element tree's props, which
 /// carry no style from class selectors (`collect_render_props` only applies
-/// ID-based CSS). Only the replaced nodes are restyled, so the cost follows
-/// the change and not the size of the tree. Layout overrides follow for the
-/// results that recompute layout.
+/// ID-based CSS). Only the replaced nodes are restyled, layout rules included,
+/// so the cost follows the change and not the size of the tree.
 fn restyle_after_incremental_update(
     tree: &mut RenderTree,
     result: blinc_layout::UpdateResult,
@@ -44,7 +43,6 @@ fn restyle_after_incremental_update(
         UpdateResult::LayoutChanged => {
             tracing::debug!("Incremental update: LayoutChanged - recomputing layout");
             tree.restyle_replaced_nodes(router);
-            tree.apply_stylesheet_layout_overrides();
         }
         UpdateResult::ChildrenChanged => {
             tracing::debug!("Incremental update: ChildrenChanged - subtrees rebuilt");
