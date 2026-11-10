@@ -450,12 +450,6 @@ struct EffectLayerRange {
 }
 
 struct Pipelines {
-    /// Pipeline for SDF primitives (rects, circles, etc.) — monolithic fallback (deprecated)
-    #[allow(dead_code)]
-    sdf: wgpu::RenderPipeline,
-    /// Pipeline for SDF primitives rendering on top of existing content (1x sampled) — monolithic fallback (deprecated)
-    #[allow(dead_code)]
-    sdf_overlay: wgpu::RenderPipeline,
     /// Split SDF pipeline: core shapes (Rect, Circle, Ellipse)
     sdf_core: wgpu::RenderPipeline,
     /// Split SDF pipeline: shadow shapes (Shadow, InnerShadow, CircleShadow, CircleInnerShadow)
@@ -482,13 +476,9 @@ struct Pipelines {
     sdf_3d_overlay: wgpu::RenderPipeline,
     /// Split SDF overlay pipeline: notch shapes (1x sampled)
     sdf_notch_overlay: wgpu::RenderPipeline,
-    /// Pipeline for text rendering (MSAA)
-    #[allow(dead_code)]
-    text: wgpu::RenderPipeline,
     /// Pipeline for text rendering on top of existing content (1x sampled)
     text_overlay: wgpu::RenderPipeline,
     /// Pipeline for final compositing (MSAA)
-    #[allow(dead_code)]
     composite: wgpu::RenderPipeline,
     /// Pipeline for final compositing (1x sampled, for overlay blending)
     composite_overlay: wgpu::RenderPipeline,
@@ -527,9 +517,6 @@ struct EffectPipelines {
 
 /// Cached MSAA pipelines for dynamic sample counts
 struct MsaaPipelines {
-    /// SDF pipeline for this sample count (monolithic fallback, deprecated)
-    #[allow(dead_code)]
-    sdf: wgpu::RenderPipeline,
     /// Split SDF MSAA pipeline: core shapes
     sdf_core: wgpu::RenderPipeline,
     /// Split SDF MSAA pipeline: shadow shapes
@@ -2510,14 +2497,6 @@ impl GpuRenderer {
                 )
             };
 
-        // The monolithic SDF_SHADER is no longer compiled — split pipelines
-        // handle all primitive types. Use core shader as stand-in for the
-        // dead-code monolithic pipeline fields in the Pipelines struct.
-        let sdf_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("SDF Shader (stand-in — split pipelines active)"),
-            source: wgpu::ShaderSource::Wgsl(sdf_core_source.into()),
-        });
-
         let sdf_core_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("SDF Core Shader"),
             source: wgpu::ShaderSource::Wgsl(sdf_core_source.into()),
@@ -2583,7 +2562,6 @@ impl GpuRenderer {
         let pipelines = Self::create_pipelines(
             &device,
             &bind_group_layouts,
-            &sdf_shader,
             &sdf_core_shader,
             sdf_core_simple_shader.as_ref(),
             sdf_simple_shader.as_ref(),
@@ -3532,7 +3510,6 @@ impl GpuRenderer {
     fn create_pipelines(
         device: &wgpu::Device,
         layouts: &BindGroupLayouts,
-        sdf_shader: &wgpu::ShaderModule,
         sdf_core_shader: &wgpu::ShaderModule,
         sdf_core_simple_shader: Option<&wgpu::ShaderModule>,
         sdf_simple_shader: Option<&wgpu::ShaderModule>,
@@ -3599,56 +3576,12 @@ impl GpuRenderer {
             &[SdfVertexInstance::LAYOUT]
         };
 
-        let sdf = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("SDF Pipeline"),
-            layout: Some(&sdf_layout),
-            vertex: wgpu::VertexState {
-                module: sdf_shader,
-                entry_point: Some("vs_main"),
-                buffers: sdf_vb_buffers,
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: sdf_shader,
-                entry_point: Some("fs_main"),
-                targets: color_targets,
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            primitive: primitive_state,
-            depth_stencil: None,
-            multisample: multisample_state,
-            multiview: None,
-            cache: pipeline_cache,
-        });
-
         // Overlay pipelines use sample_count=1 for rendering on resolved textures
         let overlay_multisample_state = wgpu::MultisampleState {
             count: 1,
             mask: !0,
             alpha_to_coverage_enabled: false,
         };
-
-        let sdf_overlay = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("SDF Overlay Pipeline"),
-            layout: Some(&sdf_layout),
-            vertex: wgpu::VertexState {
-                module: sdf_shader,
-                entry_point: Some("vs_main"),
-                buffers: sdf_vb_buffers,
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: sdf_shader,
-                entry_point: Some("fs_main"),
-                targets: color_targets,
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            primitive: primitive_state,
-            depth_stencil: None,
-            multisample: overlay_multisample_state,
-            multiview: None,
-            cache: pipeline_cache,
-        });
 
         // --- Split SDF pipelines (share sdf_layout, same blend/primitive state) ---
 
@@ -3781,28 +3714,6 @@ impl GpuRenderer {
         // TEXT_DT_SHADER has its own vs_main that reads from a glyph data texture
         // (no VB instance attributes needed — unlike SDF DT which uses VB + DT).
         let text_vb_buffers: &[wgpu::VertexBufferLayout<'_>] = &[];
-
-        let text = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Text Pipeline"),
-            layout: Some(&text_layout),
-            vertex: wgpu::VertexState {
-                module: text_shader,
-                entry_point: Some("vs_main"),
-                buffers: text_vb_buffers,
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: text_shader,
-                entry_point: Some("fs_main"),
-                targets: color_targets,
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            primitive: primitive_state,
-            depth_stencil: None,
-            multisample: multisample_state,
-            multiview: None,
-            cache: pipeline_cache,
-        });
 
         // Text overlay pipeline - uses sample_count=1 for rendering on resolved textures
         let text_overlay = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -4122,8 +4033,6 @@ impl GpuRenderer {
         });
 
         Pipelines {
-            sdf,
-            sdf_overlay,
             sdf_core,
             sdf_shadow,
             sdf_3d,
@@ -4136,7 +4045,6 @@ impl GpuRenderer {
             sdf_shadow_overlay,
             sdf_3d_overlay,
             sdf_notch_overlay,
-            text,
             text_overlay,
             composite,
             composite_overlay,
@@ -4490,20 +4398,6 @@ impl GpuRenderer {
             alpha_to_coverage_enabled: false,
         };
 
-        // Monolithic stand-in (MSAA) — uses core shader to avoid compiling
-        // the full SDF_SHADER which exceeds PowerVR's shader compiler limit.
-        let msaa_core_source = if !has_storage_buffers {
-            SDF_CORE_DT_SHADER
-        } else if !has_vertex_storage {
-            SDF_CORE_VB_SHADER
-        } else {
-            SDF_CORE_SHADER
-        };
-        let sdf_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("SDF Shader (MSAA stand-in)"),
-            source: wgpu::ShaderSource::Wgsl(msaa_core_source.into()),
-        });
-
         let sdf_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("SDF Pipeline Layout (MSAA)"),
             bind_group_layouts: &[&layouts.sdf],
@@ -4515,28 +4409,6 @@ impl GpuRenderer {
         } else {
             &[SdfVertexInstance::LAYOUT]
         };
-
-        let sdf = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("SDF Pipeline (MSAA)"),
-            layout: Some(&sdf_layout),
-            vertex: wgpu::VertexState {
-                module: &sdf_shader,
-                entry_point: Some("vs_main"),
-                buffers: sdf_vb_buffers,
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &sdf_shader,
-                entry_point: Some("fs_main"),
-                targets: color_targets,
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            primitive: primitive_state,
-            depth_stencil: None,
-            multisample: multisample_state,
-            multiview: None,
-            cache: None,
-        });
 
         // Split SDF shader modules (MSAA)
         let make_msaa_sdf_pipeline = |source: &str, label: &str| -> wgpu::RenderPipeline {
@@ -4704,7 +4576,6 @@ impl GpuRenderer {
         });
 
         MsaaPipelines {
-            sdf,
             sdf_core,
             sdf_shadow,
             sdf_3d,
