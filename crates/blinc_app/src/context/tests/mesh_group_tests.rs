@@ -587,3 +587,23 @@ fn mesh_group_perspective_camera_lights_and_environment_match_direct_output() {
     );
     super::opacity_group_tests::pixel(&page, (80, 60), faded(expected, 0.5, 1.0));
 }
+
+#[test]
+#[ignore] // Requires GPU
+fn a_mesh_draws_the_same_after_its_targets_are_released() {
+    let mut context = super::main_text_clip_tests::context(true, 1);
+    let tree = scene();
+    let state = RenderState::new(Arc::new(Mutex::new(
+        blinc_animation::AnimationScheduler::new(),
+    )));
+    let before = frame(&mut context, &tree, &state, 0);
+    let drawn = before.get_pixel(65, 50).0;
+    assert!(
+        drawn[0] > 200 && drawn[1] > 200,
+        "the mesh was not drawn: {drawn:?}"
+    );
+    // The release drops the mesh pass's window-sized targets; the next frame makes them again.
+    context.release_idle_memory();
+    let after = frame(&mut context, &tree, &state, 0);
+    assert_eq!(before.get_pixel(65, 50), after.get_pixel(65, 50));
+}

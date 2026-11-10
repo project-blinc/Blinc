@@ -7,9 +7,7 @@
 use super::GpuRenderer;
 use wgpu::util::DeviceExt;
 
-/// How many frames a target may go undrawn before it is freed. A size drawn every few frames
-/// keeps its target.
-const IDLE_FRAMES: u64 = 60;
+use super::idle::IDLE_FRAMES;
 
 /// One size's target and what composites it.
 pub(super) struct OverlayTarget {
@@ -34,6 +32,11 @@ pub(super) struct OverlayTargets {
 }
 
 impl OverlayTargets {
+    /// Frames started so far.
+    pub(super) fn frame(&self) -> u64 {
+        self.frame
+    }
+
     pub(super) fn clear(&mut self) {
         self.targets.clear();
     }
@@ -236,6 +239,29 @@ mod tests {
         assert!(
             r.layer_texture_cache.pool_small.is_empty(),
             "the idle pool kept its texture"
+        );
+    }
+
+    #[test]
+    fn the_scene_copy_goes_once_no_frame_uses_it() {
+        let Some(mut r) = renderer() else { return };
+        r.viewport_size = (64, 32);
+        for frame in 0..(IDLE_FRAMES * 2) {
+            if frame % 5 == 0 {
+                r.ensure_scene_copy();
+            }
+            r.next_frame();
+        }
+        assert!(
+            r.scene_copy_texture.is_some(),
+            "a copy used every few frames was freed"
+        );
+        for _ in 0..=IDLE_FRAMES {
+            r.next_frame();
+        }
+        assert!(
+            r.scene_copy_texture.is_none(),
+            "an unused scene copy was kept"
         );
     }
 }

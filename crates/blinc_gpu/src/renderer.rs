@@ -1316,6 +1316,10 @@ pub struct GpuRenderer {
     /// Staging texture for scene capture (used by flow shaders with sample_scene()).
     /// Lazily created/resized to match the render target.
     scene_copy_texture: Option<(wgpu::Texture, wgpu::TextureView, u32, u32)>,
+    /// The frame that last used `scene_copy_texture`.
+    scene_copy_last_frame: u64,
+    /// The frame that last drew meshes into the mesh pass's window-sized targets.
+    pub(crate) mesh_targets_last_frame: u64,
     /// Whether the GPU adapter supports storage buffers in vertex shaders.
     /// When `false`, SDF pipelines use an instance-stepped vertex buffer
     /// fallback (WebGL2 path).
@@ -2815,6 +2819,8 @@ impl GpuRenderer {
             flow_pipeline_cache,
             flow_cursor: [0.0; 2],
             scene_copy_texture: None,
+            scene_copy_last_frame: 0,
+            mesh_targets_last_frame: 0,
             has_vertex_storage,
             has_storage_buffers,
             has_texture_compression_bc,
@@ -4989,6 +4995,7 @@ impl GpuRenderer {
     /// Called once per frame before rendering any flows that use `sample_scene()`.
     /// Returns the scene texture view, or None if the copy failed.
     fn ensure_scene_copy(&mut self) -> Option<&wgpu::TextureView> {
+        self.scene_copy_last_frame = self.current_frame();
         let (tw, th) = self.viewport_size;
         if tw == 0 || th == 0 {
             return None;

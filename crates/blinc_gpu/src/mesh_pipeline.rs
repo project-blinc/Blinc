@@ -222,6 +222,25 @@ pub(crate) struct MeshPipeline {
 use crate::renderer::{GpuRenderer, SHADOW_MAP_SIZE, mat4_inverse_flat};
 use crate::shaders::MESH_DT_SHADER;
 
+impl MeshPipeline {
+    /// Drop the window-sized targets (depth, HDR, OIT, bloom); the next mesh draw makes them
+    /// again. The pipelines, the shadow map and the environment map stay.
+    pub(crate) fn release_targets(&mut self) {
+        self.main_depth = None;
+        self.main_depth_view = None;
+        self.hdr_texture = None;
+        self.hdr_view = None;
+        self.oit_accum_texture = None;
+        self.oit_accum_view = None;
+        self.oit_reveal_texture = None;
+        self.oit_reveal_view = None;
+        self.bloom_a = None;
+        self.bloom_a_view = None;
+        self.bloom_b = None;
+        self.bloom_b_view = None;
+    }
+}
+
 impl GpuRenderer {
     fn ensure_mesh_pipeline(&mut self) {
         if self.mesh_pipeline.is_some() {
@@ -2412,6 +2431,7 @@ impl GpuRenderer {
         // borrow ended at the bind_group creation above.
         // ── Lazily (re)allocate depth + HDR textures ─────────────────────
         let (viewport_w, viewport_h) = self.viewport_size;
+        self.mesh_targets_last_frame = self.current_frame();
         {
             let mp_mut = self.mesh_pipeline.as_mut().unwrap();
             let size = (viewport_w.max(1), viewport_h.max(1));

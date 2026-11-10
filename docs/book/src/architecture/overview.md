@@ -92,8 +92,10 @@ rebuilds, layout-affecting changes, scroll, overlay transitions. See [GPU
 Rendering](./gpu-rendering.md) for the cache, damage, and culling details.
 
 The static layer is a window-sized texture. A desktop window that has drawn
-nothing for two seconds frees it, with the offscreen targets and pooled layer
-textures, and the next frame paints in full and makes them again. An app
+nothing for two seconds frees it, with the offscreen targets, pooled layer
+textures, flow scene copy and mesh targets, and the next frame paints in full
+and makes them again. The window-sized intermediates also go once no frame has
+used them for 60 frames, while the app keeps drawing. An app
 that drives its own loop can do the same with `BlincApp::release_idle_memory`.
 
 ## Core Crates
