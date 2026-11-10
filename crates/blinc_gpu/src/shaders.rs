@@ -2272,7 +2272,7 @@ pub const SDF_3D_SHADER: &str = crate::sdf_russl::sdf_3d::WGSL;
 ///
 /// Handles concave corners with edge modifiers (scoop, bulge, cut, peak).
 /// Full border, gradient, filter, and mask support.
-pub const SDF_NOTCH_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_notch.wgsl"));
+pub const SDF_NOTCH_SHADER: &str = crate::sdf_russl::sdf_notch::WGSL;
 
 /// Vertex-buffer fallback: Core shapes (no VERTEX_STORAGE needed)
 ///

@@ -9,6 +9,8 @@
 use blinc_gpu::shaders::{SDF_NOTCH_DT_SHADER, SDF_NOTCH_SHADER, SDF_NOTCH_VB_SHADER};
 
 const PRELUDE: &str = include_str!("../src/shaders/common/sdf_common.wgsl");
+/// The full-tier notch distance function, in russl.
+const RUSSL: &str = include_str!("../src/sdf_russl/notch.rs");
 
 fn squeeze(src: &str) -> String {
     src.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -53,6 +55,24 @@ fn a_bulge_and_a_peak_reach_half_the_body_and_are_clipped_to_their_width() {
     ] {
         assert!(src.contains(reach), "{reach}");
     }
+    assert!(
+        !src.contains("p.y - base_y - join_depth") && !src.contains("base_y - p.y - join_depth"),
+        "a bulge still stops at the join depth"
+    );
+}
+
+#[test]
+fn the_russl_notch_keeps_the_same_joins() {
+    let src = squeeze(RUSSL);
+    assert_eq!(src.matches("d = min(d, flare);").count(), 4);
+    assert!(!src.contains("smin(d, flare"), "a flare is blended again");
+    assert!(src.contains("let join_depth = min(8.0, min(inner_size.x, inner_size.y) * 0.5);"));
+    assert!(src.contains("let deep_depth = min(inner_size.x, inner_size.y) * 0.5;"));
+    assert_eq!(
+        src.matches("abs(p.x - cx) - half_w").count(),
+        4,
+        "a piece is not clipped to its own width"
+    );
     assert!(
         !src.contains("p.y - base_y - join_depth") && !src.contains("base_y - p.y - join_depth"),
         "a bulge still stops at the join depth"

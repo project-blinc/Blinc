@@ -1,13 +1,15 @@
 //! Blinc's SDF shaders in russl, compiled at build time. `sdf_core` is the full core pipeline;
 //! `simple` is the one for plain solid shapes: `sdf_core` with the blocks they never use switched
-//! off. `sdf_shadow` and `sdf_3d` are the shadow and raymarching pipelines. `russl_parity` checks
+//! off. `sdf_shadow`, `sdf_3d` and `sdf_notch` are the shadow, raymarching and notch pipelines. `russl_parity` checks
 //! that simple and full draw the same pixels for the shapes `simple` takes.
 
 pub(crate) mod abi;
 mod clip;
 mod common;
+mod notch;
 pub(crate) mod sdf_3d;
 pub(crate) mod sdf_core;
+pub(crate) mod sdf_notch;
 pub(crate) mod sdf_shadow;
 mod shapes3d;
 

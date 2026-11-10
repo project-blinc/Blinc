@@ -450,6 +450,41 @@ fn the_3d_pipeline_raymarches_shapes_and_groups() {
 }
 
 #[test]
+fn the_notch_pipeline_fills_the_top_slot_for_bulges_and_peaks_and_hollows_it_for_scoops_and_cuts() {
+    let Some((device, queue)) = device() else {
+        eprintln!("no adapter with vertex storage: skipped");
+        return;
+    };
+    // A bulge or a peak sits in the height the body is inset by; a scoop or a cut is carved out
+    // of the body. Probe the middle of the top edge, just below the outer bounds.
+    let notch = |kind: f32| {
+        let mut p = GpuPrimitive::rect(40.0, 50.0, 48.0, 40.0).with_color(0.2, 0.6, 0.8, 1.0);
+        p.type_info[0] = 8;
+        p.perspective = [kind, 20.0, 10.0, 0.0];
+        p
+    };
+    let wgsl = crate::sdf_russl::sdf_notch::WGSL;
+    for (kind, name, filled) in [
+        (1.0, "scoop", false),
+        (2.0, "bulge", true),
+        (3.0, "cut", false),
+        (4.0, "peak", true),
+    ] {
+        let pixels = draw(&device, &queue, wgsl, &[], &[notch(kind)]);
+        assert!(
+            alpha(&pixels, 64, 80) > 250,
+            "the {name} left the body empty"
+        );
+        let slot = alpha(&pixels, 64, 53);
+        if filled {
+            assert!(slot > 0, "the {name} does not fill the top slot");
+        } else {
+            assert_eq!(slot, 0, "the {name} does not hollow the top slot");
+        }
+    }
+}
+
+#[test]
 fn the_cpu_primitive_lays_out_as_the_shader_reads_it() {
     use crate::sdf_russl::abi::Primitive;
     use std::mem::{offset_of, size_of};
