@@ -2250,7 +2250,7 @@ pub const CLEAR_QUAD_SHADER: &str = include_str!("shaders/clear_quad.wgsl");
 /// Handles prim_type 0-2 with full features: borders, gradients,
 /// CSS filters, mask gradients, perspective, clip regions.
 /// Part of the multi-pipeline SDF split for driver compatibility.
-pub const SDF_CORE_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_core.wgsl"));
+pub const SDF_CORE_SHADER: &str = crate::sdf_russl::sdf_core::WGSL;
 
 /// Split SDF shader: plain Rect and Circle (solid fill, circular corners, uniform border,
 /// rounded rect clip). Only for tiers with storage buffers in the vertex stage.

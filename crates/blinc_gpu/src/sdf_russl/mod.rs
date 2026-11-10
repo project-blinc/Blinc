@@ -1,6 +1,6 @@
-//! The SDF core shader in russl, compiled at build time. `simple` is the pipeline for plain solid
-//! shapes: `sdf_core` with the blocks they never use switched off. The full pipeline is still
-//! built from `sdf_core.wgsl`; `russl_parity` checks that the two draw the same pixels.
+//! The SDF core shader in russl, compiled at build time. `sdf_core` is the full pipeline; `simple`
+//! is the one for plain solid shapes: `sdf_core` with the blocks they never use switched off.
+//! `russl_parity` checks that the two draw the same pixels for those shapes.
 
 mod clip;
 mod common;

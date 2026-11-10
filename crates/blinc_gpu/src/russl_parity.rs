@@ -1,7 +1,6 @@
-//! The simple core pipeline, specialised at build time by russl, draws the same pixels as
-//! `sdf_core.wgsl` specialised by wgpu with the constants russl built it with. The full pipeline
-//! is built from that WGSL, so this keeps the two copies of the shader in step. The CPU's
-//! `GpuPrimitive` must hold the bytes the shader's `Primitive` reads, which the layout test checks.
+//! The simple core pipeline (the `FEAT_*` blocks off) draws the same pixels as the full one for
+//! the primitives `GpuPrimitive::is_simple_core` sends it. The CPU's `GpuPrimitive` must hold the
+//! bytes the shader's `Primitive` reads, which the layout test checks.
 
 use crate::primitives::GpuPrimitive;
 use wgpu::util::DeviceExt;
@@ -245,7 +244,7 @@ fn draw(
 }
 
 #[test]
-fn the_offline_simple_pipeline_draws_what_the_runtime_one_draws() {
+fn the_simple_pipeline_draws_what_the_full_one_draws_for_simple_primitives() {
     let Some((device, queue)) = device() else {
         eprintln!("no adapter with vertex storage: skipped");
         return;
@@ -266,23 +265,22 @@ fn the_offline_simple_pipeline_draws_what_the_runtime_one_draws() {
     for p in &prims {
         assert!(p.is_simple_core(), "{p:?} is not a simple core primitive");
     }
-    let runtime = draw(
-        &device,
-        &queue,
-        crate::shaders::SDF_CORE_SHADER,
-        crate::sdf_russl::simple::CONSTANTS,
-        &prims,
-    );
-    let offline = draw(&device, &queue, crate::sdf_russl::simple::WGSL, &[], &prims);
+    same_pixels(&device, &queue, &prims);
+}
+
+/// The simple pipeline and the full one draw `prims` to the same pixels.
+fn same_pixels(device: &wgpu::Device, queue: &wgpu::Queue, prims: &[GpuPrimitive]) {
+    let full = draw(device, queue, crate::sdf_russl::sdf_core::WGSL, &[], prims);
+    let simple = draw(device, queue, crate::sdf_russl::simple::WGSL, &[], prims);
     assert!(
-        runtime.iter().any(|&b| b != 0),
-        "the runtime pipeline drew nothing"
+        full.iter().any(|&b| b != 0),
+        "the full pipeline drew nothing"
     );
-    let differing = runtime
+    let differing = full
         .as_chunks::<4>()
         .0
         .iter()
-        .zip(offline.as_chunks::<4>().0)
+        .zip(simple.as_chunks::<4>().0)
         .filter(|(a, b)| a != b)
         .count();
     assert_eq!(differing, 0, "{differing} of {} pixels differ", SIZE * SIZE);
