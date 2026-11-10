@@ -135,7 +135,6 @@ fn main() {
             p.extension().is_some_and(|x| x == "wgsl")
                 && p.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
                     n.starts_with("sdf_")
-                        || n == "image.wgsl"
                         || n == "backdrop.wgsl"
                         || n == "canvas.wgsl"
                         || n == "path.wgsl"
@@ -220,7 +219,7 @@ fn main() {
             used.len(),
             order.len()
         );
-        if name == "image.wgsl" || name == "path.wgsl" {
+        if name == "path.wgsl" {
             let dt = out.replace("var<storage, read> aux_data: array<vec4<f32>>;", "var aux_tex: texture_2d<f32>;")
                 .replace("return aux_data[index];", "return textureLoad(aux_tex, vec2<i32>(i32(index % 1024u), i32(index / 1024u)), 0);");
             std::fs::write(out_dir.join(name.replace(".wgsl", "_dt.wgsl")), dt)

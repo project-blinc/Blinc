@@ -136,10 +136,10 @@ pub const PATH_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/path_dt
 /// - UV cropping for box-fit modes
 /// - Tinting and opacity
 /// - Optional rounded corners
-pub const IMAGE_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/image.wgsl"));
+pub const IMAGE_SHADER: &str = crate::sdf_russl::image::WGSL;
 
 /// Image shader using a data texture for auxiliary clips.
-pub const IMAGE_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/image_dt.wgsl"));
+pub const IMAGE_DT_SHADER: &str = crate::sdf_russl::image_dt::WGSL;
 
 /// Shader for layer composition
 ///

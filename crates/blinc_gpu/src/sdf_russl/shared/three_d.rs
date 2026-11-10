@@ -3,7 +3,8 @@
 //! Each tier's entry points call these with the fields they read.
 
 russl::russl! {
-    use super::access::{UNIFORMS, prim, aux};
+    use super::access::{UNIFORMS, prim};
+    use super::aux::aux;
     use super::clip::{calculate_clip_alpha, abi_shape_clip_alpha};
     use super::shapes3d::{apply_boolean_op, ray_aabb_intersect, rotate_x_inv, rotate_y_inv, rotate_z_inv, sdf_3d_eval};
 

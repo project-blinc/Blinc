@@ -12,6 +12,8 @@
 
 #[path = "shared/access.rs"]
 pub(crate) mod access;
+#[path = "shared/aux.rs"]
+pub(crate) mod aux;
 #[path = "shared/clip.rs"]
 mod clip;
 #[path = "shared/common.rs"]
@@ -36,6 +38,20 @@ pub(crate) mod sdf_simple;
 pub(crate) mod text;
 pub(crate) mod text_dt {
     russl::russl! { #![specialize(super::text)] const TIER: u32 = 2; }
+}
+
+/// The image shader: storage tier and data texture tier, the auxiliary data at slot 3.
+#[path = "shared/image.rs"]
+mod image_source;
+pub(crate) mod image {
+    russl::russl! { #![specialize(super::image_source)] const AUX_SLOT: u32 = 3; }
+}
+pub(crate) mod image_dt {
+    russl::russl! {
+        #![specialize(super::image_source)]
+        const TIER: u32 = 2;
+        const AUX_SLOT: u32 = 3;
+    }
 }
 
 /// The core shader: storage tier, vertex buffer tier and data texture tier, and `simple`, the

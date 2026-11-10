@@ -2,7 +2,7 @@
 //! the auxiliary data.
 
 russl::russl! {
-    use super::access::aux;
+    use super::aux::aux;
     use super::common::{sd_circle, sd_ellipse, sd_rounded_rect, sd_shaped_rect};
 
     // ============================================================================

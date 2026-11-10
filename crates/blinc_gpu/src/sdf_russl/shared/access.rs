@@ -1,7 +1,7 @@
-//! How a primitive and the auxiliary data are read, and the bind group around them. `TIER` is the
-//! device tier the shader is built for: 0 reads storage buffers, 1 the same with the vertex
-//! stage's instance fields in a vertex buffer, 2 `RGBA32F` data textures (WebGL2, no storage
-//! buffers). Tier 0 is the default; a specialisation sets the others.
+//! How a primitive is read, and the bind group around it. `TIER` is the device tier the shader is
+//! built for: 0 reads storage buffers, 1 the same with the vertex stage's instance fields in a
+//! vertex buffer, 2 `RGBA32F` data textures (WebGL2, no storage buffers). Tier 0 is the default;
+//! a specialisation sets the others. The auxiliary data is in `aux`.
 
 russl::russl! {
     use super::primitive::{Primitive, Uniforms};
@@ -17,8 +17,6 @@ russl::russl! {
     #if TIER == 2
         // Primitive rows, one RGBA32F texel per vec4 field.
         #[group(0)] #[binding(1)] pub static PRIM_DATA: Texture2D<f32>;
-        // Auxiliary data packed into an RGBA32F texture (width 1024, height ceil(len / 1024)).
-        #[group(0)] #[binding(5)] pub static AUX_TEX: Texture2D<f32>;
 
         // Primitive `index`: each row is one primitive, the column is the field.
         pub fn prim(index: u32) -> Primitive {
@@ -61,26 +59,12 @@ russl::russl! {
             p.clip_shape = PRIM_DATA.load(IVec2::new(33, y), 0);
             return p;
         }
-
-        // Auxiliary data vec4 `index`.
-        pub fn aux(index: u32) -> Vec4 {
-            let i = index as i32;
-            return AUX_TEX.load(IVec2::new(i % 1024, i / 1024), 0);
-        }
     #else
         #[group(0)] #[binding(1)] pub static PRIMITIVES: Storage<[Primitive]>;
-        // Variable-length per-primitive data: 3D group shape descriptors, polygon clip vertices,
-        // gradient stop tables.
-        #[group(0)] #[binding(5)] pub static AUX_DATA: Storage<[Vec4]>;
 
         // Primitive `index`.
         pub fn prim(index: u32) -> Primitive {
             return PRIMITIVES[index];
-        }
-
-        // Auxiliary data vec4 `index`.
-        pub fn aux(index: u32) -> Vec4 {
-            return AUX_DATA[index];
         }
     #endif
 }
