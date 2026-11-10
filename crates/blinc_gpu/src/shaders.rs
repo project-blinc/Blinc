@@ -2250,7 +2250,7 @@ pub const CLEAR_QUAD_SHADER: &str = include_str!("shaders/clear_quad.wgsl");
 /// Handles prim_type 0-2 with full features: borders, gradients,
 /// CSS filters, mask gradients, perspective, clip regions.
 /// Part of the multi-pipeline SDF split for driver compatibility.
-pub const SDF_CORE_SHADER: &str = crate::sdf_russl::sdf_core::WGSL;
+pub const SDF_CORE_SHADER: &str = crate::sdf_russl::storage::sdf_core::WGSL;
 
 /// Split SDF shader: plain Rect and Circle (solid fill, circular corners, uniform border,
 /// rounded rect clip). Only for tiers with storage buffers in the vertex stage.
@@ -2260,19 +2260,19 @@ pub const SDF_SIMPLE_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_
 ///
 /// Handles prim_type 3-6 (Shadow, InnerShadow, CircleShadow,
 /// CircleInnerShadow). Each case is self-contained with early return.
-pub const SDF_SHADOW_SHADER: &str = crate::sdf_russl::sdf_shadow::WGSL;
+pub const SDF_SHADOW_SHADER: &str = crate::sdf_russl::storage::sdf_shadow::WGSL;
 
 /// Split SDF shader: 3D raymarched shapes
 ///
 /// Handles primitives with shape_type > 0 (3D box, sphere, cylinder,
 /// torus, capsule, group). 32-step raymarching with Blinn-Phong lighting.
-pub const SDF_3D_SHADER: &str = crate::sdf_russl::sdf_3d::WGSL;
+pub const SDF_3D_SHADER: &str = crate::sdf_russl::storage::sdf_3d::WGSL;
 
 /// Split SDF shader: Notch primitives (prim_type 8)
 ///
 /// Handles concave corners with edge modifiers (scoop, bulge, cut, peak).
 /// Full border, gradient, filter, and mask support.
-pub const SDF_NOTCH_SHADER: &str = crate::sdf_russl::sdf_notch::WGSL;
+pub const SDF_NOTCH_SHADER: &str = crate::sdf_russl::storage::sdf_notch::WGSL;
 
 /// Vertex-buffer fallback: Core shapes (no VERTEX_STORAGE needed)
 ///
@@ -2281,8 +2281,7 @@ pub const SDF_NOTCH_SHADER: &str = crate::sdf_russl::sdf_notch::WGSL;
 pub const SDF_CORE_VB_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_core_vb.wgsl"));
 
 /// Vertex-buffer fallback: Shadow primitives
-pub const SDF_SHADOW_VB_SHADER: &str =
-    include_str!(concat!(env!("OUT_DIR"), "/sdf_shadow_vb.wgsl"));
+pub const SDF_SHADOW_VB_SHADER: &str = crate::sdf_russl::vertex_buffer::sdf_shadow::WGSL;
 
 /// Vertex-buffer fallback: 3D raymarched shapes
 pub const SDF_3D_VB_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_3d_vb.wgsl"));
@@ -2297,8 +2296,7 @@ pub const SDF_NOTCH_VB_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sd
 pub const SDF_CORE_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_core_dt.wgsl"));
 
 /// Data-texture fallback: Shadow primitives
-pub const SDF_SHADOW_DT_SHADER: &str =
-    include_str!(concat!(env!("OUT_DIR"), "/sdf_shadow_dt.wgsl"));
+pub const SDF_SHADOW_DT_SHADER: &str = crate::sdf_russl::data_texture::sdf_shadow::WGSL;
 
 /// Data-texture fallback: 3D raymarched shapes
 pub const SDF_3D_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_3d_dt.wgsl"));

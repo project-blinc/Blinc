@@ -5,11 +5,10 @@
 //! spread and CSS grows a corner by the spread only as far as the corner is
 //! already round, so a square corner stays square.
 //!
-//! The source checks keep the vertex buffer and data texture variants in step: they are separate
-//! files with the same fragment code. The storage buffer variant is compiled from russl, and
-//! `russl_parity` checks the same rules on its pixels.
+//! The three tiers (storage buffer, vertex buffer, data texture) compile one russl source, which
+//! the source checks read; `russl_parity` checks the same rules on the pixels of each.
 
-use blinc_gpu::shaders::{SDF_SHADOW_DT_SHADER, SDF_SHADOW_VB_SHADER};
+use blinc_gpu::shaders::{SDF_SHADOW_DT_SHADER, SDF_SHADOW_SHADER, SDF_SHADOW_VB_SHADER};
 
 fn spread_radius(r: f32, s: f32) -> f32 {
     if s > 0.0 {
@@ -56,7 +55,11 @@ fn a_negative_spread_shrinks_the_corner_and_stops_at_square() {
     assert_eq!(spread_radius(0.0, -4.0), 0.0);
 }
 
-const VARIANTS: [(&str, &str); 2] = [
+/// The shadow shader every tier compiles.
+const SOURCE: &str = include_str!("../src/sdf_russl/shared/shadow.rs");
+
+const VARIANTS: [(&str, &str); 3] = [
+    ("sdf_shadow", SDF_SHADOW_SHADER),
     ("sdf_shadow_vb", SDF_SHADOW_VB_SHADER),
     ("sdf_shadow_dt", SDF_SHADOW_DT_SHADER),
 ];
@@ -66,57 +69,49 @@ fn squeeze(src: &str) -> String {
 }
 
 #[test]
-fn every_variant_grows_the_quad_by_the_spread() {
-    for (name, src) in VARIANTS {
-        let src = squeeze(src);
-        assert!(
-            src.contains(".w, 0.0) + 1.0;") && src.contains("let blur_expand"),
-            "{name}: the vertex stage does not pad by the spread and an antialiasing pixel"
-        );
-    }
+fn the_quad_grows_by_the_spread() {
+    let src = squeeze(SOURCE);
+    assert!(
+        src.contains(".w, 0.0) + 1.0;") && src.contains("let blur_expand"),
+        "the vertex stage does not pad by the spread and an antialiasing pixel"
+    );
 }
 
 #[test]
-fn every_variant_draws_an_outer_shadow_that_has_only_an_offset() {
-    for (name, src) in VARIANTS {
-        let src = squeeze(src);
-        assert!(
-            !src.contains("prim.shadow.w != 0.0"),
-            "{name}: an outer shadow with no blur and no spread is still skipped"
-        );
-    }
+fn an_outer_shadow_that_has_only_an_offset_is_drawn() {
+    let src = squeeze(SOURCE);
+    assert!(
+        !src.contains("prim.shadow.w != 0.0"),
+        "an outer shadow with no blur and no spread is still skipped"
+    );
 }
 
 #[test]
-fn every_variant_grows_corners_the_way_css_does() {
-    for (name, src) in VARIANTS {
-        let src = squeeze(src);
-        assert!(
-            src.contains("shadow_spread_radius(prim.corner_radius, spread)"),
-            "{name}: corners are not grown by shadow_spread_radius"
-        );
-        assert!(
-            !src.contains("prim.corner_radius + vec4<f32>(spread)"),
-            "{name}: spread is added to every corner radius"
-        );
-    }
+fn corners_grow_the_way_css_does() {
+    let src = squeeze(SOURCE);
+    assert!(
+        src.contains("shadow_spread_radius(prim.corner_radius, spread)"),
+        "corners are not grown by shadow_spread_radius"
+    );
+    assert!(
+        !src.contains("prim.corner_radius + Vec4::splat(spread)"),
+        "spread is added to every corner radius"
+    );
 }
 
 #[test]
-fn every_variant_antialiases_an_unblurred_edge() {
-    for (name, src) in VARIANTS {
-        let src = squeeze(src);
-        assert!(
-            src.contains("clamp(0.5 - shadow_sdf_dist, 0.0, 1.0)"),
-            "{name}: the outer edge with no blur is a hard step"
-        );
-        assert_eq!(
-            src.matches("clamp(0.5 + spread - edge_dist, 0.0, 1.0)")
-                .count(),
-            2,
-            "{name}: an inset shadow with no blur (box and circle) is not antialiased"
-        );
-    }
+fn an_unblurred_edge_is_antialiased() {
+    let src = squeeze(SOURCE);
+    assert!(
+        src.contains("clamp(0.5 - shadow_sdf_dist, 0.0, 1.0)"),
+        "the outer edge with no blur is a hard step"
+    );
+    assert_eq!(
+        src.matches("clamp(0.5 + spread - edge_dist, 0.0, 1.0)")
+            .count(),
+        2,
+        "an inset shadow with no blur (box and circle) is not antialiased"
+    );
 }
 
 #[test]

@@ -4,8 +4,9 @@
 
 russl::russl! {
     use super::common::{sd_circle, sd_ellipse, sd_shaped_rect, quarter_ellipse_sdf, erf, apply_css_filter, border_side_color};
-    use super::abi::{Uniforms, Primitive, UNIFORMS, PRIMITIVES, GLYPH_ATLAS, GLYPH_SAMPLER, COLOR_GLYPH_ATLAS};
-    use super::clip::{calculate_clip_alpha, calculate_polygon_clip_alpha, gradient_table_color, abi_shape_clip_alpha, AUX_DATA};
+    use super::primitive::{Uniforms, Primitive};
+    use super::access::{UNIFORMS, PRIMITIVES, GLYPH_ATLAS, GLYPH_SAMPLER, COLOR_GLYPH_ATLAS, AUX_DATA};
+    use super::clip::{calculate_clip_alpha, calculate_polygon_clip_alpha, gradient_table_color, abi_shape_clip_alpha};
 
     // ============================================================================
     // Blinc SDF Core Shader — Rect, Circle, Ellipse

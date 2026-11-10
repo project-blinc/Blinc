@@ -1,5 +1,4 @@
-//! What every SDF pipeline shares: the viewport uniforms, the `Primitive` the CPU uploads, and
-//! the bind group the pipelines are laid out with.
+//! What every SDF pipeline shares: the viewport uniforms and the `Primitive` the CPU uploads.
 
 russl::russl! {
     pub struct Uniforms {
@@ -82,11 +81,4 @@ russl::russl! {
         // One more than the AUX_DATA header offset for an ABI shape clip, zero for none.
         pub clip_shape: Vec4,
     }
-
-    #[group(0)] #[binding(0)] pub static UNIFORMS: Uniform<Uniforms>;
-    #[group(0)] #[binding(1)] pub static PRIMITIVES: Storage<[Primitive]>;
-    // Glyph atlas textures for unified text rendering
-    #[group(0)] #[binding(2)] pub static GLYPH_ATLAS: Texture2D<f32>;
-    #[group(0)] #[binding(3)] pub static GLYPH_SAMPLER: Sampler;
-    #[group(0)] #[binding(4)] pub static COLOR_GLYPH_ATLAS: Texture2D<f32>;
 }

@@ -2,8 +2,9 @@
 //! torus, capsule) or a group of them, raymarched per fragment.
 
 russl::russl! {
-    use super::abi::{Uniforms, Primitive, UNIFORMS, PRIMITIVES, GLYPH_ATLAS, GLYPH_SAMPLER, COLOR_GLYPH_ATLAS};
-    use super::clip::{calculate_clip_alpha, abi_shape_clip_alpha, AUX_DATA};
+    use super::primitive::{Uniforms, Primitive};
+    use super::access::{UNIFORMS, PRIMITIVES, GLYPH_ATLAS, GLYPH_SAMPLER, COLOR_GLYPH_ATLAS, AUX_DATA};
+    use super::clip::{calculate_clip_alpha, abi_shape_clip_alpha};
     use super::shapes3d::{apply_boolean_op, ray_aabb_intersect, rotate_x_inv, rotate_y_inv, rotate_z_inv, sdf_3d_eval};
 
     // ============================================================================

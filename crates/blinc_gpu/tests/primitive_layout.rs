@@ -28,14 +28,6 @@ const SHADERS: &[(&str, &str)] = &[
         include_str!("../src/shaders/sdf_core_vb.wgsl"),
     ),
     (
-        "sdf_shadow_dt",
-        include_str!("../src/shaders/sdf_shadow_dt.wgsl"),
-    ),
-    (
-        "sdf_shadow_vb",
-        include_str!("../src/shaders/sdf_shadow_vb.wgsl"),
-    ),
-    (
         "sdf_notch_dt",
         include_str!("../src/shaders/sdf_notch_dt.wgsl"),
     ),

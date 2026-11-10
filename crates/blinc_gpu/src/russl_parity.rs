@@ -26,7 +26,18 @@ fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
     }
 }
 
-fn layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+/// How a tier gets its primitives to the shader.
+#[derive(Clone, Copy, PartialEq)]
+enum Tier {
+    /// Storage buffers in every stage.
+    Storage,
+    /// The vertex stage reads a vertex buffer; the fragment stage reads storage buffers.
+    VertexBuffer,
+    /// The vertex stage reads a vertex buffer; the fragment stage reads data textures.
+    DataTexture,
+}
+
+fn layout(device: &wgpu::Device, tier: Tier) -> wgpu::BindGroupLayout {
     let both = wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT;
     let buffer = |binding, ty| wgpu::BindGroupLayoutEntry {
         binding,
@@ -38,31 +49,40 @@ fn layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         },
         count: None,
     };
-    let texture = |binding| wgpu::BindGroupLayoutEntry {
+    let texture = |binding, filterable| wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::FRAGMENT,
         ty: wgpu::BindingType::Texture {
-            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            sample_type: wgpu::TextureSampleType::Float { filterable },
             view_dimension: wgpu::TextureViewDimension::D2,
             multisampled: false,
         },
         count: None,
     };
     let storage = wgpu::BufferBindingType::Storage { read_only: true };
+    let data = tier == Tier::DataTexture;
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: None,
         entries: &[
             buffer(0, wgpu::BufferBindingType::Uniform),
-            buffer(1, storage),
-            texture(2),
+            if data {
+                texture(1, false)
+            } else {
+                buffer(1, storage)
+            },
+            texture(2, true),
             wgpu::BindGroupLayoutEntry {
                 binding: 3,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
             },
-            texture(4),
-            buffer(5, storage),
+            texture(4, true),
+            if data {
+                texture(5, false)
+            } else {
+                buffer(5, storage)
+            },
         ],
     })
 }
@@ -87,8 +107,61 @@ fn draw_with_aux(
     prims: &[GpuPrimitive],
     aux: &[[f32; 4]],
 ) -> Vec<u8> {
+    draw_in_tier(device, queue, Tier::Storage, source, constants, prims, aux)
+}
+
+/// An `RGBA32F` texture of `width` by `height` texels holding `bytes`, row by row.
+fn data_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    width: u32,
+    height: u32,
+    bytes: &[u8],
+) -> wgpu::TextureView {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba32Float,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        texture.as_image_copy(),
+        bytes,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 16),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+    texture.create_view(&Default::default())
+}
+
+/// `draw` for a tier: how the primitives and the auxiliary data reach the shader.
+fn draw_in_tier(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    tier: Tier,
+    source: &str,
+    constants: &[(&str, f64)],
+    prims: &[GpuPrimitive],
+    aux: &[[f32; 4]],
+) -> Vec<u8> {
+    use crate::primitives::SdfVertexInstance;
     let format = wgpu::TextureFormat::Rgba8Unorm;
-    let bind_layout = layout(device);
+    let bind_layout = layout(device, tier);
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::ShaderSource::Wgsl(source.into()),
@@ -96,6 +169,11 @@ fn draw_with_aux(
     let options = wgpu::PipelineCompilationOptions {
         constants,
         ..Default::default()
+    };
+    let vertex_buffers: &[wgpu::VertexBufferLayout] = if tier == Tier::Storage {
+        &[]
+    } else {
+        &[SdfVertexInstance::LAYOUT]
     };
     let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: None,
@@ -109,7 +187,7 @@ fn draw_with_aux(
         vertex: wgpu::VertexState {
             module: &module,
             entry_point: Some("vs_main"),
-            buffers: &[],
+            buffers: vertex_buffers,
             compilation_options: options.clone(),
         },
         fragment: Some(wgpu::FragmentState {
@@ -138,8 +216,47 @@ fn draw_with_aux(
         })
     };
     let uniforms = buffer(bytemuck::bytes_of(&uniforms), wgpu::BufferUsages::UNIFORM);
-    let primitives = buffer(bytemuck::cast_slice(prims), wgpu::BufferUsages::STORAGE);
-    let aux = buffer(bytemuck::cast_slice(aux), wgpu::BufferUsages::STORAGE);
+    let instances: Vec<SdfVertexInstance> = prims
+        .iter()
+        .map(SdfVertexInstance::from_primitive)
+        .collect();
+    let instance_buffer = buffer(bytemuck::cast_slice(&instances), wgpu::BufferUsages::VERTEX);
+    // The primitives and the auxiliary data, as the tier binds them.
+    let primitives_buffer;
+    let aux_buffer;
+    let primitives_view;
+    let aux_view;
+    let (primitives, aux_binding) = if tier == Tier::DataTexture {
+        primitives_view = data_texture(
+            device,
+            queue,
+            GpuPrimitive::DATA_TEXTURE_TEXELS,
+            prims.len() as u32,
+            bytemuck::cast_slice(prims),
+        );
+        // The auxiliary texture is 1024 texels wide and as many rows as it needs.
+        let rows = aux.len().div_ceil(1024).max(1);
+        let mut padded = aux.to_vec();
+        padded.resize(rows * 1024, [0.0; 4]);
+        aux_view = data_texture(
+            device,
+            queue,
+            1024,
+            rows as u32,
+            bytemuck::cast_slice(&padded),
+        );
+        (
+            wgpu::BindingResource::TextureView(&primitives_view),
+            wgpu::BindingResource::TextureView(&aux_view),
+        )
+    } else {
+        primitives_buffer = buffer(bytemuck::cast_slice(prims), wgpu::BufferUsages::STORAGE);
+        aux_buffer = buffer(bytemuck::cast_slice(aux), wgpu::BufferUsages::STORAGE);
+        (
+            primitives_buffer.as_entire_binding(),
+            aux_buffer.as_entire_binding(),
+        )
+    };
     let atlas = device
         .create_texture(&wgpu::TextureDescriptor {
             label: None,
@@ -167,7 +284,7 @@ fn draw_with_aux(
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: primitives.as_entire_binding(),
+                resource: primitives,
             },
             wgpu::BindGroupEntry {
                 binding: 2,
@@ -183,7 +300,7 @@ fn draw_with_aux(
             },
             wgpu::BindGroupEntry {
                 binding: 5,
-                resource: aux.as_entire_binding(),
+                resource: aux_binding,
             },
         ],
     });
@@ -228,6 +345,9 @@ fn draw_with_aux(
         });
         pass.set_pipeline(&pipeline);
         pass.set_bind_group(0, &bind, &[]);
+        if tier != Tier::Storage {
+            pass.set_vertex_buffer(0, instance_buffer.slice(..));
+        }
         pass.draw(0..6, 0..prims.len() as u32);
     }
     encoder.copy_texture_to_buffer(
@@ -309,7 +429,7 @@ fn same_pixels(device: &wgpu::Device, queue: &wgpu::Queue, prims: &[GpuPrimitive
         queue,
         prims,
         &[[0.0; 4]],
-        crate::sdf_russl::sdf_core::WGSL,
+        crate::sdf_russl::storage::sdf_core::WGSL,
         crate::sdf_russl::simple::WGSL,
     );
 }
@@ -337,7 +457,7 @@ fn the_shadow_pipeline_grows_corners_and_edges_the_way_css_does() {
         draw(
             &device,
             &queue,
-            crate::sdf_russl::sdf_shadow::WGSL,
+            crate::sdf_russl::storage::sdf_shadow::WGSL,
             &[],
             &[p],
         )
@@ -388,6 +508,83 @@ fn the_shadow_pipeline_grows_corners_and_edges_the_way_css_does() {
 }
 
 #[test]
+fn the_shadow_fallback_tiers_draw_what_the_storage_tier_draws() {
+    use crate::primitives::PrimitiveType::*;
+    let Some((device, queue)) = device() else {
+        eprintln!("no adapter with vertex storage: skipped");
+        return;
+    };
+    let shadow = |kind: crate::primitives::PrimitiveType, x, y, w, h, params: [f32; 4]| {
+        let mut p = GpuPrimitive::rect(x, y, w, h).with_corner_radius(8.0);
+        p.type_info[0] = kind as u32;
+        p.shadow = params;
+        p.shadow_color = [0.0, 0.0, 0.0, 0.7];
+        p
+    };
+    let mut prims = vec![
+        shadow(Shadow, 14.0, 14.0, 40.0, 30.0, [3.0, 4.0, 8.0, 2.0]),
+        shadow(Shadow, 70.0, 14.0, 40.0, 30.0, [0.0; 4]),
+        shadow(InnerShadow, 14.0, 70.0, 40.0, 40.0, [2.0, 3.0, 6.0, 1.0]),
+        shadow(InnerShadow, 70.0, 70.0, 40.0, 40.0, [0.0, 0.0, 0.0, 2.0]),
+        shadow(CircleShadow, 40.0, 40.0, 24.0, 24.0, [4.0, 4.0, 10.0, 3.0]),
+        shadow(
+            CircleInnerShadow,
+            90.0,
+            90.0,
+            30.0,
+            30.0,
+            [2.0, -2.0, 5.0, 1.0],
+        ),
+        shadow(Shadow, 30.0, 60.0, 50.0, 30.0, [1.0, 2.0, 6.0, 0.0])
+            .with_clip_rounded_rect(30.0, 60.0, 30.0, 20.0, 6.0, 6.0, 6.0, 6.0),
+    ];
+    // A shadow clipped to a triangle whose vertices are read from the auxiliary data: the data
+    // texture tier reads them from a texture.
+    let mut clipped = shadow(Shadow, 50.0, 20.0, 40.0, 30.0, [0.0, 0.0, 6.0, 2.0]);
+    clipped.type_info[2] = 4;
+    clipped.clip_bounds = [0.0, 0.0, 128.0, 128.0];
+    // The vertices sit in the second 1024-texel row of the auxiliary texture, past its middle.
+    clipped.clip_radius = [0.0, 0.0, 3.0, 1600.0];
+    prims.push(clipped);
+    let mut aux = vec![[0.0; 4]; 1600];
+    aux.extend([[-10.0, -10.0, 60.0, -10.0], [25.0, 50.0, 0.0, 0.0]]);
+
+    let storage = draw_in_tier(
+        &device,
+        &queue,
+        Tier::Storage,
+        crate::sdf_russl::storage::sdf_shadow::WGSL,
+        &[],
+        &prims,
+        &aux,
+    );
+    assert!(
+        storage.iter().any(|&p| p != 0),
+        "the storage tier drew nothing"
+    );
+    for (tier, source) in [
+        (
+            Tier::VertexBuffer,
+            crate::sdf_russl::vertex_buffer::sdf_shadow::WGSL,
+        ),
+        (
+            Tier::DataTexture,
+            crate::sdf_russl::data_texture::sdf_shadow::WGSL,
+        ),
+    ] {
+        let other = draw_in_tier(&device, &queue, tier, source, &[], &prims, &aux);
+        let differing = storage
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(other.as_chunks::<4>().0)
+            .filter(|(a, b)| a != b)
+            .count();
+        assert_eq!(differing, 0, "{differing} of {} pixels differ", SIZE * SIZE);
+    }
+}
+
+#[test]
 fn the_3d_pipeline_raymarches_shapes_and_groups() {
     let Some((device, queue)) = device() else {
         eprintln!("no adapter with vertex storage: skipped");
@@ -413,7 +610,7 @@ fn the_3d_pipeline_raymarches_shapes_and_groups() {
         let pixels = draw(
             &device,
             &queue,
-            crate::sdf_russl::sdf_3d::WGSL,
+            crate::sdf_russl::storage::sdf_3d::WGSL,
             &[],
             &[shape(kind, 46.0, 46.0)],
         );
@@ -439,7 +636,7 @@ fn the_3d_pipeline_raymarches_shapes_and_groups() {
         [14.0, 14.0, 12.0, 0.0],
         [0.2, 0.4, 0.9, 1.0],
     ];
-    let wgsl = crate::sdf_russl::sdf_3d::WGSL;
+    let wgsl = crate::sdf_russl::storage::sdf_3d::WGSL;
     let grouped = draw_with_aux(&device, &queue, wgsl, &[], &[group], &aux);
     let empty = draw_with_aux(&device, &queue, wgsl, &[], &[group], &[[0.0; 4]]);
     assert!(
@@ -463,7 +660,7 @@ fn the_notch_pipeline_fills_the_top_slot_for_bulges_and_peaks_and_hollows_it_for
         p.perspective = [kind, 20.0, 10.0, 0.0];
         p
     };
-    let wgsl = crate::sdf_russl::sdf_notch::WGSL;
+    let wgsl = crate::sdf_russl::storage::sdf_notch::WGSL;
     for (kind, name, filled) in [
         (1.0, "scoop", false),
         (2.0, "bulge", true),
@@ -486,7 +683,7 @@ fn the_notch_pipeline_fills_the_top_slot_for_bulges_and_peaks_and_hollows_it_for
 
 #[test]
 fn the_cpu_primitive_lays_out_as_the_shader_reads_it() {
-    use crate::sdf_russl::abi::Primitive;
+    use crate::sdf_russl::storage::primitive::Primitive;
     use std::mem::{offset_of, size_of};
     assert_eq!(size_of::<GpuPrimitive>(), Primitive::SIZE);
     macro_rules! same_offsets {

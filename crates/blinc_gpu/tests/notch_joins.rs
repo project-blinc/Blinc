@@ -10,7 +10,7 @@ use blinc_gpu::shaders::{SDF_NOTCH_DT_SHADER, SDF_NOTCH_SHADER, SDF_NOTCH_VB_SHA
 
 const PRELUDE: &str = include_str!("../src/shaders/common/sdf_common.wgsl");
 /// The full-tier notch distance function, in russl.
-const RUSSL: &str = include_str!("../src/sdf_russl/notch.rs");
+const RUSSL: &str = include_str!("../src/sdf_russl/shared/notch.rs");
 
 fn squeeze(src: &str) -> String {
     src.split_whitespace().collect::<Vec<_>>().join(" ")

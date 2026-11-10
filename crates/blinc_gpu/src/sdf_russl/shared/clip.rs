@@ -1,12 +1,9 @@
 //! Clips, ABI shape clips and gradient tables: the parts of Blinc's SDF core shader that read
-//! the auxiliary data buffer.
+//! the auxiliary data.
 
 russl::russl! {
+    use super::access::aux;
     use super::common::{sd_circle, sd_ellipse, sd_rounded_rect, sd_shaped_rect};
-
-    // Variable-length per-primitive data: 3D group shape descriptors, polygon clip
-    // vertices, gradient stop tables.
-    #[group(0)] #[binding(5)] pub static AUX_DATA: Storage<[Vec4]>;
 
     // ============================================================================
     // SDF Functions
@@ -87,7 +84,7 @@ russl::russl! {
         for i in 0u32..vertex_count {
             // Read vertex i: packed as (x0, y0, x1, y1) per vec4
             let vec_idx = aux_offset + (i / 2u32);
-            let data = AUX_DATA[vec_idx];
+            let data = aux(vec_idx);
             let mut vi: Vec2;
             if (i % 2u32) == 0u32 {
                 vi = data.xy;
@@ -98,7 +95,7 @@ russl::russl! {
             // Read vertex j (next, wrapping)
             let j = (i + 1u32) % vertex_count;
             let vec_idx_j = aux_offset + (j / 2u32);
-            let data_j = AUX_DATA[vec_idx_j];
+            let data_j = aux(vec_idx_j);
             let mut vj: Vec2;
             if (j % 2u32) == 0u32 {
                 vj = data_j.xy;
@@ -154,15 +151,15 @@ russl::russl! {
     // and offset. Stops mix in premultiplied colour. A repeating or reflecting
     // gradient folds `position` into the span of its stops first.
     pub fn gradient_table_color(position: f32, first: u32) -> Vec4 {
-        let header = AUX_DATA[first];
+        let header = aux(first);
         let count = ((header.x) as u32);
-        let start = AUX_DATA[first + 3u32].x;
-        let end = AUX_DATA[first + 1u32 + 2u32 * count].x;
+        let start = aux(first + 3u32).x;
+        let end = aux(first + 1u32 + 2u32 * count).x;
         let mut t = position;
         if header.y > 0.5 {
             let period = end - start;
             if period <= 0.0001 {
-                return AUX_DATA[first + 1u32];
+                return aux(first + 1u32);
             }
             let mut phase = (t - start) / period;
             if header.y > 1.5 {
@@ -172,12 +169,12 @@ russl::russl! {
             }
             t = start + phase * period;
         }
-        let mut color = AUX_DATA[first + 2u32];
+        let mut color = aux(first + 2u32);
         let mut offset = start;
         let mut i = 1u32;
         while i < count {
-            let next = AUX_DATA[first + 2u32 + 2u32 * i];
-            let at = AUX_DATA[first + 3u32 + 2u32 * i].x;
+            let next = aux(first + 2u32 + 2u32 * i);
+            let at = aux(first + 3u32 + 2u32 * i).x;
             if t < at {
                 let amount = clamp((t - offset) / max(at - offset, 1e-20), 0.0, 1.0);
                 let premult = mix(
@@ -199,7 +196,7 @@ russl::russl! {
 
     // Binding-dependent helpers are composed after shader declarations by build.rs.
     pub fn abi_clip_data(index: u32) -> Vec4 {
-        return AUX_DATA[index];
+        return aux(index);
     }
 
     pub fn abi_clip_crossing(a: Vec2, b: Vec2, p: Vec2) -> i32 {

@@ -1,8 +1,9 @@
-//! The SDF shadow shader: Shadow, InnerShadow, CircleShadow and CircleInnerShadow primitives.
+//! The SDF shadow shader's stages, without their entry points: Shadow, InnerShadow, CircleShadow
+//! and CircleInnerShadow primitives. Each tier's entry points call these with the fields they read.
 
 russl::russl! {
-    use super::abi::{Uniforms, Primitive, UNIFORMS, PRIMITIVES, GLYPH_ATLAS, GLYPH_SAMPLER, COLOR_GLYPH_ATLAS};
-    use super::clip::{calculate_clip_alpha, calculate_polygon_clip_alpha, abi_shape_clip_alpha, AUX_DATA};
+    use super::access::{UNIFORMS, prim};
+    use super::clip::{calculate_clip_alpha, calculate_polygon_clip_alpha, abi_shape_clip_alpha};
     use super::common::{sd_circle, sd_shaped_rect, erf, shadow_circle, shadow_spread_radius};
 
     // ============================================================================
@@ -12,10 +13,10 @@ russl::russl! {
     // 6 (CircleInnerShadow). These are shadow-only primitives that render
     // shadows as separate elements.
 
-    struct VertexOutput {
-        #[builtin(position)] position: Vec4,
-        #[location(0)] uv: Vec2,
-        #[location(1)] #[flat] instance_index: u32,
+    pub struct VertexOutput {
+        #[builtin(position)] pub position: Vec4,
+        #[location(0)] pub uv: Vec2,
+        #[location(1)] #[flat] pub instance_index: u32,
     }
 
     // Enum values are inlined as literals at every use site rather than declared as `const`, so
@@ -34,23 +35,24 @@ russl::russl! {
     // Vertex Shader
     // ============================================================================
 
-    #[vertex]
-    fn vs_main(
-        #[builtin(vertex_index)] vertex_index: u32,
-        #[builtin(instance_index)] instance_index: u32,
+    // The quad of one primitive: the instance's bounds and shadow, which the tier's entry point
+    // reads from wherever it keeps them.
+    pub fn shadow_vertex(
+        vertex_index: u32,
+        instance_index: u32,
+        instance_bounds: Vec4,
+        instance_shadow: Vec4,
     ) -> VertexOutput {
         let mut out: VertexOutput;
 
-        let prim = PRIMITIVES[instance_index];
-
         // Expand the quad over the blur, the offset and the spread; the extra
         // pixel is for the antialiased edge of a shadow with no blur.
-        let blur_expand = prim.shadow.z * 3.0 + abs(prim.shadow.x) + abs(prim.shadow.y) + max(prim.shadow.w, 0.0) + 1.0;
+        let blur_expand = instance_shadow.z * 3.0 + abs(instance_shadow.x) + abs(instance_shadow.y) + max(instance_shadow.w, 0.0) + 1.0;
         let bounds = Vec4::new(
-            prim.bounds.x - blur_expand,
-            prim.bounds.y - blur_expand,
-            prim.bounds.z + blur_expand * 2.0,
-            prim.bounds.w + blur_expand * 2.0
+            instance_bounds.x - blur_expand,
+            instance_bounds.y - blur_expand,
+            instance_bounds.z + blur_expand * 2.0,
+            instance_bounds.w + blur_expand * 2.0
         );
 
         // Generate quad vertices (two triangles split along / diagonal)
@@ -95,10 +97,8 @@ russl::russl! {
     // Fragment Shader
     // ============================================================================
 
-    #[fragment]
-    #[location(0)]
-    fn fs_main(input: VertexOutput) -> Vec4 {
-        let prim = PRIMITIVES[input.instance_index];
+    pub fn shadow_fragment(input: VertexOutput) -> Vec4 {
+        let prim = prim(input.instance_index);
         let p = input.uv;
 
         let prim_type = prim.type_info.x;
