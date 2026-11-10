@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794292481,"nonce":"CIJWxPyBmGrpv5y50VcOARhIldQ=","message":"Fixed in f27f794adbfacaff5252653cad88c827cf3cb38a for overlay layers, Stateful refreshes and BuildScope drop. DSL with-regions moved to 0c2577c.","files":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1794292482,"nonce":"sTRk4nWM8RTHKrwhZINpN65FFd0=","status":2}]}
