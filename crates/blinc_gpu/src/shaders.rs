@@ -2260,7 +2260,7 @@ pub const SDF_SIMPLE_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_
 ///
 /// Handles prim_type 3-6 (Shadow, InnerShadow, CircleShadow,
 /// CircleInnerShadow). Each case is self-contained with early return.
-pub const SDF_SHADOW_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_shadow.wgsl"));
+pub const SDF_SHADOW_SHADER: &str = crate::sdf_russl::sdf_shadow::WGSL;
 
 /// Split SDF shader: 3D raymarched shapes
 ///

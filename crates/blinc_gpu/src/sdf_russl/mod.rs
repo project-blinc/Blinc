@@ -2,9 +2,11 @@
 //! is the one for plain solid shapes: `sdf_core` with the blocks they never use switched off.
 //! `russl_parity` checks that the two draw the same pixels for those shapes.
 
+pub(crate) mod abi;
 mod clip;
 mod common;
 pub(crate) mod sdf_core;
+pub(crate) mod sdf_shadow;
 
 pub(crate) mod simple {
     russl::russl! {

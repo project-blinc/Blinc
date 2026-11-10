@@ -4,6 +4,7 @@
 
 russl::russl! {
     use super::common::{sd_circle, sd_ellipse, sd_shaped_rect, quarter_ellipse_sdf, erf, apply_css_filter, border_side_color};
+    use super::abi::{Uniforms, Primitive, UNIFORMS, PRIMITIVES, GLYPH_ATLAS, GLYPH_SAMPLER, COLOR_GLYPH_ATLAS};
     use super::clip::{calculate_clip_alpha, calculate_polygon_clip_alpha, gradient_table_color, abi_shape_clip_alpha, AUX_DATA};
 
     // ============================================================================
@@ -25,10 +26,6 @@ russl::russl! {
         #[location(2)] mesh_bary: Vec3,
     }
 
-    struct Uniforms {
-        viewport_size: Vec2,
-        _padding: Vec2,
-    }
 
     // Enum values used throughout this shader. They're inlined as
     // literals at every use site rather than declared as `const` at
@@ -48,81 +45,6 @@ russl::russl! {
     //   0u32 = NONE                 1u32 = RECT                2u32 = CIRCLE
     //   3u32 = ELLIPSE              4u32 = POLYGON
 
-    struct Primitive {
-        // Bounds (x, y, width, height)
-        bounds: Vec4,
-        // Corner radii (top-left, top-right, bottom-right, bottom-left)
-        corner_radius: Vec4,
-        // Fill color (or gradient start color)
-        color: Vec4,
-        // Gradient end color (for gradients)
-        color2: Vec4,
-        // Border (width, 0, 0, 0)
-        border: Vec4,
-        // Border color
-        border_color: Vec4,
-        // Shadow (offset_x, offset_y, blur, spread)
-        shadow: Vec4,
-        // Shadow color
-        shadow_color: Vec4,
-        // Clip bounds (x, y, width, height) for rect clips, (cx, cy, rx, ry) for circle/ellipse
-        clip_bounds: Vec4,
-        // Clip corner radii (for rounded rect) or (radius_x, radius_y, 0, 0) for ellipse
-        clip_radius: Vec4,
-        // Clip corner shape (superellipse n per corner) for the rounded
-        // rect clip — n=1.0 = round (default), 2.0 = squircle, 0.0 = bevel,
-        // -1.0 = scoop. Lets overflow:clip on a squircle parent follow
-        // the same curve as the parent fill instead of a circular cut.
-        clip_corner_shape: Vec4,
-        // Gradient parameters: linear (x1, y1, x2, y2), radial (cx, cy, r, 0) in user space
-        gradient_params: Vec4,
-        // Rotation (sin_rz, cos_rz, sin_ry, cos_ry) - for rotated SDF evaluation
-        rotation: Vec4,
-        // Local 2x2 affine (a, b, c, d) - normalized (DPI removed).
-        // Maps local rect space → screen space. Supports rotation, scale, AND skew.
-        // Identity = (1, 0, 0, 1).
-        local_affine: Vec4,
-        // Perspective (sin_rx, cos_rx, perspective_d, shape_3d_type)
-        // shape_3d_type: 0=none, 1=box, 2=sphere, 3=cylinder, 4=torus, 5=capsule, 6=group
-        perspective: Vec4,
-        // SDF 3D params (depth, ambient, specular_power, translate_z)
-        sdf_3d: Vec4,
-        // Light params (dir_x, dir_y, dir_z, intensity)
-        light: Vec4,
-        // CSS filter A (grayscale, invert, sepia, hue_rotate_rad)
-        filter_a: Vec4,
-        // CSS filter B (brightness, contrast, saturate, 0)
-        filter_b: Vec4,
-        // Mask gradient params: linear=(x1,y1,x2,y2), radial=(cx,cy,r,0) in OBB (0-1) space
-        mask_params: Vec4,
-        // Mask info: (mask_type, start_alpha, end_alpha, 0)
-        // mask_type: 0=none, 1=linear, 2=radial
-        mask_info: Vec4,
-        // Corner shape (superellipse n parameter per corner)
-        // n=1.0 = round (default), n=0.0 = bevel, n=2.0 = squircle, n=-1.0 = scoop
-        corner_shape: Vec4,
-        // Overflow fade distances (top, right, bottom, left) in pixels
-        clip_fade: Vec4,
-        // Type info (primitive_type, fill_type, clip_type, 0)
-        type_info: UVec4,
-        // Border colour of each side when the sides differ; alphas that sum to
-        // zero mean unset, and the border is `border_color` all round.
-        side_color_top: Vec4,
-        side_color_right: Vec4,
-        side_color_bottom: Vec4,
-        side_color_left: Vec4,
-        // A gradient's stop table in AUX_DATA: one more than its offset, zero for none.
-        gradient_table: Vec4,
-        // A clip in the primitive's own frame, its width zero for none.
-        local_clip_bounds: Vec4,
-        local_clip_radius: Vec4,
-        // Separate screen fade rectangle; zero width uses clip_bounds.
-        clip_fade_bounds: Vec4,
-        // ABI notch scale and shadow mode; zero scale keeps native shading.
-        notch_info: Vec4,
-        // One more than the AUX_DATA header offset for an ABI shape clip, zero for none.
-        clip_shape: Vec4,
-    }
 
     // Feature switches, set per pipeline. The default pipeline keeps every feature; the simple
     // pipeline turns off the ones a plain solid shape never uses, so the compiler does not size
@@ -135,12 +57,6 @@ russl::russl! {
     #[pipeline] const FEAT_3D: bool = true;
     #[pipeline] const FEAT_CLIP_SHAPE: bool = true;
 
-    #[group(0)] #[binding(0)] static UNIFORMS: Uniform<Uniforms>;
-    #[group(0)] #[binding(1)] static PRIMITIVES: Storage<[Primitive]>;
-    // Glyph atlas textures for unified text rendering
-    #[group(0)] #[binding(2)] static GLYPH_ATLAS: Texture2D<f32>;
-    #[group(0)] #[binding(3)] static GLYPH_SAMPLER: Sampler;
-    #[group(0)] #[binding(4)] static COLOR_GLYPH_ATLAS: Texture2D<f32>;
 
     // ============================================================================
     // Vertex Shader

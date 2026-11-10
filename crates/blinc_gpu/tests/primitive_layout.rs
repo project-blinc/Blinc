@@ -27,7 +27,6 @@ const SHADERS: &[(&str, &str)] = &[
         "sdf_core_vb",
         include_str!("../src/shaders/sdf_core_vb.wgsl"),
     ),
-    ("sdf_shadow", include_str!("../src/shaders/sdf_shadow.wgsl")),
     (
         "sdf_shadow_dt",
         include_str!("../src/shaders/sdf_shadow_dt.wgsl"),

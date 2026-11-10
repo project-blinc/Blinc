@@ -5,10 +5,11 @@
 //! spread and CSS grows a corner by the spread only as far as the corner is
 //! already round, so a square corner stays square.
 //!
-//! The source checks keep the three variants (storage buffer, vertex buffer,
-//! data texture) in step: they are separate files with the same fragment code.
+//! The source checks keep the vertex buffer and data texture variants in step: they are separate
+//! files with the same fragment code. The storage buffer variant is compiled from russl, and
+//! `russl_parity` checks the same rules on its pixels.
 
-use blinc_gpu::shaders::{SDF_SHADOW_DT_SHADER, SDF_SHADOW_SHADER, SDF_SHADOW_VB_SHADER};
+use blinc_gpu::shaders::{SDF_SHADOW_DT_SHADER, SDF_SHADOW_VB_SHADER};
 
 fn spread_radius(r: f32, s: f32) -> f32 {
     if s > 0.0 {
@@ -55,8 +56,7 @@ fn a_negative_spread_shrinks_the_corner_and_stops_at_square() {
     assert_eq!(spread_radius(0.0, -4.0), 0.0);
 }
 
-const VARIANTS: [(&str, &str); 3] = [
-    ("sdf_shadow", SDF_SHADOW_SHADER),
+const VARIANTS: [(&str, &str); 2] = [
     ("sdf_shadow_vb", SDF_SHADOW_VB_SHADER),
     ("sdf_shadow_dt", SDF_SHADOW_DT_SHADER),
 ];

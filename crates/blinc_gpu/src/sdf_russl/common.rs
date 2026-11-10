@@ -108,6 +108,31 @@ russl::russl! {
         return s * y;
     }
 
+    pub fn shadow_circle(p: Vec2, center: Vec2, radius: f32, sigma: f32) -> f32 {
+        let dist = length(p - center);
+
+        if sigma < 0.001 {
+            // No blur - hard edge
+            return if dist < radius { 1.0 } else { 0.0 };
+        }
+
+        // Gaussian falloff from circle edge
+        // erf gives cumulative distribution, we want shadow inside and fading outside
+        let d = 0.5 * sqrt(2.0) * sigma;
+        return 0.5 * (1.0 + erf((radius - dist) / d));
+    }
+
+    // Corner radii of a box shadow grown by `spread`, as CSS does: a corner grows
+    // by the spread only as far as it is already round, so a square corner stays
+    // square.
+    pub fn shadow_spread_radius(radius: Vec4, spread: f32) -> Vec4 {
+        if spread > 0.0 {
+            let u = min(radius / spread, Vec4::splat(1.0)) - Vec4::splat(1.0);
+            return radius + spread * (Vec4::splat(1.0) + u * u * u);
+        }
+        return max(radius + Vec4::splat(spread), Vec4::splat(0.0));
+    }
+
     pub fn quarter_ellipse_sdf(point: Vec2, radii: Vec2) -> f32 {
         // Avoid division by zero
         let safe_radii = max(radii, Vec2::splat(0.001));

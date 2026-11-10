@@ -268,27 +268,114 @@ fn the_simple_pipeline_draws_what_the_full_one_draws_for_simple_primitives() {
     same_pixels(&device, &queue, &prims);
 }
 
-/// The simple pipeline and the full one draw `prims` to the same pixels.
-fn same_pixels(device: &wgpu::Device, queue: &wgpu::Queue, prims: &[GpuPrimitive]) {
-    let full = draw(device, queue, crate::sdf_russl::sdf_core::WGSL, &[], prims);
-    let simple = draw(device, queue, crate::sdf_russl::simple::WGSL, &[], prims);
-    assert!(
-        full.iter().any(|&b| b != 0),
-        "the full pipeline drew nothing"
-    );
-    let differing = full
+/// `a` and `b` draw `prims` to the same pixels.
+fn assert_same_pixels(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    prims: &[GpuPrimitive],
+    a: &str,
+    b: &str,
+) {
+    let a = draw(device, queue, a, &[], prims);
+    let b = draw(device, queue, b, &[], prims);
+    assert!(a.iter().any(|&p| p != 0), "the first pipeline drew nothing");
+    let differing = a
         .as_chunks::<4>()
         .0
         .iter()
-        .zip(simple.as_chunks::<4>().0)
+        .zip(b.as_chunks::<4>().0)
         .filter(|(a, b)| a != b)
         .count();
     assert_eq!(differing, 0, "{differing} of {} pixels differ", SIZE * SIZE);
 }
 
+/// The simple pipeline and the full one draw `prims` to the same pixels.
+fn same_pixels(device: &wgpu::Device, queue: &wgpu::Queue, prims: &[GpuPrimitive]) {
+    assert_same_pixels(
+        device,
+        queue,
+        prims,
+        crate::sdf_russl::sdf_core::WGSL,
+        crate::sdf_russl::simple::WGSL,
+    );
+}
+
+/// The alpha of the pixel at `(x, y)` in `draw`'s output.
+fn alpha(pixels: &[u8], x: u32, y: u32) -> u8 {
+    pixels[((y * SIZE + x) * 4 + 3) as usize]
+}
+
+fn outer_shadow(rect: [f32; 4], radius: f32, shadow: [f32; 4]) -> GpuPrimitive {
+    let mut p = GpuPrimitive::rect(rect[0], rect[1], rect[2], rect[3]).with_corner_radius(radius);
+    p.type_info[0] = crate::primitives::PrimitiveType::Shadow as u32;
+    p.shadow = shadow;
+    p.shadow_color = [0.0, 0.0, 0.0, 1.0];
+    p
+}
+
+#[test]
+fn the_shadow_pipeline_grows_corners_and_edges_the_way_css_does() {
+    let Some((device, queue)) = device() else {
+        eprintln!("no adapter with vertex storage: skipped");
+        return;
+    };
+    let draw_one = |p: GpuPrimitive| {
+        draw(
+            &device,
+            &queue,
+            crate::sdf_russl::sdf_shadow::WGSL,
+            &[],
+            &[p],
+        )
+    };
+
+    // The quad grows by the spread, and a square corner stays square: the grown corner pixel is
+    // covered, the pixel past the grown edge is not.
+    let grown = draw_one(outer_shadow(
+        [40.0, 40.0, 48.0, 48.0],
+        0.0,
+        [0.0, 0.0, 0.0, 8.0],
+    ));
+    assert!(alpha(&grown, 33, 33) > 250, "the square corner is rounded");
+    assert!(alpha(&grown, 34, 60) > 250, "the spread is not drawn");
+    assert_eq!(
+        alpha(&grown, 30, 60),
+        0,
+        "the shadow reaches past the spread"
+    );
+    assert_eq!(
+        alpha(&grown, 60, 60),
+        0,
+        "the shadow is drawn under the shape"
+    );
+
+    // An outer shadow that has only an offset is drawn.
+    let moved = draw_one(outer_shadow(
+        [40.0, 40.0, 48.0, 48.0],
+        0.0,
+        [10.0, 0.0, 0.0, 0.0],
+    ));
+    assert!(
+        alpha(&moved, 92, 60) > 250,
+        "an offset-only shadow is skipped"
+    );
+
+    // An unblurred edge is antialiased over a pixel: the edge at x = 31.5 splits pixel 31.
+    let edge = draw_one(outer_shadow(
+        [40.0, 40.0, 48.0, 48.0],
+        0.0,
+        [0.0, 0.0, 0.0, 8.5],
+    ));
+    let a = alpha(&edge, 31, 60);
+    assert!(
+        (100..160).contains(&a),
+        "the unblurred edge is not antialiased: {a}"
+    );
+}
+
 #[test]
 fn the_cpu_primitive_lays_out_as_the_shader_reads_it() {
-    use crate::sdf_russl::sdf_core::Primitive;
+    use crate::sdf_russl::abi::Primitive;
     use std::mem::{offset_of, size_of};
     assert_eq!(size_of::<GpuPrimitive>(), Primitive::SIZE);
     macro_rules! same_offsets {
