@@ -1050,22 +1050,33 @@ mod tests {
         );
     }
 
-    /// Proves what the tests above guard: `incremental_update` alone drops the class
-    /// background, so without the restyle the panel turns black (issue #70).
-    #[test]
-    fn incremental_update_alone_drops_the_class_background() {
-        let mut tree = first_pass();
-        assert_eq!(
-            tree.incremental_update(&ui(Color::GREEN, 80.0)),
-            UpdateResult::VisualOnly
-        );
-        assert!(!panel_is_red(&tree));
+    /// A panel whose own props change: its class background must come back with the restyle.
+    fn ui_with_panel_width(panel_width: f32) -> Div {
+        div()
+            .w(400.0)
+            .h(200.0)
+            .child(div().id("panel").class("panel").w(panel_width).h(100.0))
+    }
 
-        let mut tree = first_pass();
-        assert_eq!(
-            tree.incremental_update(&ui(Color::BLUE, 120.0)),
-            UpdateResult::LayoutChanged
-        );
+    /// Proves what the tests above guard: a node whose props the update replaces loses
+    /// the class background unless the restyle runs (issue #70). A node whose own hash is
+    /// unchanged keeps its props and is not replaced.
+    #[test]
+    fn incremental_update_alone_drops_the_class_background_of_a_replaced_node() {
+        let first = || {
+            let mut tree = RenderTree::from_element(&ui_with_panel_width(200.0));
+            tree.set_stylesheet(Stylesheet::parse(CSS).expect("css"));
+            tree.apply_all_stylesheet_styles();
+            tree.compute_layout(400.0, 200.0);
+            tree
+        };
+
+        let mut tree = first();
+        assert!(panel_is_red(&tree));
+        let result = tree.incremental_update(&ui_with_panel_width(220.0));
+        assert_ne!(result, UpdateResult::NoChanges);
         assert!(!panel_is_red(&tree));
+        restyle_after_incremental_update(&mut tree, result, None);
+        assert!(panel_is_red(&tree));
     }
 }
