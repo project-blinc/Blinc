@@ -571,4 +571,92 @@ mod tests {
             }
         }
     }
+
+    /// Whether a system font resolves; the kerning tests below need real glyph advances.
+    fn system_font_found() -> bool {
+        init_text_measurer();
+        let registry = Arc::new(Mutex::new(FontRegistry::new()));
+        registry.lock().unwrap().preload_generic_fonts();
+        let found = registry
+            .lock()
+            .unwrap()
+            .resolve_styled(None, GenericFont::System, 400, false)
+            .is_some();
+        if !found {
+            eprintln!("no system font resolved; skipping");
+        }
+        found
+    }
+
+    /// A click lands on the caret position nearest to it, and the carets are where they are drawn:
+    /// the flip between two neighbours is halfway between their drawn positions, kerning included.
+    #[test]
+    fn a_click_lands_where_the_caret_is_drawn() {
+        use crate::text_measure::TextFace;
+        use crate::widgets::text_input::TextInputData;
+        if !system_font_found() {
+            return;
+        }
+        let face = TextFace::default();
+        let text = "AVATAR To Wa";
+        let size = 28.0;
+        let data = TextInputData::with_value(text);
+        let carets: Vec<f32> = (0..=text.chars().count())
+            .map(|i| face.caret_x(text, i, size))
+            .collect();
+        for i in 0..carets.len() - 1 {
+            let halfway = (carets[i] + carets[i + 1]) / 2.0;
+            assert_eq!(
+                data.cursor_position_from_x_with(halfway - 0.05, size, &face),
+                i,
+                "just before halfway past caret {i}"
+            );
+            assert_eq!(
+                data.cursor_position_from_x_with(halfway + 0.05, size, &face),
+                i + 1,
+                "just after halfway past caret {i}"
+            );
+        }
+    }
+
+    /// Scrolling puts the caret at the right edge where it is drawn, not where the text before it
+    /// measures on its own.
+    #[test]
+    fn scrolling_follows_the_drawn_caret() {
+        use crate::text_measure::TextFace;
+        use crate::widgets::text_input::{TextInputConfig, TextInputData};
+        static THEME_INIT: std::sync::Once = std::sync::Once::new();
+        THEME_INIT.call_once(blinc_theme::ThemeState::init_default);
+        if !system_font_found() {
+            return;
+        }
+        let mut cfg = TextInputConfig {
+            font_size: 28.0,
+            width: 40.0,
+            use_full_width: false,
+            ..TextInputConfig::default()
+        };
+        cfg.face = TextFace::default();
+        let text = "AVATAR To Wa AVATAR To Wa";
+        // A caret in the middle of the text where the kerned and the plain positions differ.
+        let Some(at) = (1..text.chars().count() - 3).find(|&i| {
+            let before: String = text.chars().take(i).collect();
+            let plain = cfg.face.measure(&before, cfg.font_size).width;
+            (plain - cfg.face.caret_x(text, i, cfg.font_size)).abs() > 0.5
+        }) else {
+            eprintln!("no kerned pair in this font; skipping");
+            return;
+        };
+        let available = cfg.width - cfg.padding_x * 2.0 - cfg.border_width * 2.0;
+        let caret = cfg.face.caret_x(text, at, cfg.font_size);
+        assert!(caret > available - 4.0, "the caret is past the right edge");
+        let mut data = TextInputData::with_value(text);
+        data.cursor = at;
+        data.ensure_cursor_visible(&cfg);
+        assert!(
+            (data.scroll_offset_x - (caret - available + 4.0)).abs() < 0.001,
+            "scrolled to {}, the caret is at {caret}",
+            data.scroll_offset_x
+        );
+    }
 }
