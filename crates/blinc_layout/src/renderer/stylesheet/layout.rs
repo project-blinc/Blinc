@@ -63,7 +63,7 @@ impl RenderTree {
         self.apply_stylesheet_layout_overrides_filtered(Some(&subtree_set));
     }
 
-    fn apply_stylesheet_layout_overrides_filtered(
+    pub(super) fn apply_stylesheet_layout_overrides_filtered(
         &mut self,
         subtree_filter: Option<&std::collections::HashSet<LayoutNodeId>>,
     ) {

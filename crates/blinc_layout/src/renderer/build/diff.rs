@@ -451,7 +451,9 @@ impl RenderTree {
 
         // Update taffy node's layout style if element provides one
         // This is critical for layout changes (width, height, padding, etc.)
-        if let Some(style) = element.layout_style() {
+        // The stylesheet's layout rules sit on top of the taffy style; a node that
+        // keeps its style keeps them.
+        if !unchanged && let Some(style) = element.layout_style() {
             self.layout_tree.set_style(node_id, style.clone());
         }
 
@@ -543,7 +545,9 @@ impl RenderTree {
 
         // Update taffy node's layout style if element provides one
         // This is critical for layout changes (width, height, padding, etc.)
-        if let Some(style) = element.layout_style() {
+        // The stylesheet's layout rules sit on top of the taffy style; a node that
+        // keeps its style keeps them.
+        if !unchanged && let Some(style) = element.layout_style() {
             self.layout_tree.set_style(node_id, style.clone());
         }
 
