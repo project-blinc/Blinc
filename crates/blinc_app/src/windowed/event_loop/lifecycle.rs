@@ -147,8 +147,9 @@ where
 
                             #[cfg(target_os = "linux")]
                             {
-                                // Keep presenting at vsync while the scene is static, on a genuine
-                                // Wayland backend (not X11/XWayland). BLINC_KEEP_ALIVE=1/0 overrides.
+                                // Off by default: a static scene presents only when something changes.
+                                // BLINC_KEEP_ALIVE=1 turns on presents at vsync while the scene is static;
+                                // it applies on a Wayland backend only (not X11/XWayland).
                                 let on_wayland = {
                                     use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
                                     window
@@ -159,12 +160,11 @@ where
                                         })
                                         .unwrap_or(false)
                                 };
-                                ws.wayland_keep_alive =
-                                    match std::env::var("BLINC_KEEP_ALIVE").ok().as_deref() {
-                                        Some("0") | Some("false") | Some("off") => false,
-                                        Some("1") | Some("true") | Some("on") => true,
-                                        _ => on_wayland,
-                                    };
+                                ws.wayland_keep_alive = on_wayland
+                                    && matches!(
+                                        std::env::var("BLINC_KEEP_ALIVE").ok().as_deref(),
+                                        Some("1" | "true" | "on")
+                                    );
                                 if ws.wayland_keep_alive {
                                     tracing::info!("wayland keep-alive active");
                                 }
