@@ -4,15 +4,25 @@
 use wgpu::util::DeviceExt;
 
 /// A device and queue on the default adapter, or none where the machine has no adapter.
-pub(crate) fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
+fn adapter() -> Option<wgpu::Adapter> {
     let instance = wgpu::Instance::default();
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+    pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::default(),
         force_fallback_adapter: false,
         compatible_surface: None,
     }))
-    .ok()?;
+    .ok()
+}
+
+pub(crate) fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
+    let adapter = adapter()?;
     pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
+}
+
+/// Whether the adapter is the GL backend, which emulates what the others do natively (a 1D texture
+/// is a 2D one of one row).
+pub(crate) fn on_gl() -> bool {
+    adapter().is_some_and(|a| a.get_info().backend == wgpu::Backend::Gl)
 }
 
 /// A 2D texture of `size` holding `bytes`, row by row, `texel_bytes` to a texel.

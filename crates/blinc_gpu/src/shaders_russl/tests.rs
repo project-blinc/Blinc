@@ -2,8 +2,8 @@
 //! with the same maths on the CPU.
 
 use super::harness::{
-    CLEARED, Input, POINTS, Pass, SIZE, aces, floats, gradient_bytes, is, need_device, pixel,
-    render, texel, texture,
+    CLEARED, Input, POINTS, Pass, SIZE, aces, can_read_depth, floats, gradient_bytes, is,
+    need_device, pixel, render, texel, texture,
 };
 use wgpu::util::DeviceExt;
 
@@ -303,6 +303,10 @@ fn backdrop_rows_blur_by_their_taps_and_copy_raw() {
 #[test]
 fn shadow_depth_writes_the_depth_of_the_transformed_triangle() {
     let (device, queue) = need_device!();
+    if !can_read_depth() {
+        eprintln!("no depth texture copies: skipped");
+        return;
+    }
     // Column-major matrices: a model that moves right a little, a light that halves depth.
     #[rustfmt::skip]
     let uniforms = floats(&[

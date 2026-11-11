@@ -924,10 +924,10 @@ fn sample_base(u: f32, v: f32) -> [f32; 4] {
     out
 }
 
-fn assert_near(pixel: [u8; 4], expected: [f32; 3], what: &str) {
+fn assert_near(pixel: [u8; 4], expected: [f32; 3], tolerance: f32, what: &str) {
     for c in 0..3 {
         assert!(
-            (pixel[c] as f32 - expected[c]).abs() <= 3.0,
+            (pixel[c] as f32 - expected[c]).abs() <= tolerance,
             "{what}: channel {c} is {} and should be {:.1}",
             pixel[c],
             expected[c]
@@ -990,6 +990,7 @@ fn an_unlit_alpha_mask_draws_the_texel_through_the_transform_and_the_cutoff() {
                 assert_near(
                     pixel(&pixels, px, py),
                     [texel[0] * 255.0, texel[1] * 255.0, texel[2] * 255.0],
+                    3.0,
                     &format!("unlit texel at {px},{py}"),
                 );
                 kept += 1;
@@ -1002,9 +1003,13 @@ fn an_unlit_alpha_mask_draws_the_texel_through_the_transform_and_the_cutoff() {
     }
 }
 
+/// How far a pinned pixel may differ. Software rasterisers differ from a GPU by a few levels in
+/// the lighting maths; a missing term moves a pixel far more.
+const PIN_TOLERANCE: f32 = 8.0;
+
 /// Pixels as the shaders drew them when they were checked against the hand-written WGSL they
 /// replaced: the colour of each object at its centre and near its edge, for the full shader and
-/// the reduced one. A pixel can move a level or two between GPUs.
+/// the reduced one.
 const PINS: &[(bool, u32, u32, [u8; 3])] = &[
     // The full shader: textured, normal mapped, shadowed.
     (true, 34, 34, [162, 124, 127]),
@@ -1097,6 +1102,7 @@ fn the_scene_keeps_its_pinned_pixels() {
             assert_near(
                 pixel(&pixels, x, y),
                 expected.map(f32::from),
+                PIN_TOLERANCE,
                 &format!("full={full}, pinned pixel {x},{y}"),
             );
         }

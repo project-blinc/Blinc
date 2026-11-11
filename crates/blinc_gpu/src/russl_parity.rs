@@ -534,7 +534,11 @@ fn the_compact_shader_draws_a_circle_border_all_round() {
     let diagonal = std::f32::consts::FRAC_1_SQRT_2;
     let (on_ring, inside) = (64.0 - 28.0 * diagonal, 64.0 - 20.0 * diagonal);
     assert_eq!(rgb(on_ring as u32, on_ring as u32), [0, 0, 0]);
-    assert_eq!(rgb(inside as u32, inside as u32), [51, 204, 77]);
+    // 0.3 * 255 is a tie between 76 and 77, which adapters round differently.
+    let fill = rgb(inside as u32, inside as u32);
+    for (got, want) in fill.into_iter().zip([51u8, 204, 77]) {
+        assert!(got.abs_diff(want) <= 1, "fill is {fill:?}");
+    }
 }
 
 /// The alpha of the pixel at `(x, y)` in `draw`'s output.
