@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794420897,"nonce":"wPjkzELLRunzRfWXsTl9IBavL9I=","message":"Fixed in 523694f14abda187e100ac3eef1e30032ef7dfb4 and c896884a78e1e171bc60a1e86ed02925b1301cb7: caret placement, click and scroll-into-view use the drawn caret position.","files":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1794420897,"nonce":"DaP9JMbL3KQ4Ohz1rm1EsAi0DZk=","status":2}]}
