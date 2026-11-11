@@ -1,5 +1,6 @@
 # Build artifacts
 /target/
+/crates/blinc/tests/consumer/target/
 /build/
 /dist/
 
