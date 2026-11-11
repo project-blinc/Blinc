@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794429204,"nonce":"MHH33LDcJfjwVHN0RWVgU7dPIm0=","message":"Fixed in 45a2a8c3b91e4d9fc84b4feb27e9865512f1c160: the layout pass matches a node's rules with its signal-bound classes held back.","files":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1794429204,"nonce":"h2IMg/N1iEzdmUfyb/ssuVJgtzo=","status":2}]}
