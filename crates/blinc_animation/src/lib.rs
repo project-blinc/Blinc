@@ -14,6 +14,7 @@
 //! - **AnimationContext**: Platform-agnostic animation management trait
 
 pub mod context;
+pub mod descriptor;
 pub mod easing;
 pub mod keyframe;
 pub mod morph;
@@ -27,6 +28,7 @@ pub mod values;
 pub use context::{
     AnimationContext, AnimationContextExt, SharedAnimatedTimeline, SharedAnimatedValue,
 };
+pub use descriptor::{AnimationDescriptor, Curve, PowerMode, StepJump};
 pub use easing::Easing;
 pub use keyframe::{
     FillMode, Keyframe, KeyframeAnimation, KeyframePoint, KeyframeProperties, KeyframeTrack,

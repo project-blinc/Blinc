@@ -4,6 +4,13 @@ All notable changes to `blinc_animation` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `AnimationDescriptor`: an animation as data, `{ start_ms, duration_ms, from, to, curve, initial_velocity }`, with `evaluate`, `velocity`, `is_finished` and `retarget`. Nothing is stepped, so a value and its velocity at any time come straight from the descriptor and a stalled frame skips ahead as a CSS animation does. `descriptor::now_ms` reads the frame clock on the scale descriptors use.
+- `Curve`: `Linear`, `CubicBezier`, `Steps` with `StepJump`, `Power` with `PowerMode` (the polynomial easings, exactly) and `Spring`, a damped spring in closed form for under, critical and over damping. A spring's duration is when it has settled, within a thousandth of the distance it moved.
+- `Easing::to_curve`, `Spring::to_descriptor`, `AnimatedValue::descriptor` and `SchedulerHandle::get_spring`.
+- `descriptor::lerp_color_premultiplied`, the sRGB premultiplied colour mix CSS uses.
+- The curve maths is checked against one file of float64 vectors computed outside either implementation (`tests/vectors/curves.txt`, made by `generate.py`): the CPU code and the shader in blinc_gpu both agree with it to better than 1e-6 of the distance moved.
+
 ### Fixed
 - The README's examples use the API that exists. They called `Spring::animate_to` and `update`, `SpringConfig::bouncy`, `KeyframeAnimation::update`, `Timeline::play` and `AnimationScheduler::global`, none of which are there.
 

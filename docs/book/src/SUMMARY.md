@@ -95,6 +95,7 @@
 # Animation
 
 - [Spring Physics](./animation/springs.md)
+- [Animation Descriptors](./animation/descriptors.md)
 - [Keyframe Timelines](./animation/timelines.md)
 - [Motion Containers](./animation/motion.md)
 - [Layout Animations (FLIP)](./animation/layout-animations.md)

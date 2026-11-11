@@ -1454,6 +1454,13 @@ impl SchedulerHandle {
             .and_then(|inner| inner.lock().unwrap().springs.get(id).map(|s| s.value()))
     }
 
+    /// A copy of a spring, with its value, velocity and target as they are now.
+    pub fn get_spring(&self, id: SpringId) -> Option<Spring> {
+        self.inner
+            .upgrade()
+            .and_then(|inner| inner.lock().unwrap().springs.get(id).copied())
+    }
+
     /// Check if a spring has settled (at rest at target)
     ///
     /// Returns `true` if the spring exists and has settled, or if the spring
@@ -1891,6 +1898,14 @@ impl AnimatedValue {
         } else {
             self.current
         }
+    }
+
+    /// The motion under way as data, from the value and velocity now, or `None` when the value is
+    /// at rest. It is the same motion `get` reads, as a closed form that needs no tick.
+    pub fn descriptor(&self) -> Option<crate::descriptor::AnimationDescriptor> {
+        let spring = self.handle.get_spring(self.spring_id?)?;
+        let descriptor = spring.to_descriptor(crate::descriptor::now_ms());
+        (descriptor.duration_ms > 0.0).then_some(descriptor)
     }
 
     /// Set value immediately without animation
