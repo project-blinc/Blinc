@@ -1001,6 +1001,10 @@ pub struct RenderTree {
     /// Base styles for elements (before state modifiers)
     /// Used to restore original styles when state changes
     base_styles: HashMap<LayoutNodeId, RenderProps>,
+    /// Nodes whose props the last incremental update replaced with the new
+    /// element's props, in tree order. They carry no stylesheet until
+    /// `restyle_replaced_nodes` runs.
+    props_replaced: Vec<LayoutNodeId>,
     /// The stylesheet state rules (`:hover`, `:active`, `:focus`) currently
     /// applied over each node's properties, in the order applied. A bound
     /// write made while one holds is put back under it, so the rule keeps
@@ -1202,6 +1206,7 @@ impl RenderTree {
             stylesheet: None,
             state_style_table: RefCell::new(crate::state_style_table::StateStyleTable::empty()),
             base_styles: HashMap::new(),
+            props_replaced: Vec::new(),
             state_layers: HashMap::new(),
             dynamic_classes: HashMap::new(),
             base_taffy_styles: HashMap::new(),
@@ -3404,7 +3409,9 @@ impl RenderTree {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::div::div;
+    use crate::css_parser::Stylesheet;
+    use crate::div::{Div, div};
+    use blinc_core::{Brush, Color};
 
     #[test]
     fn test_render_tree_from_element() {
@@ -3684,6 +3691,74 @@ mod tests {
                 .get("row--active"),
             None
         );
+    }
+
+    fn red_panel_ui(button_color: Color, button_width: f32) -> Div {
+        div()
+            .w(400.0)
+            .h(200.0)
+            .child(div().id("panel").class("panel").w(200.0).h(100.0))
+            .child(div().id("button").bg(button_color).w(button_width).h(30.0))
+    }
+
+    fn red_panel_tree() -> RenderTree {
+        let mut tree = RenderTree::from_element(&red_panel_ui(Color::BLUE, 80.0));
+        tree.set_stylesheet(Stylesheet::parse(".panel { background: #ff0000; }").expect("css"));
+        tree.apply_all_stylesheet_styles();
+        tree.compute_layout(400.0, 200.0);
+        tree
+    }
+
+    fn node_is_red(tree: &RenderTree, id: &str) -> bool {
+        let node = tree.query_by_id(id).expect("node");
+        let node = tree.get_render_node(node).expect("render node");
+        matches!(node.props.background, Some(Brush::Solid(c)) if c == Color::RED)
+    }
+
+    /// An unchanged node keeps its styled props, and the node that changed is restyled.
+    #[test]
+    fn restyle_follows_the_replaced_nodes_only() {
+        let mut tree = red_panel_tree();
+        let panel = tree.query_by_id("panel").unwrap();
+        let button = tree.query_by_id("button").unwrap();
+
+        assert_eq!(
+            tree.incremental_update(&red_panel_ui(Color::GREEN, 80.0)),
+            UpdateResult::VisualOnly
+        );
+        assert!(
+            node_is_red(&tree, "panel"),
+            "unchanged node keeps its class style"
+        );
+        assert!(!tree.props_replaced.contains(&panel));
+        assert!(tree.props_replaced.contains(&button));
+        tree.restyle_replaced_nodes(None);
+        assert!(tree.props_replaced.is_empty());
+        assert!(node_is_red(&tree, "panel"));
+    }
+
+    /// A node that changes while carrying a class gets the class style back.
+    #[test]
+    fn a_replaced_node_takes_its_class_style_again() {
+        let ui = |w: f32| {
+            div()
+                .w(400.0)
+                .h(200.0)
+                .child(div().id("panel").class("panel").w(w).h(50.0))
+        };
+        let mut tree = RenderTree::from_element(&ui(100.0));
+        tree.set_stylesheet(Stylesheet::parse(".panel { background: #ff0000; }").expect("css"));
+        tree.apply_all_stylesheet_styles();
+        tree.compute_layout(400.0, 200.0);
+        assert!(node_is_red(&tree, "panel"));
+
+        assert_ne!(tree.incremental_update(&ui(120.0)), UpdateResult::NoChanges);
+        assert!(
+            !node_is_red(&tree, "panel"),
+            "the update drops the class style"
+        );
+        tree.restyle_replaced_nodes(None);
+        assert!(node_is_red(&tree, "panel"));
     }
 
     #[test]
