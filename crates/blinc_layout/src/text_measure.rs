@@ -447,6 +447,22 @@ impl TextFace {
         }
     }
 
+    /// Where a caret after the first `chars` characters of `text` stands: where the next character is
+    /// drawn, which includes the kerning between it and the one before. At the end of the text it is
+    /// the text's width.
+    pub fn caret_x(&self, text: &str, chars: usize, font_size: f32) -> f32 {
+        let at = text.char_indices().nth(chars).map(|(at, _)| at);
+        match at {
+            Some(at) if at > 0 => {
+                let next = text[at..].chars().next().map_or(0, char::len_utf8);
+                let through = self.measure(&text[..at + next], font_size).width;
+                through - self.measure(&text[at..at + next], font_size).width
+            }
+            Some(_) => 0.0,
+            None => self.measure(text, font_size).width,
+        }
+    }
+
     /// The size of `text` at `font_size` in this face.
     pub fn measure(&self, text: &str, font_size: f32) -> TextMetrics {
         if *self == Self::default() {
