@@ -80,9 +80,8 @@ impl GpuRenderer {
     }
 
     /// Update the frame time (for animations)
-    pub fn update_time(&mut self, time: f32) {
-        self.time = time;
-    }
+    #[deprecated(note = "the renderer reads `blinc_core::FrameClock`; runners set it each frame")]
+    pub fn update_time(&mut self, _time: f32) {}
 
     /// Get the wgpu device
     pub fn device(&self) -> &wgpu::Device {

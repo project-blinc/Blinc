@@ -375,8 +375,6 @@ pub struct GpuRenderer {
     pending_damage_scissor: Option<(u32, u32, u32, u32)>,
     /// Renderer configuration
     config: RendererConfig,
-    /// Current frame time (for animations)
-    time: f32,
     /// Resolved texture format used by pipelines
     pub(crate) texture_format: wgpu::TextureFormat,
     /// Lazily-created image pipeline and resources

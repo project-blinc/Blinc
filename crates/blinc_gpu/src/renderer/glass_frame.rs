@@ -155,10 +155,8 @@ impl GpuRenderer {
         self.update_aux_data_buffer(batch);
         // GPU automatically maps NDC space to the texture size, ensuring primitives
         // appear at correct relative positions for glass sampling.
-        let main_uniforms = Uniforms {
-            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
-            _padding: [0.0; 2],
-        };
+        let main_uniforms =
+            Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
         self.queue.write_buffer(
             &self.buffers.uniforms,
             0,
@@ -242,10 +240,8 @@ impl GpuRenderer {
 
         // Update uniforms for rendering (always use full viewport size)
         // The GPU maps NDC space to actual texture size automatically
-        let main_uniforms = Uniforms {
-            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
-            _padding: [0.0; 2],
-        };
+        let main_uniforms =
+            Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
 
         // Update auxiliary data buffer
         self.update_aux_data_buffer(batch);

@@ -1199,3 +1199,21 @@ fn the_cpu_primitive_lays_out_as_the_shader_reads_it() {
         clip_shape,
     );
 }
+
+#[test]
+fn the_cpu_viewport_uniforms_lay_out_as_the_shader_reads_them() {
+    use crate::primitives::Uniforms;
+    use crate::sdf_russl::primitive::Uniforms as Shader;
+    use std::mem::{offset_of, size_of};
+    assert_eq!(size_of::<Uniforms>(), Shader::SIZE);
+    assert_eq!(
+        offset_of!(Uniforms, viewport_size),
+        offset_of!(Shader, viewport_size)
+    );
+    // `_padding` holds the multisample flag, then the time.
+    assert_eq!(
+        offset_of!(Uniforms, _padding),
+        offset_of!(Shader, msaa_flag)
+    );
+    assert_eq!(offset_of!(Uniforms, _padding) + 4, offset_of!(Shader, time));
+}

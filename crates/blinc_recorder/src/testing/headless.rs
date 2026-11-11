@@ -322,6 +322,7 @@ impl Headless {
     pub fn frame(&mut self, dt_ms: u32) {
         self.now_ms += dt_ms as u64;
         self.frames += 1;
+        blinc_core::FrameClock::begin_frame_at(std::time::Duration::from_millis(self.now_ms));
         let dt = dt_ms as f32;
         self.ctx.animations.lock().unwrap().tick_by(dt / 1000.0);
 

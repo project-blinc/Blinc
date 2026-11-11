@@ -62,19 +62,16 @@ impl GpuRenderer {
 
         let overlay = self.overlay_target(sample_count);
 
-        // Update uniforms. `_padding.x = 1.0` signals the SDF fragment
+        // Update uniforms. The msaa flag at 1.0 signals the SDF fragment
         // shader that hardware multisample coverage is driving
         // silhouette AA for this pass — see `render_primitives_overlay_msaa`
         // for the longer rationale on why stacking the shader's
         // per-edge fade on top of MSAA resolve under-fills every
         // partially-covered pixel. The flag is only honoured by the
         // mesh-primitive branch inside `sdf_core`; every other branch
-        // ignores `_padding`.
+        // ignores the flag.
         let msaa_flag = if sample_count > 1 { 1.0 } else { 0.0 };
-        let uniforms = Uniforms {
-            viewport_size: [width as f32, height as f32],
-            _padding: [msaa_flag, 0.0],
-        };
+        let uniforms = Uniforms::new([width as f32, height as f32]).with_msaa(msaa_flag);
         self.queue
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
 
@@ -270,10 +267,7 @@ impl GpuRenderer {
         let overlay = self.overlay_target(sample_count);
 
         // Update uniforms
-        let uniforms = Uniforms {
-            viewport_size: [width as f32, height as f32],
-            _padding: [0.0; 2],
-        };
+        let uniforms = Uniforms::new([width as f32, height as f32]);
         self.queue
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
 
@@ -422,7 +416,7 @@ impl GpuRenderer {
 
         // Update viewport uniform for this pass.
         //
-        // `_padding.x` carries an MSAA flag: 1.0 here tells the SDF
+        // The msaa flag at 1.0 here tells the SDF
         // fragment shader that hardware multisample coverage is driving
         // silhouette AA, so the mesh-primitive branch should skip its
         // own per-edge barycentric fade. The fade works well on
@@ -433,10 +427,7 @@ impl GpuRenderer {
         // before the average. Removing the redundant shader fade
         // restores the resolve to hardware-accurate coverage.
         let msaa_flag = if sample_count > 1 { 1.0 } else { 0.0 };
-        let uniforms = Uniforms {
-            viewport_size: [width as f32, height as f32],
-            _padding: [msaa_flag, 0.0],
-        };
+        let uniforms = Uniforms::new([width as f32, height as f32]).with_msaa(msaa_flag);
         self.queue
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
 

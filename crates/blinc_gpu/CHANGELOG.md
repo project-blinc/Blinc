@@ -5,10 +5,14 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `Uniforms::new` builds the viewport uniforms stamped with `blinc_core::FrameClock`'s time, `with_msaa` sets the multisample flag and `time` reads the stamp. The shaders' `UNIFORMS.time` is the frame clock in seconds, in the lane that was padding; `GlassUniforms::time` follows the clock too.
 - `GpuRenderer::release_idle_memory` frees the static layer, the overlay targets, the pooled layer textures, the flow scene copy and the mesh pass's window-sized targets, and maintains the device so wgpu destroys them. `LayerTextureCache::clear_pools` drops the pooled textures and keeps the named ones.
 - `GpuRenderer::next_frame` starts a frame for the renderer's caches: the overlay passes' offscreen targets that no frame has drawn for 60 frames are freed, and the layer texture pool's idle clock moves, so a pool whose layered passes stopped is flushed as it is after 120 idle frames. A renderer never told keeps them.
 - `GpuRenderer::with_offscreen_canvas` shares web surface/device setup with the DOM canvas constructor.
 - `PrimitiveBatch::has_ordered_content` reports the ordered draws a batch holds now (captured groups, ordered images, glass, layer samples, meshes, GPU passes, clipped paths). `has_ordered_draws` is that or the mark left by cross-stream resolution.
+
+### Deprecated
+- `GpuRenderer::update_time` does nothing: the renderer reads `blinc_core::FrameClock`, which the runners set each frame.
 
 ### Changed
 - The renderer no longer builds the monolithic SDF pipelines or the MSAA text pipeline, which nothing drew with, nor the second copy of the core SDF shader they were built from.

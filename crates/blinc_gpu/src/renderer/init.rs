@@ -423,7 +423,6 @@ impl GpuRenderer {
             pending_damage_scissor: None,
             memory_budget: GpuMemoryBudget::new(config.gpu_memory_budget),
             config,
-            time: 0.0,
             texture_format,
             image_pipeline: None,
             mesh_pipeline: None,

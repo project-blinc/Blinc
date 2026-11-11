@@ -1286,6 +1286,8 @@ pub extern "C" fn blinc_build_frame(ctx: *mut IOSRenderContext) {
     unsafe {
         let ctx = &mut *ctx;
 
+        blinc_core::FrameClock::begin_frame();
+
         // Tick animations
         if let Ok(sched) = ctx.animations.lock() {
             sched.tick();

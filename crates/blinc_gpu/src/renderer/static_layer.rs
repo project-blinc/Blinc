@@ -299,10 +299,7 @@ impl GpuRenderer {
 
         // Update uniforms (viewport is the cache extent, not the
         // window — primitives were emitted into cache pixel space).
-        let uniforms = Uniforms {
-            viewport_size: [layer_width, layer_height],
-            _padding: [0.0; 2],
-        };
+        let uniforms = Uniforms::new([layer_width, layer_height]);
         self.queue
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
 
@@ -606,10 +603,7 @@ impl GpuRenderer {
         // earlier this frame, but the GPU has already consumed
         // those reads in the static-layer render pass, so the queue
         // is allowed to overwrite the buffer here.
-        let uniforms = Uniforms {
-            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
-            _padding: [0.0; 2],
-        };
+        let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
         self.queue
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
 

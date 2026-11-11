@@ -3,11 +3,36 @@
 use super::ClipType;
 
 /// Uniform buffer for viewport information
+///
+/// `_padding` carries two values the SDF shaders read: `[0]` is 1.0 while an overlay draws into
+/// its multisampled target, and `[1]` is the frame clock's time in seconds. Build one with
+/// [`Uniforms::new`] to have both set.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniforms {
     pub viewport_size: [f32; 2],
     pub _padding: [f32; 2],
+}
+
+impl Uniforms {
+    /// Uniforms for a `viewport_size` target, stamped with the frame clock's time.
+    pub fn new(viewport_size: [f32; 2]) -> Self {
+        Self {
+            viewport_size,
+            _padding: [0.0, blinc_core::FrameClock::now_secs()],
+        }
+    }
+
+    /// With the multisampled-target flag set to `flag`.
+    pub fn with_msaa(mut self, flag: f32) -> Self {
+        self._padding[0] = flag;
+        self
+    }
+
+    /// The frame clock's time in seconds when these were built.
+    pub fn time(&self) -> f32 {
+        self._padding[1]
+    }
 }
 
 /// Uniform buffer for glass shader

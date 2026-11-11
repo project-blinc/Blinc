@@ -3,7 +3,10 @@
 russl::russl! {
     pub struct Uniforms {
         pub viewport_size: Vec2,
-        pub _padding: Vec2,
+        // 1.0 while an overlay draws into its multisampled target.
+        pub msaa_flag: f32,
+        // The frame clock's time in seconds.
+        pub time: f32,
     }
 
     pub struct Primitive {

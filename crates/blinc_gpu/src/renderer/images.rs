@@ -183,10 +183,7 @@ impl GpuRenderer {
         let image_pipeline = self.image_pipeline.as_ref().unwrap();
 
         // Update uniforms
-        let uniforms = Uniforms {
-            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
-            _padding: [0.0; 2],
-        };
+        let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
         self.queue
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
 

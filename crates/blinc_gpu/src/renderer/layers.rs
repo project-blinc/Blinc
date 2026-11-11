@@ -347,10 +347,7 @@ impl GpuRenderer {
         }
 
         // Update uniforms
-        let uniforms = Uniforms {
-            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
-            _padding: [0.0; 2],
-        };
+        let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
         self.queue
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
 
@@ -604,10 +601,7 @@ impl GpuRenderer {
             .collect();
 
         // Update uniforms with content size (the viewport for this tight render)
-        let uniforms = Uniforms {
-            viewport_size: [content_size.0 as f32, content_size.1 as f32],
-            _padding: [0.0; 2],
-        };
+        let uniforms = Uniforms::new([content_size.0 as f32, content_size.1 as f32]);
         self.queue
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
 
@@ -728,10 +722,8 @@ impl GpuRenderer {
         self.queue.submit(std::iter::once(encoder.finish()));
 
         // Restore viewport uniforms for subsequent operations
-        let restore_uniforms = Uniforms {
-            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
-            _padding: [0.0; 2],
-        };
+        let restore_uniforms =
+            Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
         self.queue.write_buffer(
             &self.buffers.uniforms,
             0,

@@ -2431,6 +2431,7 @@ impl WebApp {
     /// also call this directly to force a render after a click /
     /// keypress.
     pub fn run_one_frame(&mut self) -> Result<()> {
+        blinc_core::FrameClock::begin_frame();
         if matches!(&self.canvas, worker::WebCanvas::Offscreen(_)) {
             self.ctx.animations.lock().unwrap().tick();
         }

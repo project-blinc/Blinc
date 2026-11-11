@@ -31,6 +31,10 @@ thiserror.workspace = true
 # Logging
 tracing.workspace = true
 
+# `web_time::Instant` is `std::time::Instant` on native and `performance.now()` on wasm32,
+# where the std one panics.
+web-time = "1.1"
+
 [dev-dependencies]
 blinc_animation = { path = "../blinc_animation" }
 

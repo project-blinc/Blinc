@@ -590,7 +590,7 @@ russl::russl! {
         // `fwidth` runs in uniform control flow here (computed
         // unconditionally before any prim_type branch) to satisfy WGSL's
         // derivative-uniformity rule.
-        // `UNIFORMS._padding.x` is the MSAA-active flag: 1.0 when the
+        // `UNIFORMS.msaa_flag` is the MSAA-active flag: 1.0 when the
         // render pass is writing into a multisampled target, 0.0 on
         // single-sampled paths. When hardware MSAA is doing the silhouette
         // coverage, stacking the shader's per-edge barycentric fade on
@@ -605,7 +605,7 @@ russl::russl! {
         // actually takes.
         let mb = mb_uniform;
         let mb_fw = mb_fw_uniform;
-        let mesh_msaa_active = UNIFORMS._padding.x > 0.5;
+        let mesh_msaa_active = UNIFORMS.msaa_flag > 0.5;
         if prim.type_info.x == 9u32 {
             if mesh_msaa_active {
                 fill_alpha = 1.0;

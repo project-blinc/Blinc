@@ -46,3 +46,19 @@ fn glass_uniform_layout_keeps_tight_target_and_backdrop_frames_separate() {
     assert_eq!(std::mem::offset_of!(GlassUniforms, sample_size), 16);
     assert_eq!(std::mem::offset_of!(GlassUniforms, origin), 24);
 }
+
+/// The SDF shaders read the viewport, the multisample flag and the frame time from one 16-byte
+/// block.
+#[test]
+fn viewport_uniforms_carry_the_frame_time() {
+    use blinc_gpu::primitives::Uniforms;
+    assert_eq!(std::mem::size_of::<Uniforms>(), 16);
+    assert_eq!(std::mem::offset_of!(Uniforms, _padding), 8);
+
+    blinc_core::FrameClock::begin_frame_at(std::time::Duration::from_millis(2_500));
+    let uniforms = Uniforms::new([640.0, 480.0]);
+    assert_eq!(uniforms.viewport_size, [640.0, 480.0]);
+    assert_eq!(uniforms._padding[0], 0.0, "the multisample flag starts off");
+    assert!(uniforms.time() >= 2.5, "stamped with {}", uniforms.time());
+    assert_eq!(uniforms.with_msaa(1.0)._padding[0], 1.0);
+}
