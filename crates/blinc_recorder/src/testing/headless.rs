@@ -20,7 +20,7 @@
 //! logs every difference without failing.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, Once, OnceLock};
 
 use blinc_animation::AnimationScheduler;
 use blinc_layout::div::Div;
@@ -153,6 +153,34 @@ pub struct Headless {
     recording: Option<Arc<SharedRecordingSession>>,
 }
 
+/// Sets the process-wide context state for the first session; a later session leaves it. Sessions
+/// that start together cannot both pass the check and set it.
+fn init_context_state(ctx: &WindowedContext) {
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        if !blinc_core::BlincContextState::is_initialized() {
+            blinc_core::BlincContextState::init_with_callback(
+                blinc_core::reactive::global_graph(),
+                Arc::new(Mutex::new(blinc_core::context_state::HookState::new())),
+                ctx.dirty_flag().clone(),
+                Arc::new(|ids| {
+                    blinc_layout::check_stateful_deps(ids);
+                }),
+            );
+        }
+    });
+}
+
+/// The overlay context, set once in the same way.
+fn init_overlay_context(ctx: &WindowedContext) {
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        if !blinc_layout::overlay_state::OverlayContext::is_initialized() {
+            blinc_layout::overlay_state::OverlayContext::init(ctx.overlay_manager().clone());
+        }
+    });
+}
+
 impl Headless {
     /// An offscreen surface of `width` x `height` logical pixels. Fails when
     /// there is no GPU adapter.
@@ -180,24 +208,13 @@ impl Headless {
             scale,
         );
         ctx.animations = shared_scheduler();
-        if !blinc_core::BlincContextState::is_initialized() {
-            blinc_core::BlincContextState::init_with_callback(
-                blinc_core::reactive::global_graph(),
-                Arc::new(Mutex::new(blinc_core::context_state::HookState::new())),
-                ctx.dirty_flag().clone(),
-                Arc::new(|ids| {
-                    blinc_layout::check_stateful_deps(ids);
-                }),
-            );
-        }
+        init_context_state(&ctx);
         blinc_core::reactive::set_stateful_deps_notifier(|ids| {
             blinc_layout::check_stateful_deps(ids);
         });
         blinc_core::BlincContextState::get()
             .set_viewport_size(logical_width as f32, logical_height as f32);
-        if !blinc_layout::overlay_state::OverlayContext::is_initialized() {
-            blinc_layout::overlay_state::OverlayContext::init(ctx.overlay_manager().clone());
-        }
+        init_overlay_context(&ctx);
 
         let texture = app.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("blinc headless surface"),
