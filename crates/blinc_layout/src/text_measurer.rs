@@ -522,18 +522,23 @@ mod tests {
         registry.lock().unwrap().preload_generic_fonts();
         let measurer = FontTextMeasurer::with_shared_registry(registry.clone());
         let opts = TextLayoutOptions::new();
-        let font = match registry
-            .lock()
-            .unwrap()
-            .resolve_styled(None, GenericFont::System, 400, false)
-        {
-            Some(font) => font,
-            None => {
-                eprintln!("no system font resolved; skipping");
-                return;
-            }
-        };
-        for text in ["M\u{fc}ller Wilhelm lilli \u{c4}\u{d6}\u{dc}", "\u{f6}\u{df}\u{e4}\u{fc} mmm iii", "AVATAR To Wa"] {
+        let font =
+            match registry
+                .lock()
+                .unwrap()
+                .resolve_styled(None, GenericFont::System, 400, false)
+            {
+                Some(font) => font,
+                None => {
+                    eprintln!("no system font resolved; skipping");
+                    return;
+                }
+            };
+        for text in [
+            "M\u{fc}ller Wilhelm lilli \u{c4}\u{d6}\u{dc}",
+            "\u{f6}\u{df}\u{e4}\u{fc} mmm iii",
+            "AVATAR To Wa",
+        ] {
             for size in [12.0_f32, 14.0, 28.0] {
                 let fallbacks = measurer.fallbacks_for(&font, text);
                 let probe = LayoutOptions {
@@ -554,7 +559,8 @@ mod tests {
                         None => continue,
                     };
                     let chars = text[..at].chars().count();
-                    let measured = crate::text_measure::TextFace::default().caret_x(text, chars, size);
+                    let measured =
+                        crate::text_measure::TextFace::default().caret_x(text, chars, size);
                     assert!(
                         (measured - drawn).abs() <= 0.5,
                         "{text:?} at {size}px, byte {at}: caret {measured}, glyph drawn at {drawn}"
