@@ -633,8 +633,8 @@ impl WebApp {
         // wasm — the desktop runner can override via the
         // `BLINC_GPU_MAX_PRIMITIVES` env var, but `std::env::var` is
         // a no-op on wasm32.  20k covers every current example with
-        // comfortable headroom and adds ~3.7 MB to GPU memory
-        // (20,000 × 368 bytes per GpuPrimitive ≈ 7.2 MB total).
+        // comfortable headroom
+        // (20,000 × 544 bytes per GpuPrimitive ≈ 10.9 MB total).
         let config = BlincConfig {
             max_primitives: 20_000,
             sample_count: 1, // SDF pipelines do their own shader-level AA
