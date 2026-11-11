@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1794381795,"nonce":"H6fRxf2ARbF9q8K5AD9NNQk/Jso=","added":["bug","area:debugger"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794420897,"nonce":"dU6nBJwDwFiCz/wkbitEwpMf4Wg=","message":"Fixed in 613fbb6cb0d07bc599f15a22ee040d5ab040cc4e: the global context and overlay init run once per process.","files":null}]}
