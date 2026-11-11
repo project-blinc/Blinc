@@ -5,7 +5,7 @@
 
 russl::russl! {
     use super::access::UNIFORMS;
-    use super::aux::aux;
+    use super::aux_data::aux;
     use super::clip::abi_shape_clip_alpha;
     use super::common::sd_shaped_rect;
 

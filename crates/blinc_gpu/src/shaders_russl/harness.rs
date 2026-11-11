@@ -5,15 +5,28 @@ use wgpu::util::DeviceExt;
 
 pub(super) const SIZE: u32 = 64;
 
-pub(super) fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
+fn adapter() -> Option<wgpu::Adapter> {
     let instance = wgpu::Instance::default();
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+    pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::default(),
         force_fallback_adapter: false,
         compatible_surface: None,
     }))
-    .ok()?;
+    .ok()
+}
+
+pub(super) fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
+    let adapter = adapter()?;
     pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
+}
+
+/// Whether a depth texture can be copied to a buffer; a GL adapter cannot.
+pub(super) fn can_read_depth() -> bool {
+    adapter().is_some_and(|a| {
+        a.get_downlevel_capabilities()
+            .flags
+            .contains(wgpu::DownlevelFlags::DEPTH_TEXTURE_AND_BUFFER_COPIES)
+    })
 }
 
 /// What a pass binds, by binding number in group 0.

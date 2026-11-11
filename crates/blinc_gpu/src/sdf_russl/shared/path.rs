@@ -5,7 +5,7 @@
 //! specialisations set.
 
 russl::russl! {
-    use super::aux::aux;
+    use super::aux_data::aux;
     use super::clip::abi_shape_clip_alpha;
     use super::common::{sd_circle, sd_ellipse, sd_rounded_rect};
 

@@ -6,7 +6,7 @@
 russl::russl! {
     use super::common::{sd_circle, sd_ellipse, sd_shaped_rect, quarter_ellipse_sdf, erf, apply_css_filter, border_side_color};
     use super::access::{UNIFORMS, GLYPH_ATLAS, GLYPH_SAMPLER, COLOR_GLYPH_ATLAS, prim};
-    use super::aux::aux;
+    use super::aux_data::aux;
     use super::clip::{calculate_clip_alpha, calculate_polygon_clip_alpha, gradient_table_color, abi_shape_clip_alpha};
 
     // The device tier: 0 reads storage buffers and draws mesh triangles through the vertex stage;
