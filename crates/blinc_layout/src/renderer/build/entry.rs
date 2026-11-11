@@ -132,6 +132,7 @@ impl RenderTree {
     /// - LayoutChanged: call compute_layout(), then render
     /// - ChildrenChanged: call compute_layout(), then render
     pub fn incremental_update<E: ElementBuilder>(&mut self, element: &E) -> UpdateResult {
+        self.props_replaced.clear();
         let new_tree_hash = DivHash::compute_element_tree(element);
         let new_topology_hash = DivHash::compute_topology_tree(element);
 

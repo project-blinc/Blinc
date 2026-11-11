@@ -2695,7 +2695,10 @@ impl WebApp {
             if let Some(ref mut existing_tree) = self.current_tree {
                 use blinc_layout::UpdateResult;
                 match builder.build_and_update(&mut self.ctx, existing_tree) {
-                    UpdateResult::NoChanges | UpdateResult::VisualOnly => {}
+                    UpdateResult::NoChanges => {}
+                    UpdateResult::VisualOnly => {
+                        existing_tree.restyle_replaced_nodes(None);
+                    }
                     UpdateResult::LayoutChanged | UpdateResult::ChildrenChanged => {
                         // Post-children-changed wiring (mirrors windowed.rs:3812-3834)
                         existing_tree.apply_stylesheet_base_styles();
