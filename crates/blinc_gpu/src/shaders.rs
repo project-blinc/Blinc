@@ -440,4 +440,144 @@ mod tests {
     fn mesh_dt_shader_parses() {
         parse_wgsl(MESH_DT_SHADER).expect("MESH_DT_SHADER");
     }
+
+    /// HLSL for a shader at shader model 5.1, which Windows compiles with FXC.
+    fn hlsl_of(source: &str) -> String {
+        use naga::valid::{Capabilities, ValidationFlags, Validator};
+        let module = naga::front::wgsl::parse_str(source).expect("the shader parses");
+        let info = Validator::new(ValidationFlags::all(), Capabilities::all())
+            .validate(&module)
+            .expect("the shader validates");
+        let mut hlsl = String::new();
+        naga::back::hlsl::Writer::new(
+            &mut hlsl,
+            &naga::back::hlsl::Options::default(),
+            &naga::back::hlsl::PipelineOptions::default(),
+        )
+        .write(&module, &info, None)
+        .expect("the shader converts to HLSL");
+        hlsl
+    }
+
+    /// The `case` and `default` labels of a switch in `hlsl` whose body does not end in `return`,
+    /// `break` or `continue`. FXC reads such a body as a fall-through and rejects the shader; it
+    /// does not take `discard` for an exit.
+    fn switch_cases_without_exit(hlsl: &str) -> Vec<String> {
+        let lines: Vec<&str> = hlsl.lines().collect();
+        let indent = |line: &str| line.len() - line.trim_start().len();
+        let mut found = Vec::new();
+        for (at, line) in lines.iter().enumerate() {
+            let label = line.trim();
+            if !((label.starts_with("case ") || label.starts_with("default:"))
+                && label.ends_with('{'))
+            {
+                continue;
+            }
+            let body: Vec<&str> = lines[at + 1..]
+                .iter()
+                .take_while(|l| !(indent(l) == indent(line) && l.trim_start().starts_with('}')))
+                .map(|l| l.trim())
+                .collect();
+            let last = body.iter().rev().find(|l| !l.is_empty());
+            if let Some(last) = last
+                && !["return", "break", "continue"]
+                    .iter()
+                    .any(|exit| last.starts_with(exit))
+            {
+                found.push(format!("line {}: `{label}` ends in `{last}`", at + 1));
+            }
+        }
+        found
+    }
+
+    #[test]
+    fn the_switch_check_sees_a_case_that_ends_in_discard() {
+        let bad = "    switch (x) {\n        case 0u: {\n            return a;\n        }\n        default: {\n            discard;\n        }\n    }\n";
+        let good = bad.replace("discard;", "discard;\n            return a;");
+        assert_eq!(switch_cases_without_exit(bad).len(), 1);
+        assert!(switch_cases_without_exit(&good).is_empty());
+    }
+
+    /// Windows compiles every shader with FXC, which no other platform runs: a shape it rejects
+    /// fails the pipeline there and nowhere else.
+    #[test]
+    fn no_shader_has_a_switch_case_fxc_rejects() {
+        let shaders: &[(&str, &str)] = &[
+            ("CLEAR_QUAD_SHADER", CLEAR_QUAD_SHADER),
+            ("SDF_CORE_SHADER", SDF_CORE_SHADER),
+            ("SDF_SIMPLE_SHADER", SDF_SIMPLE_SHADER),
+            ("SDF_SHADOW_SHADER", SDF_SHADOW_SHADER),
+            ("SDF_3D_SHADER", SDF_3D_SHADER),
+            ("SDF_NOTCH_SHADER", SDF_NOTCH_SHADER),
+            ("SDF_CORE_VB_SHADER", SDF_CORE_VB_SHADER),
+            ("SDF_SHADOW_VB_SHADER", SDF_SHADOW_VB_SHADER),
+            ("SDF_3D_VB_SHADER", SDF_3D_VB_SHADER),
+            ("SDF_NOTCH_VB_SHADER", SDF_NOTCH_VB_SHADER),
+            ("SDF_CORE_DT_SHADER", SDF_CORE_DT_SHADER),
+            ("SDF_SHADOW_DT_SHADER", SDF_SHADOW_DT_SHADER),
+            ("SDF_3D_DT_SHADER", SDF_3D_DT_SHADER),
+            ("SDF_NOTCH_DT_SHADER", SDF_NOTCH_DT_SHADER),
+            ("TEXT_DT_SHADER", TEXT_DT_SHADER),
+            ("GLASS_DT_SHADER", GLASS_DT_SHADER),
+            ("SIMPLE_GLASS_DT_SHADER", SIMPLE_GLASS_DT_SHADER),
+            ("MESH_DT_SHADER", MESH_DT_SHADER),
+            ("MESH_SHADER", MESH_SHADER),
+            ("TEXT_SHADER", TEXT_SHADER),
+            ("GLASS_SHADER", GLASS_SHADER),
+            ("SIMPLE_GLASS_SHADER", SIMPLE_GLASS_SHADER),
+            ("COMPOSITE_SHADER", COMPOSITE_SHADER),
+            ("PATH_SHADER", PATH_SHADER),
+            ("PATH_DT_SHADER", PATH_DT_SHADER),
+            ("IMAGE_SHADER", IMAGE_SHADER),
+            ("IMAGE_DT_SHADER", IMAGE_DT_SHADER),
+            ("LAYER_COMPOSITE_SHADER", LAYER_COMPOSITE_SHADER),
+            ("BLUR_SHADER", BLUR_SHADER),
+            ("COLOR_MATRIX_SHADER", COLOR_MATRIX_SHADER),
+            ("MASK_IMAGE_SHADER", MASK_IMAGE_SHADER),
+            ("DROP_SHADOW_SHADER", DROP_SHADOW_SHADER),
+            ("GLOW_SHADER", GLOW_SHADER),
+            (
+                "PARTICLE_COMPUTE_SHADER",
+                crate::particles::PARTICLE_COMPUTE_SHADER,
+            ),
+            (
+                "PARTICLE_RENDER_SHADER",
+                crate::particles::PARTICLE_RENDER_SHADER,
+            ),
+            (
+                "PARTICLE_RENDER_DT_SHADER",
+                crate::particles::PARTICLE_RENDER_DT_SHADER,
+            ),
+            ("shaders_russl::bloom", crate::shaders_russl::bloom::WGSL),
+            (
+                "shaders_russl::oit_composite",
+                crate::shaders_russl::oit_composite::WGSL,
+            ),
+            (
+                "shaders_russl::shadow_depth",
+                crate::shaders_russl::shadow_depth::WGSL,
+            ),
+            ("shaders_russl::skybox", crate::shaders_russl::skybox::WGSL),
+            (
+                "shaders_russl::tonemap",
+                crate::shaders_russl::tonemap::WGSL,
+            ),
+            (
+                "shaders_russl::backdrop_rows",
+                crate::shaders_russl::backdrop_rows::WGSL,
+            ),
+            ("sdf_russl::backdrop", crate::sdf_russl::backdrop::WGSL),
+        ];
+        let mut bad = Vec::new();
+        for (name, source) in shaders {
+            for case in switch_cases_without_exit(&hlsl_of(source)) {
+                bad.push(format!("{name}: {case}"));
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "switch cases FXC rejects:\n{}",
+            bad.join("\n")
+        );
+    }
 }

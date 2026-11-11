@@ -274,7 +274,10 @@ russl::russl! {
                 return inner_result;
             }
             _ => {
+                // The return stays inside the arm: FXC takes a case that ends in `discard` for a
+                // fall-through.
                 discard!();
+                return Vec4::splat(0.0);
             }
         }
 

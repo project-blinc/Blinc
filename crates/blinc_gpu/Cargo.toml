@@ -91,6 +91,8 @@ lyon.workspace = true
 # in as well; declaring them here is what lets `with_canvas` accept
 # `web_sys::HtmlCanvasElement` directly without going through that crate.
 [dev-dependencies]
+# The HLSL writer, for the switch check in `shaders`; the runtime dependency above does not need it.
+naga = { workspace = true, features = ["hlsl-out", "wgsl-in"] }
 image.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
