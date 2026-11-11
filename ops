@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1794391106,"nonce":"2h+KGbz25eLRGug/CstlHX9Xjck=","added":["perf","area:gpu","area:layout","area:animation"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794391146,"nonce":"n/kXeVFYkRCdL0y9MsgfFByJ1II=","message":"Part of the GPU-deferral plan: da827f7.","files":null}]}
