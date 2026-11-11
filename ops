@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1794379373,"nonce":"HK76rBCJ18kNaidT1D5vwW7FNos=","added":["bug","area:layout"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794379381,"nonce":"sWL59i1gXV//yjoDdV4+XqPR9Qs=","message":"Related: d2082a0 (Div::visible with a constant is not seen by incremental_update).","files":null}]}
