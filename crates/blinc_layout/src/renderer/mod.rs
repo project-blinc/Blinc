@@ -3765,6 +3765,56 @@ mod tests {
         assert_eq!(width(&tree), 123.0);
     }
 
+    fn two_nodes(a: Color, z: i32) -> Div {
+        use crate::element::CursorStyle;
+        div()
+            .w(400.0)
+            .h(200.0)
+            .child(div().id("a").bg(a).w(80.0).h(30.0))
+            .child(
+                div()
+                    .id("b")
+                    .w(80.0)
+                    .h(30.0)
+                    .z_index(z)
+                    .cursor(CursorStyle::Pointer),
+            )
+    }
+
+    fn z_index_of(tree: &RenderTree, id: &str) -> i32 {
+        let node = tree.query_by_id(id).expect("node");
+        tree.get_render_node(node)
+            .expect("render node")
+            .props
+            .z_index
+    }
+
+    /// A property the own hash once left out changes on one node while another node's colour
+    /// changes: the first node takes its new value instead of keeping the old one.
+    #[test]
+    fn a_prop_the_hash_missed_is_applied_beside_a_visual_change() {
+        let mut tree = RenderTree::from_element(&two_nodes(Color::BLUE, 0));
+        tree.compute_layout(400.0, 200.0);
+        assert_eq!(z_index_of(&tree, "b"), 0);
+
+        let result = tree.incremental_update(&two_nodes(Color::GREEN, 7));
+        assert_ne!(result, UpdateResult::NoChanges);
+        tree.restyle_replaced_nodes(None);
+        assert_eq!(z_index_of(&tree, "b"), 7);
+    }
+
+    /// The same property changing alone is an update, not a no-op.
+    #[test]
+    fn a_prop_the_hash_missed_is_an_update_on_its_own() {
+        let mut tree = RenderTree::from_element(&two_nodes(Color::BLUE, 0));
+        tree.compute_layout(400.0, 200.0);
+
+        let result = tree.incremental_update(&two_nodes(Color::BLUE, 7));
+        assert_ne!(result, UpdateResult::NoChanges);
+        tree.restyle_replaced_nodes(None);
+        assert_eq!(z_index_of(&tree, "b"), 7);
+    }
+
     /// A node that changes while carrying a class gets the class style back.
     #[test]
     fn a_replaced_node_takes_its_class_style_again() {
