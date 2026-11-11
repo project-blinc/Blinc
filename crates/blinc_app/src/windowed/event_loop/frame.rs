@@ -9,6 +9,7 @@ use blinc_layout::prelude::*;
 use blinc_platform::{ControlFlow, Event, Window};
 use std::sync::atomic::Ordering;
 
+mod acquire;
 mod animate;
 mod present;
 mod rebuild;
@@ -74,18 +75,8 @@ where
                 let stateful_dirty = blinc_layout::peek_needs_redraw()
                     || blinc_layout::has_pending_subtree_rebuilds()
                     || blinc_layout::has_pending_partial_prop_updates();
-                // Wayland keep-alive: when the frame-gate is active we must
-                // keep presenting even when the scene is static. Once
-                // animations finish and the redraw chain goes quiet,
-                // skipping here stops all presents; Mutter then holds every
-                // swapchain buffer and the next get_current_texture()
-                // starves for the full ~1s acquire timeout (freeze). The
-                // gate throttles us to the compositor's Done cadence, so
-                // this stays vsync-paced, not a spin.
-                // Wayland keep-alive: keep presenting even when the
-                // scene is static (frame-gate or present-thread mode),
-                // else the swapchain goes idle and the compositor starves
-                // the next acquire.
+                // Wayland keep-alive: keep presenting at vsync while the scene is static
+                // (frame-gate or keep-alive mode).
                 #[allow(unused_mut)]
                 let mut keep_alive = false;
                 #[cfg(all(feature = "wayland-frame-gate", target_os = "linux"))]
@@ -131,6 +122,9 @@ where
                         Some(s) => s,
                         None => return ControlFlow::Continue,
                     };
+
+                    #[cfg(all(feature = "wayland-frame-gate", target_os = "linux"))]
+                    let mut gate_stalled = false;
 
                     // Experimental Wayland frame-callback gate: when
                     // active, drain our wl_callback Done events from
@@ -200,55 +194,10 @@ where
                             window.request_redraw();
                             return ControlFlow::Continue;
                         }
-                        // Proceeding WITHOUT Done means the safety valve
-                        // fired — the compositor stalled its frame
-                        // callbacks and the swapchain has starved (Mutter
-                        // holds every buffer until the surface is
-                        // reconfigured). Recreate it, exactly as a manual
-                        // window resize does, so the acquire below doesn't
-                        // block the full ~1s timeout.
-                        if !ready {
-                            tracing::debug!(
-                                target: "blinc_app::wayland_gate",
-                                "Done stalled; recreating swapchain to un-starve acquire",
-                            );
-                            surf.configure(blinc_app.device(), config);
-                        }
+                        // Proceeding without Done: the swapchain is
+                        // recreated right before the acquire below.
+                        gate_stalled = !ready;
                     }
-
-                    // Get current frame (surf bound above)
-                    let frame = match surf.get_current_texture() {
-                        Ok(f) => f,
-                        Err(wgpu::SurfaceError::Lost) => {
-                            surf.configure(blinc_app.device(), config);
-                            return ControlFlow::Continue;
-                        }
-                        Err(wgpu::SurfaceError::OutOfMemory) => {
-                            tracing::error!("Out of GPU memory");
-                            return ControlFlow::Exit;
-                        }
-                        Err(wgpu::SurfaceError::Timeout) => {
-                            // The compositor stopped releasing swapchain
-                            // buffers, so the acquire starved. Reconfigure
-                            // to un-stick it — the same recovery a manual
-                            // window resize produces. Without this the UI
-                            // thread re-enters the acquire and parks on the
-                            // GPU fence again ("responsive for a while,
-                            // then froze"). The keep-alive self-drive keeps
-                            // presents flowing afterward so it stays live.
-                            tracing::debug!("Surface acquire timeout — reconfiguring to un-stick");
-                            surf.configure(blinc_app.device(), config);
-                            window.request_redraw();
-                            return ControlFlow::Continue;
-                        }
-                        Err(e) => {
-                            tracing::warn!("Surface error: {:?}", e);
-                            return ControlFlow::Continue;
-                        }
-                    };
-
-                    let render_tex: &wgpu::Texture = &frame.texture;
-                    let view = render_tex.create_view(&wgpu::TextureViewDescriptor::default());
 
                     // Update context from window
                     windowed_ctx.update_from_window(window);
@@ -306,7 +255,7 @@ where
                         has_visible_overlays: Default::default(),
                         keep_alive,
                     };
-                    if let Some(flow) = rebuild::check_rebuild(
+                    let mut skip = rebuild::check_rebuild(
                         ws,
                         window,
                         frame_dirty,
@@ -315,34 +264,71 @@ where
                         animations,
                         element_registry,
                         &mut vars,
-                    ) {
-                        return flow;
+                    );
+                    if skip.is_none() {
+                        skip = rebuild::build_tree(
+                            ws,
+                            window,
+                            animations,
+                            css_anim_store,
+                            element_registry,
+                            ready_callbacks,
+                            ui_builder,
+                            &mut vars,
+                        );
                     }
-                    if let Some(flow) = rebuild::build_tree(
-                        ws,
+                    if skip.is_none() {
+                        skip = animate::tick_animations(
+                            ws,
+                            window,
+                            platform,
+                            animation_fps_cap,
+                            animation_fps_cap_atomic,
+                            wake_proxy_for_pacing,
+                            frame_dirty,
+                            animations,
+                            &mut vars,
+                        );
+                    }
+                    let token = match acquire::Decision::after_phases(skip) {
+                        acquire::Decision::Skip(flow) => return flow,
+                        acquire::Decision::Draw(token) => token,
+                    };
+                    // The swapchain image is taken only once the frame is
+                    // known to be drawn: an acquired image that is not
+                    // presented stays held and starves later acquires.
+                    let (Some(surf), Some(blinc_app), Some(config)) = (
+                        ws.surface.as_ref(),
+                        ws.app.as_ref(),
+                        ws.surface_config.as_ref(),
+                    ) else {
+                        return ControlFlow::Continue;
+                    };
+                    #[cfg(all(feature = "wayland-frame-gate", target_os = "linux"))]
+                    if gate_stalled {
+                        surf.configure(blinc_app.device(), config);
+                    }
+                    let mut swapchain = acquire::SurfaceSwapchain {
+                        surface: surf,
+                        device: blinc_app.device(),
+                        config,
+                    };
+                    let mut signals = acquire::WindowSignals {
                         window,
-                        animations,
-                        css_anim_store,
-                        element_registry,
-                        ready_callbacks,
-                        ui_builder,
-                        &mut vars,
-                    ) {
-                        return flow;
-                    }
-                    if let Some(flow) = animate::tick_animations(
-                        ws,
-                        window,
-                        platform,
-                        animation_fps_cap,
-                        animation_fps_cap_atomic,
-                        wake_proxy_for_pacing,
-                        frame_dirty,
-                        animations,
-                        &mut vars,
-                    ) {
-                        return flow;
-                    }
+                        dirty: frame_dirty,
+                    };
+                    let frame = match acquire::acquire_for_draw(token, &mut swapchain, &mut signals)
+                    {
+                        acquire::Acquired::Image(f) => f,
+                        acquire::Acquired::Retry => return ControlFlow::Continue,
+                        acquire::Acquired::Exit => {
+                            tracing::error!("Out of GPU memory");
+                            return ControlFlow::Exit;
+                        }
+                    };
+                    let view = frame
+                        .texture
+                        .create_view(&wgpu::TextureViewDescriptor::default());
                     if let Some(flow) = present::render_and_schedule(
                         ws,
                         window,
