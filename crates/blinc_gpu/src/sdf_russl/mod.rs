@@ -138,6 +138,15 @@ pub(crate) mod particle_render_dt {
 #[path = "shared/particle_compute.rs"]
 pub(crate) mod particle_compute;
 
+/// Animation curves: a curve's progress, a descriptor's value and velocity, the colour mix.
+#[cfg(test)]
+#[path = "shared/curve.rs"]
+pub(crate) mod curve;
+/// Evaluates descriptors for the parity test against the shared vectors.
+#[cfg(test)]
+#[path = "shared/curve_check.rs"]
+pub(crate) mod curve_check;
+
 /// The core shader: storage tier, vertex buffer tier and data texture tier, and `simple`, the
 /// storage tier with the blocks plain solid shapes never use switched off.
 #[path = "shared/sdf_core.rs"]
