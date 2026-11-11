@@ -12,8 +12,8 @@
 
 #[path = "shared/access.rs"]
 pub(crate) mod access;
-#[path = "shared/aux.rs"]
-pub(crate) mod aux;
+#[path = "shared/aux_data.rs"]
+pub(crate) mod aux_data;
 #[path = "shared/clip.rs"]
 mod clip;
 #[path = "shared/common.rs"]

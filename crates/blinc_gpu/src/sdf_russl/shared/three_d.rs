@@ -4,7 +4,7 @@
 
 russl::russl! {
     use super::access::{UNIFORMS, prim};
-    use super::aux::aux;
+    use super::aux_data::aux;
     use super::clip::{calculate_clip_alpha, abi_shape_clip_alpha};
     use super::shapes3d::{apply_boolean_op, ray_aabb_intersect, rotate_x_inv, rotate_y_inv, rotate_z_inv, sdf_3d_eval};
 

@@ -4,7 +4,7 @@
 //! sets; `backdrop_rows` is the horizontal pass.
 
 russl::russl! {
-    use super::aux::aux;
+    use super::aux_data::aux;
     use super::clip::abi_shape_clip_alpha;
     use super::common::sd_shaped_rect;
     use super::notch::sd_abi_notch;
