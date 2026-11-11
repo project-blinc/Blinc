@@ -30,6 +30,8 @@ fn frame(tree: &mut RenderTree) {
     );
     let updates = blinc_layout::take_pending_partial_prop_updates();
     tree.apply_partial_property_updates(updates);
+    // A runner applies the layout rules again whenever layout is needed.
+    tree.apply_stylesheet_layout_overrides();
     tree.compute_layout(400.0, 400.0);
 }
 
@@ -77,6 +79,24 @@ fn the_content_follows_its_signal_in_place() {
         open.set(false);
         frame(&mut tree);
         assert_eq!(layout_height(&tree, body), 0.0, "the section did not shut");
+    })
+}
+
+#[test]
+fn the_content_opens_again_after_it_has_shut() {
+    guarded(|| {
+        init();
+        let open = signal(false);
+        let mut tree = section(open);
+        let body = find(&tree, "cn-collapsible-content");
+        for round in 0..3 {
+            open.set(true);
+            frame(&mut tree);
+            assert_eq!(layout_height(&tree, body), 80.0, "round {round}: opening");
+            open.set(false);
+            frame(&mut tree);
+            assert_eq!(layout_height(&tree, body), 0.0, "round {round}: shutting");
+        }
     })
 }
 

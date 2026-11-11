@@ -77,6 +77,11 @@ impl RenderTree {
             None => return,
         };
 
+        // The rules of a class that follows a signal sit in the node's layer for it, over the
+        // snapshot folded below. Matched with the class on, they would be folded into the
+        // snapshot and stay when the class goes, so the rules are matched without such classes.
+        let withheld = self.withhold_dynamic_classes();
+
         // Collect (node_id, style) pairs that have layout overrides.
         // Apply complex rules (class/type selectors) FIRST — lower specificity.
         // Then apply simple ID rules LAST — higher specificity overrides.
@@ -141,6 +146,7 @@ impl RenderTree {
                 overrides.push((node_id, style.clone()));
             }
         }
+        self.restore_classes(withheld);
 
         // A node that took up its bound classes or a state rule before this pass holds a
         // snapshot of itself without them, and the rules applied here belong to that snapshot:
