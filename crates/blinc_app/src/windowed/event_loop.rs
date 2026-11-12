@@ -169,6 +169,21 @@ where
         let is_secondary = event_wid
             .map(|wid| primary_wid.is_some_and(|p| wid != p))
             .unwrap_or(false);
+        // Where the pointer is, for hover to follow the content when the pointer is still.
+        if !is_secondary {
+            match &event {
+                Event::Input(
+                    _,
+                    InputEvent::Mouse(
+                        MouseEvent::Moved { x, y }
+                        | MouseEvent::ButtonPressed { x, y, .. }
+                        | MouseEvent::ButtonReleased { x, y, .. },
+                    ),
+                ) => ws.pointer_px = Some((*x, *y)),
+                Event::Input(_, InputEvent::Mouse(MouseEvent::Left)) => ws.pointer_px = None,
+                _ => {}
+            }
+        }
         // Mouse button press/release on a non-interactive area
         // doesn't need to schedule a redraw — if the click fires
         // a handler that mutates state, the post-dispatch check
@@ -498,8 +513,44 @@ where
             Event::Lifecycle(LifecycleEvent::Resumed) => self.on_resumed(event, window),
             Event::Window(..) => self.on_window_event(event, window),
             Event::Input(..) => self.on_input(event, window),
-            Event::Frame(_) => self.on_frame(event, window),
+            Event::Frame(wid) => {
+                self.refresh_hover(wid, window);
+                self.on_frame(event, window)
+            }
             _ => ControlFlow::Continue,
         }
+    }
+
+    /// When a scroll offset or the layout has moved what is under a still pointer, run the move
+    /// again at the pointer, so hover, its styles and the cursor follow content that moves while
+    /// the mouse does not: a list scrolling, rows mounting. The move takes the path a real one
+    /// does, short of the cache of the last hit it would otherwise stop at.
+    fn refresh_hover(
+        &mut self,
+        wid: blinc_platform::WindowId,
+        window: &blinc_platform_desktop::DesktopWindow,
+    ) {
+        if self.primary_wid != Some(wid) {
+            return;
+        }
+        let (Some(ctx), Some(tree)) = (self.ws.ctx.as_mut(), self.ws.render_tree.as_ref()) else {
+            return;
+        };
+        let stamp = (tree.scroll_signature(), tree.layout_tree.epoch());
+        let moved = self.ws.hover_stamp.is_some_and(|last| last != stamp);
+        self.ws.hover_stamp = Some(stamp);
+        let Some((x, y)) = self.ws.pointer_px else {
+            return;
+        };
+        if !moved || ctx.event_router.is_press_in_flight() {
+            return;
+        }
+        ctx.event_router.forget_last_hit();
+        // The move is not one the coalescing of fast mice may drop.
+        self.ws.last_pointer_dispatch = None;
+        let _ = self.handle(
+            Event::Input(wid, InputEvent::Mouse(MouseEvent::Moved { x, y })),
+            window,
+        );
     }
 }

@@ -97,6 +97,11 @@ pub(crate) struct WindowState {
     /// the full event-buffer refactor.
     /// ([[project-reactive-architecture-v2]] Phase 3.1.)
     pub last_pointer_dispatch: Option<std::time::Instant>,
+    /// Where the pointer is, in physical pixels, while it is over the window.
+    pub pointer_px: Option<(f32, f32)>,
+    /// The scroll offsets and layout the pointer was last tested against: when they change, what
+    /// is under a still pointer may have too (`DesktopLoop::refresh_hover`).
+    pub hover_stamp: Option<(u64, u64)>,
     /// EXPERIMENTAL: hand-rolled Wayland `wl_surface::frame()` gate.
     /// `Some(...)` only when (a) the `wayland-frame-gate` feature is
     /// enabled, (b) we're on Linux/Wayland, and (c) the gate's
@@ -155,6 +160,8 @@ impl WindowState {
             cached_modifiers: blinc_platform::Modifiers::default(),
             last_router_state_fp: None,
             last_pointer_dispatch: None,
+            pointer_px: None,
+            hover_stamp: None,
             #[cfg(all(feature = "wayland-frame-gate", target_os = "linux"))]
             wayland_gate: None,
             #[cfg(target_os = "linux")]

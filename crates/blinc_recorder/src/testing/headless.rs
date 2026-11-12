@@ -158,6 +158,8 @@ pub struct Headless {
     /// does, rather than on every frame.
     gate_state_styles: bool,
     state_fingerprint: Option<u64>,
+    /// The scroll offsets and layout the pointer was last tested against; see `refresh_hover`.
+    hover_stamp: Option<(u64, u64)>,
 }
 
 /// Sets the process-wide context state for the first session; a later session leaves it. Sessions
@@ -299,6 +301,7 @@ impl Headless {
             recording: None,
             gate_state_styles: false,
             state_fingerprint: None,
+            hover_stamp: None,
         })
     }
 
@@ -387,6 +390,7 @@ impl Headless {
         self.drain_queued_css();
         self.rebuild_if_needed();
         self.apply_queued_updates();
+        self.refresh_hover();
 
         self.render_state.process_global_motion_exit_cancels();
         self.render_state.process_global_motion_exit_starts();
@@ -436,12 +440,14 @@ impl Headless {
             } else {
                 true
             };
-            if apply_states
-                && tree.stylesheet().is_some()
-                && tree.apply_stylesheet_state_styles(&self.ctx.event_router)
-            {
-                tree.compute_layout(w, h);
-                tree.update_flip_bounds();
+            if apply_states && tree.stylesheet().is_some() {
+                let epoch = tree.layout_tree.epoch();
+                if tree.apply_stylesheet_state_styles(&self.ctx.event_router)
+                    && tree.layout_due_since(epoch)
+                {
+                    tree.compute_layout(w, h);
+                    tree.update_flip_bounds();
+                }
             }
             tree.apply_all_css_animation_props();
             tree.apply_all_css_transition_props();
@@ -678,6 +684,12 @@ impl Headless {
     // ---- input ---------------------------------------------------------
 
     fn deliver(&mut self, events: Vec<(LayoutNodeId, u32)>) {
+        self.dispatch(events);
+        self.frame(0);
+    }
+
+    /// Hand pointer events to the nodes they name.
+    fn dispatch(&mut self, events: Vec<(LayoutNodeId, u32)>) {
         let (x, y) = self.pointer;
         // A drag carries how far it has gone, as the window gives it.
         let (dx, dy) = self.ctx.event_router.drag_delta();
@@ -712,7 +724,27 @@ impl Headless {
                 );
             }
         }
-        self.frame(0);
+    }
+
+    /// When a scroll offset or the layout has moved what is under a still pointer, run the move
+    /// again at the pointer, as a window does at the top of a frame: hover follows the content
+    /// as it moves, not only the mouse.
+    fn refresh_hover(&mut self) {
+        let Some(tree) = self.tree.as_ref() else {
+            return;
+        };
+        let stamp = (tree.scroll_signature(), tree.layout_tree.epoch());
+        if self.hover_stamp == Some(stamp) {
+            return;
+        }
+        self.hover_stamp = Some(stamp);
+        let (x, y) = self.pointer;
+        if x < 0.0 || self.ctx.event_router.is_press_in_flight() {
+            return;
+        }
+        self.ctx.event_router.forget_last_hit();
+        let events = self.ctx.event_router.on_mouse_move(tree, x, y);
+        self.dispatch(events);
     }
 
     /// Move the pointer to `(x, y)`.
