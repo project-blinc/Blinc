@@ -13,15 +13,19 @@
 //! The small `scrolling_a_short_list_*` test is not ignored and keeps this file honest.
 
 use blinc_core::Color;
-use blinc_layout::div::div;
+use blinc_layout::div::{Div, ElementBuilder, div};
 use blinc_layout::prelude::*;
 use blinc_layout::selector::ScrollRef;
+use blinc_layout::widgets::virtual_list::virtual_list;
 use blinc_recorder::{Headless, MotionPaint};
 use blinc_theme::{ColorScheme, HybridTheme};
 
 const W: u32 = 360;
 const H: u32 = 640;
 const ROW_HEIGHT: f32 = 30.0;
+/// Pixels a frame may differ by from a full paint: the edge of a glyph a fraction of a pixel apart.
+/// Text a frame behind its row, or a row a pixel off, differs by hundreds.
+const EDGE_PIXELS: usize = 40;
 
 fn env_number(name: &str, default: f32) -> f32 {
     std::env::var(name)
@@ -115,6 +119,50 @@ impl Report {
     }
 }
 
+fn row(i: usize) -> Div {
+    let hue = (i % 9) as f32 / 9.0;
+    div()
+        .w_full()
+        .h(ROW_HEIGHT - 2.0)
+        .mb(0.5)
+        .px(3.0)
+        .rounded(6.0)
+        .bg(Color::rgb(0.2 + 0.35 * hue, 0.4, 0.9 - 0.4 * hue))
+        .flex_row()
+        .items_center()
+        .child(text(format!("Row {i}")).size(13.0).color(Color::WHITE))
+}
+
+/// Mount `rows` rows in a scroll container bound to `bound`: a child for every row, or a virtual
+/// list that builds the rows in view.
+fn mount_list(ui: &mut Headless, rows: usize, virtualized: bool, bound: &ScrollRef) {
+    let bound = bound.clone();
+    ui.mount(move |_| {
+        let list: Box<dyn ElementBuilder> = if virtualized {
+            // Only a window of rows is built; the rest of the list is a count.
+            Box::new(
+                virtual_list(rows, row)
+                    .estimated_item_height(ROW_HEIGHT)
+                    .bind(&bound)
+                    .w(W as f32)
+                    .h(H as f32)
+                    .into_div(),
+            )
+        } else {
+            let mut list = div().flex_col().w(W as f32);
+            for i in 0..rows {
+                list = list.child(row(i));
+            }
+            Box::new(scroll().bind(&bound).w(W as f32).h(H as f32).child(list))
+        };
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .bg(Color::rgb(0.09, 0.1, 0.13))
+            .child_box(list)
+    });
+}
+
 /// Build `rows` rows, paint, jump to the middle of the list, and scroll `steps` notches.
 fn run(way: Way, rows: usize, steps: usize, notch: f32) -> Option<Report> {
     let mut ui = session(way)?;
@@ -122,29 +170,8 @@ fn run(way: Way, rows: usize, steps: usize, notch: f32) -> Option<Report> {
     let bound = reference.clone();
 
     let started = std::time::Instant::now();
-    ui.mount(move |_| {
-        let mut list = div().flex_col().w(W as f32);
-        for i in 0..rows {
-            let hue = (i % 9) as f32 / 9.0;
-            list = list.child(
-                div()
-                    .w_full()
-                    .h(ROW_HEIGHT - 2.0)
-                    .mb(0.5)
-                    .px(3.0)
-                    .rounded(6.0)
-                    .bg(Color::rgb(0.2 + 0.35 * hue, 0.4, 0.9 - 0.4 * hue))
-                    .flex_row()
-                    .items_center()
-                    .child(text(format!("Row {i}")).size(13.0).color(Color::WHITE)),
-            );
-        }
-        div()
-            .w(W as f32)
-            .h(H as f32)
-            .bg(Color::rgb(0.09, 0.1, 0.13))
-            .child(scroll().bind(&bound).w(W as f32).h(H as f32).child(list))
-    });
+    let virtualized = std::env::var("SCROLL_LIST").is_ok_and(|v| v == "virtual");
+    mount_list(&mut ui, rows, virtualized, &bound);
     ui.settle();
     let build = started.elapsed().as_secs_f64() * 1000.0;
 
@@ -164,6 +191,17 @@ fn run(way: Way, rows: usize, steps: usize, notch: f32) -> Option<Report> {
     reference.set_scroll_offset(0.0, middle);
     ui.settle_scroll();
     let (_, jump) = ui.paint_timed(false).ok()?;
+    // `SCROLL_DUMP=<dir>` writes the frame after the jump as raw RGBA, to see what was drawn.
+    if let Ok(dir) = std::env::var("SCROLL_DUMP") {
+        let frame = ui.snapshot().ok()?;
+        let _ = std::fs::write(
+            format!(
+                "{dir}/{}_{}x{}.rgba",
+                virtualized, frame.width, frame.height
+            ),
+            &frame.data,
+        );
+    }
 
     // `SCROLL_PAUSE_MS` waits here before the frames that are timed, to attach a profiler.
     if let Some(pause) = std::env::var("SCROLL_PAUSE_MS")
@@ -226,5 +264,48 @@ fn what_scrolling_a_long_list_costs() {
             return;
         };
         report.print(way);
+    }
+}
+
+/// A list scrolled a frame at a time shows what a full paint of the same state shows, text with the
+/// rows it belongs to (to within the anti-aliasing of an edge a fraction of a pixel apart): after
+/// a full paint, `run` frames each scrolled a little and painted the way a window paints a frame
+/// in which only the scroll moved, then one full paint of the last of them to compare with.
+/// Several run lengths, so the window of painted content is outrun and painted again among them.
+#[test]
+fn a_list_scrolled_by_rows_shows_what_a_full_paint_shows() {
+    for (virtualized, name) in [(false, "a child for every row"), (true, "a virtual list")] {
+        let Some(mut ui) = session(Way::CpuRows) else {
+            return;
+        };
+        let reference = ScrollRef::new();
+        mount_list(&mut ui, 4000, virtualized, &reference);
+        ui.settle();
+        let mut y = 3000.0;
+        reference.set_scroll_offset(0.0, y);
+        ui.settle_scroll();
+        let mut off = Vec::new();
+        for run in [10, 25, 40, 55, 70, 90, 120] {
+            ui.invalidate_render_cache("scroll_perf");
+            ui.snapshot().expect("a full paint");
+            let mut last = None;
+            for _ in 0..run {
+                y += 7.0;
+                reference.set_scroll_offset(0.0, y);
+                ui.frame(16);
+                last = Some(ui.snapshot_fast().expect("a fast paint"));
+            }
+            ui.invalidate_render_cache("scroll_perf");
+            let full = ui.snapshot().expect("a full paint");
+            let differing =
+                blinc_recorder::testing::difference(&last.expect("a frame"), &full, 100).differing;
+            if differing > EDGE_PIXELS {
+                off.push((run, differing));
+            }
+        }
+        assert!(
+            off.is_empty(),
+            "{name}: after this many frames of scroll, pixels that differ from a full paint: {off:?}"
+        );
     }
 }

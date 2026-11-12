@@ -85,6 +85,21 @@ impl RenderTree {
         })
     }
 
+    /// Whether the layout has changed since the containers on rows were painted: rows mounted or
+    /// removed, or restyled, as a virtual list does when its window moves. What was painted is
+    /// then not what is there, and moving it by a row shows the old.
+    pub fn scroll_rows_tree_changed(&self) -> bool {
+        !self.scroll_row_nodes.borrow().is_empty()
+            && self.scroll_painted_epoch.get() != Some(self.layout_tree.epoch())
+    }
+
+    /// Whether the paint of a scroll container is stale and has to be made again: one that is not
+    /// on rows has an offset other than the one it was painted at, and one that is has had its
+    /// content change.
+    pub fn scroll_paint_stale(&self) -> bool {
+        self.scroll_off_rows_changed() || self.scroll_rows_tree_changed()
+    }
+
     /// Whether, at the last tick of the scroll physics, a scroll container that is not on rows was
     /// gliding, bouncing or fading its scrollbar.
     pub fn scroll_off_rows_animating(&self) -> bool {
@@ -104,6 +119,7 @@ impl RenderTree {
         self.scroll_row_nodes.borrow_mut().clear();
         self.scroll_painted.borrow_mut().clear();
         self.scroll_applied.borrow_mut().clear();
+        self.scroll_painted_epoch.set(None);
     }
 
     pub(crate) fn record_scroll_painted(&self, node: LayoutNodeId, offset: (f32, f32)) {
@@ -119,6 +135,8 @@ impl RenderTree {
         overscan: f32,
     ) -> f32 {
         let margin = (overscan - SPARE).max(0.0);
+        self.scroll_painted_epoch
+            .set(Some(self.layout_tree.epoch()));
         self.scroll_row_nodes
             .borrow_mut()
             .insert(node, (overscan, margin));

@@ -306,7 +306,7 @@ pub(super) fn render_and_schedule(
         // A scroll container the rows move needs no paint as it scrolls; any other does, while it
         // glides or bounces and when its offset has changed since it was painted.
         let scroll_blocks_fast = ws.render_tree.as_ref().map_or(scroll_animating, |t| {
-            t.scroll_off_rows_changed() || (scroll_animating && t.scroll_off_rows_animating())
+            t.scroll_paint_stale() || (scroll_animating && t.scroll_off_rows_animating())
         });
         let try_fast_paint = !did_rebuild
             && !ws.needs_relayout

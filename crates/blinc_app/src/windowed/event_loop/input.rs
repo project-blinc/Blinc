@@ -508,7 +508,7 @@ where
                     let scroll_made_stale = ws
                         .render_tree
                         .as_ref()
-                        .is_none_or(|t| t.scroll_off_rows_changed());
+                        .is_none_or(|t| t.scroll_paint_stale());
                     if had_scroll && scroll_made_stale {
                         if let Some(ref mut app) = ws.app {
                             app.invalidate_render_cache_tagged("had_scroll");

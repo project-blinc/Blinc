@@ -80,6 +80,9 @@ fn session(path: Path) -> Option<Headless> {
         HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
         ColorScheme::Dark,
     );
+    // The state-style pass runs when hover or focus changes, as in a window; run every frame it
+    // restyles nodes, and each frame would look like a change to the layout.
+    ui.gate_state_styles();
     ui.load_font_data(
         include_bytes!("../../../examples/blinc_component_demos/assets/NotoSans-Regular.ttf")
             .to_vec(),

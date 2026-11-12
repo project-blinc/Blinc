@@ -879,11 +879,7 @@ impl Headless {
         }
         // The window drops the render cache on a frame a scroll landed that the rows cannot
         // move, so that frame is a full paint.
-        if self
-            .tree
-            .as_ref()
-            .is_some_and(|t| t.scroll_off_rows_changed())
-        {
+        if self.tree.as_ref().is_some_and(|t| t.scroll_paint_stale()) {
             self.app.invalidate_render_cache_tagged("had_scroll");
         }
         self.frame(0);
@@ -901,11 +897,7 @@ impl Headless {
     /// is not on rows moved, as the window does.
     pub fn settle_scroll(&mut self) -> &mut Self {
         self.frame(0);
-        if self
-            .tree
-            .as_ref()
-            .is_some_and(|t| t.scroll_off_rows_changed())
-        {
+        if self.tree.as_ref().is_some_and(|t| t.scroll_paint_stale()) {
             self.app.invalidate_render_cache_tagged("had_scroll");
         }
         self
@@ -1129,6 +1121,8 @@ impl Headless {
     fn paint(&mut self, try_fast_paint: bool) -> Result<()> {
         self.frame(0);
         let tree = self.tree.as_ref().expect("nothing is mounted");
+        // A window paints in full a frame in which a scroll container's paint went stale.
+        let try_fast_paint = try_fast_paint && !tree.scroll_paint_stale();
         self.app.render_tree_with_motion_opt(
             tree,
             &self.render_state,
