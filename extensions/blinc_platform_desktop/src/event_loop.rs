@@ -452,8 +452,12 @@ where
             }
 
             WinitWindowEvent::KeyboardInput { event, .. } => {
-                let input_event =
-                    input::convert_keyboard_event(&event.logical_key, event.state, self.modifiers);
+                let input_event = input::convert_keyboard_event(
+                    &event.logical_key,
+                    event.state,
+                    self.modifiers,
+                    event.text.as_deref(),
+                );
                 self.handle_event_for(winit_id, Event::Input(wid, input_event));
                 if let Some(window) = self.windows.get(&winit_id) {
                     window.request_redraw();
@@ -559,6 +563,7 @@ where
                                     key: blinc_platform::Key::Char(c),
                                     state: blinc_platform::KeyState::Pressed,
                                     modifiers: blinc_platform::Modifiers::default(),
+                                    text: None,
                                 },
                             );
                             self.handle_event_for(winit_id, Event::Input(wid, input_event));
