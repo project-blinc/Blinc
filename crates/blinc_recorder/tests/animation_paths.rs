@@ -748,15 +748,6 @@ const ON_ROWS: &[&str] = &[
     "motion with its own clip",
 ];
 
-/// Scenes held to the vector paint from the second frame. The vector paint of the first frame
-/// of a scene whose label moves and scales together places the label about 0.1 px off from where
-/// every later frame and the table put it.
-const FROM_SECOND_FRAME: &[&str] = &[
-    "motion nested",
-    "motion in a clipped box",
-    "motion with its own clip",
-];
-
 /// Paint every scene with the node table and hold the ones it moves alone to the vector paint.
 #[test]
 fn the_node_table_against_the_reference() {
@@ -791,13 +782,11 @@ fn the_node_table_against_the_reference() {
                 report.name, report.steps
             ));
         }
-        let first = usize::from(FROM_SECOND_FRAME.contains(&report.name));
         if let Some((at, (pixels, channel))) = report
             .per_step
             .iter()
             .copied()
             .enumerate()
-            .skip(first)
             .find(|(_, (pixels, _))| *pixels > 0)
         {
             off.push(format!(

@@ -293,10 +293,12 @@ impl RenderContext {
         // Determine the motion scale center for children
         // If this node has motion scale (from RenderState or binding), use its center as the scale center
         // Otherwise, inherit the parent's scale center
-        let this_node_has_scale = (node_motion_scale.0 - 1.0).abs() > 0.001
-            || (node_motion_scale.1 - 1.0).abs() > 0.001
-            || (binding_scale_values.0 - 1.0).abs() > 0.001
-            || (binding_scale_values.1 - 1.0).abs() > 0.001;
+        // The same bound as the one that decides a text affine has a scale at all (1e-6): a scale
+        // between the two used to scale text about the origin.
+        let this_node_has_scale = (node_motion_scale.0 - 1.0).abs() > 1e-6
+            || (node_motion_scale.1 - 1.0).abs() > 1e-6
+            || (binding_scale_values.0 - 1.0).abs() > 1e-6
+            || (binding_scale_values.1 - 1.0).abs() > 1e-6;
 
         let effective_motion_scale_center = if this_node_has_scale {
             // This node has motion scale - compute its center in absolute layout coordinates
