@@ -666,23 +666,19 @@ impl RenderContext {
             .map(|a| (new_offset.0 - a.x, new_offset.1 - a.y));
         // A clip with no area shows nothing beneath it (a closed collapsible, say).
         let clip_is_empty = should_clip && (bounds.width <= 0.0 || bounds.height <= 0.0);
-        let children = if clip_is_empty {
-            Vec::new()
-        } else {
-            tree.layout().children(node)
-        };
-
         // A container on rows was painted as a window wider than its viewport, and is collected
         // for the same window.
         let previous_overscan = tree
             .scroll_row_overscan(node)
             .map(|overscan| tree.set_cull_overscan(overscan));
+        let children = if clip_is_empty {
+            Vec::new()
+        } else if let (Some(view), Some(shift)) = (children_cull_view, cull_shift) {
+            tree.visible_children(node, shift, view)
+        } else {
+            tree.layout().children(node)
+        };
         for child_id in children {
-            if let (Some(view), Some(shift)) = (children_cull_view, cull_shift)
-                && tree.draws_outside(child_id, shift, view)
-            {
-                continue;
-            }
             self.collect_elements_recursive(
                 tree,
                 child_id,

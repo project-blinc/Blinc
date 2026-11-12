@@ -291,6 +291,9 @@ pub struct LayoutTree {
     /// First baselines worked out from a text node's measure context, for
     /// nodes whose builder reported none. Dropped when the context changes.
     derived_baseline: FxHashMap<NodeId, f32>,
+    /// Moves on every change to the tree or its styles, and on every layout. Geometry derived
+    /// from the tree is valid for as long as it is the one it was derived at.
+    epoch: u64,
 }
 
 impl LayoutTree {
@@ -303,7 +306,13 @@ impl LayoutTree {
             incidental_align_self: FxHashSet::default(),
             text_baseline: FxHashMap::default(),
             derived_baseline: FxHashMap::default(),
+            epoch: 0,
         }
+    }
+
+    /// A number that changes whenever the tree, its styles or its layout do.
+    pub fn epoch(&self) -> u64 {
+        self.epoch
     }
 
     /// Namespace for this layout tree's queued work and subscriptions.
@@ -317,6 +326,7 @@ impl LayoutTree {
 
     /// Create a new layout node with the given style
     pub fn create_node(&mut self, style: Style) -> LayoutNodeId {
+        self.epoch = self.epoch.wrapping_add(1);
         let taffy_node = self.taffy.new_leaf(style).unwrap();
         let id = self.node_map.insert(taffy_node);
         self.reverse_map.insert(taffy_node, id);
@@ -328,6 +338,7 @@ impl LayoutTree {
     /// This allows Taffy to dynamically measure text with the actual available
     /// width during layout, enabling proper multi-line height calculation.
     pub fn create_text_node(&mut self, style: Style, context: TextMeasureContext) -> LayoutNodeId {
+        self.epoch = self.epoch.wrapping_add(1);
         let taffy_node = self.taffy.new_leaf_with_context(style, context).unwrap();
         let id = self.node_map.insert(taffy_node);
         self.reverse_map.insert(taffy_node, id);
@@ -344,6 +355,7 @@ impl LayoutTree {
         id: LayoutNodeId,
         f: impl FnOnce(&mut TextMeasureContext),
     ) -> bool {
+        self.epoch = self.epoch.wrapping_add(1);
         let Some(&taffy_node) = self.node_map.get(id) else {
             return false;
         };
@@ -366,6 +378,7 @@ impl LayoutTree {
 
     /// Set the style for a node
     pub fn set_style(&mut self, id: LayoutNodeId, style: Style) {
+        self.epoch = self.epoch.wrapping_add(1);
         if let Some(&taffy_node) = self.node_map.get(id) {
             // Setting a style marks the node and its ancestors for layout.
             // An unchanged one is left alone, so a pass that writes every
@@ -391,6 +404,7 @@ impl LayoutTree {
 
     /// Add a child to a parent node
     pub fn add_child(&mut self, parent: LayoutNodeId, child: LayoutNodeId) {
+        self.epoch = self.epoch.wrapping_add(1);
         if let (Some(&parent_node), Some(&child_node)) =
             (self.node_map.get(parent), self.node_map.get(child))
         {
@@ -400,6 +414,7 @@ impl LayoutTree {
 
     /// Compute layout for a tree rooted at the given node
     pub fn compute_layout(&mut self, root: LayoutNodeId, available_space: Size<AvailableSpace>) {
+        self.epoch = self.epoch.wrapping_add(1);
         self.resolve_incidental_align_self(root);
         let text_baseline = &self.text_baseline;
         let reverse_map = &self.reverse_map;
@@ -431,12 +446,14 @@ impl LayoutTree {
     /// Record where a text node's first baseline sits below its
     /// content-box top, for `align-items: baseline`.
     pub fn set_text_baseline(&mut self, id: LayoutNodeId, offset: f32) {
+        self.epoch = self.epoch.wrapping_add(1);
         self.text_baseline.insert(id, offset);
     }
 
     /// Replace the baseline a text node's builder reported, if it reported
     /// one: the metrics it came from have changed.
     pub fn refresh_text_baseline(&mut self, id: LayoutNodeId, offset: f32) {
+        self.epoch = self.epoch.wrapping_add(1);
         if let Some(reported) = self.text_baseline.get_mut(&id) {
             *reported = offset;
         }
@@ -499,6 +516,7 @@ impl LayoutTree {
 
     /// Remove a node
     pub fn remove_node(&mut self, id: LayoutNodeId) {
+        self.epoch = self.epoch.wrapping_add(1);
         if let Some(taffy_node) = self.node_map.remove(id) {
             self.reverse_map.remove(&taffy_node);
             let _ = self.taffy.remove(taffy_node);
@@ -519,6 +537,15 @@ impl LayoutTree {
             .iter()
             .filter_map(|&child_taffy| self.reverse_map.get(&child_taffy).copied())
             .collect()
+    }
+
+    /// How many children `parent` has, without listing them.
+    pub fn child_count(&self, parent: LayoutNodeId) -> usize {
+        use taffy::TraversePartialTree;
+        self.node_map
+            .get(parent)
+            .map(|&node| self.taffy.child_count(node))
+            .unwrap_or(0)
     }
 
     /// Number of children taffy actually lays out under `parent`.
@@ -623,6 +650,7 @@ impl LayoutTree {
 
     /// Remove all children from a node (but keep the node itself)
     pub fn clear_children(&mut self, parent: LayoutNodeId) {
+        self.epoch = self.epoch.wrapping_add(1);
         let Some(&parent_taffy) = self.node_map.get(parent) else {
             return;
         };
@@ -646,6 +674,7 @@ impl LayoutTree {
 
     /// Remove a node and all its descendants
     pub fn remove_subtree(&mut self, id: LayoutNodeId) {
+        self.epoch = self.epoch.wrapping_add(1);
         // First get and remove all children recursively
         let children = self.children(id);
         for child in children {
@@ -663,6 +692,7 @@ impl LayoutTree {
         parent: LayoutNodeId,
         new_children: Vec<LayoutNodeId>,
     ) -> Vec<LayoutNodeId> {
+        self.epoch = self.epoch.wrapping_add(1);
         let Some(&parent_taffy) = self.node_map.get(parent) else {
             return Vec::new();
         };

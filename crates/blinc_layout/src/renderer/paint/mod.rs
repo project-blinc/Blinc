@@ -30,7 +30,7 @@
 pub mod basic;
 mod canvas_order;
 pub mod collect;
-mod cross_stream;
+pub(in crate::renderer) mod cross_stream;
 pub mod helpers;
 pub mod layered;
 pub mod layout_renderer;

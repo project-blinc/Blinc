@@ -7,7 +7,6 @@
 //! (something fixed or sticky, an SVG, a canvas, a group, anything already moving) keeps the
 //! container painted as before, and so does a container inside another that is on rows.
 
-use super::ElementType;
 use super::RenderTree;
 use crate::tree::LayoutNodeId;
 use blinc_core::{DrawContext, Transform};
@@ -131,6 +130,15 @@ impl RenderTree {
     /// nothing under it moves on its own, draws apart from the batch, or is positioned against
     /// the scroll.
     pub(crate) fn scroll_content_qualifies(&self, node: LayoutNodeId) -> bool {
+        self.children_qualify(node)
+    }
+
+    fn children_qualify(&self, node: LayoutNodeId) -> bool {
+        // A container with very many children keeps the answer to the checks that do not change
+        // by the frame; what is animating is asked each time.
+        if let Some(qualifies) = self.indexed_qualification(node) {
+            return qualifies && !self.animating_under(node);
+        }
         self.layout_tree
             .children(node)
             .into_iter()
@@ -138,30 +146,12 @@ impl RenderTree {
     }
 
     fn scroll_subtree_qualifies(&self, node: LayoutNodeId) -> bool {
-        let Some(render) = self.render_nodes.get(&node) else {
-            return true;
-        };
-        let props = &render.props;
-        let simple = !self.moves_its_content(node)
-            && !props.is_overlay_root
-            && !props.is_glass()
-            && props.opacity >= 0.999
-            && props.layer_effects.is_empty()
-            && props.clip_path.is_none()
-            && !matches!(
-                render.element_type,
-                ElementType::Svg(_) | ElementType::Canvas(_)
-            )
+        self.scroll_node_qualifies(node)
             && !matches!(
                 self.current_animation_status.borrow().get(&node),
                 Some(super::AnimationStatus::Animating(_))
-            );
-        simple
-            && self
-                .layout_tree
-                .children(node)
-                .into_iter()
-                .all(|child| self.scroll_subtree_qualifies(child))
+            )
+            && self.children_qualify(node)
     }
 
     /// Draw the scrollbars of the containers on rows, as the walker draws them for the others:

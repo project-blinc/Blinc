@@ -47,6 +47,7 @@ mod animation;
 mod ime;
 pub use animation::css::css_animation_playing;
 mod build;
+mod child_index;
 mod cull;
 mod cursor;
 mod events;
@@ -58,6 +59,7 @@ mod registries;
 mod scroll;
 mod scroll_gesture;
 mod scroll_rows;
+mod tracked;
 pub use scroll_gesture::ScrollGesturePhase;
 pub(crate) mod stylesheet;
 mod transfers;
@@ -681,7 +683,15 @@ impl TextLook {
     }
 }
 
-#[derive(Clone, Copy, Default)]
+/// What one pass over the render nodes found, valid at one revision of them.
+struct NodeScan {
+    revision: u64,
+    has_glass: bool,
+    has_foreground: bool,
+    canvases: Vec<LayoutNodeId>,
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
 struct DeferredContent {
     text: bool,
     svg: bool,
@@ -715,7 +725,7 @@ pub struct RenderTree {
     /// The underlying layout tree
     pub layout_tree: LayoutTree,
     /// Render data for each node (ordered by insertion/tree order)
-    render_nodes: IndexMap<LayoutNodeId, RenderNode>,
+    render_nodes: tracked::Tracked<IndexMap<LayoutNodeId, RenderNode>>,
     ime_bindings: HashMap<LayoutNodeId, crate::ime::ImeBinding>,
     accessibility_bindings: HashMap<LayoutNodeId, crate::accessibility::AccessibilityBinding>,
     /// Root node ID
@@ -762,6 +772,11 @@ pub struct RenderTree {
     /// content was painted and how far its offset may move from the one it was painted at before
     /// the content has to be painted again.
     scroll_row_nodes: RefCell<HashMap<LayoutNodeId, (f32, f32)>>,
+    /// Indexes over the children of containers with very many; see `child_index`.
+    child_indexes: RefCell<child_index::ChildIndexes>,
+    /// What a scan of the render nodes found, and the revision of the nodes it was made at: the
+    /// layers that have nodes on them, and the canvases.
+    node_scan: RefCell<Option<NodeScan>>,
     /// The offset of every scroll container at the last paint.
     scroll_painted: RefCell<HashMap<LayoutNodeId, (f32, f32)>>,
     /// The offsets the rows were last written for.
@@ -800,6 +815,8 @@ pub struct RenderTree {
     retained_canvas_redraws: RefCell<Vec<Option<crate::canvas::CanvasRedrawFn>>>,
     /// Capture candidates and their deferred-content requirements.
     cross_stream_groups: RefCell<HashMap<LayoutNodeId, DeferredContent>>,
+    /// What `cross_stream_groups` was planned from: a plan is made again only when it changes.
+    cross_stream_plan_key: RefCell<Option<paint::cross_stream::PlanKey>>,
     /// When `true`, the paint walker skips invoking each
     /// `Canvas` node's `render_fn` while still recording the
     /// `CanvasPaintRecord` for later replay. Used by the layer
@@ -823,7 +840,7 @@ pub struct RenderTree {
     /// pass and grown back during the recursive walk.
     painted_node_ids: RefCell<HashSet<LayoutNodeId>>,
     /// Motion bindings for continuous animations (keyed by node_id)
-    motion_bindings: HashMap<LayoutNodeId, crate::motion::MotionBindings>,
+    motion_bindings: tracked::Tracked<HashMap<LayoutNodeId, crate::motion::MotionBindings>>,
     /// Compositor-path metadata captured during paint for nodes whose
     /// transform / opacity is driven by motion bindings. Records the
     /// range of primitives the paint walker emitted for the binding's
@@ -1186,7 +1203,7 @@ impl RenderTree {
     pub fn new() -> Self {
         Self {
             layout_tree: LayoutTree::new(),
-            render_nodes: IndexMap::new(),
+            render_nodes: tracked::Tracked::default(),
             ime_bindings: HashMap::new(),
             accessibility_bindings: HashMap::new(),
             root: None,
@@ -1202,6 +1219,8 @@ impl RenderTree {
             paint_scroll: Cell::new((0.0, 0.0)),
             scroll_rows: Cell::new(false),
             scroll_row_nodes: RefCell::new(HashMap::new()),
+            child_indexes: RefCell::new(HashMap::new()),
+            node_scan: RefCell::new(None),
             scroll_painted: RefCell::new(HashMap::new()),
             scroll_applied: RefCell::new(HashMap::new()),
             scroll_off_rows_animating: Cell::new(false),
@@ -1211,9 +1230,10 @@ impl RenderTree {
             had_retained_canvas_painted: Cell::new(false),
             retained_canvas_redraws: RefCell::new(Vec::new()),
             cross_stream_groups: RefCell::new(HashMap::new()),
+            cross_stream_plan_key: RefCell::new(None),
             skip_canvas_drawing: Cell::new(false),
             painted_node_ids: RefCell::new(HashSet::new()),
-            motion_bindings: HashMap::new(),
+            motion_bindings: tracked::Tracked::default(),
             composite_bindings: RefCell::new(HashMap::new()),
             painted_unpromoted_binding: Cell::new(false),
             css_anim_paint_records: RefCell::new(HashMap::new()),
@@ -1471,6 +1491,30 @@ impl RenderTree {
                 crate::tree::StableNodeId::ROOT
             }
         }
+    }
+
+    /// Run `read` on what a pass over the render nodes found, passing again only when they have
+    /// been borrowed mutably since the last.
+    fn with_node_scan<R>(&self, read: impl FnOnce(&NodeScan) -> R) -> R {
+        let revision = self.render_nodes.revision();
+        let mut scan = self.node_scan.borrow_mut();
+        if scan.as_ref().is_none_or(|s| s.revision != revision) {
+            let mut found = NodeScan {
+                revision,
+                has_glass: false,
+                has_foreground: false,
+                canvases: Vec::new(),
+            };
+            for (id, node) in self.render_nodes.iter() {
+                found.has_glass |= node.props.is_glass();
+                found.has_foreground |= matches!(node.props.layer, RenderLayer::Foreground);
+                if matches!(node.element_type, ElementType::Canvas(_)) {
+                    found.canvases.push(*id);
+                }
+            }
+            *scan = Some(found);
+        }
+        read(scan.as_ref().expect("scan was just made"))
     }
 
     /// Current build generation. Bumped each full rebuild. Subsystems
@@ -1923,15 +1967,12 @@ impl RenderTree {
 
         // Canvases: every `ElementType::Canvas` is always animating
         // (the closure can produce different output every frame).
-        for (node, render_node) in self.render_nodes.iter() {
-            if matches!(
-                render_node.element_type,
-                crate::renderer::ElementType::Canvas(_)
-            ) {
+        self.with_node_scan(|scan| {
+            for node in &scan.canvases {
                 candidates.insert(*node);
                 canvas_nodes.insert(*node);
             }
-        }
+        });
 
         // CSS animations / transitions: keyed by StableNodeId. Map
         // back to LayoutNodeId via `stable_to_layout`. Filter on

@@ -140,32 +140,10 @@ impl RenderTree {
                 ctx.push_transform(Transform::scale(self.scale_factor, self.scale_factor));
             }
 
-            // Skip Glass / Foreground passes when no node in the tree
-            // is on those layers. Each walker pass costs a full tree
-            // traversal (transform pushes / viewport-cull checks /
-            // child recursion) even when it ends up emitting nothing,
-            // so on a typical UI without glass material or
-            // `.foreground()` nodes — most cn / styling examples —
-            // two of the three passes were ~99 % wasted work.
-            //
-            // Scanning `render_nodes` once is O(N) but the check is
-            // a single `matches!` per node, an order of magnitude
-            // cheaper than the walker's per-node bounds lookups +
-            // prop reads + stack ops. Net win is roughly 2 × walker
-            // cost when the page has no glass / foreground content.
-            let mut has_glass = false;
-            let mut has_foreground = false;
-            for (_, node) in self.render_nodes.iter() {
-                if !has_glass && node.props.is_glass() {
-                    has_glass = true;
-                }
-                if !has_foreground && matches!(node.props.layer, RenderLayer::Foreground) {
-                    has_foreground = true;
-                }
-                if has_glass && has_foreground {
-                    break;
-                }
-            }
+            // Skip Glass / Foreground passes when no node in the tree is on those layers: each
+            // walker pass costs a full tree traversal even when it emits nothing.
+            let (has_glass, has_foreground) =
+                self.with_node_scan(|scan| (scan.has_glass, scan.has_foreground));
 
             // Pass 1: Background (primitives go to background batch)
             ctx.set_foreground_layer(false);
@@ -1988,8 +1966,12 @@ impl RenderTree {
         }
         // A clip with no area shows nothing beneath it (a closed collapsible, say).
         let clip_is_empty = clips_content && (bounds.width <= 0.0 || bounds.height <= 0.0);
+        // Viewport cull: only the children that, with everything under them, draw inside the
+        // nearest culling scroll container's on-screen rect.
         let children = if clip_is_empty {
             Vec::new()
+        } else if let Some((cx, cy, cw, ch)) = self.cull_viewport.get() {
+            self.visible_children(node, child_paint_scroll, [cx, cy, cw, ch])
         } else {
             self.layout_tree.children(node)
         };
@@ -2003,14 +1985,6 @@ impl RenderTree {
             let child_render = self.render_nodes.get(&child_id);
             let child_is_fixed = child_render.map(|n| n.props.is_fixed).unwrap_or(false);
             let child_is_sticky = child_render.map(|n| n.props.is_sticky).unwrap_or(false);
-
-            // Viewport cull: skip a child that, with everything under it, draws outside the
-            // nearest culling scroll container's on-screen rect.
-            if let Some((cx, cy, cw, ch)) = self.cull_viewport.get()
-                && self.draws_outside(child_id, child_paint_scroll, [cx, cy, cw, ch])
-            {
-                continue;
-            }
 
             // Fixed: push counter-scroll to cancel ALL accumulated scroll
             let has_fixed_counter = child_is_fixed
