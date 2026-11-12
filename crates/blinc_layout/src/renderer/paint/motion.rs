@@ -637,6 +637,7 @@ impl RenderTree {
         // The actual `DynamicRegion` insert happens at the bottom of
         // this fn alongside the legacy `composite_bindings` insert,
         // gated on the node's `AnimationStatus` being `Animating`.
+        let ambient_clip = ctx.current_clip_aabb();
         let v2_motion_ambient = (in_motion_subtree && ctx.bg_batch_is_dynamic()).then(|| {
             (
                 ctx.current_affine_elements(),
@@ -2253,6 +2254,7 @@ impl RenderTree {
                             last_opacity,
                             layer_push_index: motion_binding_layer_push_index,
                             centre,
+                            ambient_clip,
                             last_screen_aabb,
                         },
                     );

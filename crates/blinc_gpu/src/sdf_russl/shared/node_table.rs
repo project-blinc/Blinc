@@ -9,7 +9,8 @@
 //! the bounds, the corner radius, the border widths, the shadow's offset, blur and spread, the
 //! rotation and the local affine, and the alpha of the fill, the gradient end, the border, the
 //! shadow and the side colours. Lengths scale by the geometric mean of the two axes. The clip and
-//! the gradient geometry stay as they were.
+//! the gradient geometry stay as they were, except that a clip a primitive says follows the rows
+//! (`node_slot.y`) is scaled and moved with them.
 
 russl::russl! {
     use super::primitive::Primitive;
@@ -24,7 +25,8 @@ russl::russl! {
     }
 
     // `p_in` as it is drawn under the delta of `node`.
-    pub fn apply_node(p_in: Primitive, node: NodeRow) -> Primitive {
+    // `depth` is the row's place in the primitive's chain, zero for the node's own.
+    pub fn apply_node(p_in: Primitive, node: NodeRow, depth: u32) -> Primitive {
         let mut p = p_in;
         let sx = node.motion.z;
         let sy = node.motion.w;
@@ -48,6 +50,18 @@ russl::russl! {
         p.bounds = Vec4::new(ncx - nw * 0.5, ncy - nh * 0.5, nw, nh);
         let k = sqrt(abs(sx * sy));
         p.corner_radius = p.corner_radius * k;
+        // A clip of the node's own, or of an ancestor that moves, is moved by the rows from its
+        // depth up: scaled and moved like the bounds, without the turn.
+        if p.node_slot.y > 0.5 && depth + 1u32 >= (p.node_slot.y as u32) {
+            let cw = p.clip_bounds.z;
+            let ch = p.clip_bounds.w;
+            let ccx = p.clip_bounds.x + cw * 0.5;
+            let ccy = p.clip_bounds.y + ch * 0.5;
+            let ncx2 = px + (ccx - px) * sx + node.motion.x;
+            let ncy2 = py + (ccy - py) * sy + node.motion.y;
+            p.clip_bounds = Vec4::new(ncx2 - cw * sx * 0.5, ncy2 - ch * sy * 0.5, cw * sx, ch * sy);
+            p.clip_radius = p.clip_radius * k;
+        }
         // A mesh triangle keeps a triangle count and an offset in its border and has no shadow.
         if p.type_info.x != 9u32 {
             p.border = p.border * k;

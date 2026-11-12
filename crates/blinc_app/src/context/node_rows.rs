@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use blinc_gpu::node_table::{NODE_CHAIN_DEPTH, NODE_TABLE_CAPACITY, NodeRow};
 use blinc_gpu::primitives::LayerCommand;
-use blinc_gpu::{GpuRenderer, PrimitiveBatch};
+use blinc_gpu::{GpuPrimitive, GpuRenderer, PrimitiveBatch};
 
 use super::cached_text::TextBatch;
 use blinc_layout::motion::MotionBindings;
@@ -103,6 +103,10 @@ struct Slot {
     /// The layer command whose opacity is this node's, patched on the CPU as a value of its own;
     /// the row then leaves opacity alone.
     layer: Option<usize>,
+    /// The clip in force when the node began painting.
+    ambient_clip: Option<[f32; 4]>,
+    /// Whether a primitive's clip moves with this node's row, which cannot turn a clip.
+    clip_moves: bool,
 }
 
 /// Whether a binding is the dynamic batch's to move: its primitives are in that batch, or it has
@@ -166,6 +170,11 @@ fn nest<K: Copy>(ranges: &[(K, Range<usize>, usize)]) -> Option<Nested<K>> {
     (out.len() <= NODE_TABLE_CAPACITY).then_some(out)
 }
 
+/// Whether `clip` (x, y, width, height) is the clip that was in force at `ambient`.
+fn same_clip(clip: [f32; 4], ambient: Option<[f32; 4]>) -> bool {
+    ambient.is_some_and(|a| clip.iter().zip(a).all(|(c, a)| (c - a).abs() < 0.5))
+}
+
 fn next_epoch() -> u64 {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     NEXT.fetch_add(1, Ordering::Relaxed)
@@ -184,6 +193,10 @@ impl NodeRows {
         let turn = now.rotation - was.rotation;
         let uniform = |s: (f32, f32)| (s.0 - s.1).abs() <= EPS;
         if turn.abs() > EPS && !(uniform(was.scale) && uniform(now.scale)) {
+            return None;
+        }
+        // A clip is a rectangle in the window's axes, which a turn would have to rotate.
+        if turn.abs() > EPS && slot.clip_moves {
             return None;
         }
         if was.scale.0.abs() < EPS || was.scale.1.abs() < EPS {
@@ -300,14 +313,6 @@ impl NodeRows {
             if parent != held_by {
                 return None;
             }
-            // A clip of the node's own should move with it, and one of an ancestor should not; a
-            // row cannot tell which this is.
-            if batch.primitives[range.clone()]
-                .iter()
-                .any(|p| p.type_info[2] != 0)
-            {
-                return None;
-            }
             if let Some(index) = meta.layer_push_index
                 && !matches!(
                     batch.layer_commands.get(index).map(|e| &e.command),
@@ -323,6 +328,8 @@ impl NodeRows {
                 baseline: Pose::of_meta(meta),
                 centre: meta.centre,
                 layer: meta.layer_push_index,
+                ambient_clip: meta.ambient_clip,
+                clip_moves: false,
             });
         }
         // The shaders follow a chain of NODE_CHAIN_DEPTH rows, and a turned ancestor puts a node's
@@ -411,6 +418,48 @@ impl NodeRows {
         }
     }
 
+    /// Where in the chain of rows from `slot` the clip of `prim` begins to follow them: the first
+    /// node whose own painting introduced a clip it does not share with the clip in force when it
+    /// began. `Ok(None)` for no clip, or one that is wholly an ancestor's and stays. `Err` for a
+    /// clip that must move and is not a rectangle, which a row cannot move.
+    fn clip_from(&mut self, slot: u32, prim: &GpuPrimitive) -> Result<Option<u32>, ()> {
+        if prim.type_info[2] == 0 {
+            return Ok(None);
+        }
+        let mut depth = 0u32;
+        let mut up = Some(slot);
+        while let Some(s) = up {
+            let node = &self.slots[s as usize];
+            if !same_clip(prim.clip_bounds, node.ambient_clip) {
+                // Introduced inside this node's subtree: this row and every one above it move it.
+                if prim.type_info[2] != 1 {
+                    return Err(());
+                }
+                let mut moving = Some(s);
+                while let Some(m) = moving {
+                    self.slots[m as usize].clip_moves = true;
+                    moving = self.slots[m as usize].parent;
+                }
+                return Ok(Some(depth));
+            }
+            depth += 1;
+            up = node.parent;
+        }
+        Ok(None)
+    }
+
+    /// Say, on each primitive that has a clip, which rows move it. `false` when one cannot.
+    fn follow_clips(&mut self, prims: &mut [GpuPrimitive]) -> bool {
+        for p in prims {
+            let Some(row) = p.node_slot() else { continue };
+            match self.clip_from(row / 2, p) {
+                Ok(from) => p.set_node_clip_from(from),
+                Err(()) => return false,
+            }
+        }
+        true
+    }
+
     /// The slot of the nearest bound node at or above `node`, if any.
     fn owner(
         &self,
@@ -431,7 +480,7 @@ impl NodeRows {
         text: &mut TextBatch,
         ancestors: &dyn Fn(LayoutNodeId) -> Vec<LayoutNodeId>,
     ) -> bool {
-        if !text.glyphs.is_empty() || text.primitives.iter().any(|p| p.type_info[2] != 0) {
+        if !text.glyphs.is_empty() {
             return false;
         }
         let mut owned = vec![None; text.primitives.len()];
@@ -486,25 +535,7 @@ impl NodeRows {
                 return Outcome::Declined;
             };
             self.slots = slots;
-        }
-
-        let mut rows = Vec::with_capacity(self.slots.len() * 2);
-        for slot in &self.slots {
-            let Some(b) = motion.get(&slot.node) else {
-                return self.decline(given, batch, text, bindings);
-            };
-            let now = Pose::of(b, slot.baseline.opacity);
-            let (Some(batch_row), Some(text_row)) = (
-                Self::row(slot, &now, dpi, false),
-                Self::row(slot, &now, dpi, true),
-            ) else {
-                return self.decline(given, batch, text, bindings);
-            };
-            rows.push(batch_row);
-            rows.push(text_row);
-        }
-
-        if !given {
+            // Give the batch and the glyphs their slots, and say which clips move with them.
             let epoch = next_epoch();
             for (i, slot) in self.slots.iter().enumerate() {
                 for p in &mut batch.primitives[slot.range.clone()] {
@@ -514,12 +545,40 @@ impl NodeRows {
             batch.node_slots_epoch = epoch;
             self.epoch = epoch;
             self.rows.clear();
+            let mut primitives = std::mem::take(&mut batch.primitives);
+            let followed = self.follow_clips(&mut primitives);
+            batch.primitives = primitives;
+            if !followed {
+                return self.decline(true, batch, text, bindings);
+            }
             if has_text && let Some(text) = text.as_deref_mut() {
                 if !self.give_text_slots(text, ancestors) {
                     return self.decline(true, batch, Some(text), bindings);
                 }
                 text.node_slots_epoch = epoch;
+                let mut primitives = std::mem::take(&mut text.primitives);
+                let followed = self.follow_clips(&mut primitives);
+                text.primitives = primitives;
+                if !followed {
+                    return self.decline(true, batch, Some(text), bindings);
+                }
             }
+        }
+
+        let mut rows = Vec::with_capacity(self.slots.len() * 2);
+        for slot in &self.slots {
+            let Some(b) = motion.get(&slot.node) else {
+                return self.decline(true, batch, text, bindings);
+            };
+            let now = Pose::of(b, slot.baseline.opacity);
+            let (Some(batch_row), Some(text_row)) = (
+                Self::row(slot, &now, dpi, false),
+                Self::row(slot, &now, dpi, true),
+            ) else {
+                return self.decline(true, batch, text, bindings);
+            };
+            rows.push(batch_row);
+            rows.push(text_row);
         }
         if rows != self.rows {
             if !renderer.set_node_rows(&rows) {
@@ -640,6 +699,8 @@ mod tests {
             baseline,
             centre: (50.0, 40.0),
             layer: None,
+            ambient_clip: None,
+            clip_moves: false,
         }
     }
 
@@ -718,6 +779,7 @@ mod tests {
             last_opacity: 1.0,
             layer_push_index: None,
             centre: (10.0, 10.0),
+            ambient_clip: None,
             last_screen_aabb: None,
         }
     }

@@ -101,7 +101,7 @@ russl::russl! {
             for depth in 0u32..4u32 {
                 if slot != 0u32 {
                     let row = node_row(slot - 1u32);
-                    p = apply_node(p, row);
+                    p = apply_node(p, row, depth);
                     slot = row.link.x as u32;
                 }
             }

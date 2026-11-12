@@ -360,6 +360,66 @@ fn beside_settled_scene() -> Scene {
     }
 }
 
+/// A bound card in a clipped box (the clip is an ancestor's and stays), or one that clips its own
+/// children (the clip is the node's and moves and grows with it).
+fn clip_scene(own: bool) -> Scene {
+    let steps = 14;
+    Scene {
+        name: if own {
+            "motion with its own clip"
+        } else {
+            "motion in a clipped box"
+        },
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let (x, s) = (bound(ui, 0.0), bound(ui, 1.0));
+            let handles = (x.clone(), s.clone());
+            ui.mount(move |_| {
+                if own {
+                    let clipping = div()
+                        .w(120.0)
+                        .h(64.0)
+                        .rounded(14.0)
+                        .overflow_clip()
+                        .bg(Color::rgb(0.16, 0.18, 0.24))
+                        .flex_col()
+                        .items_center()
+                        .justify_center()
+                        .child(div().w(200.0).h(16.0).bg(Color::rgb(0.9, 0.4, 0.2)))
+                        .child(text("Own clip").size(14.0).color(Color::WHITE));
+                    stage().child(
+                        div()
+                            .w(120.0)
+                            .h(64.0)
+                            .child(clipping.motion().translate_x(x.clone()).scale(s.clone())),
+                    )
+                } else {
+                    stage().child(
+                        div()
+                            .w(160.0)
+                            .h(84.0)
+                            .rounded(14.0)
+                            .overflow_clip()
+                            .bg(Color::rgb(0.16, 0.18, 0.24))
+                            .flex_row()
+                            .items_center()
+                            .justify_center()
+                            .child(div().w(120.0).h(64.0).child(
+                                card(true).motion().translate_x(x.clone()).scale(s.clone()),
+                            )),
+                    )
+                }
+            });
+            Box::new(move |_, step| {
+                let t = (step + 1) as f32 / steps as f32;
+                handles.0.lock().unwrap().set_target(50.0 * t);
+                handles.1.lock().unwrap().set_target(1.0 + 0.3 * t);
+            })
+        }),
+    }
+}
+
 /// Two overlapping children under one fading container. The group fades as one, so where they
 /// overlap the second does not show the first through it.
 fn overlap_fade_scene() -> Scene {
@@ -493,6 +553,8 @@ fn scenes() -> Vec<Scene> {
         nested_motion_scene(false, true),
         overlap_fade_scene(),
         beside_settled_scene(),
+        clip_scene(false),
+        clip_scene(true),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
         keyframe_scene("css keyframes", true),
@@ -514,6 +576,8 @@ const KNOWN_DIFFERENT: &[&str] = &[
     "motion rotate",
     "motion nested",
     "motion nested, no text",
+    "motion in a clipped box",
+    "motion with its own clip",
 ];
 
 struct Report {
@@ -680,12 +744,18 @@ const ON_ROWS: &[&str] = &[
     "motion nested, no text",
     "motion fade, overlapping",
     "motion beside a settled one",
+    "motion in a clipped box",
+    "motion with its own clip",
 ];
 
 /// Scenes held to the vector paint from the second frame. The vector paint of the first frame
-/// of the nested scene places its label about 0.1 px left of where every later frame and the
-/// table put it.
-const FROM_SECOND_FRAME: &[&str] = &["motion nested"];
+/// of a scene whose label moves and scales together places the label about 0.1 px off from where
+/// every later frame and the table put it.
+const FROM_SECOND_FRAME: &[&str] = &[
+    "motion nested",
+    "motion in a clipped box",
+    "motion with its own clip",
+];
 
 /// Paint every scene with the node table and hold the ones it moves alone to the vector paint.
 #[test]

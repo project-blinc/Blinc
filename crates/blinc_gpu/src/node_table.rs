@@ -84,7 +84,7 @@ impl NodeRow {
 impl NodeRow {
     /// `p` as it is drawn under this row: the CPU twin of the shaders' `apply_node`, for the
     /// passes that move primitives into another frame of reference before they draw them.
-    pub fn apply_to_primitive(&self, mut p: GpuPrimitive) -> GpuPrimitive {
+    pub fn apply_to_primitive(&self, mut p: GpuPrimitive, depth: u32) -> GpuPrimitive {
         let [tx, ty, sx, sy] = self.motion;
         let [px, py, turn, opacity] = self.pivot;
         let (sin_d, cos_d) = turn.sin_cos();
@@ -98,6 +98,15 @@ impl NodeRow {
         let k = (sx * sy).abs().sqrt();
         for length in &mut p.corner_radius {
             *length *= k;
+        }
+        if p.node_clip_from().is_some_and(|from| depth >= from) {
+            let [cx, cy, cw, ch] = p.clip_bounds;
+            let (ccx, ccy) = (cx + cw * 0.5, cy + ch * 0.5);
+            let (ncx, ncy) = (px + (ccx - px) * sx + tx, py + (ccy - py) * sy + ty);
+            p.clip_bounds = [ncx - cw * sx * 0.5, ncy - ch * sy * 0.5, cw * sx, ch * sy];
+            for length in &mut p.clip_radius {
+                *length *= k;
+            }
         }
         // A mesh triangle keeps a triangle count and an offset in its border and has no shadow.
         if p.type_info[0] != 9 {
@@ -136,11 +145,11 @@ impl NodeRow {
 pub fn resolve_primitive(rows: &[NodeRow], p: &GpuPrimitive) -> GpuPrimitive {
     let mut out = *p;
     let mut next = p.node_slot();
-    for _ in 0..NODE_CHAIN_DEPTH {
+    for depth in 0..NODE_CHAIN_DEPTH as u32 {
         let Some(row) = next.and_then(|s| rows.get(s as usize)) else {
             break;
         };
-        out = row.apply_to_primitive(out);
+        out = row.apply_to_primitive(out, depth);
         next = row.parent();
     }
     out.set_node_slot(None);

@@ -554,9 +554,10 @@ impl RenderContext {
                     continue;
                 }
                 for (old, new) in text.primitives[range].iter_mut().zip(fresh.primitives) {
-                    let slot = old.node_slot();
+                    // The slot and the clip lane stay as they were given.
+                    let lane = old.node_slot;
                     *old = new;
-                    old.set_node_slot(slot);
+                    old.node_slot = lane;
                 }
                 text.owners[i].3 = needed;
             }

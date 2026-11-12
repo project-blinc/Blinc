@@ -571,6 +571,9 @@ pub struct CompositeBindingMeta {
     /// Centre point (logical pixels, absolute) used for scale and
     /// rotation. Same coordinate frame as `last_translate`.
     pub centre: (f32, f32),
+    /// The clip (x, y, width, height, in screen pixels) in force when the node began painting,
+    /// before any clip of its own: the one a clip on its primitives that is not its own equals.
+    pub ambient_clip: Option<[f32; 4]>,
     /// Union AABB of every primitive in `primitive_range` at last
     /// paint, in screen pixels (post-DPI). `None` if the range was
     /// empty or the context didn't track primitive bounds.

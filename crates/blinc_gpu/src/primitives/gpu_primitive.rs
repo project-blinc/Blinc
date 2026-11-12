@@ -505,9 +505,24 @@ impl GpuPrimitive {
         (self.node_slot[0] >= 1.0).then(|| self.node_slot[0] as u32 - 1)
     }
 
-    /// Follow the animated node in `slot`, or none.
+    /// Follow the animated node in `slot`, or none. With none the clip lane is cleared too.
     pub fn set_node_slot(&mut self, slot: Option<u32>) {
         self.node_slot[0] = slot.map_or(0.0, |s| (s + 1) as f32);
+        if slot.is_none() {
+            self.node_slot[1] = 0.0;
+        }
+    }
+
+    /// Where in the node's chain of rows the clip begins to follow them: the clip moves with the
+    /// row at this depth (zero is the node's own) and every row above it. None leaves the clip
+    /// where it is painted, as the clip of an ancestor that does not move.
+    pub fn node_clip_from(&self) -> Option<u32> {
+        (self.node_slot[1] >= 1.0).then(|| self.node_slot[1] as u32 - 1)
+    }
+
+    /// Set [`node_clip_from`](Self::node_clip_from).
+    pub fn set_node_clip_from(&mut self, depth: Option<u32>) {
+        self.node_slot[1] = depth.map_or(0.0, |d| (d + 1) as f32);
     }
 
     /// Create a text glyph primitive from a GpuGlyph

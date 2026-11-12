@@ -97,7 +97,7 @@ fn rotated_like_the_cpu(mut p: GpuPrimitive, d: &Delta) -> GpuPrimitive {
 /// then translate. The same as the shader's, to compare against when the CPU patcher's order
 /// would give another answer.
 fn composed(p: GpuPrimitive, d: &Delta) -> GpuPrimitive {
-    d.row(0).apply_to_primitive(p)
+    d.row(0).apply_to_primitive(p, 0)
 }
 
 /// A mix of what motion and CSS animations move: a rounded card with a border, a translucent
@@ -519,5 +519,75 @@ fn a_parent_node_moves_what_its_child_node_moves() {
     assert!(
         worst <= 8 && over <= 24,
         "chain: worst {worst}, {over} over"
+    );
+}
+
+/// A rect with a clip over its middle, which `follows` the node or stays where it is painted.
+fn clipped(follows: bool) -> GpuPrimitive {
+    let mut p = GpuPrimitive::rect(14.0, 14.0, 100.0, 100.0).with_color(0.9, 0.3, 0.1, 1.0);
+    p.clip_bounds = [34.0, 30.0, 60.0, 64.0];
+    p.type_info[2] = crate::primitives::ClipType::Rect as u32;
+    p.set_node_slot(Some(0));
+    p.set_node_clip_from(follows.then_some(0));
+    p
+}
+
+#[test]
+fn a_clip_follows_the_node_only_when_the_primitive_says_it_does() {
+    let Some((device, queue)) = harness::device() else {
+        return;
+    };
+    let delta = Delta {
+        translate: [14.0, -9.0],
+        scale: [1.25, 1.25],
+        ..Delta::REST
+    };
+    for follows in [true, false] {
+        let mut expected = delta.row(0).apply_to_primitive(clipped(follows), 0);
+        expected.set_node_slot(None);
+        let drawn = draw(
+            &device,
+            &queue,
+            crate::sdf_russl::sdf_core::WGSL,
+            &[expected],
+            &[],
+        );
+        let table = draw(
+            &device,
+            &queue,
+            crate::sdf_russl::sdf_core_nodes::WGSL,
+            &[clipped(follows)],
+            &[delta.row(0)],
+        );
+        dump(&format!("clip_follows_{follows}"), &drawn, &table);
+        let (worst, over) = compare(&drawn, &table);
+        assert!(
+            worst <= 8 && over <= 24,
+            "clip follows {follows}: worst difference {worst}, {over} pixels over two levels"
+        );
+    }
+    // The two are different pictures: the clip moving is what changes the frame.
+    let mut moved = delta.row(0).apply_to_primitive(clipped(true), 0);
+    moved.set_node_slot(None);
+    let mut stayed = delta.row(0).apply_to_primitive(clipped(false), 0);
+    stayed.set_node_slot(None);
+    let a = draw(
+        &device,
+        &queue,
+        crate::sdf_russl::sdf_core::WGSL,
+        &[moved],
+        &[],
+    );
+    let b = draw(
+        &device,
+        &queue,
+        crate::sdf_russl::sdf_core::WGSL,
+        &[stayed],
+        &[],
+    );
+    assert_ne!(
+        compare(&a, &b),
+        (0, 0),
+        "a following clip drew as a fixed one"
     );
 }
