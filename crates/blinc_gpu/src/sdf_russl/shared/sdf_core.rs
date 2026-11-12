@@ -478,7 +478,7 @@ russl::russl! {
                 );
                 let local_uv = (sp - origin) / size;
                 // A transformed AABB must not sample adjacent glyphs in the atlas.
-                if fill_type >= 2u32 && (any(local_uv < Vec2::splat(0.0)) || any(local_uv >= Vec2::splat(1.0))) {
+                if any(local_uv < Vec2::splat(0.0)) || any(local_uv >= Vec2::splat(1.0)) {
                     discard!();
                 }
                 let atlas_uv = uv_bounds.xy + local_uv * (uv_bounds.zw - uv_bounds.xy);

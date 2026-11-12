@@ -822,3 +822,49 @@ fn a_shadow_turns_with_its_card() {
         }
     }
 }
+
+/// How much a label changes a frame: the summed channel difference between the frame and the same
+/// frame without it. A turned label has the ink of an upright one.
+fn ink(with: &CapturedFrame, without: &CapturedFrame) -> f64 {
+    let mut total = 0.0;
+    for y in 0..with.height as usize {
+        for x in 0..with.width as usize {
+            let (p, q) = (pixel(with, x, y), pixel(without, x, y));
+            total += (0..3).map(|i| (p[i] - q[i]).abs() as f64).sum::<f64>();
+        }
+    }
+    total
+}
+
+/// A turned glyph's quad is larger than the glyph; what lies in the corners is not another glyph
+/// from the atlas.
+#[test]
+fn a_turned_label_is_not_smeared() {
+    let channels = Channels {
+        rotate: true,
+        ..Default::default()
+    };
+    let (Some(rest), Some(rest_bare)) = (
+        run(
+            &motion_scene("rest", Channels::default(), true, 1),
+            Path::Full,
+        ),
+        run(
+            &motion_scene("rest", Channels::default(), false, 1),
+            Path::Full,
+        ),
+    ) else {
+        return;
+    };
+    let upright = ink(&rest[0], &rest_bare[0]);
+    let with = run(&motion_scene("turned", channels, true, 12), Path::Full).unwrap();
+    let without = run(&motion_scene("turned", channels, false, 12), Path::Full).unwrap();
+    for step in 0..12 {
+        let ratio = ink(&with[step], &without[step]) / upright;
+        eprintln!("step {step:>2}: {ratio:.2} of the upright ink");
+        assert!(
+            ratio < 1.15,
+            "step {step}: the turned label has {ratio:.2} times the ink of an upright one"
+        );
+    }
+}
