@@ -1076,6 +1076,32 @@ impl Headless {
         self.read_frame()
     }
 
+    /// Paint a frame as [`snapshot_fast`](Self::snapshot_fast) (or, with `try_fast_paint` off,
+    /// [`snapshot`](Self::snapshot)) does and say what it cost, in milliseconds: the session's own
+    /// frame, which a window does not pay, and the engine's render with its submission, which it
+    /// does. The picture is not read back.
+    pub fn paint_timed(&mut self, try_fast_paint: bool) -> Result<(f64, f64)> {
+        let started = std::time::Instant::now();
+        self.frame(0);
+        let session = started.elapsed();
+        let rendered = std::time::Instant::now();
+        let tree = self.tree.as_ref().expect("nothing is mounted");
+        self.app.render_tree_with_motion_opt(
+            tree,
+            &self.render_state,
+            &self.view,
+            Some(&self.texture),
+            self.width,
+            self.height,
+            try_fast_paint,
+        )?;
+        let render = rendered.elapsed();
+        Ok((
+            session.as_secs_f64() * 1000.0,
+            render.as_secs_f64() * 1000.0,
+        ))
+    }
+
     fn paint(&mut self, try_fast_paint: bool) -> Result<()> {
         self.frame(0);
         let tree = self.tree.as_ref().expect("nothing is mounted");
