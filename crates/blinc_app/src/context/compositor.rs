@@ -66,14 +66,6 @@ impl RenderContext {
         // Ignore subpixel spring tails when deciding whether binding changes are visible.
         // Timeline rotations remain active while playing.
         const VISIBLE_PIXEL_EPS: f32 = 0.5;
-        const VISIBLE_DEG_EPS: f32 = 0.5;
-        let value_far_from_target =
-            |v: &Option<blinc_animation::SharedAnimatedValue>, eps: f32| -> bool {
-                v.as_ref()
-                    .and_then(|s| s.lock().ok())
-                    .map(|g| (g.get() - g.target()).abs() > eps)
-                    .unwrap_or(false)
-            };
         // Detect settled direct writes by comparing current translation with the cached
         // baseline.
         let direct_write_drift = {
@@ -99,19 +91,10 @@ impl RenderContext {
             })
         };
         let bindings_animating = direct_write_drift
-            || tree.motion_bindings_map().values().any(|b| {
-                value_far_from_target(&b.translate_x, VISIBLE_PIXEL_EPS)
-                    || value_far_from_target(&b.translate_y, VISIBLE_PIXEL_EPS)
-                    || value_far_from_target(&b.scale, 0.01)
-                    || value_far_from_target(&b.scale_x, 0.01)
-                    || value_far_from_target(&b.scale_y, 0.01)
-                    || value_far_from_target(&b.rotation, VISIBLE_DEG_EPS)
-                    || value_far_from_target(&b.opacity, 0.01)
-                    || b.rotation_timeline
-                        .as_ref()
-                        .and_then(|t| t.timeline.lock().ok())
-                        .is_some_and(|g| g.is_playing())
-            });
+            || tree
+                .motion_bindings_map()
+                .values()
+                .any(|b| b.is_visibly_moving());
         // Read CSS activity separately from binding and structural animations.
         let css_anim_active = {
             let store = tree.css_anim_store();

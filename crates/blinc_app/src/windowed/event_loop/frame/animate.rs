@@ -245,6 +245,27 @@ pub(super) fn tick_animations(
             let guard = store.lock().unwrap();
             guard.has_visible_vsync_class(&t.painted_stable_ids())
         });
+    // While the only motion is the last small wobble of a spring, nothing visible changes from
+    // one frame to the next. The springs keep ticking at every wake, so they settle when they
+    // would have, but frames are drawn at a lower rate. Anything else that moves, or any rebuild
+    // or relayout, draws at once.
+    const TAIL_FPS: u32 = 20;
+    let tail_only = !needs_vsync
+        && !scroll_animating
+        && !css_active
+        && !theme_animating
+        && ws.render_tree.as_ref().is_some_and(|t| {
+            t.bindings_in_tail()
+                && !blinc_layout::has_visible_animating_statefuls(&t.painted_node_ids())
+        })
+        && !blinc_app.has_active_flows()
+        && !blinc_app.context().has_pending_image_fade()
+        && windowed_ctx.pointer_query.is_empty();
+    let cap_interval_ms = if tail_only {
+        Some(cap_interval_ms.map_or(1000 / TAIL_FPS as u64, |c| c.max(1000 / TAIL_FPS as u64)))
+    } else {
+        cap_interval_ms
+    };
     let should_render = match cap_interval_ms {
         None => true,
         Some(_) if did_rebuild => true,

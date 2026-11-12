@@ -3105,6 +3105,14 @@ impl RenderTree {
     pub fn motion_bindings_map(&self) -> &HashMap<LayoutNodeId, crate::motion::MotionBindings> {
         &self.motion_bindings
     }
+
+    /// Whether the only thing the motion bindings are still doing is the last small oscillations
+    /// of a spring: one is ticking, and none is far enough from its target to be seen.
+    pub fn bindings_in_tail(&self) -> bool {
+        let bindings = &self.motion_bindings;
+        bindings.values().any(|b| b.is_any_animating())
+            && !bindings.values().any(|b| b.is_visibly_moving())
+    }
     /// Check if the tree has any dirty nodes (needs rebuild)
     pub fn needs_rebuild(&self) -> bool {
         self.dirty_tracker.has_dirty()
