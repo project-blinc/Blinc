@@ -87,50 +87,28 @@ impl RenderTree {
         // Then apply simple ID rules LAST — higher specificity overrides.
         let mut overrides: Vec<(LayoutNodeId, crate::element_style::ElementStyle)> = Vec::new();
 
-        // Complex rules: class, type, and combinator selectors
+        // Complex rules: class, type, and combinator selectors. A node takes the rules that match
+        // it, in ascending specificity.
         let complex_rules = stylesheet.complex_rules();
         if !complex_rules.is_empty() {
-            let empty_set = std::collections::HashSet::new();
-
-            let mut base_rules: Vec<&(
-                crate::css_parser::ComplexSelector,
-                crate::element_style::ElementStyle,
-            )> = complex_rules
-                .iter()
-                .filter(|(selector, _)| !selector.has_state())
-                .collect();
-            base_rules.sort_by_key(|(selector, style)| Self::rule_order(selector, style));
-
-            // Build inverted class index once for O(1) lookups
-            let class_to_nodes = self.element_registry.class_to_nodes_index();
-
-            for (selector, style) in base_rules {
-                if !style.has_layout_props() {
-                    continue;
-                }
-
-                // Fast path: simple `.class` selectors use inverted index
-                if let Some(class_name) = selector.simple_class_name() {
-                    if let Some(node_ids) = class_to_nodes.get(class_name) {
-                        for &node_id in node_ids {
-                            if subtree_filter.is_none_or(|s| s.contains(&node_id)) {
-                                overrides.push((node_id, style.clone()));
-                            }
-                        }
-                    }
-                    continue;
-                }
-
-                // Slow path: complex selectors need full matching
-                let all_node_ids: Vec<LayoutNodeId> = self.render_nodes.keys().copied().collect();
-                for &node_id in &all_node_ids {
-                    if subtree_filter.is_none_or(|s| s.contains(&node_id))
-                        && self.complex_selector_matches(
-                            selector, node_id, &empty_set, &empty_set, None,
-                        )
-                    {
-                        overrides.push((node_id, style.clone()));
-                    }
+            let nodes: Vec<LayoutNodeId> = match subtree_filter {
+                Some(set) => set.iter().copied().collect(),
+                None => self.render_nodes.keys().copied().collect(),
+            };
+            for node_id in nodes {
+                let mut matched: Vec<usize> = self
+                    .matching_base_rules(node_id, &stylesheet)
+                    .into_iter()
+                    .filter(|i| complex_rules[*i].1.has_layout_props())
+                    .collect();
+                matched.sort_by_key(|&i| {
+                    (
+                        Self::rule_order(&complex_rules[i].0, &complex_rules[i].1),
+                        i,
+                    )
+                });
+                for i in matched {
+                    overrides.push((node_id, complex_rules[i].1.clone()));
                 }
             }
         }
@@ -399,55 +377,24 @@ impl RenderTree {
         // =====================================================================
         let complex_rules = stylesheet.complex_rules();
         if !complex_rules.is_empty() {
-            let empty_set = std::collections::HashSet::new();
-
-            // Collect non-state rules and sort by specificity (ascending)
-            let mut base_rules: Vec<&(
-                crate::css_parser::ComplexSelector,
-                crate::element_style::ElementStyle,
-            )> = complex_rules
-                .iter()
-                .filter(|(selector, _)| !selector.has_state())
-                .collect();
-            base_rules.sort_by_key(|(selector, style)| Self::rule_order(selector, style));
-
-            // Build inverted class index ONCE (single lock acquisition)
-            let class_to_nodes = self.element_registry.class_to_nodes_index();
-
-            for (selector, style) in base_rules {
-                let has_layout = style.has_layout_props();
-
-                // Fast path: simple `.class` selectors use inverted index
-                if let Some(class_name) = selector.simple_class_name() {
-                    if let Some(node_ids) = class_to_nodes.get(class_name) {
-                        for &node_id in node_ids {
-                            // Apply visual styles
-                            if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
-                                Self::apply_element_style_to_props(&mut render_node.props, style);
-                            }
-                            // Collect layout overrides
-                            if has_layout {
-                                layout_overrides.push((node_id, style.clone()));
-                            }
-                        }
+            // Each node takes the rules that match it, in ascending specificity: the visual
+            // ones at once, the layout ones after.
+            let nodes: Vec<LayoutNodeId> = self.render_nodes.keys().copied().collect();
+            for node_id in nodes {
+                let mut matched = self.matching_base_rules(node_id, &stylesheet);
+                matched.sort_by_key(|&i| {
+                    (
+                        Self::rule_order(&complex_rules[i].0, &complex_rules[i].1),
+                        i,
+                    )
+                });
+                for i in matched {
+                    let style = &complex_rules[i].1;
+                    if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
+                        Self::apply_element_style_to_props(&mut render_node.props, style);
                     }
-                    continue;
-                }
-
-                // Slow path: complex selectors (combinators, structural pseudos)
-                let all_node_ids: Vec<LayoutNodeId> = self.render_nodes.keys().copied().collect();
-                for &node_id in &all_node_ids {
-                    if self
-                        .complex_selector_matches(selector, node_id, &empty_set, &empty_set, None)
-                    {
-                        // Apply visual styles
-                        if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
-                            Self::apply_element_style_to_props(&mut render_node.props, style);
-                        }
-                        // Collect layout overrides
-                        if has_layout {
-                            layout_overrides.push((node_id, style.clone()));
-                        }
+                    if style.has_layout_props() {
+                        layout_overrides.push((node_id, style.clone()));
                     }
                 }
             }

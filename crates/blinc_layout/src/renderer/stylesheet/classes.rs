@@ -151,15 +151,12 @@ impl RenderTree {
     ) -> Option<crate::css_parser::CssAnimation> {
         let none: HashSet<LayoutNodeId> = HashSet::new();
         let rules = stylesheet.complex_rules();
-        rules
-            .iter()
-            .enumerate()
-            .filter(|(_, (selector, style))| style.animation.is_some() && !selector.has_state())
-            .filter(|(_, (selector, _))| {
-                self.complex_selector_matches(selector, node, &none, &none, None)
-            })
-            .max_by_key(|(i, (selector, style))| (Self::rule_order(selector, style), *i))
-            .and_then(|(_, (_, style))| style.animation.clone())
+        self.candidate_rules_for(stylesheet, node)
+            .into_iter()
+            .filter(|i| rules[*i].1.animation.is_some() && !rules[*i].0.has_state())
+            .filter(|i| self.complex_selector_matches(&rules[*i].0, node, &none, &none, None))
+            .max_by_key(|i| (Self::rule_order(&rules[*i].0, &rules[*i].1), *i))
+            .and_then(|i| rules[i].1.animation.clone())
     }
 
     /// Start the animations the stateless rules give nodes that play none,
@@ -370,22 +367,19 @@ impl RenderTree {
         }
     }
 
-    /// The indices of the base (stateless) rules that match the node now.
-    fn matching_base_rules(
+    /// The indices of the base (stateless) rules that match the node now, in the order the rules
+    /// were written. Only the rules that can match it, by its id, classes and type, are tried.
+    pub(super) fn matching_base_rules(
         &self,
         node: LayoutNodeId,
         stylesheet: &crate::css_parser::Stylesheet,
     ) -> Vec<usize> {
         let none: HashSet<LayoutNodeId> = HashSet::new();
-        stylesheet
-            .complex_rules()
-            .iter()
-            .enumerate()
-            .filter(|(_, (selector, _))| !selector.has_state())
-            .filter(|(_, (selector, _))| {
-                self.complex_selector_matches(selector, node, &none, &none, None)
-            })
-            .map(|(i, _)| i)
+        let rules = stylesheet.complex_rules();
+        self.candidate_rules_for(stylesheet, node)
+            .into_iter()
+            .filter(|i| !rules[*i].0.has_state())
+            .filter(|i| self.complex_selector_matches(&rules[*i].0, node, &none, &none, None))
             .collect()
     }
 

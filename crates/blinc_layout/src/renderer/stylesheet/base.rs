@@ -79,45 +79,12 @@ impl RenderTree {
         // Then apply simple ID rules LAST (highest specificity, always override).
         let complex_rules = stylesheet.complex_rules();
         if !complex_rules.is_empty() {
-            let empty_set = HashSet::new();
-
-            // Collect non-state rules and sort by specificity (ascending)
-            let mut base_rules: Vec<&(
-                crate::css_parser::ComplexSelector,
-                crate::element_style::ElementStyle,
-            )> = complex_rules
-                .iter()
-                .filter(|(selector, _)| !selector.has_state())
-                .collect();
-            base_rules.sort_by_key(|(selector, style)| Self::rule_order(selector, style));
+            // Each node takes the rules that match it, in ascending specificity.
+            let all_nodes: Vec<LayoutNodeId> = self.render_nodes.keys().copied().collect();
+            self.apply_base_complex_rules(&stylesheet, &all_nodes);
 
             // Build inverted class index once (single lock acquisition) for O(1) lookups
             let class_to_nodes = self.element_registry.class_to_nodes_index();
-
-            for (selector, style) in base_rules {
-                // Fast path: simple `.class` selectors use inverted index — O(matched_nodes)
-                if let Some(class_name) = selector.simple_class_name() {
-                    if let Some(node_ids) = class_to_nodes.get(class_name) {
-                        for &node_id in node_ids {
-                            if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
-                                Self::apply_element_style_to_props(&mut render_node.props, style);
-                            }
-                        }
-                    }
-                    continue;
-                }
-
-                // Slow path: complex selectors (combinators, structural pseudos) — O(all_nodes)
-                let all_node_ids: Vec<LayoutNodeId> = self.render_nodes.keys().copied().collect();
-                for &node_id in &all_node_ids {
-                    if self
-                        .complex_selector_matches(selector, node_id, &empty_set, &empty_set, None)
-                        && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
-                    {
-                        Self::apply_element_style_to_props(&mut render_node.props, style);
-                    }
-                }
-            }
 
             // Eagerly save base_styles for nodes matching classes that also have
             // state rules (:hover, :active, :focus). This prevents the lazy save
@@ -399,47 +366,12 @@ impl RenderTree {
         // Apply complex base rules (class selectors, combinators) — lower specificity first
         let complex_rules = stylesheet.complex_rules();
         if !complex_rules.is_empty() {
-            let empty_set = HashSet::new();
-
-            let mut base_rules: Vec<&(
-                crate::css_parser::ComplexSelector,
-                crate::element_style::ElementStyle,
-            )> = complex_rules
-                .iter()
-                .filter(|(selector, _)| !selector.has_state())
-                .collect();
-            base_rules.sort_by_key(|(selector, style)| Self::rule_order(selector, style));
+            // Each node takes the rules that match it, in ascending specificity.
+            self.apply_base_complex_rules(stylesheet, subtree_nodes);
 
             // Build inverted class index for the subtree nodes
             let class_to_nodes = self.element_registry.class_to_nodes_index();
-            // Filter to only subtree nodes for simple class lookups
             let subtree_set: HashSet<LayoutNodeId> = subtree_nodes.iter().copied().collect();
-
-            for (selector, style) in base_rules {
-                // Fast path: simple `.class` selectors use inverted index
-                if let Some(class_name) = selector.simple_class_name() {
-                    if let Some(node_ids) = class_to_nodes.get(class_name) {
-                        for &node_id in node_ids {
-                            if subtree_set.contains(&node_id)
-                                && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
-                            {
-                                Self::apply_element_style_to_props(&mut render_node.props, style);
-                            }
-                        }
-                    }
-                    continue;
-                }
-
-                // Slow path: complex selectors need full matching
-                for &node_id in subtree_nodes {
-                    if self
-                        .complex_selector_matches(selector, node_id, &empty_set, &empty_set, None)
-                        && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
-                    {
-                        Self::apply_element_style_to_props(&mut render_node.props, style);
-                    }
-                }
-            }
 
             // Eagerly save base_styles for subtree nodes matching classes that
             // also have :hover/:active/:focus state rules. This prevents the

@@ -45,6 +45,73 @@ pub struct Stylesheet {
     /// made mouse-over-non-hoverable-content drop the fast path on
     /// every frame.
     hover_participants: std::collections::HashSet<String>,
+    /// `complex_rules` filed by the key of each rule's subject; see [`RuleIndex`].
+    rule_index: RuleIndexCell,
+}
+
+/// The index over a stylesheet's complex rules, made the first time it is asked for and dropped
+/// when the rules change.
+#[derive(Clone, Default, Debug)]
+struct RuleIndexCell(std::sync::OnceLock<RuleIndex>);
+
+/// The complex rules of a stylesheet, each filed under the most selective thing its subject
+/// (the compound the selector ends in) needs: an id, a class, an attribute name or an element
+/// type; a subject that needs none of them, a `*` or a bare pseudo-class, is in every element's
+/// candidates. An element's candidates are the rules filed under its id, its classes, the names
+/// of its attributes and its type, and the rest, which are a superset of the rules that can match
+/// it: a rule not among them asks for something the element does not have.
+#[derive(Clone, Default, Debug)]
+struct RuleIndex {
+    by_id: HashMap<String, Vec<u32>>,
+    by_class: HashMap<String, Vec<u32>>,
+    by_attribute: HashMap<String, Vec<u32>>,
+    by_type: HashMap<String, Vec<u32>>,
+    universal: Vec<u32>,
+}
+
+impl RuleIndex {
+    fn of(rules: &[(ComplexSelector, ElementStyle)]) -> Self {
+        let mut index = RuleIndex::default();
+        for (i, (selector, _)) in rules.iter().enumerate() {
+            let i = i as u32;
+            let Some((subject, _)) = selector.segments.last() else {
+                continue;
+            };
+            let key = |want: fn(&SelectorPart) -> Option<&str>| subject.parts.iter().find_map(want);
+            if let Some(id) = key(|p| match p {
+                SelectorPart::Id(id) => Some(id.as_str()),
+                _ => None,
+            }) {
+                index.by_id.entry(id.to_string()).or_default().push(i);
+            } else if let Some(class) = key(|p| match p {
+                SelectorPart::Class(c) => Some(c.as_str()),
+                _ => None,
+            }) {
+                index.by_class.entry(class.to_string()).or_default().push(i);
+            } else if let Some(name) = key(|p| match p {
+                SelectorPart::Attribute { name, .. } => Some(name.as_str()),
+                _ => None,
+            }) {
+                index
+                    .by_attribute
+                    .entry(name.to_string())
+                    .or_default()
+                    .push(i);
+            } else if let Some(element) = key(|p| match p {
+                SelectorPart::Type(t) => Some(t.as_str()),
+                _ => None,
+            }) {
+                index
+                    .by_type
+                    .entry(element.to_string())
+                    .or_default()
+                    .push(i);
+            } else {
+                index.universal.push(i);
+            }
+        }
+        index
+    }
 }
 
 impl Stylesheet {
@@ -436,6 +503,44 @@ impl Stylesheet {
         &self.complex_rules
     }
 
+    /// The indices into [`Self::complex_rules`] of the rules that can match an element with this
+    /// id, these classes, and this type, in the order the rules were written. A class entry of the
+    /// form `name=value` is also the attribute `name`, as selectors read attributes. A superset of
+    /// the matches: the rules not listed need an id, a class, an attribute or a type that the
+    /// element does not have, and the rest are for the caller to match.
+    pub fn candidate_rules<S: AsRef<str>>(
+        &self,
+        id: Option<&str>,
+        classes: &[S],
+        element_type: Option<&str>,
+    ) -> Vec<usize> {
+        let index = self
+            .rule_index
+            .0
+            .get_or_init(|| RuleIndex::of(&self.complex_rules));
+        let mut found: Vec<u32> = index.universal.clone();
+        if let Some(rules) = id.and_then(|id| index.by_id.get(id)) {
+            found.extend_from_slice(rules);
+        }
+        if let Some(rules) = element_type.and_then(|t| index.by_type.get(t)) {
+            found.extend_from_slice(rules);
+        }
+        for class in classes {
+            let class = class.as_ref();
+            if let Some(rules) = index.by_class.get(class) {
+                found.extend_from_slice(rules);
+            }
+            if let Some((name, _)) = class.split_once('=')
+                && let Some(rules) = index.by_attribute.get(name)
+            {
+                found.extend_from_slice(rules);
+            }
+        }
+        found.sort_unstable();
+        found.dedup();
+        found.into_iter().map(|i| i as usize).collect()
+    }
+
     /// Check if there are any complex rules that involve state changes
     pub fn has_complex_state_rules(&self) -> bool {
         self.complex_rules.iter().any(|(sel, _)| sel.has_state())
@@ -627,6 +732,7 @@ impl Stylesheet {
             self.styles.insert(key, merged);
         }
         self.complex_rules.extend(other.complex_rules);
+        self.rule_index = RuleIndexCell::default();
         for (key, value) in other.variables {
             self.variables.insert(key, value);
         }

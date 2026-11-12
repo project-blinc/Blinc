@@ -473,27 +473,29 @@ impl RenderTree {
             }
         }
 
-        // Re-apply all base (non-state) complex rules for reset nodes,
-        // sorted by specificity so type < class < id.
+        // Re-apply the base (non-state) complex rules for reset nodes, by specificity so
+        // type < class < id. A node is matched against the rules that can match it only.
         {
-            let mut base_rules: Vec<&(ComplexSelector, crate::element_style::ElementStyle)> =
-                complex_rules
-                    .iter()
-                    .filter(|(selector, _)| !selector.has_state())
+            let rules = stylesheet.complex_rules();
+            for &node_id in &prev_affected {
+                let mut matched: Vec<usize> = self
+                    .candidate_rules_for(&stylesheet, node_id)
+                    .into_iter()
+                    .filter(|i| !rules[*i].0.has_state())
+                    .filter(|i| {
+                        self.complex_selector_matches(
+                            &rules[*i].0,
+                            node_id,
+                            &hovered_nodes,
+                            &pressed_nodes,
+                            focused_node,
+                        )
+                    })
                     .collect();
-            base_rules.sort_by_key(|(selector, style)| Self::rule_order(selector, style));
-
-            for (selector, style) in &base_rules {
-                for &node_id in &prev_affected {
-                    if self.complex_selector_matches(
-                        selector,
-                        node_id,
-                        &hovered_nodes,
-                        &pressed_nodes,
-                        focused_node,
-                    ) && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
-                    {
-                        Self::apply_element_style_to_props(&mut render_node.props, style);
+                matched.sort_by_key(|&i| (Self::rule_order(&rules[i].0, &rules[i].1), i));
+                if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
+                    for i in matched {
+                        Self::apply_element_style_to_props(&mut render_node.props, &rules[i].1);
                     }
                 }
             }
@@ -748,6 +750,46 @@ impl RenderTree {
         frontier
     }
 
+    /// The indices of the stylesheet's complex rules that can match `node`, from what the node
+    /// has: its id, its classes and attributes, its element type. A superset of the matches, in
+    /// the order the rules were written; see `Stylesheet::candidate_rules`.
+    pub(crate) fn candidate_rules_for(
+        &self,
+        stylesheet: &crate::css_parser::Stylesheet,
+        node: LayoutNodeId,
+    ) -> Vec<usize> {
+        let id = self.element_registry.get_id(node);
+        let classes = self.element_registry.get_classes(node).unwrap_or_default();
+        let element_type = self.element_registry.get_element_type(node);
+        stylesheet.candidate_rules(id.as_deref(), &classes, element_type)
+    }
+
+    /// Apply the stateless complex rules of `stylesheet` to `nodes`: each takes the rules that
+    /// match it, in cascade order (a component's own rules first, then by specificity, then as
+    /// written). The cost follows the nodes and the rules that can match each, not their product.
+    pub(crate) fn apply_base_complex_rules(
+        &mut self,
+        stylesheet: &crate::css_parser::Stylesheet,
+        nodes: &[LayoutNodeId],
+    ) {
+        let rules = stylesheet.complex_rules();
+        if rules.is_empty() {
+            return;
+        }
+        for &node_id in nodes {
+            let mut matched = self.matching_base_rules(node_id, stylesheet);
+            if matched.is_empty() {
+                continue;
+            }
+            matched.sort_by_key(|&i| (Self::rule_order(&rules[i].0, &rules[i].1), i));
+            if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
+                for i in matched {
+                    Self::apply_element_style_to_props(&mut render_node.props, &rules[i].1);
+                }
+            }
+        }
+    }
+
     /// The `transition` a node has: its id rule's, else that of a base complex
     /// rule that matches it.
     fn complex_transition_for(
@@ -763,21 +805,25 @@ impl RenderTree {
             .get_id(node_id)
             .and_then(|eid| stylesheet.get(&eid).and_then(|s| s.transition.clone()));
         by_id.or_else(|| {
-            stylesheet.complex_rules().iter().find_map(|(sel, sty)| {
-                if !sel.has_state()
-                    && self.complex_selector_matches(
-                        sel,
-                        node_id,
-                        hovered_nodes,
-                        pressed_nodes,
-                        focused_node,
-                    )
-                {
-                    sty.transition.clone()
-                } else {
-                    None
-                }
-            })
+            let rules = stylesheet.complex_rules();
+            self.candidate_rules_for(stylesheet, node_id)
+                .into_iter()
+                .find_map(|i| {
+                    let (sel, sty) = &rules[i];
+                    if !sel.has_state()
+                        && self.complex_selector_matches(
+                            sel,
+                            node_id,
+                            hovered_nodes,
+                            pressed_nodes,
+                            focused_node,
+                        )
+                    {
+                        sty.transition.clone()
+                    } else {
+                        None
+                    }
+                })
         })
     }
 
@@ -1145,5 +1191,63 @@ mod candidate_tests {
             // A rule that matches nothing proves nothing.
             assert!(matched > 0, "`{css}` matched no node for any holder");
         }
+    }
+
+    /// The rules that match a node are the same with the index as with every rule tried.
+    #[test]
+    fn the_index_finds_every_rule_that_matches() {
+        let css = "\
+            .a .b { opacity: 0.9; }\n\
+            .b { opacity: 0.8; }\n\
+            div { opacity: 0.7; }\n\
+            .a > div.c { opacity: 0.6; }\n\
+            [data-state=open] { opacity: 0.5; }\n\
+            .b[data-state=open] .c { opacity: 0.4; }\n\
+            * { opacity: 0.3; }\n\
+            :not(.z) { opacity: 0.2; }\n\
+            .a #x { opacity: 0.1; }\n\
+            .b + .b { opacity: 0.95; }\n\
+            .c:first-child { opacity: 0.85; }\n\
+            div:not(.b) .c { opacity: 0.75; }\n\
+            .d:hover { opacity: 0.65; }\n\
+            text { opacity: 0.55; }\n\
+            ";
+        let stylesheet = Stylesheet::parse(css).expect("css");
+        let leaf = |c: &str| div().class(c).w(10.0).h(10.0);
+        let ui = div()
+            .class("a")
+            .flex_col()
+            .child(
+                div()
+                    .class("b")
+                    .class("data-state=open")
+                    .child(leaf("c"))
+                    .child(leaf("c d")),
+            )
+            .child(div().class("b").id("x").child(leaf("c")))
+            .child(div().child(crate::text::text("label").class("c")))
+            .child(div().class("z b").child(leaf("c")));
+        let mut tree = RenderTree::from_element(&ui);
+        tree.compute_layout(200.0, 400.0);
+        let none = HashSet::new();
+        let rules = stylesheet.complex_rules();
+        let nodes: Vec<LayoutNodeId> = tree.render_nodes.keys().copied().collect();
+        let mut found = 0;
+        for node in nodes {
+            let brute: Vec<usize> = (0..rules.len())
+                .filter(|i| !rules[*i].0.has_state())
+                .filter(|i| tree.complex_selector_matches(&rules[*i].0, node, &none, &none, None))
+                .collect();
+            assert_eq!(
+                tree.matching_base_rules(node, &stylesheet),
+                brute,
+                "rules for {node:?}"
+            );
+            found += brute.len();
+        }
+        assert!(
+            found > 20,
+            "the rules matched only {found} times: a weak test"
+        );
     }
 }
