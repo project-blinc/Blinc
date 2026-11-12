@@ -19,9 +19,10 @@
 //! - edges and text while a card scales up: a baked texture goes soft, the table stays sharp;
 //! - the label on a card that moves, scales or turns: it must stay put on the card;
 //! - the shadow and the border of a card that turns or scales;
-//! - `FALLBACKS=1` adds the tiles marked "falls back": a fade with text, a clipped card. Rows do
-//!   not move them, and while one is on screen the whole frame is painted in full, so the other
-//!   tiles are not moved by rows either. They should look the same in both runs;
+//! - `FALLBACKS=1` adds the tiles marked "falls back": a card with an image in it, and a fade
+//!   that a tile painted after it lies over. Rows do not move them, and while one is moving the
+//!   whole frame is painted in full, so the other tiles are not moved by rows either. They should
+//!   look the same in both runs;
 //! - anything that pops, flickers or lags one frame behind its card.
 //!
 //! `RUST_LOG=blinc_app::node_rows=info` prints whether each fast frame was moved by rows.
@@ -62,6 +63,9 @@ fn main() -> Result<()> {
     };
     blinc_app::windowed::WindowedApp::run(config, build_ui)
 }
+
+/// A 1x1 image, shown scaled up.
+const PIXEL: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg+M/wHwAEAQH/cetH5QAAAABJRU5ErkJggg==";
 
 /// Whether the tiles the node table cannot move are shown too (`FALLBACKS=1`).
 fn fallbacks() -> bool {
@@ -215,7 +219,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
     }
 
     // 4. Fade, with a label: an opacity group with text in it.
-    if fallbacks() {
+    {
         let o = bound(ctx, "fade", "o", 1.0);
         let flip = flipper(vec![Pose {
             value: o.clone(),
@@ -225,8 +229,8 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
         flips.push(flip.clone());
         let ui = stage().child(holder().child(card(Some("Fade")).motion().opacity(o)));
         tiles.push(tile(
-            "Fade (falls back)",
-            "text in an opacity group is painted in full",
+            "Fade",
+            "the label and the box fade together, as one group",
             ui,
             flip,
         ));
@@ -314,7 +318,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
     }
 
     // 7. A card moving inside a clipped box.
-    if fallbacks() {
+    {
         let x = bound(ctx, "clipped", "x", -40.0);
         let flip = flipper(vec![Pose {
             value: x.clone(),
@@ -334,8 +338,91 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
             .child(holder().child(card(Some("Clip")).motion().translate_x(x)));
         let ui = stage().child(clipped);
         tiles.push(tile(
-            "Clipped (falls back)",
+            "Clipped",
             "the box clips the card as it slides",
+            ui,
+            flip,
+        ));
+    }
+
+    // 7b. A layer effect: a drop shadow the group casts, on a card that moves, scales and turns.
+    {
+        let x = bound(ctx, "effect", "x", 0.0);
+        let s = bound(ctx, "effect", "s", 1.0);
+        let r = bound(ctx, "effect", "r", 0.0);
+        let flip = flipper(vec![
+            Pose {
+                value: x.clone(),
+                rest: 0.0,
+                far: 40.0,
+            },
+            Pose {
+                value: s.clone(),
+                rest: 1.0,
+                far: 1.25,
+            },
+            Pose {
+                value: r.clone(),
+                rest: 0.0,
+                far: 20.0,
+            },
+        ]);
+        flips.push(flip.clone());
+        let card = card(Some("Effect")).drop_shadow_effect(
+            6.0,
+            8.0,
+            10.0,
+            Color::rgba(0.0, 0.0, 0.0, 0.7),
+        );
+        let ui = stage().child(holder().child(card.motion().translate_x(x).scale(s).rotate(r)));
+        tiles.push(tile(
+            "Layer effect",
+            "a drop shadow the group casts follows the card",
+            ui,
+            flip,
+        ));
+    }
+
+    // 7c. An image in a card: drawn apart from the batch, which rows cannot move.
+    if fallbacks() {
+        let x = bound(ctx, "image", "x", 0.0);
+        let flip = flipper(vec![Pose {
+            value: x.clone(),
+            rest: 0.0,
+            far: 50.0,
+        }]);
+        flips.push(flip.clone());
+        let card = card(None).child(blinc_layout::image(PIXEL).size(36.0, 36.0));
+        let ui = stage().child(holder().child(card.motion().translate_x(x)));
+        tiles.push(tile(
+            "Image (falls back)",
+            "an image in a card is painted in full while it moves",
+            ui,
+            flip,
+        ));
+    }
+
+    // 7d. A fade with a tile painted after it, over the card: the group keeps its place in the
+    // paint order, which the dynamic batch cannot.
+    if fallbacks() {
+        let o = bound(ctx, "under", "o", 1.0);
+        let flip = flipper(vec![Pose {
+            value: o.clone(),
+            rest: 1.0,
+            far: 0.3,
+        }]);
+        flips.push(flip.clone());
+        let tile_after = div()
+            .w(40.0)
+            .h(24.0)
+            .ml(-15.0)
+            .bg(Color::rgb(0.95, 0.85, 0.2));
+        let ui = stage()
+            .child(holder().child(card(Some("Fade")).motion().opacity(o)))
+            .child(tile_after);
+        tiles.push(tile(
+            "Fade under a tile (falls back)",
+            "the yellow tile stays above the card as it fades",
             ui,
             flip,
         ));
