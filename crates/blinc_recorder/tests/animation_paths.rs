@@ -799,6 +799,58 @@ fn scroll_scene(
     }
 }
 
+/// A scroll list beside a card that moves, as in a window where other things are animating: the
+/// rows that move the card move the list too.
+fn scroll_beside_movers_scene() -> Scene {
+    let steps = 20;
+    Scene {
+        name: "scroll a list beside a mover",
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let (x, s) = (bound(ui, 0.0), bound(ui, 1.0));
+            let handles = (x.clone(), s.clone());
+            let reference = blinc_layout::selector::ScrollRef::new();
+            let bound_ref = reference.clone();
+            ui.mount(move |_| {
+                let mut list = div().flex_col().gap(1.0).p(1.0);
+                for i in 0..60 {
+                    list = list.child(
+                        div()
+                            .w_full()
+                            .h(22.0)
+                            .rounded(5.0)
+                            .bg(Color::rgb(0.2 + 0.05 * (i % 7) as f32, 0.45, 0.8))
+                            .flex_row()
+                            .items_center()
+                            .child(text(format!("Row {i}")).size(12.0).color(Color::WHITE)),
+                    );
+                }
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .flex_row()
+                    .gap(4.0)
+                    .child(
+                        div()
+                            .w(100.0)
+                            .h(56.0)
+                            .child(card(true).motion().translate_x(x.clone()).scale(s.clone())),
+                    )
+                    .child(scroll().bind(&bound_ref).w(150.0).h(H as f32).child(list))
+            });
+            Box::new(move |ui, step| {
+                let t = (step + 1) as f32 / steps as f32;
+                handles.0.lock().unwrap().set_target(20.0 * t);
+                handles.1.lock().unwrap().set_target(1.0 + 0.2 * t);
+                reference.set_scroll_offset(0.0, 12.0 * (step + 1) as f32);
+                ui.settle_scroll();
+            })
+        }),
+    }
+}
+
 /// A bound card with a static tile painted after it, over where the card passes. The tile stays
 /// above the card, as in a single paint in tree order. `fade` makes the card a group, and
 /// `foreground` gives that group a child painted in the foreground stream.
@@ -954,6 +1006,7 @@ fn scenes() -> Vec<Scene> {
         later_tile_scene("motion fade, a label, a tile after it", true, false, true),
         repro_fade_scene(),
         scroll_scene("scroll a list", 60, 12.0, ScrollbarVisibility::Auto),
+        scroll_beside_movers_scene(),
         scroll_scene(
             "scroll a list, scrollbar always",
             60,
