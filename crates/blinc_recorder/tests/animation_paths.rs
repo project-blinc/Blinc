@@ -20,6 +20,7 @@ use blinc_animation::AnimatedValue;
 use blinc_core::reactive::signal;
 use blinc_core::{Affine2D, Color, Transform};
 use blinc_layout::div::{Div, div};
+use blinc_layout::motion::motion;
 use blinc_layout::prelude::*;
 use blinc_recorder::testing::{CapturedFrame, ScreenshotExporter, diff_image, difference};
 use blinc_recorder::{Headless, MotionPaint};
@@ -65,7 +66,12 @@ fn session(path: Path) -> Option<Headless> {
         Path::Vector => MotionPaint::Vector,
         Path::Table => MotionPaint::NodeTable,
     };
-    let mut ui = Headless::with_motion_paint(W, H, paint).ok()?;
+    // `BLINC_ANIM_PATHS_SCALE=2` runs the scenes at a retina density.
+    let density = std::env::var("BLINC_ANIM_PATHS_SCALE")
+        .ok()
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(1.0);
+    let mut ui = Headless::with_motion_paint_at(W, H, density, paint).ok()?;
     ui.theme(
         HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
         ColorScheme::Dark,
@@ -320,6 +326,40 @@ fn nested_motion_scene(label: bool, spring: bool) -> Scene {
     }
 }
 
+/// One bound card moves beside another that is bound but stays where it is painted, so it sits in
+/// the static batch while the first is in the dynamic one.
+fn beside_settled_scene() -> Scene {
+    let steps = 12;
+    Scene {
+        name: "motion beside a settled one",
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let (moving, still) = (bound(ui, 0.0), bound(ui, 0.0));
+            let handle = moving.clone();
+            ui.mount(move |_| {
+                stage()
+                    .child(
+                        div()
+                            .w(120.0)
+                            .h(64.0)
+                            .child(card(true).motion().translate_y(moving.clone())),
+                    )
+                    .child(
+                        div()
+                            .w(120.0)
+                            .h(64.0)
+                            .child(card(true).motion().translate_y(still.clone())),
+                    )
+            });
+            Box::new(move |_, step| {
+                let t = (step + 1) as f32 / steps as f32;
+                handle.lock().unwrap().set_target(-40.0 * t);
+            })
+        }),
+    }
+}
+
 /// Two overlapping children under one fading container. The group fades as one, so where they
 /// overlap the second does not show the first through it.
 fn overlap_fade_scene() -> Scene {
@@ -452,6 +492,7 @@ fn scenes() -> Vec<Scene> {
         nested_motion_scene(true, true),
         nested_motion_scene(false, true),
         overlap_fade_scene(),
+        beside_settled_scene(),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
         keyframe_scene("css keyframes", true),
@@ -638,6 +679,7 @@ const ON_ROWS: &[&str] = &[
     "motion nested",
     "motion nested, no text",
     "motion fade, overlapping",
+    "motion beside a settled one",
 ];
 
 /// Scenes held to the vector paint from the second frame. The vector paint of the first frame
@@ -986,4 +1028,181 @@ fn a_turned_label_is_not_smeared() {
             "step {step}: the turned label has {ratio:.2} times the ink of an upright one"
         );
     }
+}
+
+/// What the windowed repro shows: several bound nodes of every kind in one tree, flipped together
+/// to a far pose and back, so that they settle at different times and some are settled while
+/// others move.
+fn many_scene(mask: u8) -> Scene {
+    let steps = 70;
+    Scene {
+        name: "motion many",
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let mini = |label: Option<&str>| {
+                let card = div()
+                    .w(80.0)
+                    .h(44.0)
+                    .rounded(10.0)
+                    .bg(Color::rgb(0.2, 0.45, 0.9))
+                    .border(2.0, Color::rgba(1.0, 1.0, 1.0, 0.9))
+                    .shadow_params(0.0, 4.0, 8.0, Color::rgba(0.0, 0.0, 0.0, 0.5))
+                    .flex_row()
+                    .items_center()
+                    .justify_center();
+                match label {
+                    Some(l) => card.child(text(l).size(12.0).color(Color::WHITE)),
+                    None => card,
+                }
+            };
+            let holder = || div().w(80.0).h(44.0);
+            let (tx, ty) = (bound(ui, 0.0), bound(ui, 0.0));
+            let sc = bound(ui, 1.0);
+            let rot = bound(ui, 0.0);
+            let (ax, as_, ar, ao) = (
+                bound(ui, 0.0),
+                bound(ui, 1.0),
+                bound(ui, 0.0),
+                bound(ui, 1.0),
+            );
+            let (nx, ns, nr) = (bound(ui, 0.0), bound(ui, 1.0), bound(ui, 0.0));
+            let txx = bound(ui, 0.0);
+            let handles = [
+                (tx.clone(), 0.0, 30.0),
+                (ty.clone(), 0.0, -10.0),
+                (sc.clone(), 1.0, 1.4),
+                (rot.clone(), 0.0, 40.0),
+                (ax.clone(), 0.0, -20.0),
+                (as_.clone(), 1.0, 1.3),
+                (ar.clone(), 0.0, -30.0),
+                (ao.clone(), 1.0, 0.5),
+                (nx.clone(), 0.0, 25.0),
+                (ns.clone(), 1.0, 1.2),
+                (nr.clone(), 0.0, 20.0),
+                (txx.clone(), 0.0, 30.0),
+            ];
+            ui.mount(move |_| {
+                let nested_inner = mini(Some("Nest"))
+                    .motion()
+                    .scale(ns.clone())
+                    .rotate(nr.clone());
+                let nested = holder()
+                    .child(nested_inner)
+                    .motion()
+                    .translate_x(nx.clone());
+                let mut root = div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .flex_row()
+                    .flex_wrap()
+                    .gap(5.0)
+                    .p(3.0);
+                if mask & 1 != 0 {
+                    root = root.child(
+                        holder().child(
+                            mini(Some("Move"))
+                                .motion()
+                                .translate_x(tx.clone())
+                                .translate_y(ty.clone()),
+                        ),
+                    );
+                }
+                if mask & 2 != 0 {
+                    root =
+                        root.child(holder().child(mini(Some("Zoom")).motion().scale(sc.clone())));
+                }
+                if mask & 4 != 0 {
+                    root =
+                        root.child(holder().child(mini(Some("Turn")).motion().rotate(rot.clone())));
+                }
+                if mask & 8 != 0 {
+                    root = root.child(
+                        holder().child(
+                            mini(None)
+                                .motion()
+                                .translate_x(ax.clone())
+                                .scale(as_.clone())
+                                .rotate(ar.clone())
+                                .opacity(ao.clone()),
+                        ),
+                    );
+                }
+                if mask & 16 != 0 {
+                    root = root.child(holder().child(nested));
+                }
+                if mask & 32 != 0 {
+                    root = root.child(
+                        div().w(80.0).h(30.0).child(
+                            motion()
+                                .translate_x(txx.clone())
+                                .items_center()
+                                .justify_center()
+                                .child(text("Just text").size(12.0).color(Color::WHITE)),
+                        ),
+                    );
+                }
+                root
+            });
+            Box::new(move |_, step| {
+                // Far at the start, back at the middle.
+                if step == 0 || step == steps / 2 {
+                    let far = step == 0;
+                    for (value, rest, target) in &handles {
+                        value
+                            .lock()
+                            .unwrap()
+                            .set_target(if far { *target } else { *rest });
+                    }
+                }
+            })
+        }),
+    }
+}
+
+/// Several bound nodes in one tree, flipped together and back so they settle at different times,
+/// are moved by rows on every frame and match the vector paint, and so does each part of them
+/// alone. A node that moves only text, a card beside settled ones and a card that scales are
+/// the cases where the node table once left text behind or fell back to full paints.
+#[test]
+fn the_node_table_beside_other_bindings() {
+    let mut off = Vec::new();
+    for mask in [0b111111u8, 0b100000, 0b100001, 0b000001, 0b010010] {
+        let scene = many_scene(mask);
+        let Some((report, reference, painted, paths)) = compare(&scene, Path::Table) else {
+            return;
+        };
+        if let Ok(dir) = std::env::var("BLINC_ANIM_PATHS_OUT") {
+            let steps = sheet_steps(&report);
+            std::fs::create_dir_all(&dir).unwrap();
+            ScreenshotExporter::save_png(
+                &sheet(&reference, &painted, &steps),
+                format!("{dir}/many_{mask:06b}.png"),
+            )
+            .unwrap();
+        }
+        let full = paths.iter().filter(|p| p.starts_with("full")).count();
+        let unmoved = paths
+            .iter()
+            .filter(|p| !p.ends_with("rows:applied"))
+            .count();
+        if full > 0 || unmoved > 0 {
+            off.push(format!(
+                "{mask:06b}: {full} full paints, {unmoved} frames not moved by rows"
+            ));
+        }
+        if let Some((at, (pixels, channel))) = report
+            .per_step
+            .iter()
+            .copied()
+            .enumerate()
+            .find(|(_, (pixels, _))| *pixels > 0)
+        {
+            off.push(format!(
+                "{mask:06b} differs from the vector paint (step {at}: {pixels} px, channel {channel})"
+            ));
+        }
+    }
+    assert!(off.is_empty(), "the node table: {}", off.join("; "));
 }

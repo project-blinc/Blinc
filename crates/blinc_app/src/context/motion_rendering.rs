@@ -480,8 +480,14 @@ impl RenderContext {
             }
         }
 
-        // Draw motion text and SVG after their dynamic geometry.
-        self.dispatch_motion_subtree_overlay_pools(tree, target);
+        // Draw motion text and SVG after their dynamic geometry. Inside the compositor's cache
+        // paint the target is the static layer, and the compositor draws them again on top of it
+        // each frame. Where motion is not baked to textures (the node table, or vectors) that copy
+        // would stay at the pose of this paint while the other moves.
+        let motion_is_vectors = !self.promote_motion || self.renderer.node_table_enabled();
+        if !(self.in_compositor_inner_call && motion_is_vectors) {
+            self.dispatch_motion_subtree_overlay_pools(tree, target);
+        }
 
         // Draw promoted backgrounds before separately dispatched motion text and SVG.
         if !self.in_compositor_inner_call {

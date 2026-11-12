@@ -211,12 +211,22 @@ impl Headless {
     /// An offscreen surface that paints motion-bound subtrees the way `paint` says, whatever
     /// `BLINC_NODE_TABLE` says.
     pub fn with_motion_paint(width: u32, height: u32, paint: MotionPaint) -> Result<Self> {
+        Self::with_motion_paint_at(width, height, 1.0, paint)
+    }
+
+    /// [`with_motion_paint`](Self::with_motion_paint) at a pixel density of `scale`.
+    pub fn with_motion_paint_at(
+        width: u32,
+        height: u32,
+        scale: f64,
+        paint: MotionPaint,
+    ) -> Result<Self> {
         let app = BlincApp::with_config(blinc_app::BlincConfig {
             node_table: paint == MotionPaint::NodeTable,
             motion_promotion: paint == MotionPaint::Promoted,
             ..Default::default()
         })?;
-        Self::open(width, height, 1.0, app)
+        Self::open(width, height, scale, app)
     }
 
     fn open(logical_width: u32, logical_height: u32, scale: f64, app: BlincApp) -> Result<Self> {

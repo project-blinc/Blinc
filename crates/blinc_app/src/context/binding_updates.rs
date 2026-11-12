@@ -370,7 +370,16 @@ impl RenderContext {
             return None;
         }
         let mut bindings = tree.composite_bindings_mut();
-        if bindings.is_empty() || !bindings.values().all(|meta| meta.dynamic_batch) {
+        if bindings.is_empty() {
+            return None;
+        }
+        // A binding whose primitives are in the static batch cannot be moved without a repaint, so
+        // one that has changed asks for it. One that is settled where it was painted is left be.
+        let motion = tree.motion_bindings_map();
+        if bindings
+            .iter()
+            .any(|(node, meta)| self.node_rows.moved(meta, motion.get(node)))
+        {
             return None;
         }
         Some(self.node_rows.apply(

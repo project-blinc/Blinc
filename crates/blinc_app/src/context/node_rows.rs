@@ -105,6 +105,12 @@ struct Slot {
     layer: Option<usize>,
 }
 
+/// Whether a binding is the dynamic batch's to move: its primitives are in that batch, or it has
+/// none and moves only text.
+fn owned(meta: &CompositeBindingMeta) -> bool {
+    meta.dynamic_batch || meta.primitive_range.is_empty()
+}
+
 /// The rows of one assignment of slots to a batch.
 #[derive(Default)]
 pub(super) struct NodeRows {
@@ -238,8 +244,10 @@ impl NodeRows {
                 _ => return None,
             }
         }
+        // Bindings whose primitives are in the static batch are not this batch's to move.
         let ranges: Vec<_> = bindings
             .iter()
+            .filter(|(_, meta)| owned(meta))
             .map(|(node, meta)| (*node, meta.primitive_range.clone(), ancestors(*node).len()))
             .collect();
         // Nodes with primitives come first, outer before inner, so an inner range's slot is
@@ -248,13 +256,13 @@ impl NodeRows {
             .into_iter()
             .map(|(node, range, _)| (node, range))
             .collect();
-        let mut bare: Vec<(LayoutNodeId, usize)> = ranges
+        let mut bare: Vec<(LayoutNodeId, Range<usize>, usize)> = ranges
             .iter()
             .filter(|(_, r, _)| r.is_empty())
-            .map(|(n, _, d)| (*n, *d))
+            .map(|(n, r, d)| (*n, r.clone(), *d))
             .collect();
-        bare.sort_by_key(|(_, depth)| *depth);
-        order.extend(bare.into_iter().map(|(n, _)| (n, 0..0)));
+        bare.sort_by_key(|(_, _, depth)| *depth);
+        order.extend(bare.into_iter().map(|(n, r, _)| (n, r)));
         if order.len() * 2 > NODE_TABLE_CAPACITY {
             return None;
         }
@@ -342,7 +350,7 @@ impl NodeRows {
     ) -> bool {
         self.epoch != 0
             && self.epoch == batch.node_slots_epoch
-            && bindings.len() == self.slots.len()
+            && bindings.values().filter(|m| owned(m)).count() == self.slots.len()
             && self.slots.iter().all(|s| {
                 bindings
                     .get(&s.node)
@@ -386,6 +394,21 @@ impl NodeRows {
         self.epoch = 0;
         self.slots.clear();
         self.rows.clear();
+    }
+
+    /// Whether the binding of `meta` has moved from the pose it was painted at.
+    pub(super) fn moved(
+        &self,
+        meta: &CompositeBindingMeta,
+        binding: Option<&MotionBindings>,
+    ) -> bool {
+        if owned(meta) {
+            return false;
+        }
+        match binding {
+            Some(b) => Pose::of(b, meta.last_opacity).differs(&Pose::of_meta(meta)),
+            None => true,
+        }
     }
 
     /// The slot of the nearest bound node at or above `node`, if any.
@@ -522,7 +545,7 @@ impl NodeRows {
         // Record each binding's values as the patcher does, so a settled binding reads as settled
         // and the redraw signal clears.
         let mut active = false;
-        for (node, meta) in bindings.iter_mut() {
+        for (node, meta) in bindings.iter_mut().filter(|(_, m)| owned(m)) {
             let Some(b) = motion.get(node) else { continue };
             active |= b.is_any_animating();
             let now = Pose::of(b, meta.last_opacity);

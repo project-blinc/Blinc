@@ -2065,7 +2065,13 @@ impl RenderTree {
                 && motion_bindings_ref.is_some()
                 && !ctx.bg_batch_is_dynamic()
                 && !ctx.bg_batch_is_composite();
-            if end > start || retained_foreground {
+            // A node that paints nothing of its own but moves text still needs a record when the
+            // GPU node table moves it, which is when motion is not baked to textures.
+            let moves_text_only = end == start
+                && !self.motion_promotion.get()
+                && motion_bindings_ref.is_some()
+                && !ctx.bg_batch_is_composite();
+            if end > start || retained_foreground || moves_text_only {
                 let (binding_tx, binding_ty) = motion_bindings_ref
                     .map(|b| {
                         let tx = b
@@ -2284,8 +2290,9 @@ impl RenderTree {
                     }),
                     _ => None,
                 };
-                if let (Some(kind), Some((amb_affine, amb_opacity, amb_clip, amb_z))) =
-                    (kind_match, v2_motion_ambient)
+                if end > start
+                    && let (Some(kind), Some((amb_affine, amb_opacity, amb_clip, amb_z))) =
+                        (kind_match, v2_motion_ambient)
                 {
                     let region_screen_aabb = Self::affine_screen_aabb(
                         &amb_affine,
