@@ -567,6 +567,10 @@ mod tests {
                 crate::shaders_russl::backdrop_rows::WGSL,
             ),
             ("sdf_russl::backdrop", crate::sdf_russl::backdrop::WGSL),
+            (
+                "sdf_russl::sdf_core_nodes",
+                crate::sdf_russl::sdf_core_nodes::WGSL,
+            ),
         ];
         let mut bad = Vec::new();
         for (name, source) in shaders {

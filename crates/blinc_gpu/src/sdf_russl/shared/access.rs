@@ -5,8 +5,12 @@
 
 russl::russl! {
     use super::primitive::{Primitive, Uniforms};
+    use super::node_table::{NodeRow, apply_node};
 
     #[pipeline] const TIER: u32 = 0;
+    // 1 binds the animated node table and applies a node's delta to the primitives that follow it;
+    // 0 leaves the primitives as they are stored.
+    #[pipeline] const NODES: u32 = 0;
 
     #[group(0)] #[binding(0)] pub static UNIFORMS: Uniform<Uniforms>;
     // Glyph atlas textures for unified text rendering
@@ -18,8 +22,8 @@ russl::russl! {
         // Primitive rows, one RGBA32F texel per vec4 field.
         #[group(0)] #[binding(1)] pub static PRIM_DATA: Texture2D<f32>;
 
-        // Primitive `index`: each row is one primitive, the column is the field.
-        pub fn prim(index: u32) -> Primitive {
+        // Primitive `index` as stored: each row is one primitive, the column is the field.
+        pub fn prim_rest(index: u32) -> Primitive {
             let y = index as i32;
             let mut p: Primitive;
             p.bounds = PRIM_DATA.load(IVec2::new(0, y), 0);
@@ -63,9 +67,49 @@ russl::russl! {
     #else
         #[group(0)] #[binding(1)] pub static PRIMITIVES: Storage<[Primitive]>;
 
-        // Primitive `index`.
-        pub fn prim(index: u32) -> Primitive {
+        // Primitive `index` as stored.
+        pub fn prim_rest(index: u32) -> Primitive {
             return PRIMITIVES[index];
+        }
+    #endif
+
+    #if NODES == 1
+        #if TIER == 2
+            // Node rows, three RGBA32F texels each: motion, pivot, link.
+            #[group(0)] #[binding(6)] pub static NODE_DATA: Texture2D<f32>;
+
+            pub fn node_row(slot: u32) -> NodeRow {
+                let y = slot as i32;
+                let mut r: NodeRow;
+                r.motion = NODE_DATA.load(IVec2::new(0, y), 0);
+                r.pivot = NODE_DATA.load(IVec2::new(1, y), 0);
+                r.link = NODE_DATA.load(IVec2::new(2, y), 0);
+                return r;
+            }
+        #else
+            #[group(0)] #[binding(6)] pub static NODE_ROWS: Storage<[NodeRow]>;
+
+            pub fn node_row(slot: u32) -> NodeRow {
+                return NODE_ROWS[slot];
+            }
+        #endif
+
+        // Primitive `index` as it is drawn: under its node's delta, then each parent's, up to four.
+        pub fn prim(index: u32) -> Primitive {
+            let mut p = prim_rest(index);
+            let mut slot = p.node_slot.x as u32;
+            for depth in 0u32..4u32 {
+                if slot != 0u32 {
+                    let row = node_row(slot - 1u32);
+                    p = apply_node(p, row);
+                    slot = row.link.x as u32;
+                }
+            }
+            return p;
+        }
+    #else
+        pub fn prim(index: u32) -> Primitive {
+            return prim_rest(index);
         }
     #endif
 }

@@ -18,6 +18,8 @@ pub(crate) mod aux_data;
 mod clip;
 #[path = "shared/common.rs"]
 mod common;
+#[path = "shared/node_table.rs"]
+pub(crate) mod node_table;
 #[path = "shared/notch.rs"]
 mod notch;
 #[path = "shared/primitive.rs"]
@@ -156,6 +158,11 @@ pub(crate) mod sdf_core_vb {
 }
 pub(crate) mod sdf_core_dt {
     russl::russl! { #![specialize(super::sdf_core)] const TIER: u32 = 2; }
+}
+/// The core shader with the animated node table bound and applied.
+#[cfg(test)]
+pub(crate) mod sdf_core_nodes {
+    russl::russl! { #![specialize(super::sdf_core)] const NODES: u32 = 1; }
 }
 
 /// The shadow shader: the same three tiers.

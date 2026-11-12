@@ -13,6 +13,7 @@ russl::russl! {
     // 1 and 2 have no storage buffer in the vertex stage (instance fields come from a vertex
     // buffer) and 2 reads data textures; both test the mesh triangle per fragment instead.
     #[pipeline] const TIER: u32 = 0;
+    #[pipeline] const NODES: u32 = 0;
 
     // ============================================================================
     // Blinc SDF Core Shader — Rect, Circle, Ellipse
