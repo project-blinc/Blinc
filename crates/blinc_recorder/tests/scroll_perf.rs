@@ -69,9 +69,9 @@ fn session(way: Way) -> Option<Headless> {
         return None;
     }
     let mut ui = Headless::with_motion_paint(W, H, way.paint()).ok()?;
-    // No stylesheet: the rows carry no classes, and a stylesheet makes the harness match every
-    // node on every frame, which the windowed runner only does when hover or focus changes.
+    // The state-style pass runs when hover or focus changes, as in a window.
     ui.theme(HybridTheme::bundle(), ColorScheme::Dark);
+    ui.gate_state_styles();
     ui.load_font_data(
         include_bytes!("../../../examples/blinc_component_demos/assets/NotoSans-Regular.ttf")
             .to_vec(),
@@ -84,6 +84,8 @@ struct Report {
     rows: usize,
     build: f64,
     first_paint: f64,
+    /// How much of the first paint was the render, the rest being the frame before it.
+    first_render: f64,
     jump: f64,
     frames: Vec<f64>,
 }
@@ -96,10 +98,11 @@ impl Report {
         let median = at(0.5);
         let repaints = self.frames.iter().filter(|f| **f > median * 3.0).count();
         eprintln!(
-            "  {:<24} build {:>8.0}  first paint {:>7.1}  jump {:>7.1}  | frame median {:>7.2}  p90 {:>7.2}  p99 {:>7.2}  max {:>7.1}  ({} of {} above 3x the median)",
+            "  {:<24} build {:>8.0}  first paint {:>7.1} (render {:>6.1})  jump {:>7.1}  | frame median {:>7.2}  p90 {:>7.2}  p99 {:>7.2}  max {:>7.1}  ({} of {} above 3x the median)",
             way.name(),
             self.build,
             self.first_paint,
+            self.first_render,
             self.jump,
             median,
             at(0.9),
@@ -145,15 +148,31 @@ fn run(way: Way, rows: usize, steps: usize, notch: f32) -> Option<Report> {
     ui.settle();
     let build = started.elapsed().as_secs_f64() * 1000.0;
 
-    let started = std::time::Instant::now();
-    ui.paint_timed(false).ok()?;
-    let first_paint = started.elapsed().as_secs_f64() * 1000.0;
+    // `SCROLL_PAUSE_FIRST_MS` waits before the first paint, to attach a profiler.
+    if let Some(pause) = std::env::var("SCROLL_PAUSE_FIRST_MS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+    {
+        eprintln!("READY_FIRST {}", way.name());
+        std::thread::sleep(std::time::Duration::from_millis(pause));
+    }
+    let (first_frame, first_render) = ui.paint_timed(false).ok()?;
+    let first_paint = first_frame + first_render;
 
     // The middle of the list, where nothing about the index is small.
     let middle = (rows as f32 / 2.0) * ROW_HEIGHT;
     reference.set_scroll_offset(0.0, middle);
     ui.settle_scroll();
     let (_, jump) = ui.paint_timed(false).ok()?;
+
+    // `SCROLL_PAUSE_MS` waits here before the frames that are timed, to attach a profiler.
+    if let Some(pause) = std::env::var("SCROLL_PAUSE_MS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+    {
+        eprintln!("READY {}", way.name());
+        std::thread::sleep(std::time::Duration::from_millis(pause));
+    }
 
     let mut frames = Vec::with_capacity(steps);
     for step in 0..steps {
@@ -166,6 +185,7 @@ fn run(way: Way, rows: usize, steps: usize, notch: f32) -> Option<Report> {
         rows,
         build,
         first_paint,
+        first_render,
         jump,
         frames,
     })

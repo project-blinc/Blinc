@@ -154,6 +154,10 @@ pub struct Headless {
     pointer: (f32, f32),
     frames: u64,
     recording: Option<Arc<SharedRecordingSession>>,
+    /// Whether the state-style pass runs only when hover, press or focus changed, as a window
+    /// does, rather than on every frame.
+    gate_state_styles: bool,
+    state_fingerprint: Option<u64>,
 }
 
 /// Sets the process-wide context state for the first session; a later session leaves it. Sessions
@@ -293,7 +297,17 @@ impl Headless {
             pointer: (-1.0, -1.0),
             frames: 0,
             recording: None,
+            gate_state_styles: false,
+            state_fingerprint: None,
         })
+    }
+
+    /// Run the state-style pass (`:hover`, `:active`, `:focus`) only when hover, press or focus
+    /// changed, as a window does. By default it runs on every frame, which costs a pass over
+    /// every node and rewrites the styles of those a stylesheet reaches.
+    pub fn gate_state_styles(&mut self) -> &mut Self {
+        self.gate_state_styles = true;
+        self
     }
 
     /// Whether this machine can render offscreen. Tests use it to skip.
@@ -414,7 +428,16 @@ impl Headless {
         let (w, h) = (self.ctx.width, self.ctx.height);
         if let Some(tree) = self.tree.as_mut() {
             tree.sync_keyboard_focus(&mut self.ctx.event_router);
-            if tree.stylesheet().is_some()
+            let apply_states = if self.gate_state_styles {
+                let now = self.ctx.event_router.state_fingerprint();
+                let changed = self.state_fingerprint != Some(now);
+                self.state_fingerprint = Some(now);
+                changed
+            } else {
+                true
+            };
+            if apply_states
+                && tree.stylesheet().is_some()
                 && tree.apply_stylesheet_state_styles(&self.ctx.event_router)
             {
                 tree.compute_layout(w, h);
@@ -564,6 +587,7 @@ impl Headless {
             self.render_state.process_global_motion_replays();
             tree.start_all_css_animations();
             self.ctx.rebuild_count = self.ctx.rebuild_count.saturating_add(1);
+            self.state_fingerprint = None;
             self.tree = Some(tree);
         }
         if replaces_tree {
