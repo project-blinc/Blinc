@@ -311,6 +311,8 @@ pub struct RenderContext {
     /// above. Re-dispatched via `render_rasterized_svgs` after the
     /// overlay so the icon lands on top of its motion container's bg.
     cached_motion_subtree_svgs: Option<Vec<SvgElement>>,
+    /// The images inside motion containers, drawn after the dynamic batch.
+    cached_motion_subtree_images: Option<Vec<ImageElement>>,
     /// Same as `cached_glyphs_by_layer` but for CSS-transformed text
     /// primitives (text with a `transform:` style — routed through
     /// the SDF pipeline, not the glyph pipeline).
@@ -510,6 +512,13 @@ struct ImageElement {
     mask_info: [f32; 4],
     /// 3D layer info if this image is inside a perspective-transformed parent
     transform_3d_layer: Option<Transform3DLayerInfo>,
+    /// Whether the image is inside a motion container, and so is drawn after the dynamic batch
+    /// that its card's background is in.
+    in_motion_subtree: bool,
+    /// The row of the node table that moves this image, set when the table has taken it.
+    row: Option<u32>,
+    /// From which row of its chain the image's clip moves with the rows.
+    clip_from: Option<u32>,
 }
 
 /// SVG element data for rendering
@@ -622,6 +631,7 @@ impl RenderContext {
             motion_subtree_text_patch: Vec::new(),
             composite_patch_baselines: std::collections::HashMap::new(),
             cached_motion_subtree_svgs: None,
+            cached_motion_subtree_images: None,
             cached_css_transformed_text_prims: None,
             svg_cache: LruCache::new(NonZeroUsize::new(SVG_CACHE_CAPACITY).unwrap()),
             svg_atlas,

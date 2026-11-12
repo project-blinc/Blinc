@@ -156,6 +156,25 @@ impl RenderContext {
         tree: &blinc_layout::RenderTree,
         target_view: &wgpu::TextureView,
     ) {
+        // IMAGES: above the card's background, below its text. The compositor's cache paint
+        // does not draw them: the static layer would keep a copy at the painted pose.
+        if !self.in_compositor_inner_call
+            && let Some(images) = self.cached_motion_subtree_images.clone()
+        {
+            let (width, height) = self.renderer.viewport_size();
+            let images = if self.renderer.node_table_enabled() {
+                self.node_rows.place_images(&images, tree.scale_factor())
+            } else {
+                images
+            };
+            self.render_images(
+                target_view,
+                &images,
+                width as f32,
+                height as f32,
+                tree.scale_factor(),
+            );
+        }
         // TEXT — alpha + blit-anchored center remap.
         if let Some(mut text) = self.cached_motion_subtree_text_prims.clone()
             && !text.is_empty()

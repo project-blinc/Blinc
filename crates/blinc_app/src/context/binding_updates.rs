@@ -388,21 +388,23 @@ impl RenderContext {
             &self.renderer,
             batch,
             self.cached_motion_subtree_text_prims.as_mut(),
+            self.cached_motion_subtree_images.as_mut(),
             &mut bindings,
             tree.motion_bindings_map(),
             &tree.binding_ordinals(),
             &|node| tree.layout_tree.ancestors(node),
+            &|source| self.image_cache.contains(source),
             dpi,
             adopt,
         ))
     }
 
     /// Whether what a motion subtree has outside the dynamic batch is something rows cannot
-    /// move: an image or SVG inside a bound node, glyphs that are not primitives, or glyphs a
+    /// move: an SVG inside a bound node, glyphs that are not primitives, or glyphs a
     /// CSS animation patches. Glyph primitives that the table has slotted are moved, and the
     /// table checks for them.
     fn motion_overlay_unmovable(&self, tree: &blinc_layout::RenderTree) -> bool {
-        tree.bound_subtree_has_media()
+        tree.bound_subtree_has_svg()
             || self
                 .cached_motion_subtree_svgs
                 .as_ref()
@@ -416,9 +418,13 @@ impl RenderContext {
 
     /// Whether text or SVG in a motion subtree is cached apart from the dynamic batch.
     fn motion_overlay_content_cached(&self) -> bool {
-        self.cached_motion_subtree_text_prims
+        self.cached_motion_subtree_images
             .as_ref()
             .is_some_and(|v| !v.is_empty())
+            || self
+                .cached_motion_subtree_text_prims
+                .as_ref()
+                .is_some_and(|v| !v.is_empty())
             || self
                 .cached_motion_subtree_svgs
                 .as_ref()

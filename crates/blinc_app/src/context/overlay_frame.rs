@@ -12,6 +12,7 @@ struct FrameCache {
         ([f32; 4], (f32, f32), (f32, f32)),
     >,
     cached_motion_subtree_svgs: Option<Vec<SvgElement>>,
+    cached_motion_subtree_images: Option<Vec<ImageElement>>,
     cached_css_transformed_text_prims: Option<PrimitiveBatch>,
     cached_bg_batch: Option<blinc_gpu::PrimitiveBatch>,
     cached_dynamic_batch: Option<blinc_gpu::PrimitiveBatch>,
@@ -50,6 +51,10 @@ impl FrameCache {
         std::mem::swap(
             &mut self.cached_motion_subtree_svgs,
             &mut context.cached_motion_subtree_svgs,
+        );
+        std::mem::swap(
+            &mut self.cached_motion_subtree_images,
+            &mut context.cached_motion_subtree_images,
         );
         std::mem::swap(
             &mut self.cached_css_transformed_text_prims,

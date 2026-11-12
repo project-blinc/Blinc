@@ -81,6 +81,74 @@ impl NodeRow {
     }
 }
 
+/// An affine on device pixel positions, `[a, b, c, d, tx, ty]`: `x' = a x + c y + tx` and
+/// `y' = b x + d y + ty`.
+pub type Affine = [f32; 6];
+
+/// `first` and then `second`.
+pub fn then(first: Affine, second: Affine) -> Affine {
+    let [a1, b1, c1, d1, tx1, ty1] = first;
+    let [a2, b2, c2, d2, tx2, ty2] = second;
+    [
+        a2 * a1 + c2 * b1,
+        b2 * a1 + d2 * b1,
+        a2 * c1 + c2 * d1,
+        b2 * c1 + d2 * d1,
+        a2 * tx1 + c2 * ty1 + tx2,
+        b2 * tx1 + d2 * ty1 + ty2,
+    ]
+}
+
+/// What the chain of rows from a slot amounts to for something that is not a primitive.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Chain {
+    /// Where the chain puts a point of the painted pose.
+    pub affine: Affine,
+    /// The one scale lengths (a border, a corner radius) grow by.
+    pub scale: f32,
+    /// The opacity the rows multiply in.
+    pub opacity: f32,
+}
+
+impl NodeRow {
+    /// This row as an affine on device pixels: scale about the pivot, turn, move.
+    pub fn affine(&self) -> Affine {
+        let [tx, ty, sx, sy] = self.motion;
+        let [px, py, turn, _] = self.pivot;
+        let (sin, cos) = turn.sin_cos();
+        let (a, b, c, d) = (cos * sx, sin * sx, -sin * sy, cos * sy);
+        [
+            a,
+            b,
+            c,
+            d,
+            px + tx - (a * px + c * py),
+            py + ty - (b * px + d * py),
+        ]
+    }
+}
+
+/// The chain of rows from `slot`, each row and then its parent's, as the shaders follow it.
+/// The identity when a row is missing.
+pub fn chain(rows: &[NodeRow], slot: u32) -> Chain {
+    let mut out = Chain {
+        affine: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+        scale: 1.0,
+        opacity: 1.0,
+    };
+    let mut next = Some(slot);
+    for _ in 0..NODE_CHAIN_DEPTH {
+        let Some(row) = next.and_then(|s| rows.get(s as usize)) else {
+            break;
+        };
+        out.affine = then(out.affine, row.affine());
+        out.scale *= (row.motion[2] * row.motion[3]).abs().sqrt();
+        out.opacity *= row.pivot[3];
+        next = row.parent();
+    }
+    out
+}
+
 impl NodeRow {
     /// `p` as it is drawn under this row: the CPU twin of the shaders' `apply_node`, for the
     /// passes that move primitives into another frame of reference before they draw them.
@@ -206,6 +274,35 @@ mod tests {
         ];
         assert_eq!(drawn_bounds(&rows, 0, rect), [15.0, 27.0, 40.0, 20.0]);
         assert_eq!(drawn_bounds(&rows, 9, rect), rect, "no such row");
+    }
+
+    #[test]
+    fn a_chain_as_an_affine_puts_a_point_where_the_rows_put_a_rect() {
+        let rows = [
+            NodeRow::new([7.0, -3.0], [1.5, 1.5], [30.0, 20.0], 0.4, 0.5, Some(1)),
+            NodeRow::new([-5.0, 9.0], [0.8, 0.8], [80.0, 50.0], -0.2, 0.5, None),
+        ];
+        let rect = [10.0, 20.0, 40.0, 20.0];
+        let (cx, cy) = (rect[0] + rect[2] * 0.5, rect[1] + rect[3] * 0.5);
+        let c = chain(&rows, 0);
+        let [a, b, cc, d, tx, ty] = c.affine;
+        let by_affine = (a * cx + cc * cy + tx, b * cx + d * cy + ty);
+        let drawn = drawn_bounds(&rows, 0, rect);
+        let by_rows = (drawn[0] + drawn[2] * 0.5, drawn[1] + drawn[3] * 0.5);
+        assert!((by_affine.0 - by_rows.0).abs() < 1e-3 && (by_affine.1 - by_rows.1).abs() < 1e-3);
+        assert!((c.scale - 1.2).abs() < 1e-5);
+        assert!((c.opacity - 0.25).abs() < 1e-6);
+        // No such row is no change.
+        assert_eq!(chain(&rows, 9).affine, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn then_applies_the_first_affine_first() {
+        let move_then_double = then(
+            [1.0, 0.0, 0.0, 1.0, 5.0, 0.0],
+            [2.0, 0.0, 0.0, 2.0, 0.0, 0.0],
+        );
+        assert_eq!(move_then_double, [2.0, 0.0, 0.0, 2.0, 10.0, 0.0]);
     }
 
     #[test]

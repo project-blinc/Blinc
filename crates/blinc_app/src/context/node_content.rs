@@ -37,6 +37,32 @@ pub(super) struct NodeContent<'a> {
     pub(super) z_layer: &'a u32,
 }
 
+/// A box of `base` (x, y, width, height, device pixels) under a motion container's scale about
+/// its centre, and the translate its render state adds, as text and SVGs place theirs. The
+/// box's own place when no scale centre is set.
+fn motion_placed(
+    base: (f32, f32, f32, f32),
+    translate: (f32, f32),
+    scale: (f32, f32),
+    centre: Option<(f32, f32)>,
+    dpi: f32,
+) -> (f32, f32, f32, f32) {
+    let (x, y, w, h) = base;
+    let (tx, ty) = (translate.0 * dpi, translate.1 * dpi);
+    match centre {
+        Some((cx, cy)) => {
+            let (cx, cy) = (cx * dpi, cy * dpi);
+            (
+                cx + (x - cx) * scale.0 + tx,
+                cy + (y - cy) * scale.1 + ty,
+                w * scale.0,
+                h * scale.1,
+            )
+        }
+        None => (x + tx, y + ty, w, h),
+    }
+}
+
 impl RenderContext {
     pub(super) fn collect_node_content(
         &self,
@@ -325,35 +351,13 @@ impl RenderContext {
                     let base_width = bounds.width * scale;
                     let base_height = bounds.height * scale;
 
-                    // Scale motion translate by DPI factor
-                    let scaled_motion_tx = effective_motion_translate.0 * scale;
-                    let scaled_motion_ty = effective_motion_translate.1 * scale;
-
-                    // Apply motion around its inherited scale center.
-                    let (scaled_x, scaled_y, scaled_width, scaled_height) =
-                        if let Some((motion_center_x, motion_center_y)) =
-                            effective_motion_scale_center
-                        {
-                            let motion_center_x_scaled = motion_center_x * scale;
-                            let motion_center_y_scaled = motion_center_y * scale;
-
-                            let rel_x = base_x - motion_center_x_scaled;
-                            let rel_y = base_y - motion_center_y_scaled;
-
-                            let scaled_rel_x = rel_x * effective_motion_scale.0;
-                            let scaled_rel_y = rel_y * effective_motion_scale.1;
-                            let scaled_w = base_width * effective_motion_scale.0;
-                            let scaled_h = base_height * effective_motion_scale.1;
-
-                            let final_x = motion_center_x_scaled + scaled_rel_x + scaled_motion_tx;
-                            let final_y = motion_center_y_scaled + scaled_rel_y + scaled_motion_ty;
-
-                            (final_x, final_y, scaled_w, scaled_h)
-                        } else {
-                            let final_x = base_x + scaled_motion_tx;
-                            let final_y = base_y + scaled_motion_ty;
-                            (final_x, final_y, base_width, base_height)
-                        };
+                    let (scaled_x, scaled_y, scaled_width, scaled_height) = motion_placed(
+                        (base_x, base_y, base_width, base_height),
+                        effective_motion_translate,
+                        effective_motion_scale,
+                        effective_motion_scale_center,
+                        scale,
+                    );
 
                     // Intersect primary clip with scroll clip — text/SVG only support
                     // a single clip rect so we must merge both boundaries.
@@ -511,19 +515,39 @@ impl RenderContext {
                     let effective_mask = own_mask.or(parent_mask);
                     let (mask_params, mask_info) = Self::mask_image_to_arrays(effective_mask);
 
+                    let (image_x, image_y, image_w, image_h) = motion_placed(
+                        (
+                            abs_x * scale,
+                            abs_y * scale,
+                            bounds.width * scale,
+                            bounds.height * scale,
+                        ),
+                        effective_motion_translate,
+                        effective_motion_scale,
+                        effective_motion_scale_center,
+                        scale,
+                    );
+                    // Lengths grow with the box.
+                    let motion_k = if effective_motion_scale_center.is_some() {
+                        (effective_motion_scale.0 * effective_motion_scale.1)
+                            .abs()
+                            .sqrt()
+                    } else {
+                        1.0
+                    };
                     images.push(ImageElement {
                         node,
                         path_clip: text_path.clone(),
                         content_opacity: image_data.opacity,
                         source: image_data.source.clone(),
-                        x: abs_x * scale,
-                        y: abs_y * scale,
-                        width: bounds.width * scale,
-                        height: bounds.height * scale,
+                        x: image_x,
+                        y: image_y,
+                        width: image_w,
+                        height: image_h,
                         object_fit: final_object_fit,
                         object_position: final_object_position,
                         opacity: final_opacity,
-                        border_radius: final_border_radius,
+                        border_radius: final_border_radius * motion_k,
                         tint: image_data.tint,
                         clip_bounds: scaled_clip,
                         clip_radius: scaled_clip_radius,
@@ -534,7 +558,7 @@ impl RenderContext {
                         placeholder_image: final_placeholder_image,
                         fade_duration_ms: final_fade_duration,
                         z_index: *z_layer,
-                        border_width,
+                        border_width: border_width * motion_k,
                         border_color,
                         css_affine: node_css_affine,
                         shadow,
@@ -544,6 +568,9 @@ impl RenderContext {
                         mask_params,
                         mask_info,
                         transform_3d_layer: inside_3d_layer.clone(),
+                        in_motion_subtree: inside_motion_subtree,
+                        row: None,
+                        clip_from: None,
                     });
                 }
                 // Canvas elements are rendered inline during tree traversal (in render_layer)
@@ -565,15 +592,34 @@ impl RenderContext {
                             [cx * scale, cy * scale, cw * scale, ch * scale]
                         });
 
+                        let (image_x, image_y, image_w, image_h) = motion_placed(
+                            (
+                                abs_x * scale,
+                                abs_y * scale,
+                                bounds.width * scale,
+                                bounds.height * scale,
+                            ),
+                            effective_motion_translate,
+                            effective_motion_scale,
+                            effective_motion_scale_center,
+                            scale,
+                        );
+                        let motion_k = if effective_motion_scale_center.is_some() {
+                            (effective_motion_scale.0 * effective_motion_scale.1)
+                                .abs()
+                                .sqrt()
+                        } else {
+                            1.0
+                        };
                         images.push(ImageElement {
                             node,
                             path_clip: text_path.clone(),
                             content_opacity: img_brush.opacity,
                             source: img_brush.source.clone(),
-                            x: abs_x * scale,
-                            y: abs_y * scale,
-                            width: bounds.width * scale,
-                            height: bounds.height * scale,
+                            x: image_x,
+                            y: image_y,
+                            width: image_w,
+                            height: image_h,
                             object_fit: match img_brush.fit {
                                 blinc_core::ImageFit::Cover => 0,
                                 blinc_core::ImageFit::Contain => 1,
@@ -586,7 +632,9 @@ impl RenderContext {
                                 * inherited_css_opacity
                                 * effective_motion_opacity
                                 * effective_composite_layer_opacity,
-                            border_radius: render_node.props.border_radius.top_left * scale,
+                            border_radius: render_node.props.border_radius.top_left
+                                * scale
+                                * motion_k,
                             tint: [
                                 img_brush.tint.r,
                                 img_brush.tint.g,
@@ -632,6 +680,9 @@ impl RenderContext {
                                 mi
                             },
                             transform_3d_layer: inside_3d_layer.clone(),
+                            in_motion_subtree: inside_motion_subtree,
+                            row: None,
+                            clip_from: None,
                         });
                     }
                 }

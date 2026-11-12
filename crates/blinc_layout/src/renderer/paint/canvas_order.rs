@@ -38,6 +38,16 @@ impl RenderTree {
         })
     }
 
+    /// Whether `node` has an SVG somewhere below it.
+    pub(crate) fn subtree_has_svg(&self, node: LayoutNodeId) -> bool {
+        self.layout_tree.children(node).into_iter().any(|child| {
+            self.render_nodes
+                .get(&child)
+                .is_some_and(|render| matches!(render.element_type, ElementType::Svg(_)))
+                || self.subtree_has_svg(child)
+        })
+    }
+
     fn later_content_overlaps_with(&self, node: LayoutNodeId, any: bool) -> bool {
         let Some(own) = self.get_absolute_bounds(node) else {
             return false;

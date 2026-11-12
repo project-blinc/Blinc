@@ -353,6 +353,7 @@ impl RenderContext {
         motion_subtree_svgs.sort_by_key(|s| s.z_layer);
 
         let mut images = Vec::new();
+        let mut motion_subtree_images: Vec<ImageElement> = Vec::new();
         let mut layer_3d_images: std::collections::HashMap<LayoutNodeId, Vec<ImageElement>> =
             std::collections::HashMap::new();
         self.preload_images(&all_images, width as f32, height as f32);
@@ -391,9 +392,18 @@ impl RenderContext {
 
             if let Some(ref info) = image.transform_3d_layer {
                 layer_3d_images.entry(info.node_id).or_default().push(image);
+            } else if image.in_motion_subtree {
+                motion_subtree_images.push(image);
             } else {
                 images.push(image);
             }
+        }
+        // Images inside motion containers are drawn after the dynamic batch their card's
+        // background is in, so they sit above it.
+        motion_subtree_images.sort_by_key(|i| i.z_index);
+        if !used_fast_paint {
+            self.cached_motion_subtree_images =
+                (!motion_subtree_images.is_empty()).then_some(motion_subtree_images);
         }
 
         if !used_fast_paint {

@@ -92,7 +92,7 @@ impl RenderTree {
         // primitive buffer in place.
         self.composite_bindings.borrow_mut().clear();
         self.binding_ordinals.borrow_mut().clear();
-        self.bound_media.set(false);
+        self.bound_svg.set(false);
         self.painted_unpromoted_binding.set(false);
         // Phase 4b: per-CSS-animated-node paint metadata. Same
         // lifecycle as composite_bindings — cleared every full
@@ -524,8 +524,8 @@ impl RenderTree {
         // inside them. Any other motion scope, and what is inside it, keeps its groups in their
         // place in the static paint order.
         let bound_media = motion_bindings_ref.is_some() && self.subtree_has_media(node);
-        if bound_media {
-            self.bound_media.set(true);
+        if motion_bindings_ref.is_some() && self.subtree_has_svg(node) {
+            self.bound_svg.set(true);
         }
         let previous_groups = in_motion_subtree.then(|| {
             let was = ctx.set_moving_groups_dynamic(false);

@@ -924,9 +924,9 @@ pub struct RenderTree {
     /// The painter stamps a node's primitives with it, so they can be told apart whatever the
     /// batch does to them afterwards.
     binding_ordinals: RefCell<HashMap<LayoutNodeId, u32>>,
-    /// Whether the last paint found an image or an SVG inside a motion-bound node, content that
-    /// is drawn apart from the batch and stays where it was painted when the batch is moved.
-    bound_media: Cell<bool>,
+    /// Whether the last paint found an SVG inside a motion-bound node, content that is drawn
+    /// apart from the batch and stays where it was painted when the batch is moved.
+    bound_svg: Cell<bool>,
     /// Motion-subtree texture bake registry — Phase 4.2 of the
     /// unified property channel ([[project-reactive-architecture-v2]]).
     ///
@@ -1204,7 +1204,7 @@ impl RenderTree {
             subtree_texture_candidates: RefCell::new(std::collections::HashSet::new()),
             motion_promotion: Cell::new(true),
             binding_ordinals: RefCell::new(HashMap::new()),
-            bound_media: Cell::new(false),
+            bound_svg: Cell::new(false),
             motion_subtree_bake_registry: RefCell::new(
                 crate::motion_texture_cache::MotionSubtreeBakeRegistry::empty(),
             ),
@@ -1730,9 +1730,9 @@ impl RenderTree {
         self.binding_ordinals.borrow()
     }
 
-    /// Whether the last paint found an image or an SVG inside a motion-bound node.
-    pub fn bound_subtree_has_media(&self) -> bool {
-        self.bound_media.get()
+    /// Whether the last paint found an SVG inside a motion-bound node.
+    pub fn bound_subtree_has_svg(&self) -> bool {
+        self.bound_svg.get()
     }
 
     /// Allow (the default) or forbid baking motion-bound subtrees to textures. Set before the

@@ -19,10 +19,9 @@
 //! - edges and text while a card scales up: a baked texture goes soft, the table stays sharp;
 //! - the label on a card that moves, scales or turns: it must stay put on the card;
 //! - the shadow and the border of a card that turns or scales;
-//! - `FALLBACKS=1` adds the tiles marked "falls back": a card with an image in it, and a fade
-//!   that a tile painted after it lies over. Rows do not move them, and while one is moving the
-//!   whole frame is painted in full, so the other tiles are not moved by rows either. They should
-//!   look the same in both runs;
+//! - `FALLBACKS=1` adds the tile marked "falls back": a fade that a tile painted after it lies
+//!   over. Rows do not move it, and while it is moving the whole frame is painted in full, so the
+//!   other tiles are not moved by rows either. It should look the same in both runs;
 //! - anything that pops, flickers or lags one frame behind its card.
 //!
 //! `RUST_LOG=blinc_app::node_rows=info` prints whether each fast frame was moved by rows.
@@ -392,20 +391,28 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
         ));
     }
 
-    // 7c. An image in a card: drawn apart from the batch, which rows cannot move.
-    if fallbacks() {
+    // 7c. An image in a card: above the card's background, growing and moving with it.
+    {
         let x = bound(ctx, "image", "x", 0.0);
-        let flip = flipper(vec![Pose {
-            value: x.clone(),
-            rest: 0.0,
-            far: 50.0,
-        }]);
+        let sc = bound(ctx, "image", "s", 1.0);
+        let flip = flipper(vec![
+            Pose {
+                value: x.clone(),
+                rest: 0.0,
+                far: 40.0,
+            },
+            Pose {
+                value: sc.clone(),
+                rest: 1.0,
+                far: 1.3,
+            },
+        ]);
         flips.push(flip.clone());
         let card = card(None).child(blinc_layout::image(PIXEL).size(36.0, 36.0));
-        let ui = stage().child(holder().child(card.motion().translate_x(x)));
+        let ui = stage().child(holder().child(card.motion().translate_x(x).scale(sc)));
         tiles.push(tile(
-            "Image (falls back)",
-            "an image in a card is painted in full while it moves",
+            "Image",
+            "the image sits on the card and grows with it",
             ui,
             flip,
         ));

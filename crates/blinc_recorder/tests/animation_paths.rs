@@ -524,37 +524,101 @@ fn overlap_fade_scene() -> Scene {
 /// A 1x1 image the card shows, scaled up.
 const PIXEL: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg+M/wHwAEAQH/cetH5QAAAABJRU5ErkJggg==";
 
+#[derive(Clone, Copy)]
+enum ImageKind {
+    /// Translate and scale.
+    Move,
+    /// Fade: the card is a group, which keeps its image in the static batch.
+    Fade,
+    /// Turn and scale.
+    Turn,
+    /// Translate and scale, with a rounded image.
+    Rounded,
+    /// An outer move over an inner scale and turn.
+    Nested,
+    /// Translate and scale inside a box that clips.
+    Clipped,
+}
+
 /// A bound card holding an image, which is not a primitive in the batch.
-fn image_scene(name: &'static str, fade: bool) -> Scene {
+fn image_scene(name: &'static str, kind: ImageKind) -> Scene {
     let steps = 12;
     Scene {
         name,
         steps,
         step_ms: 16,
         build: Box::new(move |ui| {
-            let (x, s, opacity) = (bound(ui, 0.0), bound(ui, 1.0), bound(ui, 1.0));
-            let handles = (x.clone(), s.clone(), opacity.clone());
+            let (x, s, r, opacity) = (
+                bound(ui, 0.0),
+                bound(ui, 1.0),
+                bound(ui, 0.0),
+                bound(ui, 1.0),
+            );
+            let handles = (x.clone(), s.clone(), r.clone(), opacity.clone());
             ui.mount(move |_| {
-                let card = card(false).child(
-                    div().absolute().left(10.0).top(8.0).child(
-                        blinc_layout::image(PIXEL)
-                            .size(40.0, 40.0)
-                            .fade_in(std::time::Duration::ZERO),
-                    ),
-                );
-                let mut motion = card.motion();
-                if fade {
-                    motion = motion.opacity(opacity.clone());
+                let picture = blinc_layout::image(PIXEL)
+                    .size(40.0, 40.0)
+                    .fade_in(std::time::Duration::ZERO);
+                let picture = if matches!(kind, ImageKind::Rounded) {
+                    picture.rounded(10.0)
                 } else {
-                    motion = motion.translate_x(x.clone()).scale(s.clone());
+                    picture
+                };
+                let card = card(false).child(div().absolute().left(10.0).top(8.0).child(picture));
+                match kind {
+                    ImageKind::Move | ImageKind::Rounded => stage().child(
+                        div()
+                            .w(120.0)
+                            .h(64.0)
+                            .child(card.motion().translate_x(x.clone()).scale(s.clone())),
+                    ),
+                    ImageKind::Fade => stage().child(
+                        div()
+                            .w(120.0)
+                            .h(64.0)
+                            .child(card.motion().opacity(opacity.clone())),
+                    ),
+                    ImageKind::Turn => stage().child(
+                        div()
+                            .w(120.0)
+                            .h(64.0)
+                            .child(card.motion().rotate(r.clone()).scale(s.clone())),
+                    ),
+                    ImageKind::Nested => {
+                        let inner = card.motion().scale(s.clone()).rotate(r.clone());
+                        let outer = div()
+                            .w(120.0)
+                            .h(64.0)
+                            .child(inner)
+                            .motion()
+                            .translate_x(x.clone());
+                        stage().child(div().w(120.0).h(64.0).child(outer))
+                    }
+                    ImageKind::Clipped => stage().child(
+                        div()
+                            .w(160.0)
+                            .h(84.0)
+                            .rounded(14.0)
+                            .overflow_clip()
+                            .bg(Color::rgb(0.16, 0.18, 0.24))
+                            .flex_row()
+                            .items_center()
+                            .justify_center()
+                            .child(
+                                div()
+                                    .w(120.0)
+                                    .h(64.0)
+                                    .child(card.motion().translate_x(x.clone()).scale(s.clone())),
+                            ),
+                    ),
                 }
-                stage().child(div().w(120.0).h(64.0).child(motion))
             });
             Box::new(move |_, step| {
                 let t = (step + 1) as f32 / steps as f32;
                 handles.0.lock().unwrap().set_target(40.0 * t);
                 handles.1.lock().unwrap().set_target(1.0 + 0.3 * t);
-                handles.2.lock().unwrap().set_target(1.0 - 0.6 * t);
+                handles.2.lock().unwrap().set_target(25.0 * t);
+                handles.3.lock().unwrap().set_target(1.0 - 0.6 * t);
             })
         }),
     }
@@ -698,8 +762,12 @@ fn scenes() -> Vec<Scene> {
         clip_scene(true),
         effect_scene(false),
         effect_scene(true),
-        image_scene("motion, an image", false),
-        image_scene("motion fade, an image", true),
+        image_scene("motion, an image", ImageKind::Move),
+        image_scene("motion fade, an image", ImageKind::Fade),
+        image_scene("motion rotate, an image", ImageKind::Turn),
+        image_scene("motion, a rounded image", ImageKind::Rounded),
+        image_scene("motion nested, an image", ImageKind::Nested),
+        image_scene("motion in a clipped box, an image", ImageKind::Clipped),
         later_tile_scene("motion, a tile after it", false, false),
         later_tile_scene("motion fade, a tile after it", true, false),
         later_tile_scene("motion fade, foreground, a tile after it", true, true),
@@ -728,6 +796,10 @@ const KNOWN_DIFFERENT: &[&str] = &[
     "motion in a clipped box",
     "motion with its own clip",
     "motion, an image",
+    "motion rotate, an image",
+    "motion, a rounded image",
+    "motion nested, an image",
+    "motion in a clipped box, an image",
 ];
 
 struct Report {
@@ -896,6 +968,13 @@ const ON_ROWS: &[&str] = &[
     "motion beside a settled one",
     "motion in a clipped box",
     "motion with its own clip",
+    "motion with a layer effect, no text",
+    "motion with a layer effect",
+    "motion, an image",
+    "motion rotate, an image",
+    "motion, a rounded image",
+    "motion nested, an image",
+    "motion in a clipped box, an image",
 ];
 
 /// Paint every scene with the node table and hold the ones it moves alone to the vector paint.
@@ -1747,5 +1826,38 @@ fn what_a_frame_costs_with_many_bound_cards() {
             let p90 = times[times.len() * 9 / 10];
             eprintln!("  {name:<22} {median:>7.2} / {p90:>7.2}");
         }
+    }
+}
+
+/// Pixels that are the image's green, in a frame.
+fn green_pixels(frame: &CapturedFrame) -> usize {
+    (0..frame.width as usize * frame.height as usize)
+        .filter(|i| {
+            let at = i * 4;
+            frame.data[at] < 60 && frame.data[at + 1] > 200 && frame.data[at + 2] < 60
+        })
+        .count()
+}
+
+/// The image is the card's child, so it is above the card's own background and grows with the
+/// card, on every path that paints it as a window does.
+#[test]
+fn an_image_in_a_moving_card_is_above_the_card_and_grows_with_it() {
+    let scene = image_scene("motion, an image", ImageKind::Move);
+    for path in [Path::Full, Path::Vector, Path::Table] {
+        let Some(frames) = run(&scene, path) else {
+            return;
+        };
+        let first = green_pixels(&frames[0]);
+        let last = green_pixels(frames.last().unwrap());
+        // 40 x 40 logical pixels at rest, 1.3 times across by the end.
+        assert!(
+            first >= 1500,
+            "{path:?}: the image is not above the card ({first} px)"
+        );
+        assert!(
+            last as f32 >= first as f32 * 1.4,
+            "{path:?}: the image did not grow with the card ({first} px, then {last} px)"
+        );
     }
 }

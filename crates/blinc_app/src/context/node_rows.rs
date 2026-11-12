@@ -16,10 +16,11 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use blinc_gpu::node_table::{NODE_CHAIN_DEPTH, NODE_TABLE_CAPACITY, NodeRow};
+use blinc_gpu::node_table::{NODE_CHAIN_DEPTH, NODE_TABLE_CAPACITY, NodeRow, chain, then};
 use blinc_gpu::primitives::LayerCommand;
 use blinc_gpu::{GpuPrimitive, GpuRenderer, PrimitiveBatch};
 
+use super::ImageElement;
 use super::cached_text::TextBatch;
 use blinc_layout::motion::MotionBindings;
 use blinc_layout::renderer::CompositeBindingMeta;
@@ -507,6 +508,147 @@ impl NodeRows {
         true
     }
 
+    /// A primitive standing for an image's clip, so the clip is followed as a primitive's is.
+    fn clip_proxy(image: &ImageElement) -> GpuPrimitive {
+        let proxy = GpuPrimitive::rect(image.x, image.y, image.width, image.height);
+        match image.clip_bounds {
+            Some([x, y, w, h]) => {
+                let [tl, tr, br, bl] = image.clip_radius;
+                proxy.with_clip_rounded_rect(x, y, w, h, tl, tr, br, bl)
+            }
+            None => proxy,
+        }
+    }
+
+    /// Give each image the text row of the node that owns it, and say from which row its clip
+    /// moves. `false`, with the images as they were, when one has no owner or is drawn in a way
+    /// the affine does not carry: a shadow, or a placeholder while its image is not loaded,
+    /// which are drawn at the painted rect. The scroll clip is an ancestor's and stays.
+    fn give_image_slots(
+        &mut self,
+        images: &mut [ImageElement],
+        ancestors: &dyn Fn(LayoutNodeId) -> Vec<LayoutNodeId>,
+        loaded: &dyn Fn(&str) -> bool,
+    ) -> bool {
+        let mut given = Vec::with_capacity(images.len());
+        for image in images.iter() {
+            if image.shadow.is_some() || (image.placeholder_type != 0 && !loaded(&image.source)) {
+                return false;
+            }
+            let Some(slot) = self.owner(image.node, ancestors) else {
+                return false;
+            };
+            let Ok(from) = self.clip_from(slot, &Self::clip_proxy(image)) else {
+                return false;
+            };
+            given.push((slot * 2 + 1, from));
+        }
+        for (image, (row, from)) in images.iter_mut().zip(given) {
+            image.row = Some(row);
+            image.clip_from = from;
+        }
+        true
+    }
+
+    /// `images` as they are drawn under the rows now. Images the table has not taken are returned
+    /// as they are.
+    pub(super) fn place_images(&self, images: &[ImageElement], scale: f32) -> Vec<ImageElement> {
+        images
+            .iter()
+            .map(|image| match image.row {
+                Some(row) if !self.chain_is_rest(row) => self.place_image(image, row, scale),
+                _ => image.clone(),
+            })
+            .collect()
+    }
+
+    /// `image` under the chain of rows from `row`: faded by it, and moved, scaled and turned.
+    ///
+    /// A full paint folds a motion scale into the image's rect and turns it with an affine, which
+    /// is what this does too where the order of scaling and turning does not matter, so a frame
+    /// of rows is the frame a full paint makes. Where it does (a stretch under an image that has
+    /// a transform of its own), the chain goes through the affine whole, which the pipeline draws
+    /// with the same geometry and edges a little different.
+    ///
+    /// The clip stays where an ancestor put it and moves where the node did, then is carried back
+    /// through the affine the pipeline applies to a clip, so that it lands where it should.
+    fn place_image(&self, image: &ImageElement, row: u32, scale: f32) -> ImageElement {
+        let moved = chain(&self.rows, row);
+        let [a, b, c, d, tx, ty] = moved.affine;
+        let (sx, sy) = (a.hypot(b), c.hypot(d));
+        let mut out = image.clone();
+        out.opacity *= moved.opacity;
+        if sx < 1e-6 || sy < 1e-6 {
+            return out;
+        }
+        // The image's own transform, in device pixels.
+        let own = image
+            .css_affine
+            .map_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0], |m| {
+                [m[0], m[1], m[2], m[3], m[4] * scale, m[5] * scale]
+            });
+        let diagonal = own[1].abs() < 1e-6 && own[2].abs() < 1e-6 && (own[0] - own[3]).abs() < 1e-6;
+        let folds = (sx - sy).abs() < 1e-4 * sx.max(sy) || diagonal;
+        let all = if folds {
+            // The turn alone goes in the affine; the scale goes in the rect, about its centre.
+            let turn = [a / sx, b / sx, c / sy, d / sy, 0.0, 0.0];
+            let m = then(own, turn);
+            let (w, h) = (image.width * sx, image.height * sy);
+            let (cx, cy) = (image.x + image.width * 0.5, image.y + image.height * 0.5);
+            // Where the centre goes under the image's own transform and then the rows'.
+            let go = then(own, moved.affine);
+            let (dx, dy) = (
+                go[0] * cx + go[2] * cy + go[4],
+                go[1] * cx + go[3] * cy + go[5],
+            );
+            out.x = cx - w * 0.5;
+            out.y = cy - h * 0.5;
+            out.width = w;
+            out.height = h;
+            let k = (sx * sy).sqrt();
+            out.border_radius *= k;
+            out.border_width *= k;
+            [
+                m[0],
+                m[1],
+                m[2],
+                m[3],
+                dx - (m[0] * cx + m[2] * cy),
+                dy - (m[1] * cx + m[3] * cy),
+            ]
+        } else {
+            then(own, moved.affine)
+        };
+        out.css_affine = Some([
+            all[0],
+            all[1],
+            all[2],
+            all[3],
+            all[4] / scale,
+            all[5] / scale,
+        ]);
+        if image.clip_bounds.is_some() {
+            let mut proxy = Self::clip_proxy(image);
+            proxy.set_node_slot(Some(row));
+            proxy.set_node_clip_from(image.clip_from);
+            let proxy = blinc_gpu::node_table::resolve_primitive(&self.rows, &proxy);
+            let [fx, fy, fw, fh] = proxy.clip_bounds;
+            let [ma, mb, mc, md, mtx, mty] = all;
+            let det = ma * md - mb * mc;
+            let s = det.abs().sqrt().max(1e-6);
+            let (cx, cy) = (fx + fw * 0.5 - mtx, fy + fh * 0.5 - mty);
+            let (ix, iy) = if det.abs() > 1e-9 {
+                ((md * cx - mc * cy) / det, (ma * cy - mb * cx) / det)
+            } else {
+                (fx + fw * 0.5, fy + fh * 0.5)
+            };
+            let (iw, ih) = (fw / s, fh / s);
+            out.clip_bounds = Some([ix - iw * 0.5, iy - ih * 0.5, iw, ih]);
+            out.clip_radius = proxy.clip_radius.map(|r| r / s);
+        }
+        out
+    }
+
     /// Bring the rows up to date with the bindings, giving the batch and the glyphs their slots
     /// first if they have none. Slots are given only when `adopt` says the batch and the glyphs
     /// were both just painted, at the same pose; a glyph batch baked at some other pose can only
@@ -517,23 +659,29 @@ impl NodeRows {
         renderer: &GpuRenderer,
         batch: &mut PrimitiveBatch,
         mut text: Option<&mut TextBatch>,
+        mut images: Option<&mut Vec<ImageElement>>,
         bindings: &mut HashMap<LayoutNodeId, CompositeBindingMeta>,
         motion: &HashMap<LayoutNodeId, MotionBindings>,
         ordinals: &HashMap<LayoutNodeId, u32>,
         ancestors: &dyn Fn(LayoutNodeId) -> Vec<LayoutNodeId>,
+        loaded: &dyn Fn(&str) -> bool,
         dpi: f32,
         adopt: bool,
     ) -> Outcome {
         let has_text = text
             .as_ref()
             .is_some_and(|t| !t.primitives.is_empty() || !t.glyphs.is_empty());
+        let has_images = images.as_ref().is_some_and(|v| !v.is_empty());
         let given = self.describes(batch, bindings, ordinals)
             && text
                 .as_ref()
-                .is_none_or(|t| !has_text || t.node_slots_epoch == self.epoch);
+                .is_none_or(|t| !has_text || t.node_slots_epoch == self.epoch)
+            && images
+                .as_ref()
+                .is_none_or(|v| v.iter().all(|i| i.row.is_some()));
         if !given {
             self.release(batch, text.as_deref_mut(), bindings);
-            if has_text && !adopt {
+            if (has_text || has_images) && !adopt {
                 return Outcome::Declined;
             }
             let Some(slots) = Self::plan(batch, bindings, ordinals, ancestors) else {
@@ -573,6 +721,11 @@ impl NodeRows {
                 if !followed {
                     return self.decline(true, batch, Some(text), bindings);
                 }
+            }
+            if let Some(images) = images.as_mut()
+                && !self.give_image_slots(images, ancestors, loaded)
+            {
+                return self.decline(true, batch, text, bindings);
             }
         }
 
