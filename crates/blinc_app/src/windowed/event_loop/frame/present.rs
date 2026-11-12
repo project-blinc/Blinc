@@ -384,20 +384,12 @@ pub(super) fn render_and_schedule(
         gate.arm_before_present();
     }
     frame.present();
-    // Wayland keep-alive self-drive: request the next frame
-    // so the swapchain keeps cycling while the scene is
-    // static. `pre_present_notify` (called above) armed the
-    // compositor's frame callback, so winit paces this to
-    // vsync (Done) — steady ~7% CPU, not a busy spin.
-    // `keep_alive` is false off Wayland, so this is a no-op
-    // on X11 / macOS / Windows.
+    // Wayland keep-alive: ask for the next frame right after presenting. `pre_present_notify`
+    // armed the frame callback, so winit delivers it at vsync; no-op off Wayland.
     if keep_alive {
         window.request_redraw();
     }
-    // Frame-gate self-drive: keep presents flowing at the
-    // compositor's Done cadence so the swapchain never goes
-    // idle (see the keep-alive note above). The gate's Done
-    // wait throttles this to vsync, so it is not a spin.
+    // Frame-gate: keep presents flowing at the compositor's Done cadence.
     #[cfg(all(feature = "wayland-frame-gate", target_os = "linux"))]
     if _gate_active {
         window.request_redraw();
