@@ -29,7 +29,53 @@ impl GpuRenderer {
             self.queue
                 .write_buffer(buffer, 0, bytemuck::cast_slice(rows));
         }
+        let mut mirror = self.node_rows_cpu.lock().unwrap();
+        mirror.clear();
+        mirror.extend_from_slice(rows);
         true
+    }
+
+    /// `prim` as it is drawn with its node's rows applied on the CPU and no slot left, for the
+    /// passes that shift primitives into another frame before drawing them.
+    pub(crate) fn resolve_node_slot(
+        &self,
+        prim: &crate::primitives::GpuPrimitive,
+    ) -> crate::primitives::GpuPrimitive {
+        match prim.node_slot() {
+            Some(_) => {
+                crate::node_table::resolve_primitive(&self.node_rows_cpu.lock().unwrap(), prim)
+            }
+            None => *prim,
+        }
+    }
+
+    /// `batch` with the rows applied on the CPU to every primitive that names one, or `batch`
+    /// itself when none does.
+    pub(crate) fn with_node_rows_applied<'a>(
+        &self,
+        batch: &'a crate::primitives::PrimitiveBatch,
+    ) -> std::borrow::Cow<'a, crate::primitives::PrimitiveBatch> {
+        if !batch.primitives.iter().any(|p| p.node_slot().is_some()) {
+            return std::borrow::Cow::Borrowed(batch);
+        }
+        let mut resolved = batch.clone();
+        for p in &mut resolved.primitives {
+            *p = self.resolve_node_slot(p);
+        }
+        resolved.node_slots_epoch = 0;
+        std::borrow::Cow::Owned(resolved)
+    }
+
+    /// Where `prim` is drawn: its bounds, or those bounds moved by its node's rows.
+    pub(crate) fn drawn_bounds(&self, prim: &crate::primitives::GpuPrimitive) -> [f32; 4] {
+        match prim.node_slot() {
+            Some(slot) => crate::node_table::drawn_bounds(
+                &self.node_rows_cpu.lock().unwrap(),
+                slot,
+                prim.bounds,
+            ),
+            None => prim.bounds,
+        }
     }
 
     /// Whether the GPU device has `TEXTURE_COMPRESSION_BC` enabled.

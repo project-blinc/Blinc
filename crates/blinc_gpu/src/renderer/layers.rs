@@ -497,7 +497,8 @@ impl GpuRenderer {
         let offset_primitives: Vec<GpuPrimitive> = primitives
             .iter()
             .map(|p| {
-                let mut op = *p;
+                // Rows are in the frame of the window; this pass draws in the layer's.
+                let mut op = self.resolve_node_slot(p);
                 op.bounds[0] -= offset_x;
                 op.bounds[1] -= offset_y;
                 // Also offset clip bounds if they're valid (not the "no clip" default)

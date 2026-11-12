@@ -77,6 +77,10 @@ impl GpuPrimitive {
     /// a `viewport`-sized target by itself: a page background. Drawing it is the same as clearing
     /// the target to that colour, which costs no shading.
     pub fn opaque_backdrop(&self, viewport: (f32, f32)) -> Option<[f64; 4]> {
+        // A row can move or fade it.
+        if self.node_slot().is_some() {
+            return None;
+        }
         let [x, y, w, h] = self.bounds;
         let identity = self.local_affine == [1.0, 0.0, 0.0, 1.0];
         (self.is_simple_core()

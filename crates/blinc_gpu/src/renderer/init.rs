@@ -437,6 +437,7 @@ impl GpuRenderer {
             has_vertex_storage,
             has_storage_buffers,
             node_table,
+            node_rows_cpu: std::sync::Mutex::new(Vec::new()),
             has_texture_compression_bc,
             static_layer: None,
         })

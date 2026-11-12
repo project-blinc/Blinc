@@ -6,10 +6,10 @@
 //! parent the same way, and a primitive takes its node's delta and then each parent's, up to four.
 //!
 //! The delta is the CSS composition about a pivot: scale, then rotate, then translate. It changes
-//! what the CPU patcher in `apply_binding_deltas` changes: the bounds, the corner radius, the
+//! the bounds, the corner radius, the border widths, the shadow's offset, blur and spread, the
 //! rotation and the local affine, and the alpha of the fill, the gradient end, the border, the
-//! shadow and the side colours. It leaves the border width, the shadow's offset and blur, the
-//! clip and the gradient geometry as they were, as that patcher does.
+//! shadow and the side colours. Lengths scale by the geometric mean of the two axes. The clip and
+//! the gradient geometry stay as they were.
 
 russl::russl! {
     use super::primitive::Primitive;
@@ -46,7 +46,13 @@ russl::russl! {
         let nw = w * sx;
         let nh = h * sy;
         p.bounds = Vec4::new(ncx - nw * 0.5, ncy - nh * 0.5, nw, nh);
-        p.corner_radius = p.corner_radius * sqrt(abs(sx * sy));
+        let k = sqrt(abs(sx * sy));
+        p.corner_radius = p.corner_radius * k;
+        // A mesh triangle keeps a triangle count and an offset in its border and has no shadow.
+        if p.type_info.x != 9u32 {
+            p.border = p.border * k;
+            p.shadow = p.shadow * k;
+        }
 
         // The turn composes onto the rotation, working in (sin, cos) to avoid an atan2, and onto
         // the affine by multiplying on the right.

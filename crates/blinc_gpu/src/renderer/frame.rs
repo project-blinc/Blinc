@@ -93,10 +93,7 @@ impl GpuRenderer {
         let vp_w = self.viewport_size.0 as f32;
         let vp_h = self.viewport_size.1 as f32;
 
-        let px = prim.bounds[0];
-        let py = prim.bounds[1];
-        let pw = prim.bounds[2];
-        let ph = prim.bounds[3];
+        let [px, py, pw, ph] = self.drawn_bounds(prim);
 
         // Primitives with 3D perspective may project anywhere
         if prim.perspective[2] > 0.0 {
@@ -440,7 +437,7 @@ impl GpuRenderer {
                 let mut max_y = f32::MIN;
                 let mut clip: Option<([f32; 4], [f32; 4])> = None;
                 for p in primitives {
-                    let (px, py, pw, ph) = (p.bounds[0], p.bounds[1], p.bounds[2], p.bounds[3]);
+                    let [px, py, pw, ph] = self.drawn_bounds(p);
                     min_x = min_x.min(px);
                     min_y = min_y.min(py);
                     max_x = max_x.max(px + pw);

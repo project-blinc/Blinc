@@ -447,6 +447,8 @@ pub struct GpuRenderer {
     pub(crate) has_storage_buffers: bool,
     /// Whether the animated node table is bound and the SDF shaders apply it.
     node_table: bool,
+    /// The rows last written, for the placement the CPU needs (culling, layer bounds).
+    node_rows_cpu: std::sync::Mutex<Vec<crate::node_table::NodeRow>>,
     /// `true` when `device.features()` reports
     /// `TEXTURE_COMPRESSION_BC` — the renderer can upload BC1 / BC3
     /// / BC4 / BC5 material textures and cut GPU VRAM by 4-8× vs

@@ -46,6 +46,7 @@ impl Delta {
 
 /// What `apply_binding_deltas` does to a primitive that had no delta, with every changed property
 /// in the order it applies them: translate, opacity, scale about the pivot, then rotate about it.
+/// It also scales the border widths and the shadow, which the patcher leaves, as a paint does.
 fn patched_like_the_cpu(mut p: GpuPrimitive, d: &Delta) -> GpuPrimitive {
     p.bounds[0] += d.translate[0];
     p.bounds[1] += d.translate[1];
@@ -61,6 +62,9 @@ fn patched_like_the_cpu(mut p: GpuPrimitive, d: &Delta) -> GpuPrimitive {
     let radius = (rx * ry).sqrt();
     for r in &mut p.corner_radius {
         *r *= radius;
+    }
+    for length in p.border.iter_mut().chain(&mut p.shadow) {
+        *length *= radius;
     }
     rotated_like_the_cpu(p, d)
 }
@@ -92,40 +96,8 @@ fn rotated_like_the_cpu(mut p: GpuPrimitive, d: &Delta) -> GpuPrimitive {
 /// The composition the node table makes, done on the CPU: scale about the pivot, turn about it,
 /// then translate. The same as the shader's, to compare against when the CPU patcher's order
 /// would give another answer.
-fn composed(mut p: GpuPrimitive, d: &Delta) -> GpuPrimitive {
-    let [sx, sy] = d.scale;
-    let [px, py] = d.pivot;
-    let (w, h) = (p.bounds[2], p.bounds[3]);
-    let (cx, cy) = (p.bounds[0] + w * 0.5, p.bounds[1] + h * 0.5);
-    let (rx, ry) = ((cx - px) * sx, (cy - py) * sy);
-    let (sin_d, cos_d) = d.rotation.sin_cos();
-    let ncx = px + rx * cos_d - ry * sin_d + d.translate[0];
-    let ncy = py + rx * sin_d + ry * cos_d + d.translate[1];
-    let (nw, nh) = (w * sx, h * sy);
-    p.bounds = [ncx - nw * 0.5, ncy - nh * 0.5, nw, nh];
-    let radius = (sx * sy).abs().sqrt();
-    for r in &mut p.corner_radius {
-        *r *= radius;
-    }
-    let (sin_a, cos_a) = (p.rotation[0], p.rotation[1]);
-    p.rotation[0] = sin_a * cos_d + cos_a * sin_d;
-    p.rotation[1] = cos_a * cos_d - sin_a * sin_d;
-    let [a, b, c, e] = p.local_affine;
-    p.local_affine = [
-        a * cos_d + c * sin_d,
-        b * cos_d + e * sin_d,
-        -a * sin_d + c * cos_d,
-        -b * sin_d + e * cos_d,
-    ];
-    for colour in [
-        &mut p.color,
-        &mut p.color2,
-        &mut p.border_color,
-        &mut p.shadow_color,
-    ] {
-        colour[3] *= d.opacity;
-    }
-    p
+fn composed(p: GpuPrimitive, d: &Delta) -> GpuPrimitive {
+    d.row(0).apply_to_primitive(p)
 }
 
 /// A mix of what motion and CSS animations move: a rounded card with a border, a translucent

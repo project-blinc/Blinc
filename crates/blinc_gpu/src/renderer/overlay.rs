@@ -646,6 +646,8 @@ impl GpuRenderer {
         backdrop: Option<&wgpu::TextureView>,
     ) {
         let batch = resolved_batch(batch);
+        // Layers size themselves by their primitives, so the rows are applied before they do.
+        let batch = self.with_node_rows_applied(batch.as_ref());
         let batch = batch.as_ref();
         let items = nodes(batch);
         if (backdrop.is_none() && batch.has_background_glass())
