@@ -74,7 +74,7 @@ fn main() -> Result<()> {
             }
         ),
         width: 1000,
-        height: 760,
+        height: 960,
         ..Default::default()
     };
     blinc_app::windowed::WindowedApp::run(config, build_ui)
