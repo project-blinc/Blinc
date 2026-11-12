@@ -331,7 +331,8 @@ fn caret_and_hit_test_follow_css_letter_spacing() {
 
     let mut data = TextInputData::with_value("hello world");
     data.cursor = 5;
-    assert_eq!(caret_x(&mut data, &cfg), drawn("hello"));
+    // The caret is a difference of two widths, so it matches up to float rounding.
+    assert!((caret_x(&mut data, &cfg) - drawn("hello")).abs() < 0.01);
 
     // A click on the drawn edge after three characters lands after three.
     let x = drawn("hel");

@@ -96,6 +96,28 @@ impl Scene {
         self.tree.compute_layout(400.0, 300.0);
     }
 
+    /// `frame`, with the pass a runner makes over the stylesheet's layout rules whenever
+    /// layout is needed.
+    fn frame_as_a_runner(&mut self) {
+        let updates = blinc_layout::stateful::take_pending_partial_prop_updates();
+        self.tree.apply_partial_property_updates(updates);
+        self.tree.apply_stylesheet_layout_overrides();
+        self.tree.compute_layout(400.0, 300.0);
+    }
+
+    /// Let the transitions run `ms`, as a runner does each frame.
+    fn tick(&mut self, ms: f32) {
+        self.tree.css_anim_store().lock().unwrap().tick(ms);
+        self.tree.apply_all_css_transition_props();
+        if self.tree.apply_animated_layout_props() {
+            self.tree.compute_layout(400.0, 300.0);
+        }
+    }
+
+    fn height(&self, node: LayoutNodeId) -> f32 {
+        self.tree.get_absolute_bounds(node).unwrap().height
+    }
+
     fn fill(&self, node: LayoutNodeId) -> (f32, f32, f32) {
         match &self.tree.get_render_node(node).unwrap().props.background {
             Some(Brush::Solid(c)) => (c.r, c.g, c.b),
@@ -140,6 +162,79 @@ fn a_class_added_applies_its_rules_and_one_removed_takes_them_away() {
     assert_eq!(s.width(s.node), 100.0);
     assert_eq!(s.opacity(s.node), 1.0);
     assert!(!s.has_class(s.node, "on"));
+}
+
+#[test]
+fn a_layout_pass_between_toggles_does_not_keep_the_rules_of_a_class() {
+    let on = flag(false);
+    let mut s = scene(Some(RULES), |d| d.class_when("on", &on));
+    for round in 0..3 {
+        on.set(true);
+        s.frame_as_a_runner();
+        assert_eq!(s.width(s.node), 150.0, "round {round}: the class applied");
+        on.set(false);
+        s.frame_as_a_runner();
+        assert_eq!(s.width(s.node), 100.0, "round {round}: the class stayed");
+    }
+}
+
+#[test]
+fn a_layout_pass_leaves_a_class_that_holds_from_the_start_removable() {
+    let on = flag(true);
+    let mut s = scene(Some(RULES), |d| d.class_when("on", &on));
+    s.frame_as_a_runner();
+    assert_eq!(s.width(s.node), 150.0);
+    on.set(false);
+    s.frame_as_a_runner();
+    assert_eq!(s.width(s.node), 100.0);
+    on.set(true);
+    s.frame_as_a_runner();
+    assert_eq!(s.width(s.node), 150.0);
+}
+
+#[test]
+fn a_layout_pass_keeps_the_rules_a_node_has_without_the_class() {
+    let on = flag(false);
+    let mut s = scene(Some(".t { height: 20px } .on { height: 80px }"), |d| {
+        d.class_when("on", &on)
+    });
+    assert_eq!(s.height(s.node), 20.0);
+    on.set(true);
+    s.frame_as_a_runner();
+    assert_eq!(s.height(s.node), 80.0);
+    on.set(false);
+    s.frame_as_a_runner();
+    assert_eq!(
+        s.height(s.node),
+        20.0,
+        "back to the rule the node always had"
+    );
+    assert_eq!(s.height(s.other), 20.0);
+}
+
+#[test]
+fn a_transition_plays_each_time_a_class_comes_and_goes() {
+    let on = flag(false);
+    let mut s = scene(
+        Some(".t { transition: width 300ms linear } .on { width: 200px }"),
+        |d| d.class_when("on", &on),
+    );
+    for round in 0..3 {
+        for (want, to) in [(true, 200.0), (false, 100.0)] {
+            on.set(want);
+            s.frame_as_a_runner();
+            s.tick(100.0);
+            let mid = s.width(s.node);
+            assert!(
+                mid > 101.0 && mid < 199.0,
+                "round {round}, to {to}: the width was {mid} a third of the way"
+            );
+            for _ in 0..5 {
+                s.tick(100.0);
+            }
+            assert_eq!(s.width(s.node), to, "round {round}: it did not arrive");
+        }
+    }
 }
 
 #[test]

@@ -19,13 +19,18 @@ struct Scene {
 }
 
 fn scene() -> Scene {
+    scene_of(
+        blinc_cn::tree_view()
+            .node("src", "src", |n| {
+                n.child("main", "main.rs", |c| c)
+                    .child("lib", "lib.rs", |c| c)
+            })
+            .node("docs", "docs", |n| n.child("readme", "README.md", |c| c)),
+    )
+}
+
+fn scene_of(view: blinc_cn::TreeViewBuilder) -> Scene {
     init();
-    let view = blinc_cn::tree_view()
-        .node("src", "src", |n| {
-            n.child("main", "main.rs", |c| c)
-                .child("lib", "lib.rs", |c| c)
-        })
-        .node("docs", "docs", |n| n.child("readme", "README.md", |c| c));
     let host = div().w(300.0).h(400.0).child(view);
     let mut tree = RenderTree::from_element(&host);
     // cn's rules close a shut node's children; the test's rule marks the
@@ -104,7 +109,17 @@ impl Scene {
         );
         let updates = blinc_layout::take_pending_partial_prop_updates();
         self.tree.apply_partial_property_updates(updates);
+        // A runner applies the layout rules again whenever layout is needed.
+        self.tree.apply_stylesheet_layout_overrides();
         self.tree.compute_layout(300.0, 400.0);
+    }
+
+    /// Let the height animations run to the end.
+    fn settle(&mut self) {
+        for _ in 0..120 {
+            tick_animations(1.0 / 60.0);
+            self.tree.compute_layout(300.0, 400.0);
+        }
     }
 }
 
@@ -147,5 +162,60 @@ fn opening_a_node_animates_its_height() {
             drawn > 0.0 && drawn < full - 5.0,
             "the node jumped open: drawn {drawn} of {full}"
         );
+    })
+}
+
+#[test]
+fn a_node_opens_again_after_it_has_shut() {
+    guarded(|| {
+        let mut s = scene();
+        let src = s.rows()[0];
+        let children = s.children_of(src);
+        for round in 0..3 {
+            s.click(src);
+            s.settle();
+            assert!(
+                s.height(children) >= 56.0,
+                "round {round}: the node did not open, {}",
+                s.height(children)
+            );
+            s.click(src);
+            s.settle();
+            assert!(s.height(children) < 2.0, "round {round}: it did not shut");
+        }
+    })
+}
+
+#[test]
+fn a_node_that_starts_open_opens_again_after_it_has_shut() {
+    guarded(|| {
+        let mut s = scene_of(
+            blinc_cn::tree_view()
+                .with_guides()
+                .node("src", "src", |n| {
+                    n.expanded()
+                        .child("main", "main.rs", |c| c)
+                        .child("lib", "lib.rs", |c| c)
+                })
+                .node("docs", "docs", |n| n.child("readme", "README.md", |c| c)),
+        );
+        let src = s.rows()[0];
+        let children = s.children_of(src);
+        assert!(
+            s.height(children) >= 56.0,
+            "a node that starts open is shut"
+        );
+        for round in 0..3 {
+            s.click(src);
+            s.settle();
+            assert!(s.height(children) < 2.0, "round {round}: it did not shut");
+            s.click(src);
+            s.settle();
+            assert!(
+                s.height(children) >= 56.0,
+                "round {round}: the node did not open, {}",
+                s.height(children)
+            );
+        }
     })
 }

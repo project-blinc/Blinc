@@ -30,7 +30,7 @@ use std::sync::Arc;
 use super::plan::Painter;
 use super::{Kind, RECORD_FLOATS, Record, Unsupported, row};
 
-const SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/canvas.wgsl"));
+const SHADER: &str = include_str!("../shaders/canvas.wgsl");
 
 /// A canvas's logical rows and shape payload, independent of registered resources.
 #[derive(Clone, Debug)]

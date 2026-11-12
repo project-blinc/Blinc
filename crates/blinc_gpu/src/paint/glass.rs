@@ -1,6 +1,6 @@
 //! Retain glass and its backdrop scope in native visual groups.
-use super::{GpuGlassPrimitive, GpuPaintContext};
-use crate::primitives::{DynamicImage, LayerCommand};
+use super::GpuPaintContext;
+use crate::primitives::{DynamicImage, GpuGlassPrimitive, LayerCommand};
 use blinc_core::Rect;
 
 /// A recorded glass draw with owned clips and a tight retained-image footprint.

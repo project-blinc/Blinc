@@ -114,6 +114,7 @@ where
                     // `RUST_LOG=blinc_app::frame_timing=trace` to see
                     // where the frame budget is actually going.
                     let frame_start = std::time::Instant::now();
+                    blinc_core::FrameClock::begin_frame();
                     let mut t_phase1 = std::time::Duration::ZERO;
                     let mut t_phase2 = std::time::Duration::ZERO;
                     let mut t_phase3 = std::time::Duration::ZERO;

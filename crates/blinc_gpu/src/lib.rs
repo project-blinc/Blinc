@@ -30,16 +30,33 @@ pub mod gradient_texture;
 pub mod image;
 pub mod mesh_pipeline;
 pub use mesh_pipeline::{DirectionalLight, MAX_DIR_LIGHTS};
+#[cfg(test)]
+mod backdrop_parity;
+#[cfg(test)]
+mod glass_parity;
+#[cfg(test)]
+mod image_parity;
+#[cfg(test)]
+mod mesh_parity;
 pub mod paint;
+#[cfg(test)]
+mod parity_harness;
 pub mod particles;
+#[cfg(test)]
+mod particles_parity;
 pub mod path;
+#[cfg(test)]
+mod path_parity;
 pub mod primitives;
 pub mod renderer;
 #[cfg(test)]
 mod russl_parity;
 mod sdf_russl;
 pub mod shaders;
+mod shaders_russl;
 pub mod text;
+#[cfg(test)]
+mod text_parity;
 
 pub use backbuffer::{Backbuffer, BackbufferConfig, FrameContext};
 pub use custom_pass::{
@@ -69,7 +86,7 @@ pub use renderer::{
 pub use shaders::{
     BLUR_SHADER, COLOR_MATRIX_SHADER, COMPOSITE_SHADER, DROP_SHADOW_SHADER, GLASS_SHADER,
     GLOW_SHADER, IMAGE_SHADER, LAYER_COMPOSITE_SHADER, PATH_SHADER, SDF_3D_SHADER, SDF_CORE_SHADER,
-    SDF_NOTCH_SHADER, SDF_SHADER, SDF_SHADOW_SHADER, SIMPLE_GLASS_SHADER, TEXT_SHADER,
+    SDF_NOTCH_SHADER, SDF_SHADOW_SHADER, SIMPLE_GLASS_SHADER, TEXT_SHADER,
 };
 pub use text::TextRenderingContext;
 

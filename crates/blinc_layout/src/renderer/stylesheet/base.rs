@@ -388,31 +388,14 @@ impl RenderTree {
         }
     }
 
-    /// Apply CSS base styles (class and ID selectors) to a subtree after rebuild.
-    ///
-    /// Called after `process_pending_subtree_rebuilds` builds new child nodes.
-    /// `collect_render_props_boxed` only applies `#id` styles inline; class-based
-    /// selectors (`.sort-item`, `.grid-item`, etc.) are resolved by
-    /// `apply_stylesheet_base_styles()` which only runs at full tree creation.
-    /// This method fills that gap for incrementally rebuilt subtrees.
-    pub(crate) fn apply_stylesheet_base_styles_for_subtree(
+    /// Applies the stylesheet's class, complex and ID rules to `nodes` and
+    /// refreshes what depends on the result (Stateful base props, dynamic
+    /// classes).
+    fn apply_base_rules_to_nodes(
         &mut self,
-        parent_id: LayoutNodeId,
-        router: Option<&crate::event_router::EventRouter>,
+        stylesheet: &crate::css_parser::Stylesheet,
+        subtree_nodes: &[LayoutNodeId],
     ) {
-        let stylesheet = match &self.stylesheet {
-            Some(s) => s.clone(),
-            None => return,
-        };
-
-        // Collect all node IDs in the subtree (parent + descendants)
-        let mut subtree_nodes = Vec::new();
-        self.collect_subtree_ids(parent_id, &mut subtree_nodes);
-
-        if subtree_nodes.is_empty() {
-            return;
-        }
-
         // Apply complex base rules (class selectors, combinators) — lower specificity first
         let complex_rules = stylesheet.complex_rules();
         if !complex_rules.is_empty() {
@@ -448,7 +431,7 @@ impl RenderTree {
                 }
 
                 // Slow path: complex selectors need full matching
-                for &node_id in &subtree_nodes {
+                for &node_id in subtree_nodes {
                     if self
                         .complex_selector_matches(selector, node_id, &empty_set, &empty_set, None)
                         && let Some(render_node) = self.render_nodes.get_mut(&node_id)
@@ -481,7 +464,7 @@ impl RenderTree {
         }
 
         // Apply simple ID rules (highest specificity, overrides class selectors)
-        for &node_id in &subtree_nodes {
+        for &node_id in subtree_nodes {
             if let Some(element_id) = self.element_registry.get_id(node_id)
                 && let Some(base_style) = stylesheet.get(&element_id)
                 && let Some(render_node) = self.render_nodes.get_mut(&node_id)
@@ -491,7 +474,7 @@ impl RenderTree {
         }
 
         // Update Stateful base_render_props for subtree nodes with CSS-applied values
-        for &node_id in &subtree_nodes {
+        for &node_id in subtree_nodes {
             let _tree_scope = self.layout_tree.enter_scope();
             if crate::stateful::has_stateful_base_updater(node_id)
                 && let Some(render_node) = self.render_nodes.get(&node_id)
@@ -503,6 +486,63 @@ impl RenderTree {
         // Classes that follow a signal take the rules they match now, in this subtree.
         let styled: HashSet<LayoutNodeId> = subtree_nodes.iter().copied().collect();
         self.sync_dynamic_classes(Some(&styled));
+    }
+
+    /// Restyles the nodes the last `incremental_update` replaced the props of,
+    /// and only those: the work follows the change, not the tree size. Each
+    /// node takes the inherited text properties of its parent, which is either
+    /// replaced earlier in the same pass or kept from before.
+    pub fn restyle_replaced_nodes(&mut self, router: Option<&crate::event_router::EventRouter>) {
+        let nodes = std::mem::take(&mut self.props_replaced);
+        let stylesheet = match &self.stylesheet {
+            Some(s) if !nodes.is_empty() => s.clone(),
+            _ => return,
+        };
+        self.invalidate_mouse_move_pipeline_cache();
+        self.apply_base_rules_to_nodes(&stylesheet, &nodes);
+        // The replaced taffy styles carry no layout rules from the stylesheet.
+        let replaced: std::collections::HashSet<LayoutNodeId> = nodes.iter().copied().collect();
+        self.apply_stylesheet_layout_overrides_filtered(Some(&replaced));
+        for &node_id in &nodes {
+            let seed = self
+                .element_registry
+                .get_parent(node_id)
+                .and_then(|p| self.render_nodes.get(&p))
+                .map(InheritedText::from_node)
+                .unwrap_or_default();
+            self.inherit_text_into(node_id, seed);
+        }
+        if let Some(router) = router {
+            self.apply_state_styles_for_subtree(&nodes, router);
+        }
+    }
+
+    /// Apply CSS base styles (class and ID selectors) to a subtree after rebuild.
+    ///
+    /// Called after `process_pending_subtree_rebuilds` builds new child nodes.
+    /// `collect_render_props_boxed` only applies `#id` styles inline; class-based
+    /// selectors (`.sort-item`, `.grid-item`, etc.) are resolved by
+    /// `apply_stylesheet_base_styles()` which only runs at full tree creation.
+    /// This method fills that gap for incrementally rebuilt subtrees.
+    pub(crate) fn apply_stylesheet_base_styles_for_subtree(
+        &mut self,
+        parent_id: LayoutNodeId,
+        router: Option<&crate::event_router::EventRouter>,
+    ) {
+        let stylesheet = match &self.stylesheet {
+            Some(s) => s.clone(),
+            None => return,
+        };
+
+        // Collect all node IDs in the subtree (parent + descendants)
+        let mut subtree_nodes = Vec::new();
+        self.collect_subtree_ids(parent_id, &mut subtree_nodes);
+
+        if subtree_nodes.is_empty() {
+            return;
+        }
+
+        self.apply_base_rules_to_nodes(&stylesheet, &subtree_nodes);
 
         // Propagate inherited text properties (color, text-decoration,
         // etc.) down the rebuilt subtree, seeded from what the subtree's
@@ -547,7 +587,20 @@ impl RenderTree {
     /// Fill a node's unset text properties from what it inherits, then
     /// carry the result to its layout children.
     fn propagate_inherited_text(&mut self, node_id: LayoutNodeId, inherited: InheritedText) {
-        let carried = match self.render_nodes.get_mut(&node_id) {
+        let carried = self.inherit_text_into(node_id, inherited);
+        for child_id in self.layout_tree.children(node_id) {
+            self.propagate_inherited_text(child_id, carried);
+        }
+    }
+
+    /// Fills the unset text properties of one node and returns what it
+    /// passes on to its children.
+    fn inherit_text_into(
+        &mut self,
+        node_id: LayoutNodeId,
+        inherited: InheritedText,
+    ) -> InheritedText {
+        match self.render_nodes.get_mut(&node_id) {
             Some(node) => {
                 let p = &mut node.props;
                 p.text_decoration = p.text_decoration.or(inherited.decoration);
@@ -575,9 +628,6 @@ impl RenderTree {
             // A layout node with no render node inherits nothing of its
             // own, but must not break the chain to its children.
             None => inherited,
-        };
-        for child_id in self.layout_tree.children(node_id) {
-            self.propagate_inherited_text(child_id, carried);
         }
     }
 

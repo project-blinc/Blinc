@@ -19,6 +19,39 @@ use blinc_platform::{ControlFlow, Window};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+/// Re-applies the stylesheet after `RenderTree::incremental_update`.
+///
+/// The update replaces node props with the new element tree's props, which
+/// carry no style from class selectors (`collect_render_props` only applies
+/// ID-based CSS). Only the replaced nodes are restyled, layout rules included,
+/// so the cost follows the change and not the size of the tree.
+fn restyle_after_incremental_update(
+    tree: &mut RenderTree,
+    result: blinc_layout::UpdateResult,
+    router: Option<&blinc_layout::event_router::EventRouter>,
+) {
+    use blinc_layout::UpdateResult;
+
+    match result {
+        UpdateResult::NoChanges => {
+            tracing::debug!("Incremental update: NoChanges - skipping rebuild");
+        }
+        UpdateResult::VisualOnly => {
+            tracing::debug!("Incremental update: VisualOnly - skipping layout");
+            tree.restyle_replaced_nodes(router);
+        }
+        UpdateResult::LayoutChanged => {
+            tracing::debug!("Incremental update: LayoutChanged - recomputing layout");
+            tree.restyle_replaced_nodes(router);
+        }
+        UpdateResult::ChildrenChanged => {
+            tracing::debug!("Incremental update: ChildrenChanged - subtrees rebuilt");
+            tree.apply_stylesheet_base_styles();
+            tree.apply_stylesheet_layout_overrides();
+        }
+    }
+}
+
 /// Phase 1: check whether the tree structure needs a rebuild.
 pub(super) fn check_rebuild(
     ws: &mut WindowState,
@@ -810,31 +843,21 @@ where
                     existing_tree.update_flip_bounds();
                 }
 
+                restyle_after_incremental_update(
+                    existing_tree,
+                    update_result,
+                    Some(&windowed_ctx.event_router),
+                );
+
                 match update_result {
-                    UpdateResult::NoChanges => {
-                        tracing::debug!("Incremental update: NoChanges - skipping rebuild");
-                    }
-                    UpdateResult::VisualOnly => {
-                        tracing::debug!("Incremental update: VisualOnly - skipping layout");
-                        // Props already updated in-place by incremental_update
-                    }
+                    UpdateResult::NoChanges | UpdateResult::VisualOnly => {}
                     UpdateResult::LayoutChanged => {
                         // Layout changed - recompute layout
-                        tracing::debug!("Incremental update: LayoutChanged - recomputing layout");
-                        existing_tree.apply_stylesheet_layout_overrides();
                         existing_tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
                         existing_tree.update_flip_bounds();
                     }
                     UpdateResult::ChildrenChanged => {
-                        // Children changed - subtrees were rebuilt in place
-                        tracing::debug!("Incremental update: ChildrenChanged - subtrees rebuilt");
-
-                        // Apply CSS styles to new nodes from rebuilt subtrees
-                        // (collect_render_props only applies ID-based CSS;
-                        // class selectors need apply_stylesheet_base_styles)
-                        existing_tree.apply_stylesheet_base_styles();
                         // Recompute layout since structure changed
-                        existing_tree.apply_stylesheet_layout_overrides();
                         existing_tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
                         // FLIP: detect position changes and start CSS transitions
                         existing_tree.apply_flip_transitions();
@@ -958,4 +981,100 @@ where
         keep_alive,
     };
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::restyle_after_incremental_update;
+    use blinc_core::{Brush, Color};
+    use blinc_layout::div::{Div, div};
+    use blinc_layout::prelude::Stylesheet;
+    use blinc_layout::{RenderTree, UpdateResult};
+
+    const CSS: &str = ".panel { background: #ff0000; }";
+
+    /// A panel styled by a class rule next to a button whose colour is set in Rust.
+    fn ui(button_color: Color, button_width: f32) -> Div {
+        div()
+            .w(400.0)
+            .h(200.0)
+            .child(div().id("panel").class("panel").w(200.0).h(100.0))
+            .child(div().id("button").bg(button_color).w(button_width).h(30.0))
+    }
+
+    /// The first pass, as the windowed loop runs it for a new tree.
+    fn first_pass() -> RenderTree {
+        let mut tree = RenderTree::from_element(&ui(Color::BLUE, 80.0));
+        tree.set_stylesheet(Stylesheet::parse(CSS).expect("css"));
+        tree.apply_all_stylesheet_styles();
+        tree.compute_layout(400.0, 200.0);
+        tree
+    }
+
+    fn panel_is_red(tree: &RenderTree) -> bool {
+        let panel = tree.query_by_id("panel").expect("panel node");
+        let node = tree.get_render_node(panel).expect("panel render node");
+        matches!(node.props.background, Some(Brush::Solid(c)) if c == Color::RED)
+    }
+
+    /// The case that must keep working: only the button's colour changes.
+    #[test]
+    fn class_background_survives_a_visual_only_update() {
+        let mut tree = first_pass();
+        assert!(panel_is_red(&tree), "the first pass applies the class rule");
+
+        let result = tree.incremental_update(&ui(Color::GREEN, 80.0));
+        assert_eq!(result, UpdateResult::VisualOnly);
+        restyle_after_incremental_update(&mut tree, result, None);
+
+        assert!(
+            panel_is_red(&tree),
+            "the panel keeps its class background after a VisualOnly update"
+        );
+    }
+
+    /// The case that must keep working: the button's width changes.
+    #[test]
+    fn class_background_survives_a_layout_changed_update() {
+        let mut tree = first_pass();
+
+        let result = tree.incremental_update(&ui(Color::BLUE, 120.0));
+        assert_eq!(result, UpdateResult::LayoutChanged);
+        restyle_after_incremental_update(&mut tree, result, None);
+
+        assert!(
+            panel_is_red(&tree),
+            "the panel keeps its class background after a LayoutChanged update"
+        );
+    }
+
+    /// A panel whose own props change: its class background must come back with the restyle.
+    fn ui_with_panel_width(panel_width: f32) -> Div {
+        div()
+            .w(400.0)
+            .h(200.0)
+            .child(div().id("panel").class("panel").w(panel_width).h(100.0))
+    }
+
+    /// Proves what the tests above guard: a node whose props the update replaces loses
+    /// the class background unless the restyle runs (issue #70). A node whose own hash is
+    /// unchanged keeps its props and is not replaced.
+    #[test]
+    fn incremental_update_alone_drops_the_class_background_of_a_replaced_node() {
+        let first = || {
+            let mut tree = RenderTree::from_element(&ui_with_panel_width(200.0));
+            tree.set_stylesheet(Stylesheet::parse(CSS).expect("css"));
+            tree.apply_all_stylesheet_styles();
+            tree.compute_layout(400.0, 200.0);
+            tree
+        };
+
+        let mut tree = first();
+        assert!(panel_is_red(&tree));
+        let result = tree.incremental_update(&ui_with_panel_width(220.0));
+        assert_ne!(result, UpdateResult::NoChanges);
+        assert!(!panel_is_red(&tree));
+        restyle_after_incremental_update(&mut tree, result, None);
+        assert!(panel_is_red(&tree));
+    }
 }

@@ -3,8 +3,8 @@
 use super::{Kind, RECORD_FLOATS, Record, Unsupported, row};
 use crate::renderer::LayerTexture;
 
-const SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/backdrop.wgsl"));
-const ROWS_SHADER: &str = include_str!("../shaders/backdrop_rows.wgsl");
+const SHADER: &str = crate::sdf_russl::backdrop::WGSL;
+const ROWS_SHADER: &str = crate::shaders_russl::backdrop_rows::WGSL;
 
 /// A backdrop's logical ABI rows and the shape points they address.
 #[derive(Clone, Debug)]

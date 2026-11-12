@@ -24,43 +24,48 @@ Animation system for Blinc UI - spring physics, keyframes, and timeline orchestr
 ```rust
 use blinc_animation::{Spring, SpringConfig};
 
-// Create a spring
-let spring = Spring::new(SpringConfig {
-    stiffness: 300.0,
-    damping: 20.0,
-    mass: 1.0,
-});
+// A spring at 0.0, with its own stiffness, damping and mass.
+let mut spring = Spring::new(SpringConfig::new(300.0, 20.0, 1.0), 0.0);
 
-// Animate to target
-spring.animate_to(100.0);
+// Aim it at a target. It keeps its velocity.
+spring.set_target(100.0);
 
-// Update each frame
-let value = spring.update(delta_time);
+// Step it each frame by the time since the last, in seconds.
+spring.step(1.0 / 60.0);
+let value = spring.value();
+let done = spring.is_settled();
 ```
 
 ### Spring Presets
 
 ```rust
 SpringConfig::gentle()      // Slow, gentle movement
-SpringConfig::default()     // Balanced default
-SpringConfig::bouncy()      // Playful bounce
-SpringConfig::stiff()       // Quick, snappy
+SpringConfig::wobbly()      // Playful overshoot
+SpringConfig::stiff()       // Quick, snappy (the default)
+SpringConfig::snappy()      // Quick with little overshoot
+SpringConfig::molasses()    // Very slow
 ```
 
 ## Keyframe Animations
 
 ```rust
-use blinc_animation::{KeyframeAnimation, Keyframe, Easing};
+use blinc_animation::{Easing, Keyframe, KeyframeAnimation};
 
-let animation = KeyframeAnimation::new()
-    .keyframe(Keyframe::new(0.0, 0.0))
-    .keyframe(Keyframe::new(0.5, 100.0).easing(Easing::EaseOut))
-    .keyframe(Keyframe::new(1.0, 80.0).easing(Easing::EaseInOut))
-    .duration(Duration::from_millis(500));
-
-// Update each frame
-let value = animation.update(delta_time);
+// A duration in milliseconds, and keyframes at 0.0..=1.0 of it. The easing
+// of a keyframe applies on the way to it.
+let mut animation = KeyframeAnimation::new(
+    500,
+    vec![
+        Keyframe { time: 0.0, value: 0.0, easing: Easing::Linear },
+        Keyframe { time: 0.5, value: 100.0, easing: Easing::EaseOut },
+        Keyframe { time: 1.0, value: 80.0, easing: Easing::EaseInOut },
+    ],
+);
+animation.start();
+let value = animation.value();
 ```
+
+The scheduler advances animations it holds; see below.
 
 ### Easing Functions
 
@@ -69,84 +74,64 @@ Easing::Linear
 Easing::EaseIn
 Easing::EaseOut
 Easing::EaseInOut
+Easing::EaseInQuad      // also Out and InOut, and Cubic and Quart
 Easing::CubicBezier(0.4, 0.0, 0.2, 1.0)
 ```
 
 ## Timelines
 
 ```rust
-use blinc_animation::{Timeline, TimelineEntry};
+use blinc_animation::{Easing, Timeline};
 
-let timeline = Timeline::new()
-    .add(opacity_animation, Duration::ZERO)
-    .add(scale_animation, Duration::from_millis(100))
-    .add(position_animation, Duration::from_millis(200));
+let mut timeline = Timeline::new();
 
-// Play/pause/seek
-timeline.play();
+// Offset and duration in milliseconds, then the start and end values.
+let opacity = timeline.add(0, 300, 0.0, 1.0);
+let scale = timeline.add_with_easing(100, 400, 0.8, 1.0, Easing::EaseOut);
+
+timeline.start();
+timeline.tick(16.0); // milliseconds
+let opacity_now = timeline.value(opacity); // Option<f32>
+
 timeline.pause();
-timeline.seek(Duration::from_millis(150));
+timeline.resume();
+timeline.seek(150.0);
 ```
 
 ## Animation Scheduler
 
 ```rust
-use blinc_animation::AnimationScheduler;
+use blinc_animation::{AnimationScheduler, Spring, SpringConfig};
 
-// Global scheduler manages all active animations
-let scheduler = AnimationScheduler::global();
+// The scheduler holds springs, keyframe animations and timelines.
+let scheduler = AnimationScheduler::new();
 
-// Schedule an animation
-scheduler.schedule(animation);
+let id = scheduler.add_spring(Spring::new(SpringConfig::snappy(), 0.0));
+scheduler.set_spring_target(id, 1.0);
 
-// Update all animations
-scheduler.update(delta_time);
-```
-
-## Multi-Property Animation
-
-```rust
-use blinc_animation::AnimatedValue;
-
-struct AnimatedElement {
-    x: AnimatedValue<f32>,
-    y: AnimatedValue<f32>,
-    opacity: AnimatedValue<f32>,
-    scale: AnimatedValue<f32>,
-}
-
-impl AnimatedElement {
-    fn animate_to(&mut self, x: f32, y: f32) {
-        self.x.animate_to(x);
-        self.y.animate_to(y);
-    }
-
-    fn update(&mut self, dt: f32) {
-        self.x.update(dt);
-        self.y.update(dt);
-        self.opacity.update(dt);
-        self.scale.update(dt);
-    }
-}
+// Advances everything it holds by the time since the last tick.
+scheduler.tick();
+let value = scheduler.get_spring_value(id);
 ```
 
 ## Presets
 
 ```rust
-use blinc_animation::presets;
+use blinc_animation::AnimationPreset;
 
-// Entry animations
-presets::fade_in()
-presets::slide_in_left()
-presets::slide_in_right()
-presets::scale_in()
-presets::bounce_in()
+// Each takes a duration in milliseconds.
+AnimationPreset::fade_in(300)
+AnimationPreset::fade_out(300)
+AnimationPreset::scale_in(300)
+AnimationPreset::scale_out(300)
+AnimationPreset::pop_in(300)
+AnimationPreset::bounce_in(500)
+AnimationPreset::bounce_out(500)
+AnimationPreset::shake(400, 8.0)        // and an intensity
 
-// Exit animations
-presets::fade_out()
-presets::slide_out_left()
-presets::slide_out_right()
-presets::scale_out()
+// Slides also take a distance.
+AnimationPreset::slide_in_left(300, 40.0)   // right, top and bottom too
+AnimationPreset::slide_out_left(300, 40.0)
 ```
 
 ## License

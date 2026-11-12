@@ -295,8 +295,8 @@ mod tests {
     #[test]
     fn both_mapped_image_shaders_validate() {
         for source in [
-            include_str!(concat!(env!("OUT_DIR"), "/image.wgsl")),
-            include_str!(concat!(env!("OUT_DIR"), "/image_dt.wgsl")),
+            crate::shaders::IMAGE_SHADER,
+            crate::shaders::IMAGE_DT_SHADER,
         ] {
             let module = naga::front::wgsl::parse_str(source).expect("image WGSL parses");
             naga::valid::Validator::new(

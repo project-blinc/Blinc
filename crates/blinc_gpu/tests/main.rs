@@ -24,6 +24,5 @@ mod rgba_clip_properties;
 mod rgba_order;
 mod rgba_path_clip;
 mod sdf_shaped_rect;
-mod shader_prelude;
 mod shadow_spread;
 mod superellipse_shortcut;

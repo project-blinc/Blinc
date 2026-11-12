@@ -612,10 +612,10 @@ impl GpuRenderer {
         self.queue.write_buffer(
             &self.buffers.uniforms,
             0,
-            bytemuck::bytes_of(&crate::primitives::Uniforms {
-                viewport_size: [viewport.0 as f32, viewport.1 as f32],
-                _padding: [0.0; 2],
-            }),
+            bytemuck::bytes_of(&crate::primitives::Uniforms::new([
+                viewport.0 as f32,
+                viewport.1 as f32,
+            ])),
         );
         (straight, extent)
     }
@@ -682,10 +682,10 @@ impl GpuRenderer {
         self.queue.write_buffer(
             &self.buffers.uniforms,
             0,
-            bytemuck::bytes_of(&crate::primitives::Uniforms {
-                viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
-                _padding: [0.0; 2],
-            }),
+            bytemuck::bytes_of(&crate::primitives::Uniforms::new([
+                self.viewport_size.0 as f32,
+                self.viewport_size.1 as f32,
+            ])),
         );
     }
 
