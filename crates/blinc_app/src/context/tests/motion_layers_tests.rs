@@ -5,8 +5,9 @@ use crate::tests::{create_test_texture, read_rendered_pixels};
 fn app() -> BlincApp {
     BlincApp::with_config(BlincConfig {
         sample_count: 1,
-        // These test the promoted layers, which the node table leaves out.
+        // These test the promoted layers, which the node table and rows on the CPU leave out.
         node_table: false,
+        motion_promotion: true,
         ..Default::default()
     })
     .expect("offscreen GPU required")

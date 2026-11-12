@@ -125,6 +125,8 @@ pub(super) struct NodeRows {
     slots: Vec<Slot>,
     /// The rows last written.
     rows: Vec<NodeRow>,
+    /// Whether the rows are applied on the CPU, because the renderer has no table.
+    cpu: bool,
 }
 
 /// The ordinal of the nearest bound node at or above `node`, zero for none.
@@ -354,6 +356,7 @@ impl NodeRows {
             batch.node_slots_epoch = 0;
         }
         self.epoch = 0;
+        self.cpu = false;
         self.slots.clear();
         self.rows.clear();
     }
@@ -427,6 +430,32 @@ impl NodeRows {
     /// The rows last written to the table.
     pub(super) fn rows(&self) -> &[NodeRow] {
         &self.rows
+    }
+
+    /// Whether the rows are applied by [`resolve_primitives`](Self::resolve_primitives) on the
+    /// CPU, because the renderer has no table to read them from.
+    pub(super) fn cpu_backend(&self) -> bool {
+        self.cpu && self.epoch != 0
+    }
+
+    /// The assignment of slots the rows belong to.
+    pub(super) fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
+    /// `prims` as they are drawn under the rows now, each slotted one moved and its slot cleared,
+    /// for a renderer with no table.
+    pub(super) fn resolve_primitives(&self, prims: &[GpuPrimitive]) -> Vec<GpuPrimitive> {
+        prims
+            .iter()
+            .map(|p| {
+                if p.node_slot().is_some() {
+                    blinc_gpu::node_table::resolve_primitive(&self.rows, p)
+                } else {
+                    *p
+                }
+            })
+            .collect()
     }
 
     /// Whether the chain of rows from `row` changes nothing.
@@ -744,12 +773,14 @@ impl NodeRows {
             rows.push(batch_row);
             rows.push(text_row);
         }
+        let on_gpu = renderer.node_table_enabled();
         if rows != self.rows {
-            if !renderer.set_node_rows(&rows) {
+            if on_gpu && !renderer.set_node_rows(&rows) {
                 return self.decline(true, batch, text, bindings);
             }
             self.rows = rows;
         }
+        self.cpu = !on_gpu;
 
         // A group's opacity is the value itself, set on its command.
         for slot in &self.slots {

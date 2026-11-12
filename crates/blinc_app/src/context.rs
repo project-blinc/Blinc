@@ -591,6 +591,12 @@ const ATLAS_GC_MAX_AGE: u64 = 120;
 
 impl RenderContext {
     /// Allow or forbid baking motion-bound subtrees to textures.
+    /// Whether bound nodes are painted as vectors once and moved by rows: of the GPU node table
+    /// where there is one, and otherwise by the same rows applied on the CPU.
+    pub(crate) fn rows_mode(&self) -> bool {
+        self.renderer.node_table_enabled() || !self.promote_motion
+    }
+
     pub(crate) fn set_promote_motion(&mut self, on: bool) {
         self.promote_motion = on;
     }

@@ -360,7 +360,7 @@ impl RenderContext {
         dpi: f32,
         adopt: bool,
     ) -> Option<Outcome> {
-        if !self.renderer.node_table_enabled() {
+        if !self.rows_mode() {
             return None;
         }
         let batch = self.cached_dynamic_batch.as_mut()?;
@@ -397,6 +397,28 @@ impl RenderContext {
             dpi,
             adopt,
         ))
+    }
+
+    /// With the rows applied on the CPU, put the primitives of the dynamic batch where the rows
+    /// put them, and hand back the ones that were there to put back after the batch is drawn.
+    /// `None`, and the batch as it is, when the rows are on the GPU or there are none.
+    pub(super) fn resolve_dynamic_batch(&mut self) -> Option<Vec<blinc_gpu::GpuPrimitive>> {
+        if !self.node_rows.cpu_backend() {
+            return None;
+        }
+        let batch = self.cached_dynamic_batch.as_mut()?;
+        if batch.node_slots_epoch != self.node_rows.epoch() {
+            return None;
+        }
+        let resolved = self.node_rows.resolve_primitives(&batch.primitives);
+        Some(std::mem::replace(&mut batch.primitives, resolved))
+    }
+
+    /// Undo [`resolve_dynamic_batch`](Self::resolve_dynamic_batch).
+    pub(super) fn restore_dynamic_batch(&mut self, original: Option<Vec<blinc_gpu::GpuPrimitive>>) {
+        if let (Some(original), Some(batch)) = (original, self.cached_dynamic_batch.as_mut()) {
+            batch.primitives = original;
+        }
     }
 
     /// Whether what a motion subtree has outside the dynamic batch is something rows cannot

@@ -43,6 +43,9 @@ enum Path {
     Patched,
     /// The vector frames, with motion-bound primitives moved by rows of the GPU node table.
     Table,
+    /// The vector frames, with the same rows applied on the CPU: what a device with no table
+    /// gets when motion is not baked.
+    Rows,
 }
 
 /// What a scene does at each step before the frame is painted.
@@ -63,7 +66,7 @@ fn session(path: Path) -> Option<Headless> {
     // The paths run with the table as they say whatever the environment says.
     let paint = match path {
         Path::Full | Path::Patched => MotionPaint::Promoted,
-        Path::Vector => MotionPaint::Vector,
+        Path::Vector | Path::Rows => MotionPaint::Vector,
         Path::Table => MotionPaint::NodeTable,
     };
     // `BLINC_ANIM_PATHS_SCALE=2` runs the scenes at a retina density.
@@ -168,7 +171,7 @@ fn run_logged(scene: &Scene, path: Path) -> Option<(Vec<CapturedFrame>, Vec<Stri
         ui.advance(scene.step_ms);
         let frame = match path {
             Path::Full | Path::Vector => ui.snapshot(),
-            Path::Patched | Path::Table => ui.snapshot_fast(),
+            Path::Patched | Path::Table | Path::Rows => ui.snapshot_fast(),
         };
         frames.push(frame.expect("a frame"));
         // One painting event per frame, and a `rows:` event when the node table was asked to move
@@ -862,7 +865,7 @@ fn compare(
 ) -> Option<(Report, Vec<CapturedFrame>, Vec<CapturedFrame>, Vec<String>)> {
     let reference = run(
         scene,
-        if path == Path::Table {
+        if matches!(path, Path::Table | Path::Rows) {
             Path::Vector
         } else {
             Path::Full
@@ -978,11 +981,12 @@ const ON_ROWS: &[&str] = &[
 ];
 
 /// Paint every scene with the node table and hold the ones it moves alone to the vector paint.
-#[test]
-fn the_node_table_against_the_reference() {
+/// Every scene on `path` is held to the vector paint, and those in `ON_ROWS` must be moved by
+/// rows.
+fn rows_against_the_reference(path: Path) {
     let mut off = Vec::new();
     for scene in scenes() {
-        let Some((report, reference, painted, paths)) = compare(&scene, Path::Table) else {
+        let Some((report, reference, painted, paths)) = compare(&scene, path) else {
             return;
         };
         let (step, (pixels, channel)) = report.worst();
@@ -994,8 +998,9 @@ fn the_node_table_against_the_reference() {
         );
         if let Ok(dir) = std::env::var("BLINC_ANIM_PATHS_OUT") {
             let steps = sheet_steps(&report);
-            let file = format!("{dir}/table/{}.png", report.name.replace([' ', ','], "_"));
-            std::fs::create_dir_all(format!("{dir}/table")).unwrap();
+            let folder = format!("{dir}/{}", format!("{path:?}").to_lowercase());
+            let file = format!("{folder}/{}.png", report.name.replace([' ', ','], "_"));
+            std::fs::create_dir_all(&folder).unwrap();
             ScreenshotExporter::save_png(&sheet(&reference, &painted, &steps), file).unwrap();
         }
         // Every scene is held to the vector paint; those in ON_ROWS must also be moved by rows.
@@ -1022,7 +1027,17 @@ fn the_node_table_against_the_reference() {
             ));
         }
     }
-    assert!(off.is_empty(), "the node table: {}", off.join("; "));
+    assert!(off.is_empty(), "rows on {path:?}: {}", off.join("; "));
+}
+
+#[test]
+fn the_node_table_against_the_reference() {
+    rows_against_the_reference(Path::Table);
+}
+
+#[test]
+fn the_cpu_rows_against_the_reference() {
+    rows_against_the_reference(Path::Rows);
 }
 
 /// Where a set of pixels sits and which way its long side points.
@@ -1791,7 +1806,7 @@ fn frame_times(scene: &Scene, path: Path) -> Option<Vec<f64>> {
         let started = std::time::Instant::now();
         let frame = match path {
             Path::Full | Path::Vector => ui.snapshot(),
-            Path::Patched | Path::Table => ui.snapshot_fast(),
+            Path::Patched | Path::Table | Path::Rows => ui.snapshot_fast(),
         };
         frame.expect("a frame");
         times.push(started.elapsed().as_secs_f64() * 1000.0);
@@ -1814,6 +1829,7 @@ fn what_a_frame_costs_with_many_bound_cards() {
             ("promoted, full paint", Path::Full),
             ("vectors, full paint", Path::Vector),
             ("promoted, patched", Path::Patched),
+            ("rows on the CPU", Path::Rows),
             ("node table", Path::Table),
         ] {
             let Some(mut times) = frame_times(&scene, path) else {

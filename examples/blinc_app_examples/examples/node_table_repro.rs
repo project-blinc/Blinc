@@ -10,11 +10,13 @@
 //! ```text
 //! cargo run -p blinc_app_examples --example node_table_repro
 //! BLINC_NODE_TABLE=1 cargo run -p blinc_app_examples --example node_table_repro
+//! BLINC_MOTION_PROMOTION=0 cargo run -p blinc_app_examples --example node_table_repro
 //! ```
 //!
 //! The first bakes each moving subtree to a texture and blits it, as the framework does by default.
-//! The second paints them as vectors once and moves them with rows of the GPU node table. Things to
-//! look at:
+//! The second paints them as vectors once and moves them with rows of the GPU node table. The third
+//! paints them as vectors once and moves them with the same rows applied on the CPU, which is what a
+//! device without the table gets. Things to look at:
 //!
 //! - edges and text while a card scales up: a baked texture goes soft, the table stays sharp;
 //! - the label on a card that moves, scales or turns: it must stay put on the card;
@@ -62,8 +64,14 @@ fn main() -> Result<()> {
 
     let config = WindowConfig {
         title: format!(
-            "Node table repro: table {}",
-            if table_is_on() { "ON" } else { "OFF" }
+            "Node table repro: {}",
+            if table_is_on() {
+                "table ON"
+            } else if promotion_is_off() {
+                "table OFF, CPU rows"
+            } else {
+                "table OFF"
+            }
         ),
         width: 1000,
         height: 760,
@@ -78,6 +86,12 @@ const PIXEL: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAA
 /// Whether the tiles the node table cannot move are shown too (`FALLBACKS=1`).
 fn fallbacks() -> bool {
     std::env::var("FALLBACKS").is_ok_and(|v| v == "1")
+}
+
+fn promotion_is_off() -> bool {
+    std::env::var("BLINC_MOTION_PROMOTION")
+        .map(|v| v == "0" || v.eq_ignore_ascii_case("false"))
+        .unwrap_or(false)
 }
 
 fn table_is_on() -> bool {
@@ -537,6 +551,8 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
 
     let mode = if table_is_on() {
         "node table ON: motion-bound nodes are vectors moved by GPU rows"
+    } else if promotion_is_off() {
+        "node table OFF, rows on the CPU: motion-bound nodes are vectors moved by the same rows"
     } else {
         "node table OFF: motion-bound nodes are baked textures (set BLINC_NODE_TABLE=1)"
     };

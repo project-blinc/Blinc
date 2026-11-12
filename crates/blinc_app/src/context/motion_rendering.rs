@@ -91,10 +91,11 @@ impl RenderContext {
         let used_fast_paint = canvas_output.is_some();
 
         // Create a single paint context for all layers with text rendering support
+        let rows_mode = self.rows_mode();
         let mut ctx =
             GpuPaintContext::with_text_context(width as f32, height as f32, &mut self.text_ctx);
         ctx.enable_deferred_text();
-        ctx.set_moving_groups_dynamic(self.renderer.node_table_enabled());
+        ctx.set_moving_groups_dynamic(rows_mode);
         ctx.enable_deferred_svg();
         ctx.enable_deferred_image();
         ctx.enable_glass_layers();
@@ -247,8 +248,8 @@ impl RenderContext {
                     // sharp as their node moves and settles.
                     let ordinal = node_rows::ordinal_of(tree, text.node);
                     let mut run_id = 0u32;
-                    let table = self.renderer.node_table_enabled();
-                    let mut prepared = if (table || !self.promote_motion) && ordinal != 0 {
+                    let table = self.rows_mode();
+                    let mut prepared = if table && ordinal != 0 {
                         let (scale, moving) = frame_text::raster_scale(tree, text.node, true);
                         let k = frame_text::raster_size(
                             scale.max(frame_text::affine_scale(text.css_affine)),
@@ -419,7 +420,7 @@ impl RenderContext {
         let layer_3d_ids: Vec<LayoutNodeId> = layer_3d_texts.keys().cloned().collect();
 
         // Text that a bound ancestor scales up is rasterized at the size it will be shown.
-        let by_target = self.renderer.node_table_enabled() || !self.promote_motion;
+        let by_target = self.rows_mode();
         let raster_scales: std::collections::HashMap<LayoutNodeId, (f32, bool)> =
             motion_subtree_texts
                 .iter()
@@ -521,6 +522,7 @@ impl RenderContext {
         if !self.in_compositor_inner_call {
             self.composite_css_layers_overlay(tree, target, LayerScope::Main);
             self.composite_motion_layers_overlay(tree, target, LayerScope::Main);
+            let moved = self.resolve_dynamic_batch();
             if let Some(ref dynamic_batch) = self.cached_dynamic_batch {
                 if !dynamic_batch.primitives.is_empty()
                     || dynamic_batch.has_paths()
@@ -538,13 +540,14 @@ impl RenderContext {
                 self.renderer.render_foreground(target, dynamic_batch);
                 self.renderer.update_aux_data_for_batch(&batch);
             }
+            self.restore_dynamic_batch(moved);
         }
 
         // Draw motion text and SVG after their dynamic geometry. Inside the compositor's cache
         // paint the target is the static layer, and the compositor draws them again on top of it
         // each frame. Where motion is not baked to textures (the node table, or vectors) that copy
         // would stay at the pose of this paint while the other moves.
-        let motion_is_vectors = !self.promote_motion || self.renderer.node_table_enabled();
+        let motion_is_vectors = self.rows_mode();
         if !(self.in_compositor_inner_call && motion_is_vectors) {
             self.dispatch_motion_subtree_overlay_pools(tree, target);
         }

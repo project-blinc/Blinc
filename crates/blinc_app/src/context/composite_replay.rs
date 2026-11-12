@@ -162,11 +162,7 @@ impl RenderContext {
             && let Some(images) = self.cached_motion_subtree_images.clone()
         {
             let (width, height) = self.renderer.viewport_size();
-            let images = if self.renderer.node_table_enabled() {
-                self.node_rows.place_images(&images, tree.scale_factor())
-            } else {
-                images
-            };
+            let images = self.node_rows.place_images(&images, tree.scale_factor());
             self.render_images(
                 target_view,
                 &images,
@@ -220,6 +216,10 @@ impl RenderContext {
                         }
                     }
                 }
+            }
+            // Without a table to read them, the rows move the glyphs here.
+            if self.node_rows.cpu_backend() && text.node_slots_epoch == self.node_rows.epoch() {
+                text.primitives = self.node_rows.resolve_primitives(&text.primitives);
             }
             self.render_text(target_view, &text);
         }

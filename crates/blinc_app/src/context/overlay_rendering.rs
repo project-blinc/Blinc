@@ -73,6 +73,7 @@ impl RenderContext {
     /// Draw the dynamic owner in a separate pass with its own auxiliary rows.
     pub(super) fn dispatch_dynamic_batch_overlay(&mut self, target_view: &wgpu::TextureView) {
         self.rebind_glyph_atlas_for_overlay();
+        let moved = self.resolve_dynamic_batch();
         if let Some(batch) = self.cached_dynamic_batch.as_ref() {
             if !batch.primitives.is_empty() || batch.has_paths() || batch.has_ordered_draws() {
                 if batch.requires_ordered_rendering() {
@@ -85,6 +86,7 @@ impl RenderContext {
             }
             self.renderer.render_foreground(target_view, batch);
         }
+        self.restore_dynamic_batch(moved);
     }
 
     /// Draw overlay-subtree canvases above their dynamic host geometry.
