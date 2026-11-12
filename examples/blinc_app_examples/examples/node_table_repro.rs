@@ -74,7 +74,7 @@ fn main() -> Result<()> {
             }
         ),
         width: 1000,
-        height: 960,
+        height: 760,
         ..Default::default()
     };
     blinc_app::windowed::WindowedApp::run(config, build_ui)
@@ -532,32 +532,6 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
             "Text only",
             "a bound container with nothing but text",
             stage().child(label),
-            flip,
-        ));
-    }
-
-    // 10. A scroll container: the wheel moves a row, not a repaint of the visible rows.
-    {
-        let mut list = div().flex_col().gap(1.0).p(1.0);
-        for i in 0..60 {
-            let hue = (i % 7) as f32 / 7.0;
-            list = list.child(
-                div()
-                    .w(190.0)
-                    .h(22.0)
-                    .rounded(5.0)
-                    .bg(Color::rgb(0.2 + 0.4 * hue, 0.45, 0.9 - 0.4 * hue))
-                    .flex_row()
-                    .items_center()
-                    .px(2.0)
-                    .child(text(format!("Row {i}")).size(12.0).color(Color::WHITE)),
-            );
-        }
-        let flip: Flip = Arc::new(|| {});
-        tiles.push(tile(
-            "Scroll",
-            "the wheel scrolls a list; a frame moves a row",
-            stage().child(scroll().w(220.0).h(130.0).child(list)),
             flip,
         ));
     }
