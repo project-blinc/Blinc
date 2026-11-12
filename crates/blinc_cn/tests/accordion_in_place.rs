@@ -83,6 +83,8 @@ impl Scene {
         );
         let updates = blinc_layout::take_pending_partial_prop_updates();
         self.tree.apply_partial_property_updates(updates);
+        // A runner applies the layout rules again whenever layout is needed.
+        self.tree.apply_stylesheet_layout_overrides();
         self.tree.compute_layout(400.0, 400.0);
     }
 
@@ -168,5 +170,25 @@ fn opening_one_section_closes_the_other() {
             "the second section did not open"
         );
         assert!(s.height(contents[0]) < 2.0, "the first section stayed open");
+    })
+}
+
+#[test]
+fn a_section_opens_again_after_it_has_shut() {
+    guarded(|| {
+        let mut s = scene();
+        let (trigger, content) = (s.triggers()[0], s.contents()[0]);
+        for round in 0..3 {
+            s.click(trigger);
+            s.settle();
+            assert!(
+                s.height(content) >= 60.0,
+                "round {round}: the section did not open, {}",
+                s.height(content)
+            );
+            s.click(trigger);
+            s.settle();
+            assert!(s.height(content) < 2.0, "round {round}: it did not shut");
+        }
     })
 }

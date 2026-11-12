@@ -822,22 +822,250 @@ fn hash_element_topology(element: &dyn ElementBuilder, hasher: &mut impl Hasher)
 
 /// Hash RenderProps.
 fn hash_render_props(props: &RenderProps, hasher: &mut impl Hasher) {
-    hash_option_brush(&props.background, hasher);
-    hash_corner_radius(&props.border_radius, hasher);
-    // Hash border properties
-    if let Some(color) = &props.border_color {
+    // Every field is named, so a new field does not compile until it is hashed or listed as left
+    // out. What the hash misses is not seen when it changes, and a node that keeps its props
+    // through an incremental update keeps it stale.
+    let RenderProps {
+        background,
+        border_radius,
+        border_radius_explicit,
+        corner_shape,
+        corner_shape_locked,
+        border_color,
+        border_width,
+        border_sides,
+        outline_color,
+        outline_width,
+        outline_offset,
+        layer,
+        material,
+        shadow,
+        inner_shadow,
+        transform,
+        opacity,
+        clips_content,
+        overflow_fade,
+        motion_stable_id,
+        motion_should_replay,
+        motion_is_suspended,
+        motion_on_ready_callback,
+        is_stack_layer,
+        is_overlay_root,
+        cursor,
+        text_hit_spans,
+        pointer_events_none,
+        is_fixed,
+        is_sticky,
+        scroll_handler_axis,
+        sticky_top,
+        sticky_bottom,
+        z_index,
+        text_color,
+        font_family,
+        font_size,
+        text_shadow,
+        font_weight,
+        font_style,
+        text_decoration,
+        line_height,
+        text_align,
+        letter_spacing,
+        fill,
+        stroke,
+        stroke_width,
+        stroke_dasharray,
+        stroke_dashoffset,
+        svg_path_data,
+        svg_tint,
+        transform_origin,
+        layer_effects,
+        rotate_x,
+        rotate_y,
+        perspective,
+        shape_3d,
+        depth,
+        light_direction,
+        light_intensity,
+        ambient,
+        specular,
+        translate_z,
+        op_3d,
+        blend_3d,
+        clip_path,
+        filter,
+        motion_is_exiting,
+        visible,
+        object_fit,
+        object_position,
+        loading_strategy,
+        placeholder_type,
+        placeholder_color,
+        placeholder_image,
+        fade_duration_ms,
+        svg_tag_styles,
+        mix_blend_mode,
+        text_decoration_color,
+        text_decoration_thickness,
+        text_overflow,
+        white_space,
+        mask_image,
+        mask_mode,
+        // Left out: the tree assigns the id, the parent sets the motion, and the style tiers and
+        // important colours record what the stylesheet applied.
+        node_id: _,
+        motion: _,
+        tiers: _,
+        important_colors: _,
+    } = props;
+
+    hash_option_brush(background, hasher);
+    hash_corner_radius(border_radius, hasher);
+    border_radius_explicit.hash(hasher);
+    hash_debug(corner_shape, hasher);
+    corner_shape_locked.hash(hasher);
+    hash_option_color(border_color, hasher);
+    hash_f32(*border_width, hasher);
+    hash_debug(border_sides, hasher);
+    hash_option_color(outline_color, hasher);
+    hash_f32(*outline_width, hasher);
+    hash_f32(*outline_offset, hasher);
+    hash_render_layer(layer, hasher);
+    hash_option_material(material, hasher);
+    hash_shadow_stack(shadow, hasher);
+    hash_shadow_stack(inner_shadow, hasher);
+    hash_option_transform(transform, hasher);
+    hash_f32(*opacity, hasher);
+    clips_content.hash(hasher);
+    hash_debug(overflow_fade, hasher);
+    motion_stable_id.hash(hasher);
+    motion_should_replay.hash(hasher);
+    motion_is_suspended.hash(hasher);
+    // Set by the tree builder, not by `render_props()`; a closure has no content to compare.
+    motion_on_ready_callback.is_some().hash(hasher);
+    is_stack_layer.hash(hasher);
+    is_overlay_root.hash(hasher);
+    hash_debug(cursor, hasher);
+    hash_debug(text_hit_spans, hasher);
+    pointer_events_none.hash(hasher);
+    is_fixed.hash(hasher);
+    is_sticky.hash(hasher);
+    hash_debug(scroll_handler_axis, hasher);
+    hash_option_f32(sticky_top, hasher);
+    hash_option_f32(sticky_bottom, hasher);
+    z_index.hash(hasher);
+    hash_option_floats(text_color, hasher);
+    hash_debug(font_family, hasher);
+    hash_option_f32(font_size, hasher);
+    if let Some(shadow) = text_shadow {
         1u8.hash(hasher);
-        hash_color(color, hasher);
+        hash_shadow(shadow, hasher);
     } else {
         0u8.hash(hasher);
     }
-    hash_f32(props.border_width, hasher);
-    hash_render_layer(&props.layer, hasher);
-    hash_option_material(&props.material, hasher);
-    hash_shadow_stack(&props.shadow, hasher);
-    hash_option_transform(&props.transform, hasher);
-    hash_f32(props.opacity, hasher);
-    props.clips_content.hash(hasher);
+    hash_debug(font_weight, hasher);
+    hash_debug(font_style, hasher);
+    hash_debug(text_decoration, hasher);
+    hash_option_f32(line_height, hasher);
+    hash_debug(text_align, hasher);
+    hash_option_f32(letter_spacing, hasher);
+    hash_option_floats(fill, hasher);
+    hash_option_floats(stroke, hasher);
+    hash_option_f32(stroke_width, hasher);
+    match stroke_dasharray {
+        Some(dashes) => {
+            1u8.hash(hasher);
+            dashes.len().hash(hasher);
+            for d in dashes {
+                hash_f32(*d, hasher);
+            }
+        }
+        None => 0u8.hash(hasher),
+    }
+    hash_option_f32(stroke_dashoffset, hasher);
+    svg_path_data.hash(hasher);
+    hash_option_floats(svg_tint, hasher);
+    hash_option_floats(transform_origin, hasher);
+    hash_debug(layer_effects, hasher);
+    for v in [
+        rotate_x,
+        rotate_y,
+        perspective,
+        shape_3d,
+        depth,
+        light_intensity,
+        ambient,
+        specular,
+        translate_z,
+        op_3d,
+        blend_3d,
+    ] {
+        hash_option_f32(v, hasher);
+    }
+    hash_option_floats(light_direction, hasher);
+    hash_debug(clip_path, hasher);
+    hash_debug(filter, hasher);
+    motion_is_exiting.hash(hasher);
+    visible.hash(hasher);
+    object_fit.hash(hasher);
+    hash_option_floats(object_position, hasher);
+    loading_strategy.hash(hasher);
+    placeholder_type.hash(hasher);
+    hash_option_floats(placeholder_color, hasher);
+    placeholder_image.hash(hasher);
+    fade_duration_ms.hash(hasher);
+    // A map iterates in an order that differs between two equal maps, so its entries are summed.
+    svg_tag_styles.len().hash(hasher);
+    let mut entries = 0u64;
+    for (tag, style) in svg_tag_styles {
+        let mut entry = DefaultHasher::new();
+        tag.hash(&mut entry);
+        hash_debug(style, &mut entry);
+        entries = entries.wrapping_add(entry.finish());
+    }
+    entries.hash(hasher);
+    hash_debug(mix_blend_mode, hasher);
+    hash_option_floats(text_decoration_color, hasher);
+    hash_option_f32(text_decoration_thickness, hasher);
+    hash_debug(text_overflow, hasher);
+    hash_debug(white_space, hasher);
+    hash_debug(mask_image, hasher);
+    hash_debug(mask_mode, hasher);
+}
+
+/// Feeds a value's `Debug` text to the hasher without building a string. Equal values print the
+/// same text, and an absent optional value is one byte.
+fn hash_debug<T: std::fmt::Debug>(value: &T, hasher: &mut impl Hasher) {
+    use std::fmt::Write;
+    struct Feed<'a, H: Hasher>(&'a mut H);
+    impl<H: Hasher> Write for Feed<'_, H> {
+        fn write_str(&mut self, text: &str) -> std::fmt::Result {
+            self.0.write(text.as_bytes());
+            Ok(())
+        }
+    }
+    let _ = write!(Feed(hasher), "{value:?}");
+}
+
+fn hash_option_floats<const N: usize>(value: &Option<[f32; N]>, hasher: &mut impl Hasher) {
+    match value {
+        Some(values) => {
+            1u8.hash(hasher);
+            for v in values {
+                hash_f32(*v, hasher);
+            }
+        }
+        None => 0u8.hash(hasher),
+    }
+}
+
+fn hash_option_color(value: &Option<Color>, hasher: &mut impl Hasher) {
+    match value {
+        Some(color) => {
+            1u8.hash(hasher);
+            hash_color(color, hasher);
+        }
+        None => 0u8.hash(hasher),
+    }
 }
 
 // =============================================================================
@@ -1436,6 +1664,23 @@ mod tests {
         let hash2 = DivHash::compute(&div2);
 
         assert_eq!(hash1, hash2, "Same properties should produce same hash");
+    }
+
+    /// Each of these properties used to be left out of the hash, so a change of it went unseen.
+    #[test]
+    fn the_hash_sees_the_props_it_once_missed() {
+        use crate::element::CursorStyle;
+        let hash = |d: Div| DivHash::compute_element(&d);
+        let base = hash(div());
+        for (name, changed) in [
+            ("z_index", hash(div().z_index(3))),
+            ("cursor", hash(div().cursor(CursorStyle::Pointer))),
+            ("outline_width", hash(div().outline_width(2.0))),
+            ("pointer_events_none", hash(div().pointer_events_none())),
+        ] {
+            assert_ne!(changed, base, "{name} is not in the hash");
+        }
+        assert_eq!(hash(div().z_index(3)), hash(div().z_index(3)));
     }
 
     #[test]

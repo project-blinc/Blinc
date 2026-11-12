@@ -633,8 +633,8 @@ impl WebApp {
         // wasm — the desktop runner can override via the
         // `BLINC_GPU_MAX_PRIMITIVES` env var, but `std::env::var` is
         // a no-op on wasm32.  20k covers every current example with
-        // comfortable headroom and adds ~3.7 MB to GPU memory
-        // (20,000 × 368 bytes per GpuPrimitive ≈ 7.2 MB total).
+        // comfortable headroom
+        // (20,000 × 544 bytes per GpuPrimitive ≈ 10.9 MB total).
         let config = BlincConfig {
             max_primitives: 20_000,
             sample_count: 1, // SDF pipelines do their own shader-level AA
@@ -2431,6 +2431,7 @@ impl WebApp {
     /// also call this directly to force a render after a click /
     /// keypress.
     pub fn run_one_frame(&mut self) -> Result<()> {
+        blinc_core::FrameClock::begin_frame();
         if matches!(&self.canvas, worker::WebCanvas::Offscreen(_)) {
             self.ctx.animations.lock().unwrap().tick();
         }
@@ -2695,7 +2696,10 @@ impl WebApp {
             if let Some(ref mut existing_tree) = self.current_tree {
                 use blinc_layout::UpdateResult;
                 match builder.build_and_update(&mut self.ctx, existing_tree) {
-                    UpdateResult::NoChanges | UpdateResult::VisualOnly => {}
+                    UpdateResult::NoChanges => {}
+                    UpdateResult::VisualOnly => {
+                        existing_tree.restyle_replaced_nodes(None);
+                    }
                     UpdateResult::LayoutChanged | UpdateResult::ChildrenChanged => {
                         // Post-children-changed wiring (mirrors windowed.rs:3812-3834)
                         existing_tree.apply_stylesheet_base_styles();

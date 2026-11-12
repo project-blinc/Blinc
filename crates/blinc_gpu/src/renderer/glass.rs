@@ -45,7 +45,7 @@ impl GpuRenderer {
         }
         let uniforms = GlassUniforms {
             viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
-            time: self.time,
+            time: blinc_core::FrameClock::now_secs(),
             clip_in_image: if clip_in_image { 1.0 } else { 0.0 },
             sample_size,
             origin,

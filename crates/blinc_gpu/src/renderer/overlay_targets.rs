@@ -233,7 +233,7 @@ mod tests {
         let texture = r.layer_texture_cache.acquire(&r.device, (64, 64), false);
         r.layer_texture_cache.release(texture);
         assert_eq!(r.layer_texture_cache.pool_small.len(), 1);
-        for _ in 0..=super::super::IDLE_FULL_FLUSH {
+        for _ in 0..=super::super::layer_cache::IDLE_FULL_FLUSH {
             r.next_frame();
         }
         assert!(

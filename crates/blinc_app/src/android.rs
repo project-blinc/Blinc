@@ -1623,6 +1623,8 @@ impl AndroidApp {
                 }
             }
 
+            blinc_core::FrameClock::begin_frame();
+
             // Tick animations on main thread (single-threaded for mobile)
             let animations_active = {
                 if let Ok(mut sched) = animations.lock() {

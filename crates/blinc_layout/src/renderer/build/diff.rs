@@ -405,19 +405,32 @@ impl RenderTree {
         render_props_eq(old, new)
     }
 
+    /// Whether the stored own hash of `node_id` equals the one of `element`.
+    fn own_hash_unchanged(&self, node_id: LayoutNodeId, element: &dyn ElementBuilder) -> bool {
+        self.node_hashes
+            .get(&node_id)
+            .is_some_and(|(own, _, _)| *own == DivHash::compute_element(element))
+    }
+
     /// Update render props in place without rebuilding the tree
     pub(crate) fn update_render_props_in_place<E: ElementBuilder>(
         &mut self,
         element: &E,
         node_id: LayoutNodeId,
     ) {
-        // Update this node's props
-        if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+        // Update this node's props. A node whose own hash is unchanged keeps its
+        // props, which already carry the stylesheet; a replaced node is queued
+        // for a restyle.
+        let unchanged = self.own_hash_unchanged(node_id, element);
+        if unchanged && self.render_nodes.contains_key(&node_id) {
+            // Kept: the own hash covers every field of the element's props.
+        } else if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
             let mut new_props = element.render_props();
             new_props.node_id = Some(node_id);
             // Preserve motion from old props (set by parent)
             new_props.motion = render_node.props.motion.clone();
             render_node.props = new_props;
+            self.props_replaced.push(node_id);
         } else {
             // Render node doesn't exist - create it
             tracing::debug!(
@@ -434,11 +447,14 @@ impl RenderTree {
                     element_type,
                 },
             );
+            self.props_replaced.push(node_id);
         }
 
         // Update taffy node's layout style if element provides one
         // This is critical for layout changes (width, height, padding, etc.)
-        if let Some(style) = element.layout_style() {
+        // The stylesheet's layout rules sit on top of the taffy style; a node that
+        // keeps its style keeps them.
+        if !unchanged && let Some(style) = element.layout_style() {
             self.layout_tree.set_style(node_id, style.clone());
         }
 
@@ -498,12 +514,16 @@ impl RenderTree {
         element: &dyn ElementBuilder,
         node_id: LayoutNodeId,
     ) {
-        if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+        let unchanged = self.own_hash_unchanged(node_id, element);
+        if unchanged && self.render_nodes.contains_key(&node_id) {
+            // Kept: the own hash covers every field of the element's props.
+        } else if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
             let mut new_props = element.render_props();
             new_props.node_id = Some(node_id);
             new_props.motion = render_node.props.motion.clone();
             render_node.props = new_props;
             render_node.element_type = Self::determine_element_type_boxed(element);
+            self.props_replaced.push(node_id);
         } else {
             // Render node doesn't exist - this can happen if the tree structure changed
             // but rebuild_children_in_place wasn't called for this subtree.
@@ -522,11 +542,14 @@ impl RenderTree {
                     element_type,
                 },
             );
+            self.props_replaced.push(node_id);
         }
 
         // Update taffy node's layout style if element provides one
         // This is critical for layout changes (width, height, padding, etc.)
-        if let Some(style) = element.layout_style() {
+        // The stylesheet's layout rules sit on top of the taffy style; a node that
+        // keeps its style keeps them.
+        if !unchanged && let Some(style) = element.layout_style() {
             self.layout_tree.set_style(node_id, style.clone());
         }
 

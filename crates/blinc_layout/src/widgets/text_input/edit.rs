@@ -495,10 +495,7 @@ impl TextInputData {
 
         // Check position before each character and after the last
         for i in 0..=char_count {
-            let prefix: String = display.chars().take(i).collect();
-            let prefix_width = face.measure(&prefix, font_size).width;
-
-            let dist = (prefix_width - text_x).abs();
+            let dist = (self.caret_offset(&display, i, face, font_size) - text_x).abs();
             if dist < min_dist {
                 min_dist = dist;
                 best_pos = i;
@@ -506,6 +503,25 @@ impl TextInputData {
         }
 
         best_pos
+    }
+
+    /// Where the caret stands before the first `chars` characters of `text` drawn in `face`: where
+    /// the next glyph is drawn, kerning included. The drawn caret, the click hit test and the
+    /// scrolling all use it, so they agree. While an IME composition is under way the text is drawn
+    /// in runs, and the width of the characters before the caret is the position.
+    pub(super) fn caret_offset(
+        &self,
+        text: &str,
+        chars: usize,
+        face: &crate::text_measure::TextFace,
+        font_size: f32,
+    ) -> f32 {
+        if self.ime.composing.is_some() {
+            let before: String = text.chars().take(chars).collect();
+            face.measure(&before, font_size).width
+        } else {
+            face.caret_x(text, chars, font_size)
+        }
     }
 
     /// Ensure the cursor is visible by adjusting horizontal scroll offset.
@@ -540,8 +556,7 @@ impl TextInputData {
 
         // Calculate cursor x position (where cursor is in the full text)
         let cursor_x = if self.cursor > 0 && !display.is_empty() {
-            let text_before: String = display.chars().take(self.cursor).collect();
-            config.face.measure(&text_before, config.font_size).width
+            self.caret_offset(&display, self.cursor, &config.face, config.font_size)
         } else {
             0.0
         };

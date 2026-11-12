@@ -1,7 +1,7 @@
 //! Executable spec for `sd_shaped_rect` in the SDF shaders.
 //!
-//! A port of the WGSL, kept in step with `shaders/sdf_core.wgsl` (and the
-//! copies in `sdf_shadow.wgsl` / `sdf_notch.wgsl`). A signed distance
+//! A port of the WGSL, kept in step with `sdf_russl/shared/common.rs` (and the
+//! copies in `sdf_russl/shared/notch.rs`). A signed distance
 //! field has to carry unit gradient: the renderer divides by it for
 //! antialiasing and offsets it by a constant for borders, so a field that
 //! is merely the right SIGN gives thin borders and uneven AA even though
