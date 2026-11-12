@@ -26,6 +26,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - On iOS and Android the end-of-frame `GpuRenderer::poll` no longer waits for the GPU to go idle. The CPU encodes the next frame while the GPU draws the last, and the swapchain paces the loop. Desktop keeps the wait.
 
 ### Fixed
+- The shadow shaders apply a primitive's local affine: the shadow of a turned or skewed element turns with it, offset included, and the quad covers the turned shadow. Shadows stayed axis-aligned under any rotation, CSS or bound.
 - The flow scene copy and the mesh pass's window-sized depth, HDR, OIT and bloom targets are freed once no frame has used them for 60 frames, instead of being held for the life of the app; the next use makes them again. The mesh pipelines, shadow map and environment map stay.
 - The overlay passes keep a target per viewport size instead of one shared slot, so a frame that draws the window and a layer of another size no longer rebuilds two window-sized textures each time it switches. A pass at one sample no longer allocates a multisampled texture it never draws into.
 - `draw_shadow` emits nothing for a shadow whose colour has no alpha. The primitive painted nothing but the shader still ran over its whole blurred area, about a screen of fragments for each large card whose `box-shadow` was `none`.

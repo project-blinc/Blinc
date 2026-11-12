@@ -226,6 +226,17 @@ impl RenderContext {
         // binding transform here.
         let binding_scale = tree.get_motion_scale(node);
         let binding_opacity = tree.get_motion_opacity(node);
+        let binding_rotation = tree
+            .get_motion_rotation(node)
+            .filter(|deg| deg.abs() > 1e-4);
+        // The node's own binding translate; descendants are placed with it already applied.
+        let own_translate = tree
+            .get_motion_transform(node)
+            .map(|t| match t {
+                blinc_core::Transform::Affine2D(a) => (a.elements[4], a.elements[5]),
+                _ => (0.0, 0.0),
+            })
+            .unwrap_or((0.0, 0.0));
 
         // Bindings and motion FSMs both make this node a motion container.
         let is_motion_container_node = tree.motion_bindings_map().contains_key(&node)
@@ -289,8 +300,8 @@ impl RenderContext {
 
         let effective_motion_scale_center = if this_node_has_scale {
             // This node has motion scale - compute its center in absolute layout coordinates
-            let center_x = abs_x + bounds.width / 2.0;
-            let center_y = abs_y + bounds.height / 2.0;
+            let center_x = abs_x + own_translate.0 + bounds.width / 2.0;
+            let center_y = abs_y + own_translate.1 + bounds.height / 2.0;
             Some((center_x, center_y))
         } else {
             // No scale on this node - inherit the parent's scale center
@@ -487,62 +498,38 @@ impl RenderContext {
             (current_clip, current_clip_radius, current_scroll_clip)
         };
 
-        // Compose the node's CSS transform before collecting its own content.
-        let node_css_affine = if let Some(render_node) = tree.get_render_node(node) {
-            let has_non_identity = if let Some(blinc_core::Transform::Affine2D(affine)) =
-                &render_node.props.transform
-            {
-                let [a, b, c, d, tx, ty] = affine.elements;
-                !((a - 1.0).abs() < 0.0001
-                    && b.abs() < 0.0001
-                    && c.abs() < 0.0001
-                    && (d - 1.0).abs() < 0.0001
-                    && tx.abs() < 0.0001
-                    && ty.abs() < 0.0001)
-            } else {
-                false
+        // Compose the node's transform (CSS transform, then binding rotation) before collecting
+        // its own content. Descendants are placed with the node's binding translate applied, so
+        // their copy pivots about the translated centre.
+        let compose_transform = |shift: (f32, f32)| -> Option<[f32; 6]> {
+            let (x, y) = (abs_x + shift.0, abs_y + shift.1);
+            let css = tree
+                .get_render_node(node)
+                .and_then(|rn| css_transform_affine(&rn.props, x, y, bounds.width, bounds.height));
+            let rotation = binding_rotation.map(|deg| {
+                rotation_about(
+                    deg.to_radians(),
+                    x + bounds.width / 2.0,
+                    y + bounds.height / 2.0,
+                )
+            });
+            let own = match (rotation, css) {
+                (Some(r), Some(c)) => Some(r.then(&c)),
+                (r, c) => r.or(c),
             };
-
-            if has_non_identity {
-                let affine = match &render_node.props.transform {
-                    Some(blinc_core::Transform::Affine2D(a)) => a.elements,
-                    _ => unreachable!(),
-                };
-                let [a, b, c, d, tx, ty] = affine;
-                // Compute transform center in absolute layout coords
-                let (cx, cy) = if let Some([ox_pct, oy_pct]) = render_node.props.transform_origin {
-                    (
-                        abs_x + bounds.width * ox_pct / 100.0,
-                        abs_y + bounds.height * oy_pct / 100.0,
-                    )
-                } else {
-                    (abs_x + bounds.width / 2.0, abs_y + bounds.height / 2.0)
-                };
-                // Build full 6-element affine: T(center) * [a,b,c,d,tx,ty] * T(-center)
-                // = [a, b, c, d, cx*(1-a) - cy*c + tx, cy*(1-d) - cx*b + ty]
-                let this_affine = [
-                    a,
-                    b,
-                    c,
-                    d,
-                    cx * (1.0 - a) - cy * c + tx,
-                    cy * (1.0 - d) - cx * b + ty,
-                ];
-                match inherited_css_affine {
-                    Some(parent) => Some(
-                        Affine2D { elements: parent }
-                            .then(&Affine2D {
-                                elements: this_affine,
-                            })
-                            .elements,
-                    ),
-                    None => Some(this_affine),
+            match (inherited_css_affine, own) {
+                (Some(parent), Some(own)) => {
+                    Some(Affine2D { elements: parent }.then(&own).elements)
                 }
-            } else {
-                inherited_css_affine
+                (parent, None) => parent,
+                (None, Some(own)) => Some(own.elements),
             }
+        };
+        let node_css_affine = compose_transform((0.0, 0.0));
+        let child_css_affine = if own_translate != (0.0, 0.0) {
+            compose_transform(own_translate)
         } else {
-            inherited_css_affine
+            node_css_affine
         };
 
         let text_path = tree
@@ -607,17 +594,9 @@ impl RenderContext {
 
         // Include scroll offset and motion offset when calculating child positions
         let scroll_offset = tree.get_scroll_offset(node);
-        let static_motion_offset = tree
-            .get_motion_transform(node)
-            .map(|t| match t {
-                blinc_core::Transform::Affine2D(a) => (a.elements[4], a.elements[5]),
-                _ => (0.0, 0.0),
-            })
-            .unwrap_or((0.0, 0.0));
-
         let new_offset = (
-            abs_x + scroll_offset.0 + static_motion_offset.0,
-            abs_y + scroll_offset.1 + static_motion_offset.1,
+            abs_x + scroll_offset.0 + own_translate.0,
+            abs_y + scroll_offset.1 + own_translate.1,
         );
 
         // Compute inherited CSS opacity for children: compound this node's CSS opacity
@@ -714,7 +693,7 @@ impl RenderContext {
                 texts,
                 svgs,
                 images,
-                node_css_affine,
+                child_css_affine,
                 child_css_opacity,
                 effective_text_color,
                 Some(node), // pass current node as parent for children
@@ -737,5 +716,59 @@ impl RenderContext {
         if node_z_index > 0 {
             *z_layer = saved_z_layer;
         }
+    }
+}
+
+/// The node's CSS transform as a layout-space affine about its transform origin, or `None`
+/// when it is the identity.
+fn css_transform_affine(
+    props: &blinc_layout::element::RenderProps,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+) -> Option<Affine2D> {
+    let Some(blinc_core::Transform::Affine2D(affine)) = &props.transform else {
+        return None;
+    };
+    let [a, b, c, d, tx, ty] = affine.elements;
+    let identity = (a - 1.0).abs() < 0.0001
+        && b.abs() < 0.0001
+        && c.abs() < 0.0001
+        && (d - 1.0).abs() < 0.0001
+        && tx.abs() < 0.0001
+        && ty.abs() < 0.0001;
+    if identity {
+        return None;
+    }
+    let (cx, cy) = match props.transform_origin {
+        Some([ox_pct, oy_pct]) => (x + width * ox_pct / 100.0, y + height * oy_pct / 100.0),
+        None => (x + width / 2.0, y + height / 2.0),
+    };
+    // T(center) * [a b c d tx ty] * T(-center)
+    Some(Affine2D {
+        elements: [
+            a,
+            b,
+            c,
+            d,
+            cx * (1.0 - a) - cy * c + tx,
+            cy * (1.0 - d) - cx * b + ty,
+        ],
+    })
+}
+
+/// Rotation by `radians` about `(cx, cy)`.
+fn rotation_about(radians: f32, cx: f32, cy: f32) -> Affine2D {
+    let (sin, cos) = radians.sin_cos();
+    Affine2D {
+        elements: [
+            cos,
+            sin,
+            -sin,
+            cos,
+            cx * (1.0 - cos) + cy * sin,
+            cy * (1.0 - cos) - cx * sin,
+        ],
     }
 }
