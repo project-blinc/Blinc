@@ -163,6 +163,12 @@ fn stage() -> Div {
 
 /// A tile: a stage under a title, flipped when clicked.
 fn tile(title: &str, note: &str, stage: Div, flip: Flip) -> Div {
+    // `ONLY=fade` shows only the tiles whose title has that in it.
+    if let Ok(only) = std::env::var("ONLY")
+        && !title.to_lowercase().contains(&only.to_lowercase())
+    {
+        return div().w(0.0).h(0.0);
+    }
     div()
         .flex_col()
         .gap(1.0)

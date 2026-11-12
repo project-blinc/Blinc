@@ -2111,7 +2111,13 @@ impl RenderTree {
                 && motion_bindings_ref.is_some()
                 && ctx.bg_batch_is_dynamic()
                 && !ctx.bg_batch_is_composite();
-            if end > start || retained_foreground || moves_text_only {
+            // A bound node painted into the static batch with nothing of its own in the range, a
+            // group whose content is captured, still has to be seen to move, or nothing repaints
+            // it while the rows move the other nodes.
+            let static_bound = motion_bindings_ref.is_some()
+                && !ctx.bg_batch_is_dynamic()
+                && !ctx.bg_batch_is_composite();
+            if end > start || retained_foreground || moves_text_only || static_bound {
                 let (binding_tx, binding_ty) = motion_bindings_ref
                     .map(|b| {
                         let tx = b

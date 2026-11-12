@@ -627,10 +627,126 @@ fn image_scene(name: &'static str, kind: ImageKind) -> Scene {
     }
 }
 
+/// The repro window's "fade under a tile" tile as it builds it: a keyed wobbly value, a card with
+/// a label in a motion container that fades, and a tile after it that overlaps.
+fn repro_fade_scene() -> Scene {
+    let steps = 40;
+    Scene {
+        name: "motion fade, built as the repro does",
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let o = ui.context().use_animated_value_for(
+                "repro:under:o",
+                1.0,
+                blinc_animation::SpringConfig::wobbly(),
+            );
+            let handle = o.clone();
+            ui.mount(move |_| {
+                let tile_after = div()
+                    .w(40.0)
+                    .h(24.0)
+                    .ml(-15.0)
+                    .bg(Color::rgb(0.95, 0.85, 0.2));
+                let stage = div()
+                    .w(220.0)
+                    .h(130.0)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .rounded(10.0)
+                    .flex_row()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        div()
+                            .w(100.0)
+                            .h(56.0)
+                            .child(card(true).motion().opacity(o.clone())),
+                    )
+                    .child(tile_after);
+                // As the window's tile wraps it: a title, a note, and a clickable box.
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .flex_row()
+                    .flex_wrap()
+                    .gap(5.0)
+                    .child(
+                        div()
+                            .flex_col()
+                            .gap(1.0)
+                            .child(text("Fade under a tile").size(13.0).color(Color::WHITE))
+                            .child(
+                                text("the yellow tile stays above")
+                                    .size(10.0)
+                                    .color(Color::WHITE),
+                            )
+                            .child(div().on_click(|_| {}).child(stage)),
+                    )
+            });
+            Box::new(move |_, step| {
+                if step == 0 {
+                    handle.lock().unwrap().set_target(0.3);
+                }
+            })
+        }),
+    }
+}
+
+/// A labelled card that fades with a tile painted after it, which keeps its place in the static
+/// batch, beside a card that moves, which the rows move. The first has to keep fading.
+fn fade_beside_a_mover_scene() -> Scene {
+    let steps = 24;
+    Scene {
+        name: "motion fade under a tile, beside others",
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let (o, o2, x) = (bound(ui, 1.0), bound(ui, 1.0), bound(ui, 0.0));
+            let handles = (o.clone(), o2.clone(), x.clone());
+            ui.mount(move |_| {
+                let plain = div()
+                    .w(100.0)
+                    .h(56.0)
+                    .child(card(true).motion().opacity(o2.clone()));
+                let faded = div()
+                    .w(100.0)
+                    .h(56.0)
+                    .child(card(true).motion().opacity(o.clone()));
+                let tile = div()
+                    .w(40.0)
+                    .h(24.0)
+                    .ml(-15.0)
+                    .bg(Color::rgb(0.95, 0.85, 0.2));
+                let mover = div()
+                    .w(60.0)
+                    .h(30.0)
+                    .child(card(false).motion().translate_x(x.clone()));
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .flex_col()
+                    .items_center()
+                    .justify_center()
+                    .gap(4.0)
+                    .child(plain)
+                    .child(div().flex_row().child(faded).child(tile))
+                    .child(mover)
+            });
+            Box::new(move |_, step| {
+                let t = (step + 1) as f32 / steps as f32;
+                handles.0.lock().unwrap().set_target(1.0 - 0.7 * t);
+                handles.1.lock().unwrap().set_target(1.0 - 0.6 * t);
+                handles.2.lock().unwrap().set_target(30.0 * t);
+            })
+        }),
+    }
+}
+
 /// A bound card with a static tile painted after it, over where the card passes. The tile stays
 /// above the card, as in a single paint in tree order. `fade` makes the card a group, and
 /// `foreground` gives that group a child painted in the foreground stream.
-fn later_tile_scene(name: &'static str, fade: bool, foreground: bool) -> Scene {
+fn later_tile_scene(name: &'static str, fade: bool, foreground: bool, label: bool) -> Scene {
     let steps = 12;
     Scene {
         name,
@@ -640,7 +756,7 @@ fn later_tile_scene(name: &'static str, fade: bool, foreground: bool) -> Scene {
             let (x, opacity) = (bound(ui, 0.0), bound(ui, 1.0));
             let handles = (x.clone(), opacity.clone());
             ui.mount(move |_| {
-                let mut card = card(false);
+                let mut card = card(label);
                 if foreground {
                     card = card.child(
                         div()
@@ -771,9 +887,17 @@ fn scenes() -> Vec<Scene> {
         image_scene("motion, a rounded image", ImageKind::Rounded),
         image_scene("motion nested, an image", ImageKind::Nested),
         image_scene("motion in a clipped box, an image", ImageKind::Clipped),
-        later_tile_scene("motion, a tile after it", false, false),
-        later_tile_scene("motion fade, a tile after it", true, false),
-        later_tile_scene("motion fade, foreground, a tile after it", true, true),
+        later_tile_scene("motion, a tile after it", false, false, false),
+        later_tile_scene("motion fade, a tile after it", true, false, false),
+        later_tile_scene(
+            "motion fade, foreground, a tile after it",
+            true,
+            true,
+            false,
+        ),
+        later_tile_scene("motion fade, a label, a tile after it", true, false, true),
+        repro_fade_scene(),
+        fade_beside_a_mover_scene(),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
         keyframe_scene("css keyframes", true),
@@ -1875,5 +1999,33 @@ fn an_image_in_a_moving_card_is_above_the_card_and_grows_with_it() {
             last as f32 >= first as f32 * 1.4,
             "{path:?}: the image did not grow with the card ({first} px, then {last} px)"
         );
+    }
+}
+
+/// Every bound node is recorded by the paint, whichever batch its content went into: a node that
+/// is not recorded is not seen to move once other nodes are moved by rows, and nothing repaints it.
+#[test]
+fn every_bound_node_is_recorded_whichever_batch_it_is_painted_into() {
+    for scene in [
+        fade_beside_a_mover_scene(),
+        repro_fade_scene(),
+        later_tile_scene("fade, a label, a tile after it", true, false, true),
+        image_scene("an image", ImageKind::Fade),
+    ] {
+        for path in [Path::Rows, Path::Full] {
+            let Some(mut ui) = session(path) else {
+                return;
+            };
+            let _ = (scene.build)(&mut ui);
+            ui.settle();
+            ui.snapshot().expect("a frame");
+            let bound = ui.tree().motion_bindings_map().len();
+            let recorded = ui.tree().composite_bindings().len();
+            assert_eq!(
+                recorded, bound,
+                "{} ({path:?}): {recorded} of {bound} bound nodes are recorded",
+                scene.name
+            );
+        }
     }
 }
