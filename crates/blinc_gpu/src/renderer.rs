@@ -50,6 +50,8 @@ mod images;
 mod init;
 mod layer_cache;
 mod layers;
+#[cfg(test)]
+mod node_table_tests;
 mod overlay_msaa;
 mod overlay_render;
 mod pipelines;
@@ -247,6 +249,8 @@ struct Buffers {
     /// Width = 1024 texels, height grows on demand. Format: Rgba32Float.
     aux_data_texture: Option<wgpu::Texture>,
     aux_data_view: Option<wgpu::TextureView>,
+    /// Storage buffer of animated node rows; present only when the node table is on.
+    node_rows: Option<wgpu::Buffer>,
     /// Current height of the aux data texture (for resize detection)
     aux_data_texture_height: u32,
     /// Data texture for glyph data (WebGL2 fallback).
@@ -441,6 +445,8 @@ pub struct GpuRenderer {
     /// primitive and auxiliary data to fragment shaders instead of storage
     /// buffers. This is the Tier 3 / WebGL2 fallback path.
     pub(crate) has_storage_buffers: bool,
+    /// Whether the animated node table is bound and the SDF shaders apply it.
+    node_table: bool,
     /// `true` when `device.features()` reports
     /// `TEXTURE_COMPRESSION_BC` — the renderer can upload BC1 / BC3
     /// / BC4 / BC5 material textures and cut GPU VRAM by 4-8× vs

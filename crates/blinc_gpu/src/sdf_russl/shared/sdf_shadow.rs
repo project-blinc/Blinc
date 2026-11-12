@@ -6,6 +6,7 @@ russl::russl! {
     use super::shadow::{VertexOutput, shadow_vertex, shadow_fragment};
 
     #[pipeline] const TIER: u32 = 0;
+    #[pipeline] const NODES: u32 = 0;
 
     #[vertex]
     fn vs_main(

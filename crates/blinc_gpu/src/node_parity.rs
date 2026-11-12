@@ -4,19 +4,11 @@
 //! drawn by the core shader built with the table. Set `BLINC_NODE_PARITY_OUT` to a directory to
 //! write each case as a PNG: the CPU's frame, the table's frame and their difference.
 
+use crate::node_table::NodeRow;
 use crate::parity_harness as harness;
 use crate::primitives::GpuPrimitive;
 
 const SIZE: u32 = 128;
-
-/// A node row as the shader reads it.
-#[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct NodeRow {
-    motion: [f32; 4],
-    pivot: [f32; 4],
-    link: [f32; 4],
-}
 
 /// A node's delta: the CSS transform about a pivot, and an opacity.
 #[derive(Clone, Copy)]
@@ -39,14 +31,15 @@ impl Delta {
 
     fn row(&self, parent: u32) -> NodeRow {
         NodeRow {
-            motion: [
-                self.translate[0],
-                self.translate[1],
-                self.scale[0],
-                self.scale[1],
-            ],
-            pivot: [self.pivot[0], self.pivot[1], self.rotation, self.opacity],
             link: [parent as f32, 0.0, 0.0, 0.0],
+            ..NodeRow::new(
+                self.translate,
+                self.scale,
+                self.pivot,
+                self.rotation,
+                self.opacity,
+                None,
+            )
         }
     }
 }

@@ -42,6 +42,7 @@ mod image_parity;
 mod mesh_parity;
 #[cfg(test)]
 mod node_parity;
+pub mod node_table;
 pub mod paint;
 #[cfg(test)]
 mod parity_harness;

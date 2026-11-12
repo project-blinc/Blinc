@@ -105,6 +105,9 @@ impl GpuPrimitive {
             0..=2 => {
                 if shape_3d_type > 0 {
                     SdfPipelineCategory::Sdf3D
+                } else if self.node_slot().is_some() {
+                    // Only the full core shader applies a node's delta.
+                    SdfPipelineCategory::Core
                 } else if self.is_plain_core() {
                     SdfPipelineCategory::CorePlain
                 } else if self.is_simple_core() {

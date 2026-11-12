@@ -3,12 +3,7 @@
 use super::{BindGroupLayouts, GpuRenderer, MsaaPipelines, Pipelines};
 use crate::path::PathVertex;
 use crate::primitives::SdfVertexInstance;
-use crate::shaders::{
-    PATH_DT_SHADER, PATH_SHADER, SDF_3D_DT_SHADER, SDF_3D_SHADER, SDF_3D_VB_SHADER,
-    SDF_CORE_DT_SHADER, SDF_CORE_SHADER, SDF_CORE_VB_SHADER, SDF_NOTCH_DT_SHADER, SDF_NOTCH_SHADER,
-    SDF_NOTCH_VB_SHADER, SDF_SHADOW_DT_SHADER, SDF_SHADOW_SHADER, SDF_SHADOW_VB_SHADER,
-    TEXT_DT_SHADER,
-};
+use crate::shaders::{PATH_DT_SHADER, PATH_SHADER, SdfSources, TEXT_DT_SHADER};
 
 impl GpuRenderer {
     #[allow(clippy::too_many_arguments)]
@@ -568,6 +563,7 @@ impl GpuRenderer {
         sample_count: u32,
         has_vertex_storage: bool,
         has_storage_buffers: bool,
+        node_table: bool,
     ) -> MsaaPipelines {
         let blend_state = wgpu::BlendState {
             color: wgpu::BlendComponent {
@@ -645,34 +641,11 @@ impl GpuRenderer {
             })
         };
 
-        let (msaa_core_src, msaa_shadow_src, msaa_3d_src, msaa_notch_src) = if !has_storage_buffers
-        {
-            (
-                SDF_CORE_DT_SHADER,
-                SDF_SHADOW_DT_SHADER,
-                SDF_3D_DT_SHADER,
-                SDF_NOTCH_DT_SHADER,
-            )
-        } else if !has_vertex_storage {
-            (
-                SDF_CORE_VB_SHADER,
-                SDF_SHADOW_VB_SHADER,
-                SDF_3D_VB_SHADER,
-                SDF_NOTCH_VB_SHADER,
-            )
-        } else {
-            (
-                SDF_CORE_SHADER,
-                SDF_SHADOW_SHADER,
-                SDF_3D_SHADER,
-                SDF_NOTCH_SHADER,
-            )
-        };
-
-        let sdf_core = make_msaa_sdf_pipeline(msaa_core_src, "SDF Core Pipeline (MSAA)");
-        let sdf_shadow = make_msaa_sdf_pipeline(msaa_shadow_src, "SDF Shadow Pipeline (MSAA)");
-        let sdf_3d = make_msaa_sdf_pipeline(msaa_3d_src, "SDF 3D Pipeline (MSAA)");
-        let sdf_notch = make_msaa_sdf_pipeline(msaa_notch_src, "SDF Notch Pipeline (MSAA)");
+        let sources = SdfSources::for_device(has_storage_buffers, has_vertex_storage, node_table);
+        let sdf_core = make_msaa_sdf_pipeline(sources.core, "SDF Core Pipeline (MSAA)");
+        let sdf_shadow = make_msaa_sdf_pipeline(sources.shadow, "SDF Shadow Pipeline (MSAA)");
+        let sdf_3d = make_msaa_sdf_pipeline(sources.three_d, "SDF 3D Pipeline (MSAA)");
+        let sdf_notch = make_msaa_sdf_pipeline(sources.notch, "SDF Notch Pipeline (MSAA)");
 
         // Create path shader
         let path_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {

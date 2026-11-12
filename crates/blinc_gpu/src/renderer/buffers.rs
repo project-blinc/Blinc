@@ -2,6 +2,7 @@
 
 use super::{BindGroupLayouts, BindGroups, Buffers, GpuRenderer, RendererConfig};
 use crate::gradient_texture::GradientTextureCache;
+use crate::node_table::{NODE_TABLE_CAPACITY, NodeRow};
 use crate::path::PathVertex;
 use crate::primitives::{
     GlassUniforms, GpuGlassPrimitive, GpuGlyph, GpuPrimitive, PathUniforms, PrimitiveBatch,
@@ -13,6 +14,7 @@ impl GpuRenderer {
         device: &wgpu::Device,
         config: &RendererConfig,
         has_storage_buffers: bool,
+        node_table: bool,
     ) -> Buffers {
         let uniforms = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Uniforms Buffer"),
@@ -66,6 +68,15 @@ impl GpuRenderer {
             size: 16, // 1 vec4<f32> minimum
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
+        });
+
+        let node_rows = node_table.then(|| {
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Node Rows Buffer"),
+                size: (std::mem::size_of::<NodeRow>() * NODE_TABLE_CAPACITY) as u64,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
         });
 
         // Create data textures for DT (Tier 3) fallback when no storage buffers
@@ -156,6 +167,7 @@ impl GpuRenderer {
             glow_uniforms: None,
             color_matrix_uniforms: None,
             aux_data,
+            node_rows,
             sdf_vertex_instances: None,
             prim_data_texture,
             prim_data_view,
@@ -241,7 +253,13 @@ impl GpuRenderer {
                     resource: wgpu::BindingResource::TextureView(color_glyph_atlas_view),
                 },
                 binding_5,
-            ],
+            ]
+            .into_iter()
+            .chain(buffers.node_rows.as_ref().map(|rows| wgpu::BindGroupEntry {
+                binding: 6,
+                resource: rows.as_entire_binding(),
+            }))
+            .collect::<Vec<_>>(),
         });
 
         // Path bind group (with gradient texture, image texture, and backdrop for glass)
@@ -563,7 +581,18 @@ impl GpuRenderer {
                     resource: wgpu::BindingResource::TextureView(color_atlas_view),
                 },
                 binding_5,
-            ],
+            ]
+            .into_iter()
+            .chain(
+                self.buffers
+                    .node_rows
+                    .as_ref()
+                    .map(|rows| wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: rows.as_entire_binding(),
+                    }),
+            )
+            .collect::<Vec<_>>(),
         });
     }
 

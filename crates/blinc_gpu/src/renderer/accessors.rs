@@ -1,12 +1,35 @@
 //! Device handles, capabilities, viewport, scissor and blend state, the glyph atlas, and the memory budget.
 
 use super::{ActiveGlyphAtlas, GpuMemoryBudget, GpuRenderer};
+use crate::node_table::{NODE_TABLE_CAPACITY, NodeRow};
 use std::sync::Arc;
 
 impl GpuRenderer {
     /// Whether the GPU adapter supports storage buffers.
     pub fn has_storage_buffers(&self) -> bool {
         self.has_storage_buffers
+    }
+
+    /// Whether the animated node table is bound. Primitives name a row through `node_slot`.
+    pub fn node_table_enabled(&self) -> bool {
+        self.node_table
+    }
+
+    /// Replace the node table's rows. Returns `false` and leaves the table alone when it is
+    /// off, or `rows` is longer than [`NODE_TABLE_CAPACITY`]. Rows past the end of `rows`
+    /// keep what they held, so a primitive must not name one.
+    pub fn set_node_rows(&self, rows: &[NodeRow]) -> bool {
+        let Some(buffer) = self.buffers.node_rows.as_ref() else {
+            return false;
+        };
+        if rows.len() > NODE_TABLE_CAPACITY {
+            return false;
+        }
+        if !rows.is_empty() {
+            self.queue
+                .write_buffer(buffer, 0, bytemuck::cast_slice(rows));
+        }
+        true
     }
 
     /// Whether the GPU device has `TEXTURE_COMPRESSION_BC` enabled.

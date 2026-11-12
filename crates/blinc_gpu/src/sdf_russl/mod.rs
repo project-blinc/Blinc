@@ -160,7 +160,6 @@ pub(crate) mod sdf_core_dt {
     russl::russl! { #![specialize(super::sdf_core)] const TIER: u32 = 2; }
 }
 /// The core shader with the animated node table bound and applied.
-#[cfg(test)]
 pub(crate) mod sdf_core_nodes {
     russl::russl! { #![specialize(super::sdf_core)] const NODES: u32 = 1; }
 }
@@ -174,6 +173,10 @@ pub(crate) mod sdf_shadow_vb {
 pub(crate) mod sdf_shadow_dt {
     russl::russl! { #![specialize(super::sdf_shadow)] const TIER: u32 = 2; }
 }
+/// The same shader with the animated node table bound and applied.
+pub(crate) mod sdf_shadow_nodes {
+    russl::russl! { #![specialize(super::sdf_shadow)] const NODES: u32 = 1; }
+}
 
 /// The notch shader: the same three tiers.
 #[path = "shared/sdf_notch.rs"]
@@ -184,6 +187,10 @@ pub(crate) mod sdf_notch_vb {
 pub(crate) mod sdf_notch_dt {
     russl::russl! { #![specialize(super::sdf_notch)] const TIER: u32 = 2; }
 }
+/// The same shader with the animated node table bound and applied.
+pub(crate) mod sdf_notch_nodes {
+    russl::russl! { #![specialize(super::sdf_notch)] const NODES: u32 = 1; }
+}
 
 /// The 3D shader: the same three tiers.
 #[path = "shared/sdf_3d.rs"]
@@ -193,6 +200,10 @@ pub(crate) mod sdf_3d_vb {
 }
 pub(crate) mod sdf_3d_dt {
     russl::russl! { #![specialize(super::sdf_3d)] const TIER: u32 = 2; }
+}
+/// The same shader with the animated node table bound and applied.
+pub(crate) mod sdf_3d_nodes {
+    russl::russl! { #![specialize(super::sdf_3d)] const NODES: u32 = 1; }
 }
 
 pub(crate) mod simple {

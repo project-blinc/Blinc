@@ -8,9 +8,7 @@ use super::{
 use crate::gradient_texture::GradientTextureCache;
 use crate::shaders::{
     CLEAR_QUAD_SHADER, COMPOSITE_SHADER, LAYER_COMPOSITE_SHADER, PATH_DT_SHADER, PATH_SHADER,
-    SDF_3D_DT_SHADER, SDF_3D_SHADER, SDF_3D_VB_SHADER, SDF_CORE_DT_SHADER, SDF_CORE_SHADER,
-    SDF_CORE_VB_SHADER, SDF_NOTCH_DT_SHADER, SDF_NOTCH_SHADER, SDF_NOTCH_VB_SHADER,
-    SDF_SHADOW_DT_SHADER, SDF_SHADOW_SHADER, SDF_SHADOW_VB_SHADER, TEXT_DT_SHADER, TEXT_SHADER,
+    SdfSources, TEXT_DT_SHADER, TEXT_SHADER,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -70,11 +68,18 @@ impl GpuRenderer {
             log_renderer_config(&config);
         }
 
+        // The node table is a storage buffer both stages read, so it needs the full storage tier.
+        let node_table = config.node_table && has_storage_buffers && has_vertex_storage;
+        if config.node_table && !node_table {
+            tracing::info!("Node table needs storage buffers in the vertex stage: not used");
+        }
+
         // Create bind group layouts
         let bind_group_layouts = Self::create_bind_group_layouts_with_flags(
             &device,
             has_vertex_storage,
             has_storage_buffers,
+            node_table,
         );
 
         // Create shaders
@@ -121,32 +126,12 @@ impl GpuRenderer {
         //   Tier 1 (full): Storage buffers in VS + FS — sdf_*.wgsl
         //   Tier 2 (VB):   No VS storage, FS storage works — sdf_*_vb.wgsl + vertex buffer
         //   Tier 3 (DT):   No storage at all (WebGL2) — sdf_*_dt.wgsl + VB + data textures
-        let (sdf_core_source, sdf_shadow_source, sdf_3d_source, sdf_notch_source) =
-            if !has_storage_buffers {
-                // Tier 3: Data texture fallback (no storage buffers at all)
-                (
-                    SDF_CORE_DT_SHADER,
-                    SDF_SHADOW_DT_SHADER,
-                    SDF_3D_DT_SHADER,
-                    SDF_NOTCH_DT_SHADER,
-                )
-            } else if !has_vertex_storage {
-                // Tier 2: VB fallback (no VS storage, FS storage works)
-                (
-                    SDF_CORE_VB_SHADER,
-                    SDF_SHADOW_VB_SHADER,
-                    SDF_3D_VB_SHADER,
-                    SDF_NOTCH_VB_SHADER,
-                )
-            } else {
-                // Tier 1: Full storage buffer support
-                (
-                    SDF_CORE_SHADER,
-                    SDF_SHADOW_SHADER,
-                    SDF_3D_SHADER,
-                    SDF_NOTCH_SHADER,
-                )
-            };
+        let SdfSources {
+            core: sdf_core_source,
+            shadow: sdf_shadow_source,
+            three_d: sdf_3d_source,
+            notch: sdf_notch_source,
+        } = SdfSources::for_device(has_storage_buffers, has_vertex_storage, node_table);
 
         let sdf_core_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("SDF Core Shader"),
@@ -241,7 +226,7 @@ impl GpuRenderer {
         }
 
         // Create buffers (storage buffers always created; DT textures added when needed)
-        let buffers = Self::create_buffers(&device, &config, has_storage_buffers);
+        let buffers = Self::create_buffers(&device, &config, has_storage_buffers, node_table);
 
         // Create placeholder glyph atlas textures (1x1 transparent)
         // These are used when no text is rendered, satisfying the bind group layout
@@ -451,6 +436,7 @@ impl GpuRenderer {
             mesh_targets_last_frame: 0,
             has_vertex_storage,
             has_storage_buffers,
+            node_table,
             has_texture_compression_bc,
             static_layer: None,
         })

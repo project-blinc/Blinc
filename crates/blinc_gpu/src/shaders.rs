@@ -45,6 +45,68 @@ pub const SDF_3D_SHADER: &str = crate::sdf_russl::sdf_3d::WGSL;
 /// Full border, gradient, filter, and mask support.
 pub const SDF_NOTCH_SHADER: &str = crate::sdf_russl::sdf_notch::WGSL;
 
+/// Core shapes with the animated node table bound and applied. Storage tier only.
+pub const SDF_CORE_NODES_SHADER: &str = crate::sdf_russl::sdf_core_nodes::WGSL;
+
+/// Shadow primitives with the animated node table.
+pub const SDF_SHADOW_NODES_SHADER: &str = crate::sdf_russl::sdf_shadow_nodes::WGSL;
+
+/// 3D raymarched shapes with the animated node table.
+pub const SDF_3D_NODES_SHADER: &str = crate::sdf_russl::sdf_3d_nodes::WGSL;
+
+/// Notch primitives with the animated node table.
+pub const SDF_NOTCH_NODES_SHADER: &str = crate::sdf_russl::sdf_notch_nodes::WGSL;
+
+/// The SDF shaders of one device tier: the sources behind the core, shadow, 3D and notch
+/// pipelines.
+#[derive(Clone, Copy)]
+pub(crate) struct SdfSources {
+    pub core: &'static str,
+    pub shadow: &'static str,
+    pub three_d: &'static str,
+    pub notch: &'static str,
+}
+
+impl SdfSources {
+    /// The sources for a device. `node_table` asks for the shaders that apply the animated node
+    /// table; only the storage tier has them, and the others get their ordinary shaders.
+    pub(crate) fn for_device(
+        has_storage_buffers: bool,
+        has_vertex_storage: bool,
+        node_table: bool,
+    ) -> Self {
+        if !has_storage_buffers {
+            Self {
+                core: SDF_CORE_DT_SHADER,
+                shadow: SDF_SHADOW_DT_SHADER,
+                three_d: SDF_3D_DT_SHADER,
+                notch: SDF_NOTCH_DT_SHADER,
+            }
+        } else if !has_vertex_storage {
+            Self {
+                core: SDF_CORE_VB_SHADER,
+                shadow: SDF_SHADOW_VB_SHADER,
+                three_d: SDF_3D_VB_SHADER,
+                notch: SDF_NOTCH_VB_SHADER,
+            }
+        } else if node_table {
+            Self {
+                core: SDF_CORE_NODES_SHADER,
+                shadow: SDF_SHADOW_NODES_SHADER,
+                three_d: SDF_3D_NODES_SHADER,
+                notch: SDF_NOTCH_NODES_SHADER,
+            }
+        } else {
+            Self {
+                core: SDF_CORE_SHADER,
+                shadow: SDF_SHADOW_SHADER,
+                three_d: SDF_3D_SHADER,
+                notch: SDF_NOTCH_SHADER,
+            }
+        }
+    }
+}
+
 /// Vertex-buffer fallback: Core shapes (no VERTEX_STORAGE needed)
 ///
 /// Same as SDF_CORE_SHADER but vs_main reads instance attributes
@@ -348,6 +410,14 @@ mod tests {
     }
 
     #[test]
+    fn the_node_table_shaders_parse() {
+        parse_wgsl(SDF_CORE_NODES_SHADER).expect("SDF_CORE_NODES_SHADER");
+        parse_wgsl(SDF_SHADOW_NODES_SHADER).expect("SDF_SHADOW_NODES_SHADER");
+        parse_wgsl(SDF_3D_NODES_SHADER).expect("SDF_3D_NODES_SHADER");
+        parse_wgsl(SDF_NOTCH_NODES_SHADER).expect("SDF_NOTCH_NODES_SHADER");
+    }
+
+    #[test]
     fn sdf_simple_shader_parses() {
         parse_wgsl(SDF_SIMPLE_SHADER).expect("SDF_SIMPLE_SHADER");
     }
@@ -571,6 +641,9 @@ mod tests {
                 "sdf_russl::sdf_core_nodes",
                 crate::sdf_russl::sdf_core_nodes::WGSL,
             ),
+            ("SDF_SHADOW_NODES_SHADER", SDF_SHADOW_NODES_SHADER),
+            ("SDF_3D_NODES_SHADER", SDF_3D_NODES_SHADER),
+            ("SDF_NOTCH_NODES_SHADER", SDF_NOTCH_NODES_SHADER),
         ];
         let mut bad = Vec::new();
         for (name, source) in shaders {

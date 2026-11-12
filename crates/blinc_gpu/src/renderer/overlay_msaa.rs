@@ -55,6 +55,7 @@ impl GpuRenderer {
                 sample_count,
                 self.has_vertex_storage,
                 self.has_storage_buffers,
+                self.node_table,
             ));
         }
 
@@ -259,6 +260,7 @@ impl GpuRenderer {
                 sample_count,
                 self.has_vertex_storage,
                 self.has_storage_buffers,
+                self.node_table,
             ));
         }
 
@@ -407,6 +409,7 @@ impl GpuRenderer {
                 sample_count,
                 self.has_vertex_storage,
                 self.has_storage_buffers,
+                self.node_table,
             ));
         }
 

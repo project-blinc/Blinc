@@ -10,6 +10,7 @@ russl::russl! {
     use super::notch::{sd_notch, sd_abi_notch};
 
     #[pipeline] const TIER: u32 = 0;
+    #[pipeline] const NODES: u32 = 0;
 
     // ============================================================================
     // Blinc SDF Notch Primitive Shader
