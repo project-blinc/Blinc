@@ -24,10 +24,10 @@ pub struct BlincConfig {
     /// Move motion-bound nodes with rows of the GPU node table, not by patching primitives.
     /// Default follows `BLINC_NODE_TABLE`, off when it is unset.
     pub node_table: bool,
-    /// Bake motion-bound subtrees to textures and blit them while they move. Off, they are
-    /// painted as vectors and moved by rows, on the GPU with the node table and otherwise on the
-    /// CPU; the node table does that whatever this says. Default follows
-    /// `BLINC_MOTION_PROMOTION`, on when it is unset and `0` or `false` turns it off.
+    /// Bake motion-bound subtrees to textures and blit them while they move. Off, the default,
+    /// they are painted as vectors and moved by rows, on the GPU with the node table and
+    /// otherwise on the CPU; the node table does that whatever this says. Default follows
+    /// `BLINC_MOTION_PROMOTION`, off when it is unset and `1` or `true` turns it on.
     pub motion_promotion: bool,
 }
 
@@ -40,8 +40,8 @@ impl Default for BlincConfig {
             sample_count: 4, // 4x MSAA for path anti-aliasing
             node_table: blinc_gpu::RendererConfig::default().node_table,
             motion_promotion: std::env::var("BLINC_MOTION_PROMOTION")
-                .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
-                .unwrap_or(true),
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
         }
     }
 }
