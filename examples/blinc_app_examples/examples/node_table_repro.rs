@@ -41,6 +41,15 @@ static PAUSED: AtomicBool = AtomicBool::new(false);
 /// How long each pose is held, in seconds.
 const HOLD: f32 = 2.0;
 
+/// How long each pose is held, from `HOLD_SECS` if it is set: a long one leaves the scenes at
+/// rest, which shows what the window costs when nothing moves.
+fn hold() -> f32 {
+    std::env::var("HOLD_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(HOLD)
+}
+
 type Flip = Arc<dyn Fn() + Send + Sync>;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -508,7 +517,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
     LOOP.call_once(move || {
         std::thread::spawn(move || {
             loop {
-                std::thread::sleep(std::time::Duration::from_secs_f32(HOLD));
+                std::thread::sleep(std::time::Duration::from_secs_f32(hold()));
                 if PAUSED.load(Ordering::Relaxed) {
                     continue;
                 }
