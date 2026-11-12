@@ -1643,3 +1643,109 @@ fn text_settled_after_an_animation_is_as_sharp_as_text_at_rest() {
         );
     }
 }
+
+/// A grid of `count` small cards, each with a translate and a scale of its own and a label,
+/// all moving together.
+fn grid_scene(count: usize) -> Scene {
+    let steps = 60;
+    Scene {
+        name: "motion grid",
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let values: Vec<_> = (0..count)
+                .map(|_| (bound(ui, 0.0), bound(ui, 1.0)))
+                .collect();
+            let handles = values.clone();
+            ui.mount(move |_| {
+                let mut grid = div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13));
+                grid = grid.flex_row().flex_wrap();
+                for (x, s) in &values {
+                    let card = div()
+                        .w(26.0)
+                        .h(14.0)
+                        .rounded(3.0)
+                        .bg(Color::rgb(0.2, 0.45, 0.9))
+                        .border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.9))
+                        .flex_row()
+                        .items_center()
+                        .justify_center()
+                        .child(text("ab").size(8.0).color(Color::WHITE));
+                    grid = grid.child(
+                        div()
+                            .w(30.0)
+                            .h(16.0)
+                            .child(card.motion().translate_x(x.clone()).scale(s.clone())),
+                    );
+                }
+                grid
+            });
+            Box::new(move |_, step| {
+                let t = (step + 1) as f32 / steps as f32;
+                for (x, s) in &handles {
+                    x.lock().unwrap().set_target(12.0 * t);
+                    s.lock().unwrap().set_target(1.0 + 0.2 * t);
+                }
+            })
+        }),
+    }
+}
+
+/// The wall time of each frame of `scene` painted by `path`, in milliseconds. A frame includes
+/// the offscreen render and the read back, which every path pays alike.
+fn frame_times(scene: &Scene, path: Path) -> Option<Vec<f64>> {
+    let mut ui = session(path)?;
+    let mut script = (scene.build)(&mut ui);
+    ui.settle();
+    let mut rest = ui.snapshot().expect("a frame");
+    for _ in 0..3 {
+        rest = ui.snapshot().expect("a frame");
+    }
+    drop(rest);
+    let mut times = Vec::new();
+    for step in 0..scene.steps {
+        script(&mut ui, step);
+        ui.advance(scene.step_ms);
+        let started = std::time::Instant::now();
+        let frame = match path {
+            Path::Full | Path::Vector => ui.snapshot(),
+            Path::Patched | Path::Table => ui.snapshot_fast(),
+        };
+        frame.expect("a frame");
+        times.push(started.elapsed().as_secs_f64() * 1000.0);
+    }
+    Some(times)
+}
+
+/// Not a check: what a frame costs on each path with many bound cards. Run with
+/// `--run-ignored all --no-capture`.
+#[test]
+#[ignore]
+fn what_a_frame_costs_with_many_bound_cards() {
+    for count in [10, 40, 140] {
+        let scene = grid_scene(count);
+        eprintln!(
+            "{count} cards, {} frames each (median / p90 ms):",
+            scene.steps
+        );
+        for (name, path) in [
+            ("promoted, full paint", Path::Full),
+            ("vectors, full paint", Path::Vector),
+            ("promoted, patched", Path::Patched),
+            ("node table", Path::Table),
+        ] {
+            let Some(mut times) = frame_times(&scene, path) else {
+                return;
+            };
+            // The first frames after a script starts include one-off work.
+            times.drain(..3);
+            times.sort_by(|a, b| a.total_cmp(b));
+            let median = times[times.len() / 2];
+            let p90 = times[times.len() * 9 / 10];
+            eprintln!("  {name:<22} {median:>7.2} / {p90:>7.2}");
+        }
+    }
+}
