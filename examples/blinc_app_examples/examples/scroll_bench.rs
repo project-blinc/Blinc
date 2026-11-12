@@ -9,6 +9,9 @@
 //! ```
 //!
 //! - `ROWS`: how many rows (default 100000).
+//! - `LIST`: `virtual` (default) builds only the rows in view, so the window is up at once however
+//!   long the list is; `flat` builds a child for every row before the first frame, which at this
+//!   size takes seconds with nothing on screen.
 //! - `SPEED`: pixels a second the list scrolls by itself, up and down the whole list (default
 //!   2000); `0` leaves it to the wheel.
 //! - `SCROLLBAR`: `auto` (default), `always`, `hover` or `never`.
@@ -23,6 +26,7 @@ use blinc_app::windowed::WindowedContext;
 use blinc_core::Color;
 use blinc_layout::selector::ScrollRef;
 use blinc_layout::widgets::ScrollbarVisibility;
+use blinc_layout::widgets::virtual_list::virtual_list;
 use std::sync::OnceLock;
 
 /// A row's height, in layout units.
@@ -52,6 +56,10 @@ fn scrollbar() -> ScrollbarVisibility {
     }
 }
 
+fn flat() -> bool {
+    std::env::var("LIST").is_ok_and(|v| v == "flat")
+}
+
 fn flag(name: &str) -> bool {
     std::env::var(name)
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -68,7 +76,7 @@ fn mode() -> &'static str {
     }
 }
 
-/// The list's scroll reference, shared with the thread that scrolls it.
+/// The list's scroll reference, shared with the tick that scrolls it.
 fn reference() -> &'static ScrollRef {
     static REFERENCE: OnceLock<ScrollRef> = OnceLock::new();
     REFERENCE.get_or_init(ScrollRef::new)
@@ -76,10 +84,11 @@ fn reference() -> &'static ScrollRef {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<()> {
+    // `RUST_LOG=blinc_app::frame_timing=trace` prints what each frame cost.
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing::Level::INFO.into()),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
 
@@ -120,32 +129,49 @@ fn row(i: usize) -> Div {
 
 pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
     let total = rows();
-    let mut list = div().flex_col().w_full().p(2.0);
-    for i in 0..total {
-        list = list.child(row(i));
-    }
+    let list: Box<dyn ElementBuilder> = if flat() {
+        let mut rows = div().flex_col().w_full().p(2.0);
+        for i in 0..total {
+            rows = rows.child(row(i));
+        }
+        Box::new(
+            scroll()
+                .bind(reference())
+                .scrollbar_visibility(scrollbar())
+                .w_full()
+                .h_full()
+                .child(rows),
+        )
+    } else {
+        Box::new(
+            virtual_list(total, row)
+                .estimated_item_height(ROW_HEIGHT)
+                .bind(reference())
+                .w_full()
+                .h_full()
+                .into_div(),
+        )
+    };
 
-    // One thread scrolls the list by itself, up and down the whole of it, a step a frame; it
-    // starts once and finds the same reference after a rebuild.
+    // The list scrolls itself, up and down the whole of it, from a tick of the animation
+    // scheduler: it runs a step a frame and keeps frames coming, where a thread of the example's own
+    // would set an offset the window does not wake to apply. It is added once, and finds the same
+    // reference after a rebuild.
     static AUTO: std::sync::Once = std::sync::Once::new();
     let pixels_a_second = speed();
     if pixels_a_second > 0.0 {
         AUTO.call_once(move || {
-            std::thread::spawn(move || {
-                let length = total as f32 * ROW_HEIGHT;
-                let started = std::time::Instant::now();
-                loop {
-                    std::thread::sleep(std::time::Duration::from_millis(8));
-                    // Triangle wave over the whole list.
-                    let travelled = started.elapsed().as_secs_f32() * pixels_a_second;
-                    let phase = travelled % (2.0 * length);
-                    let y = if phase < length {
-                        phase
-                    } else {
-                        2.0 * length - phase
-                    };
-                    reference().set_scroll_offset(0.0, y);
-                }
+            let length = total as f32 * ROW_HEIGHT;
+            let mut travelled = 0.0f32;
+            blinc_animation::get_scheduler().register_tick_callback(move |dt| {
+                travelled = (travelled + dt * pixels_a_second) % (2.0 * length);
+                // Triangle wave over the whole list.
+                let y = if travelled < length {
+                    travelled
+                } else {
+                    2.0 * length - travelled
+                };
+                reference().set_scroll_offset(0.0, y);
             });
         });
     }
@@ -182,14 +208,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                     .color(Color::rgb(0.6, 0.65, 0.75)),
                 ),
         )
-        .child(
-            scroll()
-                .bind(reference())
-                .scrollbar_visibility(scrollbar())
-                .w_full()
-                .flex_grow()
-                .child(list),
-        )
+        .child(div().w_full().flex_grow().child_box(list))
 }
 
 #[cfg(target_arch = "wasm32")]
