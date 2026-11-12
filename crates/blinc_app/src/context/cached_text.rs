@@ -6,8 +6,12 @@ pub(super) struct TextBatch {
     pub(super) glyphs: Vec<GpuGlyph>,
     pub(super) primitives: Vec<GpuPrimitive>,
     pub(super) aux_data: Arc<Vec<[f32; 4]>>,
-    /// The node that owns each run of `primitives`. Kept only for the glyphs of motion subtrees.
-    pub(super) owners: Vec<(std::ops::Range<usize>, LayoutNodeId)>,
+    /// The node that owns each run of `primitives`, the index in `elements` of the text it came
+    /// from and how many times finer than its laid-out size it was rasterized. Kept only for the
+    /// glyphs of motion subtrees.
+    pub(super) owners: Vec<(std::ops::Range<usize>, LayoutNodeId, usize, f32)>,
+    /// The texts the runs were prepared from, so a run can be prepared again at another size.
+    pub(super) elements: Arc<Vec<super::TextElement>>,
     /// Which assignment of node slots the primitives carry, zero for none.
     pub(super) node_slots_epoch: u64,
 }
@@ -67,6 +71,7 @@ impl TextBatch {
             // References keep their original offsets when earlier glyphs are omitted.
             aux_data: self.aux_data.clone(),
             owners: Vec::new(),
+            elements: Arc::default(),
             node_slots_epoch: 0,
         }
     }

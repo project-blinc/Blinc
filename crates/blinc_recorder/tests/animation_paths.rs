@@ -1206,3 +1206,121 @@ fn the_node_table_beside_other_bindings() {
     }
     assert!(off.is_empty(), "the node table: {}", off.join("; "));
 }
+
+/// A card like `card`, every length multiplied by `k`: what layout would make of it at that size.
+fn card_at(label: bool, k: f32) -> Div {
+    let card = div()
+        .w(120.0 * k)
+        .h(64.0 * k)
+        .rounded(14.0 * k)
+        .bg(Color::rgb(0.2, 0.45, 0.9))
+        .border(3.0 * k, Color::rgba(1.0, 1.0, 1.0, 0.9))
+        .flex_row()
+        .items_center()
+        .justify_center();
+    if label {
+        card.child(text("Card").size(18.0 * k).color(Color::WHITE))
+    } else {
+        card
+    }
+}
+
+/// A card zoomed from 1x towards `to` by a spring; the scale it has at each frame is recorded.
+fn zoom_scene(to: f32, label: bool, seen: Arc<Mutex<Vec<f32>>>) -> Scene {
+    Scene {
+        name: "zoom",
+        steps: 40,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let s = bound(ui, 1.0);
+            let handle = s.clone();
+            let seen = seen.clone();
+            ui.mount(move |_| {
+                stage().child(
+                    div()
+                        .w(120.0)
+                        .h(64.0)
+                        .child(card_at(label, 1.0).motion().scale(s.clone())),
+                )
+            });
+            Box::new(move |_, step| {
+                if step == 0 {
+                    handle.lock().unwrap().set_target(to);
+                }
+                seen.lock().unwrap().push(handle.lock().unwrap().get());
+            })
+        }),
+    }
+}
+
+/// The same card laid out at `k` times the size, painted once.
+fn native_scene(k: f32, label: bool) -> Scene {
+    Scene {
+        name: "native",
+        steps: 1,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            ui.mount(move |_| {
+                stage().child(div().w(120.0 * k).h(64.0 * k).child(card_at(label, k)))
+            });
+            Box::new(|_, _| {})
+        }),
+    }
+}
+
+/// How sharp the pixels a label adds are: the energy of their gradient over the energy of the
+/// pixels. Blur lowers it.
+fn sharpness(with: &CapturedFrame, without: &CapturedFrame) -> f64 {
+    let (w, h) = (with.width as usize, with.height as usize);
+    let ink = |x: usize, y: usize| -> f64 {
+        let (p, q) = (pixel(with, x, y), pixel(without, x, y));
+        (0..3).map(|i| (p[i] - q[i]).abs() as f64).sum::<f64>()
+    };
+    let (mut grad, mut energy) = (0.0, 0.0);
+    for y in 1..h - 1 {
+        for x in 1..w - 1 {
+            let v = ink(x, y);
+            let (dx, dy) = (ink(x + 1, y) - ink(x - 1, y), ink(x, y + 1) - ink(x, y - 1));
+            grad += dx * dx + dy * dy;
+            energy += v * v;
+        }
+    }
+    grad / energy.max(1.0)
+}
+
+#[test]
+fn zoomed_text_is_as_sharp_as_text_laid_out_at_that_size() {
+    let mut report = Vec::new();
+    for path in [Path::Vector, Path::Table] {
+        let (seen_with, seen_without) = (
+            Arc::new(Mutex::new(Vec::new())),
+            Arc::new(Mutex::new(Vec::new())),
+        );
+        let (Some(with), Some(without)) = (
+            run(&zoom_scene(2.0, true, seen_with.clone()), path),
+            run(&zoom_scene(2.0, false, seen_without), path),
+        ) else {
+            return;
+        };
+        let scale = *seen_with.lock().unwrap().last().unwrap();
+        let (Some(native_with), Some(native_without)) = (
+            run(&native_scene(scale, true), Path::Vector),
+            run(&native_scene(scale, false), Path::Vector),
+        ) else {
+            return;
+        };
+        let zoomed = sharpness(with.last().unwrap(), without.last().unwrap());
+        let native = sharpness(&native_with[0], &native_without[0]);
+        eprintln!(
+            "SHARP {path:?}: scale {scale:.3}, zoomed {zoomed:.3}, native {native:.3}, ratio {:.2}",
+            zoomed / native
+        );
+        report.push((path, zoomed / native));
+    }
+    for (path, ratio) in report {
+        assert!(
+            ratio > 0.8,
+            "{path:?}: zoomed text is {ratio:.2} as sharp as text laid out at that size"
+        );
+    }
+}

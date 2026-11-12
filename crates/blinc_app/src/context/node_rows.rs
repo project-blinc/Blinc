@@ -435,7 +435,7 @@ impl NodeRows {
             return false;
         }
         let mut owned = vec![None; text.primitives.len()];
-        for (range, node) in &text.owners {
+        for (range, node, _, _) in &text.owners {
             let Some(slot) = self.owner(*node, ancestors) else {
                 return false;
             };
@@ -774,7 +774,7 @@ mod tests {
                 .push(blinc_gpu::GpuPrimitive::rect(0.0, 0.0, 2.0, 2.0));
         }
         // Run 0..2 belongs to node 3 (under 2), run 2..3 to node 4 (under 1).
-        text.owners = vec![(0..2, id(3)), (2..3, id(4))];
+        text.owners = vec![(0..2, id(3), 0, 1.0), (2..3, id(4), 1, 1.0)];
         assert!(rows.give_text_slots(&mut text, &ancestors));
         assert_eq!(text.primitives[0].node_slot(), Some(slot_of(2) * 2 + 1));
         assert_eq!(text.primitives[1].node_slot(), Some(slot_of(2) * 2 + 1));
@@ -790,7 +790,7 @@ mod tests {
         let mut text = TextBatch::default();
         text.primitives
             .push(blinc_gpu::GpuPrimitive::rect(0.0, 0.0, 2.0, 2.0));
-        text.owners = vec![(0..1, id(5))];
+        text.owners = vec![(0..1, id(5), 0, 1.0)];
         assert!(!rows.give_text_slots(&mut text, &ancestors));
         assert_eq!(text.primitives[0].node_slot(), None);
     }

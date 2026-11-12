@@ -26,6 +26,9 @@ impl RenderContext {
                 tracing::info!(target: "blinc_app::node_rows", outcome = "applied", "node_rows");
                 self.last_binding_damage_rects.clear();
                 tree.set_visible_anim_active(active);
+                if active {
+                    self.refine_motion_text(tree, scale);
+                }
                 return !(active && self.motion_overlay_unmovable());
             }
             Some(Outcome::Declined) => {

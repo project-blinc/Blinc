@@ -1,7 +1,7 @@
 //! Coordinate collection and ordered dispatch with optional entry/exit animation state.
 use super::composite_replay::LayerScope;
 use super::frame_dispatch::FrameContent;
-use super::frame_text::PreparedFrameText;
+use super::frame_text::{self, PreparedFrameText};
 use super::{
     DebugMode, DrawContext, GpuPaintContext, ImageElement, LayoutNodeId, PrimitiveBatch,
     RenderContext, RenderTree, Result, SvgElement, TextElement, Transform3DLayerInfo,
@@ -367,6 +367,13 @@ impl RenderContext {
         // Collect unique 3D layer IDs for rendering
         let layer_3d_ids: Vec<LayoutNodeId> = layer_3d_texts.keys().cloned().collect();
 
+        // Text that a bound ancestor scales up is rasterized at the size it will be shown.
+        let by_target = self.renderer.node_table_enabled() || !self.promote_motion;
+        let raster_scales: std::collections::HashMap<LayoutNodeId, f32> = motion_subtree_texts
+            .iter()
+            .map(|t| (t.node, frame_text::raster_scale(tree, t.node, by_target)))
+            .collect();
+
         let PreparedFrameText {
             glyphs_by_layer,
             css_transformed_text_prims,
@@ -377,6 +384,7 @@ impl RenderContext {
             &fg_texts,
             &motion_subtree_texts,
             &motion_subtree_svgs,
+            &raster_scales,
             (width, height),
             scale_factor,
         );
