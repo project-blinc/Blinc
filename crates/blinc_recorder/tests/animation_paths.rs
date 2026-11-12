@@ -743,6 +743,50 @@ fn fade_beside_a_mover_scene() -> Scene {
     }
 }
 
+/// A list of labelled cards in a scroll container, scrolled by the wheel a notch a frame. The
+/// whole list is long, so most of it is out of the viewport.
+fn scroll_scene(name: &'static str, rows: usize, notch: f32) -> Scene {
+    let steps = 20;
+    Scene {
+        name,
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            // Scrolled by a reference, so the same script gives the same frames on every run: the
+            // wheel's physics run on the wall clock.
+            let reference = blinc_layout::selector::ScrollRef::new();
+            let bound = reference.clone();
+            ui.mount(move |_| {
+                let mut list = div().flex_col().gap(2.0).w(W as f32 - 20.0).p(2.0);
+                for i in 0..rows {
+                    let hue = (i % 7) as f32 / 7.0;
+                    list = list.child(
+                        div()
+                            .w(W as f32 - 28.0)
+                            .h(28.0)
+                            .rounded(6.0)
+                            .bg(Color::rgb(0.2 + 0.4 * hue, 0.45, 0.9 - 0.4 * hue))
+                            .border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.5))
+                            .flex_row()
+                            .items_center()
+                            .child(text(format!("Row {i}")).size(13.0).color(Color::WHITE)),
+                    );
+                }
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .child(scroll().bind(&bound).w(W as f32).h(H as f32).child(list))
+            });
+            Box::new(move |ui, step| {
+                reference.set_scroll_offset(0.0, notch * (step + 1) as f32);
+                // A window drops the render cache for any scroll.
+                ui.invalidate_render_cache("had_scroll");
+            })
+        }),
+    }
+}
+
 /// A bound card with a static tile painted after it, over where the card passes. The tile stays
 /// above the card, as in a single paint in tree order. `fade` makes the card a group, and
 /// `foreground` gives that group a child painted in the foreground stream.
@@ -2025,6 +2069,64 @@ fn every_bound_node_is_recorded_whichever_batch_it_is_painted_into() {
                 recorded, bound,
                 "{} ({path:?}): {recorded} of {bound} bound nodes are recorded",
                 scene.name
+            );
+        }
+    }
+}
+
+/// Not a check: what a scrolled frame costs on each path. Run with
+/// `--run-ignored all --no-capture`.
+#[test]
+#[ignore]
+fn what_a_scrolled_frame_costs() {
+    for rows in [60, 400] {
+        let scene = scroll_scene("scroll", rows, 12.0);
+        eprintln!(
+            "{rows} rows, {} frames each (median / p90 ms):",
+            scene.steps
+        );
+        for (name, path) in [
+            ("promoted, full paint", Path::Full),
+            ("vectors, full paint", Path::Vector),
+            ("rows on the CPU", Path::Rows),
+            ("node table", Path::Table),
+        ] {
+            let Some(mut times) = frame_times(&scene, path) else {
+                return;
+            };
+            times.drain(..2);
+            times.sort_by(|a, b| a.total_cmp(b));
+            let median = times[times.len() / 2];
+            let p90 = times[times.len() * 9 / 10];
+            eprintln!("  {name:<22} {median:>7.2} / {p90:>7.2}");
+        }
+    }
+}
+
+/// The scroll scene really scrolls, and every path shows the same frames.
+#[test]
+fn scrolling_moves_the_list_and_every_path_agrees() {
+    let scene = scroll_scene("scroll", 60, 12.0);
+    let (Some(full), Some(rows), Some(table)) = (
+        run(&scene, Path::Vector),
+        run(&scene, Path::Rows),
+        run(&scene, Path::Table),
+    ) else {
+        return;
+    };
+    let first = &full[0];
+    let last = full.last().unwrap();
+    assert!(
+        difference(first, last, LEVELS).differing > 2000,
+        "the list did not scroll"
+    );
+    for (name, frames) in [("rows", &rows), ("table", &table)] {
+        for (i, (a, b)) in full.iter().zip(frames).enumerate() {
+            let d = difference(a, b, LEVELS);
+            assert_eq!(
+                d.differing, 0,
+                "{name}: step {i} differs by {} px",
+                d.differing
             );
         }
     }

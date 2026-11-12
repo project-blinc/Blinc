@@ -853,7 +853,17 @@ impl Headless {
                 tree.dispatch_scroll_chain(hit.node, &hit.ancestors, x, y, delta_x, delta_y);
             }
         }
+        // The window drops the render cache on any frame a scroll landed, so that frame is a
+        // full paint.
+        self.app.invalidate_render_cache_tagged("had_scroll");
         self.frame(0);
+        self
+    }
+
+    /// Drop the render cache, as the window does when something it cannot patch changed: the next
+    /// paint is a full paint.
+    pub fn invalidate_render_cache(&mut self, source: &'static str) -> &mut Self {
+        self.app.invalidate_render_cache_tagged(source);
         self
     }
 
