@@ -44,6 +44,7 @@ impl RenderContext {
         }
 
         // Compute and commit the current animation and promotion status.
+        tree.set_motion_promotion(self.promote_motion && !self.renderer.node_table_enabled());
         let v2_statuses = tree.compute_animation_status();
         if tracing::enabled!(target: "blinc_app::v2_status", tracing::Level::TRACE) {
             let anim_count = v2_statuses

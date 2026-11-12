@@ -21,8 +21,8 @@ use blinc_core::reactive::signal;
 use blinc_core::{Affine2D, Color, Transform};
 use blinc_layout::div::{Div, div};
 use blinc_layout::prelude::*;
-use blinc_recorder::Headless;
 use blinc_recorder::testing::{CapturedFrame, ScreenshotExporter, diff_image, difference};
+use blinc_recorder::{Headless, MotionPaint};
 use blinc_theme::{ColorScheme, HybridTheme};
 use std::sync::{Arc, Mutex};
 
@@ -32,10 +32,16 @@ const H: u32 = 240;
 /// How a frame of an animation is painted.
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Path {
-    /// A full paint every frame: the reference.
+    /// A full paint every frame: the reference, with motion-bound subtrees promoted as a window
+    /// promotes them.
     Full,
+    /// A full paint every frame with no promotion: every subtree painted as vectors, so the frame
+    /// has the edges a texture blit softens. What the node table is held to.
+    Vector,
     /// As a window paints a frame in which only animated values changed.
     Patched,
+    /// The vector frames, with motion-bound primitives moved by rows of the GPU node table.
+    Table,
 }
 
 /// What a scene does at each step before the frame is painted.
@@ -48,12 +54,18 @@ struct Scene {
     build: Box<dyn Fn(&mut Headless) -> Script>,
 }
 
-fn session() -> Option<Headless> {
+fn session(path: Path) -> Option<Headless> {
     if !Headless::available() {
         eprintln!("no GPU adapter: skipped");
         return None;
     }
-    let mut ui = Headless::new(W, H).ok()?;
+    // The paths run with the table as they say whatever the environment says.
+    let paint = match path {
+        Path::Full | Path::Patched => MotionPaint::Promoted,
+        Path::Vector => MotionPaint::Vector,
+        Path::Table => MotionPaint::NodeTable,
+    };
+    let mut ui = Headless::with_motion_paint(W, H, paint).ok()?;
     ui.theme(
         HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
         ColorScheme::Dark,
@@ -71,7 +83,10 @@ struct PathLog(Arc<Mutex<Vec<String>>>);
 
 impl tracing::Subscriber for PathLog {
     fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
-        metadata.target() == "blinc_app::frame_timing"
+        matches!(
+            metadata.target(),
+            "blinc_app::frame_timing" | "blinc_app::node_rows"
+        )
     }
     fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
         tracing::span::Id::from_u64(1)
@@ -83,6 +98,7 @@ impl tracing::Subscriber for PathLog {
         struct Fields {
             message: String,
             path: String,
+            outcome: String,
         }
         impl tracing::field::Visit for Fields {
             fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
@@ -90,6 +106,7 @@ impl tracing::Subscriber for PathLog {
                 match field.name() {
                     "message" => self.message = text,
                     "path" => self.path = text,
+                    "outcome" => self.outcome = text,
                     _ => {}
                 }
             }
@@ -98,6 +115,11 @@ impl tracing::Subscriber for PathLog {
         event.record(&mut fields);
         match fields.message.as_str() {
             "fast_path" => self.0.lock().unwrap().push(fields.path),
+            "node_rows" => self
+                .0
+                .lock()
+                .unwrap()
+                .push(format!("rows:{}", fields.outcome)),
             "p4_breakdown" => self.0.lock().unwrap().push("full".into()),
             _ => {}
         }
@@ -115,7 +137,7 @@ fn run(scene: &Scene, path: Path) -> Option<Vec<CapturedFrame>> {
 fn run_logged(scene: &Scene, path: Path) -> Option<(Vec<CapturedFrame>, Vec<String>)> {
     let log = PathLog::default();
     let _guard = tracing::subscriber::set_default(log.clone());
-    let mut ui = session()?;
+    let mut ui = session(path)?;
     let mut script = (scene.build)(&mut ui);
     ui.settle();
     // The cache the patched path patches comes from a full paint of the scene at rest.
@@ -127,13 +149,24 @@ fn run_logged(scene: &Scene, path: Path) -> Option<(Vec<CapturedFrame>, Vec<Stri
         script(&mut ui, step);
         ui.advance(scene.step_ms);
         let frame = match path {
-            Path::Full => ui.snapshot(),
-            Path::Patched => ui.snapshot_fast(),
+            Path::Full | Path::Vector => ui.snapshot(),
+            Path::Patched | Path::Table => ui.snapshot_fast(),
         };
         frames.push(frame.expect("a frame"));
-        // One event per painted frame; keep the last, which is the frame just painted.
+        // One painting event per frame, and a `rows:` event when the node table was asked to move
+        // the batch. Keep the painting event that was last, and say what the table did.
         let mut seen = log.0.lock().unwrap();
-        paths.push(seen.last().cloned().unwrap_or_default());
+        let painted = seen
+            .iter()
+            .rev()
+            .find(|e| !e.starts_with("rows:"))
+            .cloned()
+            .unwrap_or_default();
+        let rows = seen.iter().rev().find(|e| e.starts_with("rows:"));
+        paths.push(match rows {
+            Some(rows) => format!("{painted} {rows}"),
+            None => painted,
+        });
         seen.clear();
     }
     Some((frames, paths))
@@ -496,14 +529,24 @@ fn sheet(reference: &[CapturedFrame], painted: &[CapturedFrame], steps: &[usize]
     CapturedFrame::new(data, (w * 3) as u32, (h * steps.len()) as u32)
 }
 
-fn compare(scene: &Scene) -> Option<(Report, Vec<CapturedFrame>, Vec<CapturedFrame>)> {
-    let reference = run(scene, Path::Full)?;
-    let (painted, paths) = run_logged(scene, Path::Patched)?;
+fn compare(
+    scene: &Scene,
+    path: Path,
+) -> Option<(Report, Vec<CapturedFrame>, Vec<CapturedFrame>, Vec<String>)> {
+    let reference = run(
+        scene,
+        if path == Path::Table {
+            Path::Vector
+        } else {
+            Path::Full
+        },
+    )?;
+    let (painted, paths) = run_logged(scene, path)?;
     let mut tally = std::collections::BTreeMap::<&str, usize>::new();
     for path in &paths {
         *tally.entry(path.as_str()).or_default() += 1;
     }
-    eprintln!("{:<26} patched path took {tally:?}", scene.name);
+    eprintln!("{:<26} {path:?} path took {tally:?}", scene.name);
     let per_step = reference
         .iter()
         .zip(&painted)
@@ -520,6 +563,7 @@ fn compare(scene: &Scene) -> Option<(Report, Vec<CapturedFrame>, Vec<CapturedFra
         },
         reference,
         painted,
+        paths,
     ))
 }
 
@@ -528,7 +572,7 @@ fn compare(scene: &Scene) -> Option<(Report, Vec<CapturedFrame>, Vec<CapturedFra
 fn the_patched_path_against_the_reference() {
     let mut reports = Vec::new();
     for scene in scenes() {
-        let Some((report, reference, painted)) = compare(&scene) else {
+        let Some((report, reference, painted, _)) = compare(&scene, Path::Patched) else {
             return;
         };
         let (step, (pixels, channel)) = report.worst();
@@ -576,6 +620,63 @@ fn the_patched_path_against_the_reference() {
         "these scenes match a full paint now; take them off KNOWN_DIFFERENT: {}",
         fixed.join(", ")
     );
+}
+
+/// Scenes whose every frame the node table moves alone: no full paint, rows only, so a
+/// difference from the vector paint is the table's. The others have a label in the moving
+/// subtree; text is not moved by rows yet, so each of their frames is a full paint.
+const ON_ROWS: &[&str] = &[
+    "motion translate, no text",
+    "motion scale, no text",
+    "motion rotate, no text",
+    "motion fade, no text",
+    "motion all, no text",
+    "motion nested, no text",
+    "motion fade, overlapping",
+];
+
+/// Paint every scene with the node table and hold the ones it moves alone to the vector paint.
+#[test]
+fn the_node_table_against_the_reference() {
+    let mut off = Vec::new();
+    for scene in scenes() {
+        let Some((report, reference, painted, paths)) = compare(&scene, Path::Table) else {
+            return;
+        };
+        let (step, (pixels, channel)) = report.worst();
+        eprintln!(
+            "{:<26} {:>2}/{:<2} frames differ; worst step {step}: {pixels} px, channel {channel}",
+            report.name,
+            report.differing_steps(),
+            report.steps,
+        );
+        if let Ok(dir) = std::env::var("BLINC_ANIM_PATHS_OUT") {
+            let steps = sheet_steps(&report);
+            let file = format!("{dir}/table/{}.png", report.name.replace([' ', ','], "_"));
+            std::fs::create_dir_all(format!("{dir}/table")).unwrap();
+            ScreenshotExporter::save_png(&sheet(&reference, &painted, &steps), file).unwrap();
+        }
+        if !ON_ROWS.contains(&report.name) {
+            continue;
+        }
+        let on_patcher = paths
+            .iter()
+            .filter(|p| p.starts_with("full") || !p.ends_with("rows:applied"))
+            .count();
+        if on_patcher > 0 {
+            off.push(format!(
+                "{}: {on_patcher} of {} frames were not moved by rows",
+                report.name, report.steps
+            ));
+        }
+        if report.differing_steps() > 0 {
+            off.push(format!(
+                "{} differs from the vector paint (step {step}: {pixels} px, channel {channel})",
+                report.name
+            ));
+        }
+    }
+    assert!(off.is_empty(), "the node table: {}", off.join("; "));
 }
 
 /// Where a set of pixels sits and which way its long side points.
@@ -731,7 +832,7 @@ fn a_label_turns_with_its_card() {
         if nested {
             continue;
         }
-        let mut css = session().unwrap();
+        let mut css = session(Path::Full).unwrap();
         for step in [3, 7, 11] {
             let transform = css_equivalent(ch, step, steps);
             css.mount(move |_| {

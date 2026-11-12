@@ -21,6 +21,12 @@ pub struct BlincConfig {
     pub max_glyphs: usize,
     /// MSAA sample count (1, 2, 4, or 8)
     pub sample_count: u32,
+    /// Move motion-bound nodes with rows of the GPU node table, not by patching primitives.
+    /// Default follows `BLINC_NODE_TABLE`, off when it is unset.
+    pub node_table: bool,
+    /// Bake motion-bound subtrees to textures and blit them while they move. Off, they are
+    /// painted as vectors; the node table does that whatever this says.
+    pub motion_promotion: bool,
 }
 
 impl Default for BlincConfig {
@@ -30,6 +36,8 @@ impl Default for BlincConfig {
             max_glass_primitives: 1_000,
             max_glyphs: 50_000,
             sample_count: 4, // 4x MSAA for path anti-aliasing
+            node_table: blinc_gpu::RendererConfig::default().node_table,
+            motion_promotion: true,
         }
     }
 }
@@ -83,6 +91,7 @@ impl BlincApp {
             sample_count: 1, // SDF pipelines always use single-sampled textures
             texture_format: None,
             unified_text_rendering: true,
+            node_table: config.node_table,
             ..RendererConfig::default()
         };
 
@@ -130,7 +139,8 @@ impl BlincApp {
         );
         text_ctx.preload_generic_styles(blinc_gpu::GenericFont::Monospace, &[400, 700], false);
 
-        let ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
+        let mut ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
+        ctx.set_promote_motion(config.motion_promotion);
 
         Ok(Self { ctx, config })
     }
@@ -828,7 +838,8 @@ impl BlincApp {
         );
         text_ctx.preload_generic_styles(blinc_gpu::GenericFont::Monospace, &[400, 700], false);
 
-        let ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
+        let mut ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
+        ctx.set_promote_motion(config.motion_promotion);
         let app = Self { ctx, config };
 
         Ok((app, surface))
@@ -921,7 +932,8 @@ impl BlincApp {
         );
         text_ctx.preload_generic_styles(blinc_gpu::GenericFont::Monospace, &[400, 700], false);
 
-        let ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
+        let mut ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
+        ctx.set_promote_motion(config.motion_promotion);
         let app = Self { ctx, config };
 
         Ok((app, surface))

@@ -73,6 +73,7 @@ impl RenderContext {
         let scale_factor = tree.scale_factor();
 
         // Commit animation and promotion status for both direct and compositor rendering.
+        tree.set_motion_promotion(self.promote_motion && !self.renderer.node_table_enabled());
         let v2_statuses = tree.compute_animation_status();
         tree.commit_animation_status(&v2_statuses);
         if !self.in_compositor_inner_call && !self.overlay_frame_active {

@@ -911,6 +911,9 @@ pub struct RenderTree {
     /// detection is observable only via [`Self::subtree_texture_candidates`]
     /// for tracing / testing.
     subtree_texture_candidates: RefCell<std::collections::HashSet<LayoutNodeId>>,
+    /// Whether motion-bound subtrees may be baked to a texture and blitted. Off, they are
+    /// painted as vectors into the dynamic batch, which is how the GPU node table moves them.
+    motion_promotion: Cell<bool>,
     /// Motion-subtree texture bake registry — Phase 4.2 of the
     /// unified property channel ([[project-reactive-architecture-v2]]).
     ///
@@ -1186,6 +1189,7 @@ impl RenderTree {
             css_trans_written: HashSet::new(),
             css_layout_written: HashSet::new(),
             subtree_texture_candidates: RefCell::new(std::collections::HashSet::new()),
+            motion_promotion: Cell::new(true),
             motion_subtree_bake_registry: RefCell::new(
                 crate::motion_texture_cache::MotionSubtreeBakeRegistry::empty(),
             ),
@@ -1705,6 +1709,12 @@ impl RenderTree {
         self.composite_bindings.borrow()
     }
 
+    /// Allow (the default) or forbid baking motion-bound subtrees to textures. Set before the
+    /// animation status is computed.
+    pub fn set_motion_promotion(&self, enabled: bool) {
+        self.motion_promotion.set(enabled);
+    }
+
     /// Whether the last full paint drew every motion-bound node into a
     /// promoted composite layer and recorded no composite binding. Moving
     /// bindings then leave the cached batches unchanged: each layer is
@@ -2053,6 +2063,11 @@ impl RenderTree {
     /// nodes — sub-microsecond at the scale that matters. Called once
     /// per frame as a side-effect of [`Self::compute_animation_status`].
     pub fn compute_subtree_texture_candidates(&self) {
+        if !self.motion_promotion.get() {
+            self.subtree_texture_candidates.borrow_mut().clear();
+            let _demoted = self.demote_lapsed_motion_bake_records();
+            return;
+        }
         let mut candidates = std::collections::HashSet::new();
 
         // Step 1: gather actively-animating motion-binding roots. The

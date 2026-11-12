@@ -40,6 +40,7 @@ mod css_updates;
 mod debug_rendering;
 mod image_rendering;
 mod mesh_rendering;
+mod node_rows;
 mod overlay_frame;
 mod overlay_rendering;
 mod svg_rendering;
@@ -274,6 +275,10 @@ pub struct RenderContext {
     image_load_times: std::collections::HashMap<String, web_time::Instant>,
     /// Screen-space damage from the most recent binding update.
     last_binding_damage_rects: Vec<[f32; 4]>,
+    /// The node table rows that move the dynamic batch's motion-bound primitives.
+    node_rows: node_rows::NodeRows,
+    /// Whether motion-bound subtrees may be baked to textures; the node table never bakes them.
+    promote_motion: bool,
     /// Screen-space bounds of CSS records changed by the most recent patch.
     last_css_damage_rects: Vec<[f32; 4]>,
     /// CSS sources and promotion ownership observed on the last public frame.
@@ -574,6 +579,11 @@ const ATLAS_GC_PRESSURE: f32 = 0.85;
 const ATLAS_GC_MAX_AGE: u64 = 120;
 
 impl RenderContext {
+    /// Allow or forbid baking motion-bound subtrees to textures.
+    pub(crate) fn set_promote_motion(&mut self, on: bool) {
+        self.promote_motion = on;
+    }
+
     /// Create a new render context
     pub(crate) fn new(
         renderer: GpuRenderer,
@@ -598,6 +608,8 @@ impl RenderContext {
             image_load_times: std::collections::HashMap::new(),
             image_fade_deadlines: std::collections::HashMap::new(),
             last_binding_damage_rects: Vec::new(),
+            node_rows: node_rows::NodeRows::default(),
+            promote_motion: true,
             last_css_damage_rects: Vec::new(),
             css_cache_owners: std::collections::HashMap::new(),
             scratch_css_cache_owners: std::collections::HashMap::new(),

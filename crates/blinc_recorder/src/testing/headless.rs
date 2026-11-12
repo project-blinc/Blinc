@@ -184,6 +184,18 @@ fn init_overlay_context(ctx: &WindowedContext) {
     });
 }
 
+/// How a window paints the subtrees of motion-bound nodes while they move.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MotionPaint {
+    /// Baked to a texture once and blitted at the current transform.
+    Promoted,
+    /// Painted as vectors into the dynamic batch each time it is repainted, and patched on the
+    /// CPU in between where it can be.
+    Vector,
+    /// Painted as vectors once, and moved by rows of the GPU node table.
+    NodeTable,
+}
+
 impl Headless {
     /// An offscreen surface of `width` x `height` logical pixels. Fails when
     /// there is no GPU adapter.
@@ -193,10 +205,24 @@ impl Headless {
 
     /// Render a logical viewport at a higher pixel density without changing layout.
     pub fn with_scale(logical_width: u32, logical_height: u32, scale: f64) -> Result<Self> {
+        Self::open(logical_width, logical_height, scale, BlincApp::new()?)
+    }
+
+    /// An offscreen surface that paints motion-bound subtrees the way `paint` says, whatever
+    /// `BLINC_NODE_TABLE` says.
+    pub fn with_motion_paint(width: u32, height: u32, paint: MotionPaint) -> Result<Self> {
+        let app = BlincApp::with_config(blinc_app::BlincConfig {
+            node_table: paint == MotionPaint::NodeTable,
+            motion_promotion: paint == MotionPaint::Promoted,
+            ..Default::default()
+        })?;
+        Self::open(width, height, 1.0, app)
+    }
+
+    fn open(logical_width: u32, logical_height: u32, scale: f64, app: BlincApp) -> Result<Self> {
         assert!(logical_width > 0 && logical_height > 0 && scale.is_finite() && scale > 0.0);
         let width = (logical_width as f64 * scale).round().max(1.0) as u32;
         let height = (logical_height as f64 * scale).round().max(1.0) as u32;
-        let app = BlincApp::new()?;
         blinc_layout::init_text_measurer();
         // A caret blinks on the wall clock; frames compared across runs need it held.
         blinc_layout::widgets::cursor::hold_blink(true);

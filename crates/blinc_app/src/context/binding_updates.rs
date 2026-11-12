@@ -1,4 +1,5 @@
 //! Patch cached motion-binding geometry and opacity.
+use super::node_rows::Outcome;
 use super::{LayoutNodeId, RenderContext, RenderTree, bounds_union_of_range};
 
 impl RenderContext {
@@ -17,6 +18,37 @@ impl RenderContext {
             })
         {
             return true;
+        }
+        // With the node table, the batch keeps its painted pose and rows carry the change. What
+        // the rows cannot draw is patched below as before.
+        if self.renderer.node_table_enabled()
+            && let Some(batch) = self.cached_dynamic_batch.as_mut()
+            && self
+                .cached_bg_batch
+                .as_ref()
+                .is_none_or(|b| b.cross_stream_groups.captures.is_empty())
+        {
+            let mut bindings = tree.composite_bindings_mut();
+            if !bindings.is_empty() && bindings.values().all(|meta| meta.dynamic_batch) {
+                match self.node_rows.apply(
+                    &self.renderer,
+                    batch,
+                    &mut bindings,
+                    tree.motion_bindings_map(),
+                    &|node| tree.layout_tree.ancestors(node),
+                    scale,
+                ) {
+                    Outcome::Applied { active } => {
+                        tracing::info!(target: "blinc_app::node_rows", outcome = "applied", "node_rows");
+                        self.last_binding_damage_rects.clear();
+                        tree.set_visible_anim_active(active);
+                        return !(active && self.motion_overlay_content_cached());
+                    }
+                    Outcome::Declined => {
+                        tracing::info!(target: "blinc_app::node_rows", outcome = "declined", "node_rows");
+                    }
+                }
+            }
         }
         // Shared captures rebase native ranges and retain moving output at its paint anchor.
         if !tree.motion_bindings_map().is_empty()
@@ -331,14 +363,17 @@ impl RenderContext {
 
         // Text and SVG caches are not patched with dynamic geometry. Repaint while their
         // bindings are active to keep the streams aligned.
-        let has_motion_overlay_glyphs = self
-            .cached_motion_subtree_text_prims
+        !(any_binding_active && self.motion_overlay_content_cached())
+    }
+
+    /// Whether text or SVG in a motion subtree is cached apart from the dynamic batch.
+    fn motion_overlay_content_cached(&self) -> bool {
+        self.cached_motion_subtree_text_prims
             .as_ref()
             .is_some_and(|v| !v.is_empty())
             || self
                 .cached_motion_subtree_svgs
                 .as_ref()
-                .is_some_and(|v| !v.is_empty());
-        !(any_binding_active && has_motion_overlay_glyphs)
+                .is_some_and(|v| !v.is_empty())
     }
 }
