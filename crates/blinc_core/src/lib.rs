@@ -39,6 +39,7 @@ pub mod context_state;
 pub mod draw;
 pub mod events;
 pub mod flow;
+pub mod frame_clock;
 pub mod fsm;
 pub mod intern;
 pub mod layer;
@@ -59,6 +60,7 @@ pub use draw::{
     TextureData, TexturePixelFormat, TextureTransform, Transform, Transform3DParams, Vertex,
 };
 pub use events::{Event, EventData, EventDispatcher, EventType, KeyCode, Modifiers};
+pub use frame_clock::FrameClock;
 pub use fsm::{FsmId, FsmRuntime, StateId, StateMachine, Transition};
 pub use layer::{
     Affine2D, BillboardFacing, BlendMode, BlurStyle, Brush, CachePolicy, Camera, CameraProjection,

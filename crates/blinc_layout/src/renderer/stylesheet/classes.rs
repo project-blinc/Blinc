@@ -547,6 +547,43 @@ impl RenderTree {
     pub(crate) fn forget_dynamic_classes(&mut self, node: LayoutNodeId) {
         self.dynamic_classes.remove(&node);
     }
+
+    /// Take off the registry the classes whose rules a node holds as a layer, so a pass that
+    /// matches rules against the registry sees the node as its snapshot is. What it returns
+    /// goes back with [`Self::restore_classes`].
+    pub(super) fn withhold_dynamic_classes(&self) -> Vec<(LayoutNodeId, Vec<Arc<str>>)> {
+        let mut withheld = Vec::new();
+        for (node, entry) in &self.dynamic_classes {
+            // A class that brought no rule changes no match, and may be one the node has anyway.
+            let layered: Vec<&Arc<str>> = entry
+                .applied
+                .iter()
+                .filter(|(_, rules)| !rules.is_empty())
+                .map(|(class, _)| class)
+                .collect();
+            let Some(all) = self.element_registry.get_classes(*node) else {
+                continue;
+            };
+            if layered.is_empty() || !all.iter().any(|c| layered.contains(&c)) {
+                continue;
+            }
+            let kept: Vec<Arc<str>> = all
+                .iter()
+                .filter(|c| !layered.contains(c))
+                .cloned()
+                .collect();
+            self.set_registered_classes(*node, kept);
+            withheld.push((*node, all));
+        }
+        withheld
+    }
+
+    /// Put back what [`Self::withhold_dynamic_classes`] took.
+    pub(super) fn restore_classes(&self, withheld: Vec<(LayoutNodeId, Vec<Arc<str>>)>) {
+        for (node, classes) in withheld {
+            self.set_registered_classes(node, classes);
+        }
+    }
 }
 
 /// Where in a selector a class is named.

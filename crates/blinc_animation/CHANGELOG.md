@@ -4,6 +4,9 @@ All notable changes to `blinc_animation` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- The README's examples use the API that exists. They called `Spring::animate_to` and `update`, `SpringConfig::bouncy`, `KeyframeAnimation::update`, `Timeline::play` and `AnimationScheduler::global`, none of which are there.
+
 ## [0.6.0] - 2026-11-04
 
 ### Performance
