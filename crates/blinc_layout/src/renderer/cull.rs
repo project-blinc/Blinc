@@ -10,12 +10,9 @@ pub const CULL_OVERSCAN: f32 = 200.0;
 /// A rect as `[x, y, width, height]`.
 pub type CullRect = [f32; 4];
 
-fn intersects(b: CullRect, view: CullRect) -> bool {
-    let (x0, y0) = (view[0] - CULL_OVERSCAN, view[1] - CULL_OVERSCAN);
-    let (x1, y1) = (
-        view[0] + view[2] + CULL_OVERSCAN,
-        view[1] + view[3] + CULL_OVERSCAN,
-    );
+fn intersects(b: CullRect, view: CullRect, overscan: f32) -> bool {
+    let (x0, y0) = (view[0] - overscan, view[1] - overscan);
+    let (x1, y1) = (view[0] + view[2] + overscan, view[1] + view[3] + overscan);
     b[0] + b[2] > x0 && b[0] < x1 && b[1] + b[3] > y0 && b[1] < y1
 }
 
@@ -61,7 +58,12 @@ impl RenderTree {
         let Some(b) = self.layout_tree.get_absolute_bounds(node) else {
             return false;
         };
-        if intersects([b.x + shift.0, b.y + shift.1, b.width, b.height], view) {
+        let overscan = self.cull_overscan();
+        if intersects(
+            [b.x + shift.0, b.y + shift.1, b.width, b.height],
+            view,
+            overscan,
+        ) {
             return false;
         }
         let clips = self
@@ -85,7 +87,8 @@ mod tests {
     #[test]
     fn overscan_keeps_near_edges() {
         let view = [0.0, 0.0, 100.0, 100.0];
-        assert!(intersects([0.0, 250.0, 10.0, 10.0], view));
-        assert!(!intersects([0.0, 350.0, 10.0, 10.0], view));
+        assert!(intersects([0.0, 250.0, 10.0, 10.0], view, CULL_OVERSCAN));
+        assert!(!intersects([0.0, 350.0, 10.0, 10.0], view, CULL_OVERSCAN));
+        assert!(intersects([0.0, 550.0, 10.0, 10.0], view, 500.0));
     }
 }

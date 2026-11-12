@@ -240,6 +240,7 @@ impl RenderContext {
 
         // Bindings and motion FSMs both make this node a motion container.
         let is_motion_container_node = tree.motion_bindings_map().contains_key(&node)
+            || tree.is_scroll_row_node(node)
             || tree
                 .get_render_node(node)
                 .map(|n| n.props.motion.is_some() || n.props.is_overlay_root)
@@ -671,6 +672,11 @@ impl RenderContext {
             tree.layout().children(node)
         };
 
+        // A container on rows was painted as a window wider than its viewport, and is collected
+        // for the same window.
+        let previous_overscan = tree
+            .scroll_row_overscan(node)
+            .map(|overscan| tree.set_cull_overscan(overscan));
         for child_id in children {
             if let (Some(view), Some(shift)) = (children_cull_view, cull_shift)
                 && tree.draws_outside(child_id, shift, view)
@@ -712,6 +718,10 @@ impl RenderContext {
                     .map_or(inherited_text_fade, |n| n.props.overflow_fade.to_array()),
                 children_cull_view,
             );
+        }
+
+        if let Some(previous) = previous_overscan {
+            tree.set_cull_overscan(previous);
         }
 
         // Restore z_layer after this subtree

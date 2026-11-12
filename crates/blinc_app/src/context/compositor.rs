@@ -45,6 +45,7 @@ impl RenderContext {
 
         // Compute and commit the current animation and promotion status.
         tree.set_motion_promotion(self.promote_motion && !self.renderer.node_table_enabled());
+        tree.set_scroll_rows(self.rows_mode());
         let v2_statuses = tree.compute_animation_status();
         if tracing::enabled!(target: "blinc_app::v2_status", tracing::Level::TRACE) {
             let anim_count = v2_statuses
@@ -361,6 +362,7 @@ impl RenderContext {
                 self.composite_css_layers_overlay(tree, target_view, LayerScope::Main);
                 self.composite_motion_layers_overlay(tree, target_view, LayerScope::Main);
                 self.dispatch_dynamic_batch_overlay(target_view);
+                self.draw_scroll_row_scrollbars(tree, target_view);
                 // Overlay-subtree canvases (e.g. caret blink inside a
                 // focused cn::input) dispatch HERE so they land above
                 // the dyn-batch SDF the popover just painted.
@@ -447,7 +449,7 @@ impl RenderContext {
                         .as_ref()
                         .is_some_and(|b| b.has_cross_stream_groups()));
             // Promoted layers carry all moving output, so the cache presents as is.
-            let patched = if (bindings_animating || binding_repaint)
+            let patched = if (bindings_animating || binding_repaint || tree.scroll_rows_moved())
                 && self.cached_dynamic_batch.is_some()
                 && !tree.motion_output_promoted()
             {
@@ -618,6 +620,7 @@ impl RenderContext {
                 self.composite_css_layers_overlay(tree, target_view, LayerScope::Main);
                 self.composite_motion_layers_overlay(tree, target_view, LayerScope::Main);
                 self.dispatch_dynamic_batch_overlay(target_view);
+                self.draw_scroll_row_scrollbars(tree, target_view);
                 self.dispatch_overlay_canvas_overlay(target_view, &overlay_subtree_canvases);
                 // Composite promoted backgrounds before their text and SVG.
                 self.composite_css_layers_overlay(tree, target_view, LayerScope::Overlay);
@@ -794,6 +797,7 @@ impl RenderContext {
         self.composite_css_layers_overlay(tree, target_view, LayerScope::Main);
         self.composite_motion_layers_overlay(tree, target_view, LayerScope::Main);
         self.dispatch_dynamic_batch_overlay(target_view);
+        self.draw_scroll_row_scrollbars(tree, target_view);
         self.dispatch_overlay_canvas_overlay(target_view, &overlay_subtree_canvases);
         // Draw motion text and SVG after their dynamic geometry.
         self.dispatch_motion_subtree_overlay_pools(tree, target_view);

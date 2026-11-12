@@ -100,6 +100,11 @@ impl RenderContext {
             parent_node,
             z_layer,
         } = state;
+        // Under a scroll container on rows the content is a window wider than the clip.
+        let in_scroll_window = tree.scroll_rows_enabled()
+            && std::iter::once(node)
+                .chain(tree.layout_tree.ancestors(node))
+                .any(|n| tree.is_scroll_row_node(n));
         if let Some(render_node) = tree.get_render_node(node) {
             // Determine effective layer: children inside glass render in Foreground
             let effective_layer = if inside_glass && !is_glass {
@@ -341,6 +346,7 @@ impl RenderContext {
                         transform_3d_layer: inside_3d_layer.clone(),
                         is_foreground: children_inside_foreground,
                         in_motion_subtree: inside_motion_subtree,
+                        in_scroll_window,
                         composite_ancestor: nearest_composite_ancestor,
                     });
                 }
@@ -944,6 +950,7 @@ impl RenderContext {
                                 transform_3d_layer: inside_3d_layer.clone(),
                                 is_foreground: children_inside_foreground,
                                 in_motion_subtree: inside_motion_subtree,
+                                in_scroll_window,
                                 composite_ancestor: nearest_composite_ancestor,
                             });
 

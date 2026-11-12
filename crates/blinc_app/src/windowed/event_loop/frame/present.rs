@@ -303,10 +303,15 @@ pub(super) fn render_and_schedule(
                 .unwrap_or(false);
             s || t
         };
+        // A scroll container the rows move needs no paint as it scrolls; any other does, while it
+        // glides or bounces and when its offset has changed since it was painted.
+        let scroll_blocks_fast = ws.render_tree.as_ref().map_or(scroll_animating, |t| {
+            t.scroll_off_rows_changed() || (scroll_animating && t.scroll_off_rows_animating())
+        });
         let try_fast_paint = !did_rebuild
             && !ws.needs_relayout
             && !css_blocks_fast
-            && !scroll_animating
+            && !scroll_blocks_fast
             && !bounds_anim_active
             && !new_overlay_active
             && ws.last_paint_time_ms != 0

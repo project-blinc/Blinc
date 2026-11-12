@@ -22,6 +22,7 @@ use blinc_core::{Affine2D, Color, Transform};
 use blinc_layout::div::{Div, div};
 use blinc_layout::motion::motion;
 use blinc_layout::prelude::*;
+use blinc_layout::widgets::ScrollbarVisibility;
 use blinc_recorder::testing::{CapturedFrame, ScreenshotExporter, diff_image, difference};
 use blinc_recorder::{Headless, MotionPaint};
 use blinc_theme::{ColorScheme, HybridTheme};
@@ -745,7 +746,12 @@ fn fade_beside_a_mover_scene() -> Scene {
 
 /// A list of labelled cards in a scroll container, scrolled by the wheel a notch a frame. The
 /// whole list is long, so most of it is out of the viewport.
-fn scroll_scene(name: &'static str, rows: usize, notch: f32) -> Scene {
+fn scroll_scene(
+    name: &'static str,
+    rows: usize,
+    notch: f32,
+    bar: blinc_layout::widgets::ScrollbarVisibility,
+) -> Scene {
     let steps = 20;
     Scene {
         name,
@@ -776,12 +782,18 @@ fn scroll_scene(name: &'static str, rows: usize, notch: f32) -> Scene {
                     .w(W as f32)
                     .h(H as f32)
                     .bg(Color::rgb(0.09, 0.1, 0.13))
-                    .child(scroll().bind(&bound).w(W as f32).h(H as f32).child(list))
+                    .child(
+                        scroll()
+                            .bind(&bound)
+                            .scrollbar_visibility(bar)
+                            .w(W as f32)
+                            .h(H as f32)
+                            .child(list),
+                    )
             });
             Box::new(move |ui, step| {
                 reference.set_scroll_offset(0.0, notch * (step + 1) as f32);
-                // A window drops the render cache for any scroll.
-                ui.invalidate_render_cache("had_scroll");
+                ui.settle_scroll();
             })
         }),
     }
@@ -941,6 +953,25 @@ fn scenes() -> Vec<Scene> {
         ),
         later_tile_scene("motion fade, a label, a tile after it", true, false, true),
         repro_fade_scene(),
+        scroll_scene("scroll a list", 60, 12.0, ScrollbarVisibility::Auto),
+        scroll_scene(
+            "scroll a list, scrollbar always",
+            60,
+            12.0,
+            ScrollbarVisibility::Always,
+        ),
+        scroll_scene(
+            "scroll a list, no scrollbar",
+            60,
+            12.0,
+            ScrollbarVisibility::Never,
+        ),
+        scroll_scene(
+            "scroll a list, past its window",
+            120,
+            55.0,
+            ScrollbarVisibility::Always,
+        ),
         fade_beside_a_mover_scene(),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
@@ -1146,6 +1177,9 @@ const ON_ROWS: &[&str] = &[
     "motion, a rounded image",
     "motion nested, an image",
     "motion in a clipped box, an image",
+    "scroll a list",
+    "scroll a list, scrollbar always",
+    "scroll a list, no scrollbar",
 ];
 
 /// Paint every scene with the node table and hold the ones it moves alone to the vector paint.
@@ -2080,7 +2114,7 @@ fn every_bound_node_is_recorded_whichever_batch_it_is_painted_into() {
 #[ignore]
 fn what_a_scrolled_frame_costs() {
     for rows in [60, 400] {
-        let scene = scroll_scene("scroll", rows, 12.0);
+        let scene = scroll_scene("scroll", rows, 12.0, ScrollbarVisibility::Auto);
         eprintln!(
             "{rows} rows, {} frames each (median / p90 ms):",
             scene.steps
@@ -2106,7 +2140,7 @@ fn what_a_scrolled_frame_costs() {
 /// The scroll scene really scrolls, and every path shows the same frames.
 #[test]
 fn scrolling_moves_the_list_and_every_path_agrees() {
-    let scene = scroll_scene("scroll", 60, 12.0);
+    let scene = scroll_scene("scroll", 60, 12.0, ScrollbarVisibility::Auto);
     let (Some(full), Some(rows), Some(table)) = (
         run(&scene, Path::Vector),
         run(&scene, Path::Rows),
@@ -2128,6 +2162,48 @@ fn scrolling_moves_the_list_and_every_path_agrees() {
                 "{name}: step {i} differs by {} px",
                 d.differing
             );
+        }
+    }
+}
+
+/// The scrollbar of a container on rows is drawn from its configuration and the physics, as the
+/// walker draws it for the rest: it is there, it follows the scroll, and it is the same pixels.
+#[test]
+fn the_scrollbar_of_a_container_on_rows_is_drawn_and_follows_the_scroll() {
+    for visibility in [ScrollbarVisibility::Always, ScrollbarVisibility::Never] {
+        let scene = scroll_scene("scroll", 120, 30.0, visibility);
+        let (Some(reference), Some(rows)) = (run(&scene, Path::Vector), run(&scene, Path::Rows))
+        else {
+            return;
+        };
+        // A column through the track, which is the container's edge, as a run of pixels.
+        let track = |frame: &CapturedFrame| -> Vec<[i32; 3]> {
+            (0..H as usize)
+                .map(|y| pixel(frame, W as usize - 7, y))
+                .collect()
+        };
+        let drawn = |frame: &CapturedFrame| {
+            let column = track(frame);
+            column.iter().any(|p| *p != column[H as usize / 2])
+        };
+        for (i, (a, b)) in reference.iter().zip(&rows).enumerate() {
+            assert_eq!(track(a), track(b), "{visibility:?}: step {i}");
+        }
+        match visibility {
+            ScrollbarVisibility::Never => {
+                assert!(
+                    !rows.iter().any(drawn),
+                    "a scrollbar that is never shown was drawn"
+                );
+            }
+            _ => {
+                assert!(rows.iter().all(drawn), "the scrollbar is not drawn");
+                assert_ne!(
+                    track(&rows[0]),
+                    track(rows.last().unwrap()),
+                    "the thumb did not follow the scroll"
+                );
+            }
         }
     }
 }

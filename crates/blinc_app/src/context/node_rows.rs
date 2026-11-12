@@ -109,6 +109,9 @@ struct Slot {
     ambient_clip: Option<[f32; 4]>,
     /// Whether a primitive's clip moves with this node's row, which cannot turn a clip.
     clip_moves: bool,
+    /// How far the node may move from where it was painted, in logical pixels: a scroll container
+    /// has content painted only so far past its viewport.
+    limit: Option<f32>,
 }
 
 /// Whether a binding is the dynamic batch's to move: its primitives, or its text alone, are in
@@ -180,6 +183,13 @@ impl NodeRows {
     /// `text` asks for the row of the glyphs, not of the batch primitives.
     fn row(slot: &Slot, now: &Pose, dpi: f32, text: bool) -> Option<NodeRow> {
         let was = &slot.baseline;
+        // Past the content that was painted there is nothing to move into view.
+        if let Some(limit) = slot.limit
+            && ((now.translate.0 - was.translate.0).abs() > limit
+                || (now.translate.1 - was.translate.1).abs() > limit)
+        {
+            return None;
+        }
         // A group's opacity is a layer command, not a row; glyphs are outside the layer.
         let layered = slot.layer.is_some() && !text;
         let turn = now.rotation - was.rotation;
@@ -289,6 +299,7 @@ impl NodeRows {
                 layer,
                 ambient_clip: meta.ambient_clip,
                 clip_moves: false,
+                limit: meta.scroll_margin,
             });
         }
         // The shaders follow a chain of NODE_CHAIN_DEPTH rows, and a turned ancestor puts a node's
@@ -694,6 +705,7 @@ impl NodeRows {
         ordinals: &HashMap<LayoutNodeId, u32>,
         ancestors: &dyn Fn(LayoutNodeId) -> Vec<LayoutNodeId>,
         loaded: &dyn Fn(&str) -> bool,
+        scroll: &dyn Fn(LayoutNodeId) -> Option<(f32, f32)>,
         dpi: f32,
         adopt: bool,
     ) -> Outcome {
@@ -760,10 +772,19 @@ impl NodeRows {
 
         let mut rows = Vec::with_capacity(self.slots.len() * 2);
         for slot in &self.slots {
-            let Some(b) = motion.get(&slot.node) else {
-                return self.decline(true, batch, text, bindings);
+            // A node's pose is its bound values, or for a scroll container its offset.
+            let now = match motion.get(&slot.node) {
+                Some(b) => Pose::of(b, slot.baseline.opacity),
+                None => match scroll(slot.node) {
+                    Some(offset) => Pose {
+                        translate: offset,
+                        scale: (1.0, 1.0),
+                        rotation: 0.0,
+                        opacity: slot.baseline.opacity,
+                    },
+                    None => return self.decline(true, batch, text, bindings),
+                },
             };
-            let now = Pose::of(b, slot.baseline.opacity);
             let (Some(batch_row), Some(text_row)) = (
                 Self::row(slot, &now, dpi, false),
                 Self::row(slot, &now, dpi, true),
@@ -844,6 +865,7 @@ mod tests {
             layer: None,
             ambient_clip: None,
             clip_moves: false,
+            limit: None,
         }
     }
 
@@ -935,6 +957,7 @@ mod tests {
             layer_config: None,
             centre: (10.0, 10.0),
             ambient_clip: None,
+            scroll_margin: None,
             last_screen_aabb: None,
         }
     }

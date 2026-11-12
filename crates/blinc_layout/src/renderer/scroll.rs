@@ -1226,10 +1226,12 @@ impl RenderTree {
         let node_ids: Vec<_> = self.scroll_physics.keys().copied().collect();
 
         let mut any_animating = false;
+        let mut off_rows_animating = false;
         for node_id in node_ids {
             let Some(physics_arc) = self.scroll_physics.get(&node_id) else {
                 continue;
             };
+            let on_rows = self.is_scroll_row_node(node_id);
 
             let mut physics = physics_arc.lock().unwrap();
 
@@ -1242,11 +1244,13 @@ impl RenderTree {
             // Tick the physics
             if physics.tick(dt_secs) {
                 any_animating = true;
+                off_rows_animating |= !on_rows;
             }
 
             // Tick scrollbar animations (opacity fade in/out)
             if physics.tick_scrollbar(dt_secs) {
                 any_animating = true;
+                off_rows_animating |= !on_rows;
             }
 
             // Sync ScrollRef state with current physics (for scrollbar position updates)
@@ -1259,6 +1263,7 @@ impl RenderTree {
             }
         }
 
+        self.set_scroll_off_rows_animating(off_rows_animating);
         any_animating
     }
 }

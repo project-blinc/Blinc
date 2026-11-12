@@ -26,6 +26,7 @@ impl RenderContext {
                 tracing::info!(target: "blinc_app::node_rows", outcome = "applied", "node_rows");
                 self.last_binding_damage_rects.clear();
                 tree.set_visible_anim_active(active);
+                tree.note_scroll_rows_applied();
                 self.refine_motion_text(tree, scale);
                 self.refine_captured_text(tree, scale);
                 return !(active && self.motion_overlay_unmovable(tree));
@@ -34,6 +35,11 @@ impl RenderContext {
                 tracing::info!(target: "blinc_app::node_rows", outcome = "declined", "node_rows");
             }
             None => {}
+        }
+        // The patcher below knows nothing of a scroll offset: a container on rows that the rows
+        // could not move is painted again.
+        if tree.scroll_rows_moved() {
+            return false;
         }
         // Shared captures rebase native ranges and retain moving output at its paint anchor.
         if !tree.motion_bindings_map().is_empty()
@@ -394,6 +400,7 @@ impl RenderContext {
             &tree.binding_ordinals(),
             &|node| tree.layout_tree.ancestors(node),
             &|source| self.image_cache.contains(source),
+            &|node| tree.scroll_row_pose(node),
             dpi,
             adopt,
         ))

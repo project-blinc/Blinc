@@ -92,6 +92,7 @@ impl RenderTree {
         // primitive buffer in place.
         self.composite_bindings.borrow_mut().clear();
         self.binding_ordinals.borrow_mut().clear();
+        self.clear_scroll_rows_record();
         self.bound_svg.set(false);
         self.painted_unpromoted_binding.set(false);
         // Phase 4b: per-CSS-animated-node paint metadata. Same
@@ -1894,6 +1895,45 @@ impl RenderTree {
         // Apply scroll offset (AFTER children inset clip so clip stays fixed)
         let scroll_offset = self.get_scroll_offset(node);
         let has_scroll = scroll_offset.0.abs() > 0.001 || scroll_offset.1.abs() > 0.001;
+        let node_is_scroll = self.scroll_physics.contains_key(&node);
+        if node_is_scroll {
+            self.record_scroll_painted(node, scroll_offset);
+        }
+        // A container whose content is painted once into the dynamic batch, at the offset it has
+        // now, and moved by a row as it scrolls. The viewport clip is already in force here and
+        // stays: it is what a clip on the content equals.
+        let scroll_rows = (node_is_scroll
+            && self.scroll_rows.get()
+            && motion_bindings_ref.is_none()
+            && !ctx.bg_batch_is_dynamic()
+            && !ctx.bg_batch_is_composite()
+            && self.scroll_content_qualifies(node))
+        .then(|| {
+            // The window of content painted reaches as far past the viewport as the viewport is
+            // long; a container that does not cull paints all of it.
+            let overscan = if self.viewport_cull_scrolls.contains(&node) {
+                super::super::cull::CULL_OVERSCAN.max(bounds.width.max(bounds.height))
+            } else {
+                f32::INFINITY
+            };
+            ctx.push_motion_subtree();
+            let ordinal = {
+                let mut ordinals = self.binding_ordinals.borrow_mut();
+                let next = ordinals.values().copied().max().unwrap_or(0) + 1;
+                *ordinals.entry(node).or_insert(next)
+            };
+            let previous_ordinal = ctx.set_motion_node_ordinal(ordinal);
+            let start = ctx.bg_primitive_count();
+            let ambient_clip = ctx.current_clip_aabb();
+            let previous_overscan = self.set_cull_overscan(overscan);
+            (
+                start,
+                previous_ordinal,
+                ambient_clip,
+                previous_overscan,
+                overscan,
+            )
+        });
         if has_scroll {
             ctx.push_transform(Transform::translate(scroll_offset.0, scroll_offset.1));
         }
@@ -2043,10 +2083,44 @@ impl RenderTree {
             ctx.pop_transform();
         }
 
+        // The content of a container on rows is painted: record it as a binding whose pose is
+        // its scroll offset.
+        let scroll_on_rows = scroll_rows.is_some();
+        if let Some((start, previous_ordinal, ambient_clip, previous_overscan, overscan)) =
+            scroll_rows
+        {
+            let end = ctx.bg_primitive_count();
+            if effective_layer == target_layer {
+                let margin = self.record_scroll_row_node(node, scroll_offset, overscan);
+                self.composite_bindings.borrow_mut().insert(
+                    node,
+                    super::super::CompositeBindingMeta {
+                        dynamic_batch: true,
+                        primitive_range: start..end,
+                        last_translate: scroll_offset,
+                        last_scale: (1.0, 1.0),
+                        last_rotation_rad: 0.0,
+                        last_opacity: 1.0,
+                        layer_push_index: None,
+                        layer_config: None,
+                        centre: (0.0, 0.0),
+                        ambient_clip,
+                        scroll_margin: Some(margin),
+                        last_screen_aabb: None,
+                    },
+                );
+            }
+            ctx.pop_motion_subtree();
+            ctx.set_motion_node_ordinal(previous_ordinal);
+            self.set_cull_overscan(previous_overscan);
+        }
+
         // Render scrollbar overlay if this is a scroll container
         // Scrollbar is rendered after scroll transform is popped (in viewport space)
-        // but before children inset clip is popped (clipped within content area)
+        // but before children inset clip is popped (clipped within content area).
+        // The renderer draws the scrollbar of a container on rows, from its physics, each frame.
         if effective_layer == target_layer
+            && !scroll_on_rows
             && let Some(physics) = self.scroll_physics.get(&node)
             && let Ok(p) = physics.try_lock()
         {
@@ -2301,6 +2375,7 @@ impl RenderTree {
                             layer_config: motion_binding_layer_push_index.and(group_config.clone()),
                             centre,
                             ambient_clip,
+                            scroll_margin: None,
                             last_screen_aabb,
                         },
                     );

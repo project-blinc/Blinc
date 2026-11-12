@@ -57,6 +57,7 @@ mod queries;
 mod registries;
 mod scroll;
 mod scroll_gesture;
+mod scroll_rows;
 pub use scroll_gesture::ScrollGesturePhase;
 pub(crate) mod stylesheet;
 mod transfers;
@@ -577,6 +578,10 @@ pub struct CompositeBindingMeta {
     /// The clip (x, y, width, height, in screen pixels) in force when the node began painting,
     /// before any clip of its own: the one a clip on its primitives that is not its own equals.
     pub ambient_clip: Option<[f32; 4]>,
+    /// For a scroll container painted as a node moved by rows: how far its scroll offset may move
+    /// from the one it was painted at, in logical pixels, before it is painted again. `None` for
+    /// every other binding.
+    pub scroll_margin: Option<f32>,
     /// Union AABB of every primitive in `primitive_range` at last
     /// paint, in screen pixels (post-DPI). `None` if the range was
     /// empty or the context didn't track primitive bounds.
@@ -750,6 +755,21 @@ pub struct RenderTree {
     /// container, for sticky and fixed positioning, so it cannot place a
     /// nested scroll's children.
     paint_scroll: Cell<(f32, f32)>,
+    /// Whether a scroll container may be painted as a node moved by rows: its content once, and
+    /// the scroll as a row. Set by the renderer when bound nodes are moved by rows.
+    scroll_rows: Cell<bool>,
+    /// The scroll containers the last paint put on rows, each with how far past its viewport its
+    /// content was painted and how far its offset may move from the one it was painted at before
+    /// the content has to be painted again.
+    scroll_row_nodes: RefCell<HashMap<LayoutNodeId, (f32, f32)>>,
+    /// The offset of every scroll container at the last paint.
+    scroll_painted: RefCell<HashMap<LayoutNodeId, (f32, f32)>>,
+    /// The offsets the rows were last written for.
+    scroll_applied: RefCell<HashMap<LayoutNodeId, (f32, f32)>>,
+    /// Whether, at the last tick, a scroll container that is not on rows was moving.
+    scroll_off_rows_animating: Cell<bool>,
+    /// How far past a cull rect content is drawn, for the walk in progress.
+    cull_overscan: Cell<f32>,
     /// Whether the current paint pass touched any node that drives a
     /// per-frame redraw — a `Canvas` element, a node with motion
     /// bindings, or a node with an active motion state. Reset to
@@ -1180,6 +1200,12 @@ impl RenderTree {
             subtree_owners: owners::SubtreeOwners::default(),
             cull_viewport: Cell::new(None),
             paint_scroll: Cell::new((0.0, 0.0)),
+            scroll_rows: Cell::new(false),
+            scroll_row_nodes: RefCell::new(HashMap::new()),
+            scroll_painted: RefCell::new(HashMap::new()),
+            scroll_applied: RefCell::new(HashMap::new()),
+            scroll_off_rows_animating: Cell::new(false),
+            cull_overscan: Cell::new(cull::CULL_OVERSCAN),
             visible_anim_active: Cell::new(false),
             had_canvas_painted: Cell::new(false),
             had_retained_canvas_painted: Cell::new(false),

@@ -451,6 +451,9 @@ struct TextElement {
     is_foreground: bool,
     /// Defer motion-subtree text until its dynamic geometry has been dispatched.
     in_motion_subtree: bool,
+    /// Whether the text is inside a scroll container whose content is painted as a window wider
+    /// than its clip: outside the clip is not outside what is shown once it scrolls.
+    in_scroll_window: bool,
     /// Nearest promoted ancestor whose live opacity is applied at dispatch instead of
     /// collect time.
     composite_ancestor: Option<blinc_layout::tree::StableNodeId>,

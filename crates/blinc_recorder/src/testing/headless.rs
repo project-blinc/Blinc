@@ -853,9 +853,15 @@ impl Headless {
                 tree.dispatch_scroll_chain(hit.node, &hit.ancestors, x, y, delta_x, delta_y);
             }
         }
-        // The window drops the render cache on any frame a scroll landed, so that frame is a
-        // full paint.
-        self.app.invalidate_render_cache_tagged("had_scroll");
+        // The window drops the render cache on a frame a scroll landed that the rows cannot
+        // move, so that frame is a full paint.
+        if self
+            .tree
+            .as_ref()
+            .is_some_and(|t| t.scroll_off_rows_changed())
+        {
+            self.app.invalidate_render_cache_tagged("had_scroll");
+        }
         self.frame(0);
         self
     }
@@ -864,6 +870,20 @@ impl Headless {
     /// paint is a full paint.
     pub fn invalidate_render_cache(&mut self, source: &'static str) -> &mut Self {
         self.app.invalidate_render_cache_tagged(source);
+        self
+    }
+
+    /// Apply the scrolls handlers asked for and drop the render cache if a scroll container that
+    /// is not on rows moved, as the window does.
+    pub fn settle_scroll(&mut self) -> &mut Self {
+        self.frame(0);
+        if self
+            .tree
+            .as_ref()
+            .is_some_and(|t| t.scroll_off_rows_changed())
+        {
+            self.app.invalidate_render_cache_tagged("had_scroll");
+        }
         self
     }
 

@@ -89,6 +89,32 @@ impl RenderContext {
         self.restore_dynamic_batch(moved);
     }
 
+    /// Draw the scrollbars of the scroll containers on rows, which are not in the batch: their
+    /// place and fade come from the physics, and change with every scroll.
+    pub(super) fn draw_scroll_row_scrollbars(
+        &mut self,
+        tree: &blinc_layout::RenderTree,
+        target_view: &wgpu::TextureView,
+    ) {
+        if !tree.scroll_rows_enabled() {
+            return;
+        }
+        let (width, height) = self.renderer.viewport_size();
+        let mut ctx = GpuPaintContext::new(width as f32, height as f32);
+        let scale = tree.scale_factor();
+        {
+            use blinc_core::DrawContext;
+            if scale != 1.0 {
+                ctx.push_transform(blinc_core::Transform::scale(scale, scale));
+            }
+        }
+        tree.draw_scrollbars(&mut ctx);
+        let batch = ctx.take_batch();
+        if !batch.primitives.is_empty() {
+            self.renderer.render_overlay(target_view, &batch);
+        }
+    }
+
     /// Draw overlay-subtree canvases above their dynamic host geometry.
     pub(super) fn dispatch_overlay_canvas_overlay(
         &mut self,

@@ -76,6 +76,7 @@ impl RenderContext {
 
         // Commit animation and promotion status for both direct and compositor rendering.
         tree.set_motion_promotion(self.promote_motion && !self.renderer.node_table_enabled());
+        tree.set_scroll_rows(self.rows_mode());
         let v2_statuses = tree.compute_animation_status();
         tree.commit_animation_status(&v2_statuses);
         if !self.in_compositor_inner_call && !self.overlay_frame_active {
@@ -541,6 +542,7 @@ impl RenderContext {
                 self.renderer.update_aux_data_for_batch(&batch);
             }
             self.restore_dynamic_batch(moved);
+            self.draw_scroll_row_scrollbars(tree, target);
         }
 
         // Draw motion text and SVG after their dynamic geometry. Inside the compositor's cache

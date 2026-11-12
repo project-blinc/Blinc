@@ -504,7 +504,12 @@ where
                     // force invalidation any frame a scroll
                     // input landed.
                     let had_scroll = scroll_info.is_some() || scroll_ended;
-                    if had_scroll {
+                    // A scroll the rows move leaves the cache as it is; any other has made it stale.
+                    let scroll_made_stale = ws
+                        .render_tree
+                        .as_ref()
+                        .is_none_or(|t| t.scroll_off_rows_changed());
+                    if had_scroll && scroll_made_stale {
                         if let Some(ref mut app) = ws.app {
                             app.invalidate_render_cache_tagged("had_scroll");
                         }

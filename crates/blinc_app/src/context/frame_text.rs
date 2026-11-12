@@ -66,6 +66,15 @@ pub(super) fn affine_scale(affine: Option<[f32; 6]>) -> f32 {
     affine.map_or(1.0, |[a, b, c, d, ..]| a.hypot(b).max(c.hypot(d)))
 }
 
+/// Whether `node` is inside a scroll container whose content is moved by rows. Its glyphs move
+/// by whole device pixels with the rows and are never baked: a settle bake would leave them
+/// behind the next time it scrolls.
+pub(super) fn in_scroll_rows(tree: &blinc_layout::RenderTree, node: super::LayoutNodeId) -> bool {
+    std::iter::once(node)
+        .chain(tree.layout_tree.ancestors(node))
+        .any(|n| tree.is_scroll_row_node(n))
+}
+
 /// Whether a bound node at or above `node` is moving.
 pub(super) fn chain_moving(tree: &blinc_layout::RenderTree, node: super::LayoutNodeId) -> bool {
     let bindings = tree.motion_bindings_map();
@@ -499,7 +508,9 @@ impl RenderContext {
         snap: bool,
     ) -> Option<PrimitiveBatch> {
         let (width, height) = viewport;
-        if let Some([clip_x, clip_y, clip_w, clip_h]) = text.clip_bounds {
+        if let Some([clip_x, clip_y, clip_w, clip_h]) = text.clip_bounds
+            && !text.in_scroll_window
+        {
             let text_right = text.x + text.width;
             let text_bottom = text.y + text.height;
             let clip_right = clip_x + clip_w;
@@ -621,6 +632,9 @@ impl RenderContext {
                 let Some(lane) = text.primitives.get(run.range.start).map(|p| p.node_slot) else {
                     continue;
                 };
+                if in_scroll_rows(tree, run.node) {
+                    continue;
+                }
                 let moving = chain_moving(tree, run.node);
                 match (moving, run.baked) {
                     // Moving again: back to the painted pose, at the size it now needs.
