@@ -1,11 +1,15 @@
 //! Cached text retains auxiliary ownership through selection and replay.
-use super::{Arc, GpuGlyph, GpuPrimitive, PrimitiveBatch, RenderContext};
+use super::{Arc, GpuGlyph, GpuPrimitive, LayoutNodeId, PrimitiveBatch, RenderContext};
 
 #[derive(Clone, Default)]
 pub(super) struct TextBatch {
     pub(super) glyphs: Vec<GpuGlyph>,
     pub(super) primitives: Vec<GpuPrimitive>,
     pub(super) aux_data: Arc<Vec<[f32; 4]>>,
+    /// The node that owns each run of `primitives`. Kept only for the glyphs of motion subtrees.
+    pub(super) owners: Vec<(std::ops::Range<usize>, LayoutNodeId)>,
+    /// Which assignment of node slots the primitives carry, zero for none.
+    pub(super) node_slots_epoch: u64,
 }
 
 /// How much narrower than its measured text a box may be before the text wraps, in physical
@@ -62,6 +66,8 @@ impl TextBatch {
                 .collect(),
             // References keep their original offsets when earlier glyphs are omitted.
             aux_data: self.aux_data.clone(),
+            owners: Vec::new(),
+            node_slots_epoch: 0,
         }
     }
 }

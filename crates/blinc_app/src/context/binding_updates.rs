@@ -21,34 +21,17 @@ impl RenderContext {
         }
         // With the node table, the batch keeps its painted pose and rows carry the change. What
         // the rows cannot draw is patched below as before.
-        if self.renderer.node_table_enabled()
-            && let Some(batch) = self.cached_dynamic_batch.as_mut()
-            && self
-                .cached_bg_batch
-                .as_ref()
-                .is_none_or(|b| b.cross_stream_groups.captures.is_empty())
-        {
-            let mut bindings = tree.composite_bindings_mut();
-            if !bindings.is_empty() && bindings.values().all(|meta| meta.dynamic_batch) {
-                match self.node_rows.apply(
-                    &self.renderer,
-                    batch,
-                    &mut bindings,
-                    tree.motion_bindings_map(),
-                    &|node| tree.layout_tree.ancestors(node),
-                    scale,
-                ) {
-                    Outcome::Applied { active } => {
-                        tracing::info!(target: "blinc_app::node_rows", outcome = "applied", "node_rows");
-                        self.last_binding_damage_rects.clear();
-                        tree.set_visible_anim_active(active);
-                        return !(active && self.motion_overlay_content_cached());
-                    }
-                    Outcome::Declined => {
-                        tracing::info!(target: "blinc_app::node_rows", outcome = "declined", "node_rows");
-                    }
-                }
+        match self.try_node_rows(tree, scale, false) {
+            Some(Outcome::Applied { active }) => {
+                tracing::info!(target: "blinc_app::node_rows", outcome = "applied", "node_rows");
+                self.last_binding_damage_rects.clear();
+                tree.set_visible_anim_active(active);
+                return !(active && self.motion_overlay_unmovable());
             }
+            Some(Outcome::Declined) => {
+                tracing::info!(target: "blinc_app::node_rows", outcome = "declined", "node_rows");
+            }
+            None => {}
         }
         // Shared captures rebase native ranges and retain moving output at its paint anchor.
         if !tree.motion_bindings_map().is_empty()
@@ -364,6 +347,56 @@ impl RenderContext {
         // Text and SVG caches are not patched with dynamic geometry. Repaint while their
         // bindings are active to keep the streams aligned.
         !(any_binding_active && self.motion_overlay_content_cached())
+    }
+
+    /// Hand the dynamic batch, and the glyphs of motion subtrees, to the node table: with
+    /// `adopt`, as just painted together, giving them their slots; without, as they were left,
+    /// writing the rows. `None` when the table is off or there is nothing for it to move.
+    pub(super) fn try_node_rows(
+        &mut self,
+        tree: &blinc_layout::RenderTree,
+        dpi: f32,
+        adopt: bool,
+    ) -> Option<Outcome> {
+        if !self.renderer.node_table_enabled() {
+            return None;
+        }
+        let batch = self.cached_dynamic_batch.as_mut()?;
+        if self
+            .cached_bg_batch
+            .as_ref()
+            .is_some_and(|b| !b.cross_stream_groups.captures.is_empty())
+        {
+            return None;
+        }
+        let mut bindings = tree.composite_bindings_mut();
+        if bindings.is_empty() || !bindings.values().all(|meta| meta.dynamic_batch) {
+            return None;
+        }
+        Some(self.node_rows.apply(
+            &self.renderer,
+            batch,
+            self.cached_motion_subtree_text_prims.as_mut(),
+            &mut bindings,
+            tree.motion_bindings_map(),
+            &|node| tree.layout_tree.ancestors(node),
+            dpi,
+            adopt,
+        ))
+    }
+
+    /// Whether what a motion subtree has outside the dynamic batch is something rows cannot
+    /// move: an SVG, glyphs that are not primitives, or glyphs a CSS animation patches. Glyph
+    /// primitives that the table has slotted are moved, and the table checks for them.
+    fn motion_overlay_unmovable(&self) -> bool {
+        self.cached_motion_subtree_svgs
+            .as_ref()
+            .is_some_and(|v| !v.is_empty())
+            || !self.motion_subtree_text_patch.is_empty()
+            || self
+                .cached_motion_subtree_text_prims
+                .as_ref()
+                .is_some_and(|t| !t.glyphs.is_empty())
     }
 
     /// Whether text or SVG in a motion subtree is cached apart from the dynamic batch.

@@ -381,6 +381,12 @@ impl RenderContext {
             scale_factor,
         );
 
+        // The batch and the glyphs of motion subtrees were just painted at one pose: the node
+        // table takes both, and later frames only write its rows.
+        if !used_fast_paint {
+            let _ = self.try_node_rows(tree, scale_factor, true);
+        }
+
         // SVGs are rendered as rasterized images (not tessellated paths) for better anti-aliasing
         // They will be rendered later via render_rasterized_svgs
 

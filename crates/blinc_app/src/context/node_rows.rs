@@ -6,6 +6,11 @@
 //! of their innermost binding and writes one row per binding holding the change since the bake,
 //! so a frame changes rows and leaves the batch alone. Anything the rows cannot express is
 //! declined, and the caller patches the batch on the CPU as before.
+//!
+//! A node has two rows. Row `2 * slot` is for its batch primitives, whose group opacity is a
+//! layer command and so is left out. Row `2 * slot + 1` is for the glyphs of the text under it,
+//! which draw outside any layer and take the opacity as an alpha ratio. Each row's parent is the
+//! same kind of row of the node's nearest bound ancestor.
 
 use std::collections::HashMap;
 use std::ops::Range;
@@ -14,6 +19,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use blinc_gpu::node_table::{NODE_CHAIN_DEPTH, NODE_TABLE_CAPACITY, NodeRow};
 use blinc_gpu::primitives::LayerCommand;
 use blinc_gpu::{GpuRenderer, PrimitiveBatch};
+
+use super::cached_text::TextBatch;
 use blinc_layout::motion::MotionBindings;
 use blinc_layout::renderer::CompositeBindingMeta;
 use blinc_layout::tree::LayoutNodeId;
@@ -162,10 +169,12 @@ impl NodeRows {
     /// The row for a binding that went from `slot.baseline` to `now`. `None` when the change is
     /// not a scale, turn and move about the baseline pivot: a non-uniform scale does not commute
     /// with a turn, and a scale from nothing has no ratio.
-    fn row(slot: &Slot, now: &Pose, dpi: f32) -> Option<NodeRow> {
+    ///
+    /// `text` asks for the row of the glyphs, not of the batch primitives.
+    fn row(slot: &Slot, now: &Pose, dpi: f32, text: bool) -> Option<NodeRow> {
         let was = &slot.baseline;
-        // A group's opacity is a layer command, not a row.
-        let layered = slot.layer.is_some();
+        // A group's opacity is a layer command, not a row; glyphs are outside the layer.
+        let layered = slot.layer.is_some() && !text;
         let turn = now.rotation - was.rotation;
         let uniform = |s: (f32, f32)| (s.0 - s.1).abs() <= EPS;
         if turn.abs() > EPS && !(uniform(was.scale) && uniform(now.scale)) {
@@ -193,7 +202,7 @@ impl NodeRows {
             [slot.centre.0 * dpi, slot.centre.1 * dpi],
             turn,
             opacity,
-            slot.parent,
+            slot.parent.map(|p| p * 2 + u32::from(text)),
         ))
     }
 
@@ -233,20 +242,56 @@ impl NodeRows {
             .iter()
             .map(|(node, meta)| (*node, meta.primitive_range.clone(), ancestors(*node).len()))
             .collect();
-        let nested = nest(&ranges)?;
-        let mut slots: Vec<Slot> = Vec::with_capacity(nested.len());
-        for (node, range, parent) in nested {
+        // Nodes with primitives come first, outer before inner, so an inner range's slot is
+        // given to a primitive last. The nodes with none, which move only text, follow.
+        let mut order: Vec<(LayoutNodeId, Range<usize>)> = nest(&ranges)?
+            .into_iter()
+            .map(|(node, range, _)| (node, range))
+            .collect();
+        let mut bare: Vec<(LayoutNodeId, usize)> = ranges
+            .iter()
+            .filter(|(_, r, _)| r.is_empty())
+            .map(|(n, _, d)| (*n, *d))
+            .collect();
+        bare.sort_by_key(|(_, depth)| *depth);
+        order.extend(bare.into_iter().map(|(n, _)| (n, 0..0)));
+        if order.len() * 2 > NODE_TABLE_CAPACITY {
+            return None;
+        }
+        let index: HashMap<LayoutNodeId, u32> = order
+            .iter()
+            .enumerate()
+            .map(|(i, (node, _))| (*node, i as u32))
+            .collect();
+
+        let mut slots: Vec<Slot> = Vec::with_capacity(order.len());
+        for (node, range) in order {
             if range.end > batch.primitives.len() {
                 return None;
             }
             let meta = bindings.get(&node)?;
-            // A parent is an ancestor in the tree, not only a range that happens to hold this one.
-            if let Some(p) = parent
-                && !ancestors(node).contains(&slots[p as usize].node)
-            {
+            // The nearest bound ancestor in the tree. For a node with primitives it is also the
+            // nearest range that holds this one.
+            let parent = ancestors(node)
+                .into_iter()
+                .find_map(|a| index.get(&a).copied());
+            let held_by = if range.is_empty() {
+                parent
+            } else {
+                slots
+                    .iter()
+                    .enumerate()
+                    .rev()
+                    .find(|(_, s)| {
+                        !s.range.is_empty()
+                            && s.range.start <= range.start
+                            && s.range.end >= range.end
+                    })
+                    .map(|(i, _)| i as u32)
+            };
+            if parent != held_by {
                 return None;
             }
-            let baseline = Pose::of_meta(meta);
             // A clip of the node's own should move with it, and one of an ancestor should not; a
             // row cannot tell which this is.
             if batch.primitives[range.clone()]
@@ -263,24 +308,28 @@ impl NodeRows {
             {
                 return None;
             }
-            // A turned ancestor puts this node's own moves on turned axes, which a row works in
-            // the world's.
-            let mut up = parent;
-            while let Some(p) = up {
-                let ancestor: &Slot = &slots[p as usize];
-                if ancestor.baseline.rotation.abs() > EPS {
-                    return None;
-                }
-                up = ancestor.parent;
-            }
             slots.push(Slot {
                 node,
                 range,
                 parent,
-                baseline,
+                baseline: Pose::of_meta(meta),
                 centre: meta.centre,
                 layer: meta.layer_push_index,
             });
+        }
+        // The shaders follow a chain of NODE_CHAIN_DEPTH rows, and a turned ancestor puts a node's
+        // own moves on turned axes, which a row works in the world's.
+        for slot in &slots {
+            let mut length = 1;
+            let mut up = slot.parent;
+            while let Some(p) = up {
+                let ancestor = &slots[p as usize];
+                length += 1;
+                if length > NODE_CHAIN_DEPTH || ancestor.baseline.rotation.abs() > EPS {
+                    return None;
+                }
+                up = ancestor.parent;
+            }
         }
         Some(slots)
     }
@@ -293,11 +342,7 @@ impl NodeRows {
     ) -> bool {
         self.epoch != 0
             && self.epoch == batch.node_slots_epoch
-            && bindings
-                .values()
-                .filter(|m| !m.primitive_range.is_empty())
-                .count()
-                == self.slots.len()
+            && bindings.len() == self.slots.len()
             && self.slots.iter().all(|s| {
                 bindings
                     .get(&s.node)
@@ -310,8 +355,18 @@ impl NodeRows {
     pub(super) fn release(
         &mut self,
         batch: &mut PrimitiveBatch,
+        text: Option<&mut TextBatch>,
         bindings: &mut HashMap<LayoutNodeId, CompositeBindingMeta>,
     ) {
+        if let Some(text) = text
+            && text.node_slots_epoch != 0
+            && text.node_slots_epoch == self.epoch
+        {
+            for p in &mut text.primitives {
+                p.set_node_slot(None);
+            }
+            text.node_slots_epoch = 0;
+        }
         if self.epoch != 0 && self.epoch == batch.node_slots_epoch {
             for slot in &self.slots {
                 if let Some(prims) = batch.primitives.get_mut(slot.range.clone()) {
@@ -333,51 +388,119 @@ impl NodeRows {
         self.rows.clear();
     }
 
-    /// Bring the rows up to date with the bindings, giving the batch its slots first if it has
-    /// none.
+    /// The slot of the nearest bound node at or above `node`, if any.
+    fn owner(
+        &self,
+        node: LayoutNodeId,
+        ancestors: &dyn Fn(LayoutNodeId) -> Vec<LayoutNodeId>,
+    ) -> Option<u32> {
+        let slot_of = |n: LayoutNodeId| self.slots.iter().position(|s| s.node == n);
+        slot_of(node)
+            .or_else(|| ancestors(node).into_iter().find_map(slot_of))
+            .map(|i| i as u32)
+    }
+
+    /// Give the glyphs of `text` the text row of the node that owns each run. `false`, with the
+    /// glyphs as they were, when a run has no owner or has a clip, or the batch is not glyph
+    /// primitives alone.
+    fn give_text_slots(
+        &self,
+        text: &mut TextBatch,
+        ancestors: &dyn Fn(LayoutNodeId) -> Vec<LayoutNodeId>,
+    ) -> bool {
+        if !text.glyphs.is_empty() || text.primitives.iter().any(|p| p.type_info[2] != 0) {
+            return false;
+        }
+        let mut owned = vec![None; text.primitives.len()];
+        for (range, node) in &text.owners {
+            let Some(slot) = self.owner(*node, ancestors) else {
+                return false;
+            };
+            for i in range.clone() {
+                if let Some(o) = owned.get_mut(i) {
+                    *o = Some(slot * 2 + 1);
+                }
+            }
+        }
+        if owned.iter().any(Option::is_none) {
+            return false;
+        }
+        for (p, row) in text.primitives.iter_mut().zip(owned) {
+            p.set_node_slot(row);
+        }
+        true
+    }
+
+    /// Bring the rows up to date with the bindings, giving the batch and the glyphs their slots
+    /// first if they have none. Slots are given only when `adopt` says the batch and the glyphs
+    /// were both just painted, at the same pose; a glyph batch baked at some other pose can only
+    /// be left alone, and then the rows are declined.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn apply(
         &mut self,
         renderer: &GpuRenderer,
         batch: &mut PrimitiveBatch,
+        mut text: Option<&mut TextBatch>,
         bindings: &mut HashMap<LayoutNodeId, CompositeBindingMeta>,
         motion: &HashMap<LayoutNodeId, MotionBindings>,
         ancestors: &dyn Fn(LayoutNodeId) -> Vec<LayoutNodeId>,
         dpi: f32,
+        adopt: bool,
     ) -> Outcome {
-        let given = self.describes(batch, bindings);
+        let has_text = text
+            .as_ref()
+            .is_some_and(|t| !t.primitives.is_empty() || !t.glyphs.is_empty());
+        let given = self.describes(batch, bindings)
+            && text
+                .as_ref()
+                .is_none_or(|t| !has_text || t.node_slots_epoch == self.epoch);
         if !given {
-            self.release(batch, bindings);
+            self.release(batch, text.as_deref_mut(), bindings);
+            if has_text && !adopt {
+                return Outcome::Declined;
+            }
             let Some(slots) = Self::plan(batch, bindings, ancestors) else {
                 return Outcome::Declined;
             };
             self.slots = slots;
         }
 
-        let mut rows = Vec::with_capacity(self.slots.len());
+        let mut rows = Vec::with_capacity(self.slots.len() * 2);
         for slot in &self.slots {
             let Some(b) = motion.get(&slot.node) else {
-                return self.decline(given, batch, bindings);
+                return self.decline(given, batch, text, bindings);
             };
-            let Some(row) = Self::row(slot, &Pose::of(b, slot.baseline.opacity), dpi) else {
-                return self.decline(given, batch, bindings);
+            let now = Pose::of(b, slot.baseline.opacity);
+            let (Some(batch_row), Some(text_row)) = (
+                Self::row(slot, &now, dpi, false),
+                Self::row(slot, &now, dpi, true),
+            ) else {
+                return self.decline(given, batch, text, bindings);
             };
-            rows.push(row);
+            rows.push(batch_row);
+            rows.push(text_row);
         }
 
         if !given {
             let epoch = next_epoch();
             for (i, slot) in self.slots.iter().enumerate() {
                 for p in &mut batch.primitives[slot.range.clone()] {
-                    p.set_node_slot(Some(i as u32));
+                    p.set_node_slot(Some(i as u32 * 2));
                 }
             }
             batch.node_slots_epoch = epoch;
             self.epoch = epoch;
             self.rows.clear();
+            if has_text && let Some(text) = text.as_deref_mut() {
+                if !self.give_text_slots(text, ancestors) {
+                    return self.decline(true, batch, Some(text), bindings);
+                }
+                text.node_slots_epoch = epoch;
+            }
         }
         if rows != self.rows {
             if !renderer.set_node_rows(&rows) {
-                return self.decline(true, batch, bindings);
+                return self.decline(true, batch, text, bindings);
             }
             self.rows = rows;
         }
@@ -418,10 +541,11 @@ impl NodeRows {
         &mut self,
         slots_given: bool,
         batch: &mut PrimitiveBatch,
+        text: Option<&mut TextBatch>,
         bindings: &mut HashMap<LayoutNodeId, CompositeBindingMeta>,
     ) -> Outcome {
         if slots_given {
-            self.release(batch, bindings);
+            self.release(batch, text, bindings);
         } else {
             self.slots.clear();
         }
@@ -517,7 +641,7 @@ mod tests {
             rotation: 0.75,
             opacity: 1.0,
         };
-        let row = NodeRows::row(&slot(was), &now, 2.0).unwrap();
+        let row = NodeRows::row(&slot(was), &now, 2.0, false).unwrap();
         assert_eq!(row.motion, [8.0, -6.0, 1.5, 1.5]);
         assert_eq!(row.pivot, [100.0, 80.0, 0.25, 2.0]);
         assert_eq!(row.parent(), None);
@@ -525,7 +649,7 @@ mod tests {
 
     #[test]
     fn an_unchanged_binding_has_the_row_that_changes_nothing() {
-        let row = NodeRows::row(&slot(REST), &REST, 1.0).unwrap();
+        let row = NodeRows::row(&slot(REST), &REST, 1.0, false).unwrap();
         assert_eq!(row.motion, NodeRow::REST.motion);
         assert_eq!(row.pivot[2..], NodeRow::REST.pivot[2..]);
     }
@@ -541,19 +665,110 @@ mod tests {
             ..stretched
         };
         // A stretch alone is a row; a stretch with a turn is not, since the two do not commute.
-        assert!(NodeRows::row(&slot(REST), &stretched, 1.0).is_some());
-        assert!(NodeRows::row(&slot(REST), &turned, 1.0).is_none());
+        assert!(NodeRows::row(&slot(REST), &stretched, 1.0, false).is_some());
+        assert!(NodeRows::row(&slot(REST), &turned, 1.0, false).is_none());
         // A scale from nothing has no ratio, nor has a fade from nothing.
         let nothing = Pose {
             scale: (0.0, 0.0),
             ..REST
         };
-        assert!(NodeRows::row(&slot(nothing), &REST, 1.0).is_none());
+        assert!(NodeRows::row(&slot(nothing), &REST, 1.0, false).is_none());
         let invisible = Pose {
             opacity: 0.0,
             ..REST
         };
-        assert!(NodeRows::row(&slot(invisible), &REST, 1.0).is_none());
-        assert!(NodeRows::row(&slot(invisible), &invisible, 1.0).is_some());
+        assert!(NodeRows::row(&slot(invisible), &REST, 1.0, false).is_none());
+        assert!(NodeRows::row(&slot(invisible), &invisible, 1.0, false).is_some());
+    }
+
+    fn id(n: u64) -> LayoutNodeId {
+        slotmap::KeyData::from_ffi((1 << 32) | n).into()
+    }
+
+    fn meta(range: Range<usize>) -> CompositeBindingMeta {
+        CompositeBindingMeta {
+            dynamic_batch: true,
+            primitive_range: range,
+            last_translate: (0.0, 0.0),
+            last_scale: (1.0, 1.0),
+            last_rotation_rad: 0.0,
+            last_opacity: 1.0,
+            layer_push_index: None,
+            centre: (10.0, 10.0),
+            last_screen_aabb: None,
+        }
+    }
+
+    fn batch_of(prims: usize) -> PrimitiveBatch {
+        let mut batch = PrimitiveBatch::new();
+        for i in 0..prims {
+            batch.push(blinc_gpu::GpuPrimitive::rect(i as f32, 0.0, 4.0, 4.0));
+        }
+        batch
+    }
+
+    /// A tree of `parents`: node n has the ancestors listed for it, nearest first.
+    fn tree_of(parents: &[(u64, &[u64])]) -> impl Fn(LayoutNodeId) -> Vec<LayoutNodeId> {
+        let table: HashMap<LayoutNodeId, Vec<LayoutNodeId>> = parents
+            .iter()
+            .map(|(n, up)| (id(*n), up.iter().map(|a| id(*a)).collect()))
+            .collect();
+        move |node| table.get(&node).cloned().unwrap_or_default()
+    }
+
+    #[test]
+    fn a_node_with_no_primitives_gets_a_slot_under_its_bound_ancestor() {
+        // The outer node holds both primitives, the inner one has none and moves only text.
+        let bindings = HashMap::from([(id(1), meta(0..2)), (id(2), meta(0..0))]);
+        let ancestors = tree_of(&[(1, &[]), (2, &[1])]);
+        let slots = NodeRows::plan(&batch_of(2), &bindings, &ancestors).expect("a plan");
+        assert_eq!(slots.len(), 2);
+        assert_eq!(slots[0].node, id(1));
+        assert_eq!(slots[1].node, id(2));
+        assert_eq!(slots[1].parent, Some(0));
+        assert!(slots[1].range.is_empty());
+    }
+
+    #[test]
+    fn a_range_that_is_not_an_ancestors_is_declined() {
+        // Node 2's range sits inside node 1's, but node 1 is not above it in the tree.
+        let bindings = HashMap::from([(id(1), meta(0..4)), (id(2), meta(1..3))]);
+        let ancestors = tree_of(&[(1, &[]), (2, &[])]);
+        assert!(NodeRows::plan(&batch_of(4), &bindings, &ancestors).is_none());
+    }
+
+    #[test]
+    fn glyphs_take_the_text_row_of_the_nearest_bound_node() {
+        let bindings = HashMap::from([(id(1), meta(0..2)), (id(2), meta(2..4))]);
+        let ancestors = tree_of(&[(1, &[]), (2, &[]), (3, &[2]), (4, &[1])]);
+        let mut rows = NodeRows::default();
+        rows.slots = NodeRows::plan(&batch_of(4), &bindings, &ancestors).unwrap();
+        let slot_of = |n: u64| rows.slots.iter().position(|s| s.node == id(n)).unwrap() as u32;
+
+        let mut text = TextBatch::default();
+        for _ in 0..3 {
+            text.primitives
+                .push(blinc_gpu::GpuPrimitive::rect(0.0, 0.0, 2.0, 2.0));
+        }
+        // Run 0..2 belongs to node 3 (under 2), run 2..3 to node 4 (under 1).
+        text.owners = vec![(0..2, id(3)), (2..3, id(4))];
+        assert!(rows.give_text_slots(&mut text, &ancestors));
+        assert_eq!(text.primitives[0].node_slot(), Some(slot_of(2) * 2 + 1));
+        assert_eq!(text.primitives[1].node_slot(), Some(slot_of(2) * 2 + 1));
+        assert_eq!(text.primitives[2].node_slot(), Some(slot_of(1) * 2 + 1));
+    }
+
+    #[test]
+    fn glyphs_with_no_bound_owner_are_left_alone() {
+        let bindings = HashMap::from([(id(1), meta(0..2))]);
+        let ancestors = tree_of(&[(1, &[]), (5, &[])]);
+        let mut rows = NodeRows::default();
+        rows.slots = NodeRows::plan(&batch_of(2), &bindings, &ancestors).unwrap();
+        let mut text = TextBatch::default();
+        text.primitives
+            .push(blinc_gpu::GpuPrimitive::rect(0.0, 0.0, 2.0, 2.0));
+        text.owners = vec![(0..1, id(5))];
+        assert!(!rows.give_text_slots(&mut text, &ancestors));
+        assert_eq!(text.primitives[0].node_slot(), None);
     }
 }

@@ -378,6 +378,11 @@ impl RenderContext {
             // patch when this text sits under a composite-promoted
             // ancestor (its alpha was baked at BASE, factor excluded).
             let patch_end = motion_subtree_text_prims.primitives.len();
+            if patch_end > patch_start {
+                motion_subtree_text_prims
+                    .owners
+                    .push((patch_start..patch_end, text.node));
+            }
             if patch_end > patch_start
                 && let Some(ancestor) = text.composite_ancestor
             {
