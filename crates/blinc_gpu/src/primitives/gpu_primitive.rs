@@ -513,6 +513,18 @@ impl GpuPrimitive {
         }
     }
 
+    /// The ordinal of the motion-bound node this primitive was painted for, zero for none. It
+    /// survives a batch being reordered or having primitives inserted, which a range of
+    /// primitive indices does not.
+    pub fn node_ordinal(&self) -> u32 {
+        self.node_slot[2] as u32
+    }
+
+    /// Set [`node_ordinal`](Self::node_ordinal).
+    pub fn set_node_ordinal(&mut self, ordinal: u32) {
+        self.node_slot[2] = ordinal as f32;
+    }
+
     /// Where in the node's chain of rows the clip begins to follow them: the clip moves with the
     /// row at this depth (zero is the node's own) and every row above it. None leaves the clip
     /// where it is painted, as the clip of an ancestor that does not move.

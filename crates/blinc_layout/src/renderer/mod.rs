@@ -568,6 +568,9 @@ pub struct CompositeBindingMeta {
     /// `config.opacity` at this index so the layer composite picks
     /// up the new spring value each frame.
     pub layer_push_index: Option<usize>,
+    /// The configuration of that layer as it was pushed, which finds its command again after the
+    /// batch has been reordered and `layer_push_index` no longer points at it.
+    pub layer_config: Option<blinc_core::LayerConfig>,
     /// Centre point (logical pixels, absolute) used for scale and
     /// rotation. Same coordinate frame as `last_translate`.
     pub centre: (f32, f32),
@@ -917,6 +920,13 @@ pub struct RenderTree {
     /// Whether motion-bound subtrees may be baked to a texture and blitted. Off, they are
     /// painted as vectors into the dynamic batch, which is how the GPU node table moves them.
     motion_promotion: Cell<bool>,
+    /// The ordinal each motion-bound node was given in the last paint, in walk order from one.
+    /// The painter stamps a node's primitives with it, so they can be told apart whatever the
+    /// batch does to them afterwards.
+    binding_ordinals: RefCell<HashMap<LayoutNodeId, u32>>,
+    /// Whether the last paint found an image or an SVG inside a motion-bound node, content that
+    /// is drawn apart from the batch and stays where it was painted when the batch is moved.
+    bound_media: Cell<bool>,
     /// Motion-subtree texture bake registry — Phase 4.2 of the
     /// unified property channel ([[project-reactive-architecture-v2]]).
     ///
@@ -1193,6 +1203,8 @@ impl RenderTree {
             css_layout_written: HashSet::new(),
             subtree_texture_candidates: RefCell::new(std::collections::HashSet::new()),
             motion_promotion: Cell::new(true),
+            binding_ordinals: RefCell::new(HashMap::new()),
+            bound_media: Cell::new(false),
             motion_subtree_bake_registry: RefCell::new(
                 crate::motion_texture_cache::MotionSubtreeBakeRegistry::empty(),
             ),
@@ -1710,6 +1722,17 @@ impl RenderTree {
         &self,
     ) -> std::cell::Ref<'_, HashMap<LayoutNodeId, CompositeBindingMeta>> {
         self.composite_bindings.borrow()
+    }
+
+    /// The ordinal each motion-bound node was given in the last paint, which its primitives and
+    /// its text carry.
+    pub fn binding_ordinals(&self) -> std::cell::Ref<'_, HashMap<LayoutNodeId, u32>> {
+        self.binding_ordinals.borrow()
+    }
+
+    /// Whether the last paint found an image or an SVG inside a motion-bound node.
+    pub fn bound_subtree_has_media(&self) -> bool {
+        self.bound_media.get()
     }
 
     /// Allow (the default) or forbid baking motion-bound subtrees to textures. Set before the

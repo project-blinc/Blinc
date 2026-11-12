@@ -1,7 +1,9 @@
 //! Coordinate collection and ordered dispatch with optional entry/exit animation state.
+use super::cached_text;
 use super::composite_replay::LayerScope;
 use super::frame_dispatch::FrameContent;
 use super::frame_text::{self, PreparedFrameText};
+use super::node_rows;
 use super::{
     DebugMode, DrawContext, GpuPaintContext, ImageElement, LayoutNodeId, PrimitiveBatch,
     RenderContext, RenderTree, Result, SvgElement, TextElement, Transform3DLayerInfo,
@@ -92,6 +94,7 @@ impl RenderContext {
         let mut ctx =
             GpuPaintContext::with_text_context(width as f32, height as f32, &mut self.text_ctx);
         ctx.enable_deferred_text();
+        ctx.set_moving_groups_dynamic(self.renderer.node_table_enabled());
         ctx.enable_deferred_svg();
         ctx.enable_deferred_image();
         ctx.enable_glass_layers();
@@ -220,6 +223,9 @@ impl RenderContext {
             (Transform3DLayerInfo, Vec<TextElement>),
         > = std::collections::HashMap::new();
         let mut captured = std::collections::HashMap::new();
+        if !used_fast_paint {
+            self.captured_runs.clear();
+        }
         let captured_nodes: std::collections::HashSet<_> = batch
             .cross_stream_groups
             .text_nodes
@@ -236,7 +242,42 @@ impl RenderContext {
             let key = text.node.data().as_ffi();
             if captured_nodes.contains(&key) {
                 if !used_fast_paint {
-                    let prepared = self.prepare_captured_text(&text, (width, height), scale_factor);
+                    // Glyphs inside a group carry the ordinal of the node that moves them. With the
+                    // node table they are also sized and placed as motion text is, and kept
+                    // sharp as their node moves and settles.
+                    let ordinal = node_rows::ordinal_of(tree, text.node);
+                    let mut run_id = 0u32;
+                    let table = self.renderer.node_table_enabled();
+                    let mut prepared = if (table || !self.promote_motion) && ordinal != 0 {
+                        let (scale, moving) = frame_text::raster_scale(tree, text.node, true);
+                        let k = frame_text::raster_size(
+                            scale.max(frame_text::affine_scale(text.css_affine)),
+                            moving,
+                        );
+                        if table {
+                            run_id = self.captured_runs.len() as u32 + 1;
+                            self.captured_runs.push(cached_text::CapturedRun {
+                                id: run_id,
+                                element: text.clone(),
+                                k,
+                                snapped: !moving,
+                                baked: None,
+                            });
+                        }
+                        self.prepare_captured_text_at(
+                            &text,
+                            (width, height),
+                            scale_factor,
+                            k,
+                            Some(!moving),
+                        )
+                    } else {
+                        self.prepare_captured_text(&text, (width, height), scale_factor)
+                    };
+                    for p in &mut prepared.primitives {
+                        p.set_node_ordinal(ordinal);
+                        p.node_slot[3] = run_id as f32;
+                    }
                     // A styled node can contribute several span and line runs.
                     match captured.entry(key) {
                         std::collections::hash_map::Entry::Vacant(entry) => {

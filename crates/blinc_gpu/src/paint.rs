@@ -184,6 +184,12 @@ pub struct GpuPaintContext<'a> {
     /// outside an overlay keeps its existing pre-dyn-batch
     /// canvas-overlay slot.
     overlay_subtree_depth: u32,
+    /// Keep the groups of a motion subtree in the dynamic batch, where something can move them,
+    /// instead of in the static batch at their painted position.
+    moving_groups_dynamic: bool,
+    /// The ordinal the primitives being emitted are stamped with (see
+    /// `DrawContext::set_motion_node_ordinal`).
+    motion_node_ordinal: u32,
     overlay_visit_sequence: u32,
     overlay_root_pending: Option<u32>,
     overlay_layer_scope: Option<overlay::OverlayLayerScope>,
@@ -422,6 +428,14 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         // Override the no-op trait default with our depth-counter
         // tracker so emit sites route to `dynamic_batch`.
         GpuPaintContext::push_motion_subtree(self)
+    }
+
+    fn set_motion_node_ordinal(&mut self, ordinal: u32) -> u32 {
+        std::mem::replace(&mut self.motion_node_ordinal, ordinal)
+    }
+
+    fn set_moving_groups_dynamic(&mut self, on: bool) -> bool {
+        GpuPaintContext::set_moving_groups_dynamic(self, on)
     }
 
     fn pop_motion_subtree(&mut self) {
@@ -782,10 +796,14 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         self.glass_layers
     }
     fn push_glass_layer(&mut self, id: u64, config: LayerConfig) -> bool {
-        if !self.glass_layers
-            || !self.emit_foreground()
-            || !self.begin_cross_stream_layer(id, config)
-        {
+        if !self.glass_layers || !self.emit_foreground() {
+            return false;
+        }
+        // Glass samples what was painted before it, so it keeps its place in the paint order.
+        let dynamic = std::mem::replace(&mut self.moving_groups_dynamic, false);
+        let began = self.begin_cross_stream_layer(id, config);
+        self.moving_groups_dynamic = dynamic;
+        if !began {
             return false;
         }
         self.layer_stack.last_mut().unwrap().captures_glass = true;

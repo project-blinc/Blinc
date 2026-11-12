@@ -91,6 +91,8 @@ impl RenderTree {
         // reads this between full paints to patch the cached
         // primitive buffer in place.
         self.composite_bindings.borrow_mut().clear();
+        self.binding_ordinals.borrow_mut().clear();
+        self.bound_media.set(false);
         self.painted_unpromoted_binding.set(false);
         // Phase 4b: per-CSS-animated-node paint metadata. Same
         // lifecycle as composite_bindings — cleared every full
@@ -508,6 +510,34 @@ impl RenderTree {
         if in_motion_subtree {
             ctx.push_motion_subtree();
         }
+        // A bound node's primitives carry its ordinal, until the node's walk ends.
+        // A node walked again, for the foreground stream, keeps the ordinal it had.
+        let previous_ordinal = motion_bindings_ref.map(|_| {
+            let mut ordinals = self.binding_ordinals.borrow_mut();
+            let next = ordinals.values().copied().max().unwrap_or(0) + 1;
+            let ordinal = *ordinals.entry(node).or_insert(next);
+            drop(ordinals);
+            ctx.set_motion_node_ordinal(ordinal)
+        });
+        // The groups of a bound node move with the dynamic batch, unless content painted after the
+        // node lies over its box, which they would then be drawn above, or an image or SVG is
+        // inside them. Any other motion scope, and what is inside it, keeps its groups in their
+        // place in the static paint order.
+        let bound_media = motion_bindings_ref.is_some() && self.subtree_has_media(node);
+        if bound_media {
+            self.bound_media.set(true);
+        }
+        let previous_groups = in_motion_subtree.then(|| {
+            let was = ctx.set_moving_groups_dynamic(false);
+            if was
+                && motion_bindings_ref.is_some()
+                && !bound_media
+                && !self.later_content_overlaps_any(node)
+            {
+                ctx.set_moving_groups_dynamic(true);
+            }
+            was
+        });
         // Keep portals late while retaining inherited native group state.
         let in_overlay_subtree_node = render_node.props.is_overlay_root;
         if in_overlay_subtree_node {
@@ -787,6 +817,12 @@ impl RenderTree {
             if in_motion_subtree {
                 ctx.pop_motion_subtree();
             }
+            if let Some(previous) = previous_ordinal {
+                ctx.set_motion_node_ordinal(previous);
+            }
+            if let Some(was) = previous_groups {
+                ctx.set_moving_groups_dynamic(was);
+            }
             // Same balancing for the composite-layer push.
             if pushed_composite_layer {
                 ctx.pop_composite_layer();
@@ -963,6 +999,7 @@ impl RenderTree {
             || has_blend_mode
             || use_3d_layer;
         let mut should_push_layer = false;
+        let mut group_config: Option<LayerConfig> = None;
         if has_opacity_layer
             && (effective_layer == target_layer
                 || (cross_stream_group && target_layer == RenderLayer::Foreground))
@@ -1018,6 +1055,7 @@ impl RenderTree {
                 effects: scaled_effects,
                 transform_3d,
             };
+            group_config = Some(config.clone());
             if cross_stream_group {
                 use slotmap::Key as _;
                 should_push_layer = if grouped_glass {
@@ -2071,6 +2109,7 @@ impl RenderTree {
             let moves_text_only = end == start
                 && !self.motion_promotion.get()
                 && motion_bindings_ref.is_some()
+                && ctx.bg_batch_is_dynamic()
                 && !ctx.bg_batch_is_composite();
             if end > start || retained_foreground || moves_text_only {
                 let (binding_tx, binding_ty) = motion_bindings_ref
@@ -2253,6 +2292,7 @@ impl RenderTree {
                             last_rotation_rad,
                             last_opacity,
                             layer_push_index: motion_binding_layer_push_index,
+                            layer_config: motion_binding_layer_push_index.and(group_config.clone()),
                             centre,
                             ambient_clip,
                             last_screen_aabb,
@@ -2651,6 +2691,12 @@ impl RenderTree {
         }
         if in_motion_subtree {
             ctx.pop_motion_subtree();
+        }
+        if let Some(previous) = previous_ordinal {
+            ctx.set_motion_node_ordinal(previous);
+        }
+        if let Some(was) = previous_groups {
+            ctx.set_moving_groups_dynamic(was);
         }
         // Balance the composite-layer push (same reasoning — the
         // walker emits this node's primitives into the per-node

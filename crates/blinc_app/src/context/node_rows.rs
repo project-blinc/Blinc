@@ -93,10 +93,11 @@ impl Pose {
 /// A binding with a row.
 struct Slot {
     node: LayoutNodeId,
-    range: Range<usize>,
-    /// The slot of the nearest binding whose range holds this one's.
+    /// The ordinal the walker gave the node, which its primitives carry.
+    ordinal: u32,
+    /// The slot of the nearest bound ancestor.
     parent: Option<u32>,
-    /// The pose the primitives of the range were drawn at when the slot was given.
+    /// The pose the node's primitives were drawn at when the slot was given.
     baseline: Pose,
     /// The world-space pivot of the baseline, in logical pixels.
     centre: (f32, f32),
@@ -109,10 +110,10 @@ struct Slot {
     clip_moves: bool,
 }
 
-/// Whether a binding is the dynamic batch's to move: its primitives are in that batch, or it has
-/// none and moves only text.
+/// Whether a binding is the dynamic batch's to move: its primitives, or its text alone, are in
+/// that batch.
 fn owned(meta: &CompositeBindingMeta) -> bool {
-    meta.dynamic_batch || meta.primitive_range.is_empty()
+    meta.dynamic_batch
 }
 
 /// The rows of one assignment of slots to a batch.
@@ -125,49 +126,37 @@ pub(super) struct NodeRows {
     rows: Vec<NodeRow>,
 }
 
-/// Ranges in the order slots are given, each with the slot of its parent.
-type Nested<K> = Vec<(K, Range<usize>, Option<u32>)>;
+/// The ordinal of the nearest bound node at or above `node`, zero for none.
+pub(super) fn ordinal_of(tree: &blinc_layout::RenderTree, node: LayoutNodeId) -> u32 {
+    let ordinals = tree.binding_ordinals();
+    std::iter::once(node)
+        .chain(tree.layout_tree.ancestors(node))
+        .find_map(|n| ordinals.get(&n).copied())
+        .unwrap_or(0)
+}
 
-/// Each range's parent among `ranges`, in the order the slots are given (outer before inner).
-/// Equal ranges nest by depth in the tree, the shallower outside. Declines ranges that cannot be
-/// nested: two equal ones at the same depth, two that overlap without one holding the other, or a
-/// chain longer than the shaders follow. Empty ranges have no slot and are left out.
-fn nest<K: Copy>(ranges: &[(K, Range<usize>, usize)]) -> Option<Nested<K>> {
-    let mut order: Vec<&(K, Range<usize>, usize)> =
-        ranges.iter().filter(|(_, r, _)| !r.is_empty()).collect();
-    order.sort_by(|a, b| {
-        a.1.start
-            .cmp(&b.1.start)
-            .then(b.1.end.cmp(&a.1.end))
-            .then(a.2.cmp(&b.2))
-    });
-    let mut out: Nested<K> = Vec::with_capacity(order.len());
-    let mut depths: Vec<usize> = Vec::with_capacity(order.len());
-    // The slots whose ranges hold the one being placed, outermost first.
-    let mut open: Vec<u32> = Vec::new();
-    for (key, range, depth) in order {
-        while let Some(&top) = open.last() {
-            if out[top as usize].1.end <= range.start {
-                open.pop();
-            } else {
-                break;
-            }
-        }
-        if let Some(&top) = open.last() {
-            let outer = &out[top as usize].1;
-            if range.end > outer.end || (outer == range && *depth <= depths[top as usize]) {
+/// The index of the one `Push` in `batch` that was pushed with `config`, `None` when there is
+/// not exactly one.
+fn find_group(batch: &PrimitiveBatch, config: &blinc_core::LayerConfig) -> Option<usize> {
+    let mut found = None;
+    for (i, entry) in batch.layer_commands.iter().enumerate() {
+        let LayerCommand::Push { config: c } = &entry.command else {
+            continue;
+        };
+        let same = c.position == config.position
+            && c.size == config.size
+            && c.blend_mode == config.blend_mode
+            && c.effects.len() == config.effects.len()
+            && c.transform_3d.is_some() == config.transform_3d.is_some()
+            && (c.opacity - config.opacity).abs() < 1e-4;
+        if same {
+            if found.is_some() {
                 return None;
             }
+            found = Some(i);
         }
-        if open.len() >= NODE_CHAIN_DEPTH {
-            return None;
-        }
-        let slot = out.len() as u32;
-        out.push((*key, range.clone(), open.last().copied()));
-        depths.push(*depth);
-        open.push(slot);
     }
-    (out.len() <= NODE_TABLE_CAPACITY).then_some(out)
+    found
 }
 
 /// Whether `clip` (x, y, width, height) is the clip that was in force at `ambient`.
@@ -226,14 +215,14 @@ impl NodeRows {
     }
 
     /// Slots for the bindings of `batch` as they stand now, or `None` when the rows cannot draw
-    /// them.
+    /// them. A node's primitives are found by the ordinal they carry, so the batch may have been
+    /// reordered, or have had text inserted, since they were painted.
     fn plan(
         batch: &PrimitiveBatch,
         bindings: &HashMap<LayoutNodeId, CompositeBindingMeta>,
+        ordinals: &HashMap<LayoutNodeId, u32>,
         ancestors: &dyn Fn(LayoutNodeId) -> Vec<LayoutNodeId>,
     ) -> Option<Vec<Slot>> {
-        // Anything ordered across streams keeps its place by primitive index, and what a row
-        // moves is found by it.
         if !batch.cross_stream_groups.captures.is_empty()
             || batch.has_foreground_content()
             || batch.has_foreground_layers()
@@ -241,13 +230,13 @@ impl NodeRows {
         {
             return None;
         }
-        // A plain group is drawn wherever its primitives are. One with effects, a blend mode or a
-        // 3D transform sizes itself by what is under it, which a row changes.
+        // A group sizes itself by where its primitives are drawn, which the renderer works out
+        // through the rows, so effects do not matter. A blend mode or a 3D transform is not
+        // checked yet.
         for entry in &batch.layer_commands {
             match &entry.command {
                 LayerCommand::Push { config } => {
-                    if !config.effects.is_empty()
-                        || config.blend_mode != blinc_core::BlendMode::Normal
+                    if config.blend_mode != blinc_core::BlendMode::Normal
                         || config.transform_3d.is_some()
                     {
                         return None;
@@ -257,77 +246,44 @@ impl NodeRows {
                 _ => return None,
             }
         }
-        // Bindings whose primitives are in the static batch are not this batch's to move.
-        let ranges: Vec<_> = bindings
+        // Bindings whose primitives are in the static batch are not this batch's to move. The rest
+        // are given slots in walk order, which puts a node after the ones it is inside.
+        let mut nodes: Vec<LayoutNodeId> = bindings
             .iter()
             .filter(|(_, meta)| owned(meta))
-            .map(|(node, meta)| (*node, meta.primitive_range.clone(), ancestors(*node).len()))
+            .map(|(node, _)| *node)
             .collect();
-        // Nodes with primitives come first, outer before inner, so an inner range's slot is
-        // given to a primitive last. The nodes with none, which move only text, follow.
-        let mut order: Vec<(LayoutNodeId, Range<usize>)> = nest(&ranges)?
-            .into_iter()
-            .map(|(node, range, _)| (node, range))
-            .collect();
-        let mut bare: Vec<(LayoutNodeId, Range<usize>, usize)> = ranges
-            .iter()
-            .filter(|(_, r, _)| r.is_empty())
-            .map(|(n, r, d)| (*n, r.clone(), *d))
-            .collect();
-        bare.sort_by_key(|(_, _, depth)| *depth);
-        order.extend(bare.into_iter().map(|(n, r, _)| (n, r)));
-        if order.len() * 2 > NODE_TABLE_CAPACITY {
+        nodes.sort_by_key(|node| ordinals.get(node).copied().unwrap_or(u32::MAX));
+        if nodes.len() * 2 > NODE_TABLE_CAPACITY {
             return None;
         }
-        let index: HashMap<LayoutNodeId, u32> = order
+        let index: HashMap<LayoutNodeId, u32> = nodes
             .iter()
             .enumerate()
-            .map(|(i, (node, _))| (*node, i as u32))
+            .map(|(i, node)| (*node, i as u32))
             .collect();
 
-        let mut slots: Vec<Slot> = Vec::with_capacity(order.len());
-        for (node, range) in order {
-            if range.end > batch.primitives.len() {
-                return None;
-            }
+        let mut slots: Vec<Slot> = Vec::with_capacity(nodes.len());
+        for node in nodes {
+            let ordinal = *ordinals.get(&node)?;
             let meta = bindings.get(&node)?;
-            // The nearest bound ancestor in the tree. For a node with primitives it is also the
-            // nearest range that holds this one.
+            // The nearest bound ancestor in the tree.
             let parent = ancestors(node)
                 .into_iter()
                 .find_map(|a| index.get(&a).copied());
-            let held_by = if range.is_empty() {
-                parent
-            } else {
-                slots
-                    .iter()
-                    .enumerate()
-                    .rev()
-                    .find(|(_, s)| {
-                        !s.range.is_empty()
-                            && s.range.start <= range.start
-                            && s.range.end >= range.end
-                    })
-                    .map(|(i, _)| i as u32)
+            // The command that holds this node's group opacity, found by the configuration it was
+            // pushed with: its index may have moved since.
+            let layer = match &meta.layer_config {
+                Some(config) => Some(find_group(batch, config)?),
+                None => None,
             };
-            if parent != held_by {
-                return None;
-            }
-            if let Some(index) = meta.layer_push_index
-                && !matches!(
-                    batch.layer_commands.get(index).map(|e| &e.command),
-                    Some(LayerCommand::Push { .. })
-                )
-            {
-                return None;
-            }
             slots.push(Slot {
                 node,
-                range,
+                ordinal,
                 parent,
                 baseline: Pose::of_meta(meta),
                 centre: meta.centre,
-                layer: meta.layer_push_index,
+                layer,
                 ambient_clip: meta.ambient_clip,
                 clip_moves: false,
             });
@@ -354,15 +310,15 @@ impl NodeRows {
         &self,
         batch: &PrimitiveBatch,
         bindings: &HashMap<LayoutNodeId, CompositeBindingMeta>,
+        ordinals: &HashMap<LayoutNodeId, u32>,
     ) -> bool {
         self.epoch != 0
             && self.epoch == batch.node_slots_epoch
             && bindings.values().filter(|m| owned(m)).count() == self.slots.len()
-            && self.slots.iter().all(|s| {
-                bindings
-                    .get(&s.node)
-                    .is_some_and(|m| m.primitive_range == s.range)
-            })
+            && self
+                .slots
+                .iter()
+                .all(|s| ordinals.get(&s.node) == Some(&s.ordinal))
     }
 
     /// Take the slots off `batch` and put the bindings' recorded values back to the baseline the
@@ -383,12 +339,10 @@ impl NodeRows {
             text.node_slots_epoch = 0;
         }
         if self.epoch != 0 && self.epoch == batch.node_slots_epoch {
+            for p in &mut batch.primitives {
+                p.set_node_slot(None);
+            }
             for slot in &self.slots {
-                if let Some(prims) = batch.primitives.get_mut(slot.range.clone()) {
-                    for p in prims {
-                        p.set_node_slot(None);
-                    }
-                }
                 if let Some(meta) = bindings.get_mut(&slot.node) {
                     meta.last_translate = slot.baseline.translate;
                     meta.last_scale = slot.baseline.scale;
@@ -565,6 +519,7 @@ impl NodeRows {
         mut text: Option<&mut TextBatch>,
         bindings: &mut HashMap<LayoutNodeId, CompositeBindingMeta>,
         motion: &HashMap<LayoutNodeId, MotionBindings>,
+        ordinals: &HashMap<LayoutNodeId, u32>,
         ancestors: &dyn Fn(LayoutNodeId) -> Vec<LayoutNodeId>,
         dpi: f32,
         adopt: bool,
@@ -572,7 +527,7 @@ impl NodeRows {
         let has_text = text
             .as_ref()
             .is_some_and(|t| !t.primitives.is_empty() || !t.glyphs.is_empty());
-        let given = self.describes(batch, bindings)
+        let given = self.describes(batch, bindings, ordinals)
             && text
                 .as_ref()
                 .is_none_or(|t| !has_text || t.node_slots_epoch == self.epoch);
@@ -581,15 +536,21 @@ impl NodeRows {
             if has_text && !adopt {
                 return Outcome::Declined;
             }
-            let Some(slots) = Self::plan(batch, bindings, ancestors) else {
+            let Some(slots) = Self::plan(batch, bindings, ordinals, ancestors) else {
                 return Outcome::Declined;
             };
             self.slots = slots;
             // Give the batch and the glyphs their slots, and say which clips move with them.
             let epoch = next_epoch();
-            for (i, slot) in self.slots.iter().enumerate() {
-                for p in &mut batch.primitives[slot.range.clone()] {
-                    p.set_node_slot(Some(i as u32 * 2));
+            let by_ordinal: HashMap<u32, u32> = self
+                .slots
+                .iter()
+                .enumerate()
+                .map(|(i, slot)| (slot.ordinal, i as u32))
+                .collect();
+            for p in &mut batch.primitives {
+                if let Some(slot) = by_ordinal.get(&p.node_ordinal()) {
+                    p.set_node_slot(Some(slot * 2));
                 }
             }
             batch.node_slots_epoch = epoch;
@@ -689,62 +650,10 @@ impl NodeRows {
 mod tests {
     use super::*;
 
-    fn parents(ranges: &[Range<usize>]) -> Option<Vec<(usize, Range<usize>, Option<u32>)>> {
-        let keyed: Vec<_> = ranges
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(i, r)| (i, r, 0))
-            .collect();
-        nest(&keyed)
-    }
-
-    #[test]
-    fn disjoint_ranges_have_no_parents() {
-        let out = parents(&[0..3, 3..5, 7..9]).unwrap();
-        assert!(out.iter().all(|(_, _, p)| p.is_none()));
-    }
-
-    #[test]
-    fn a_range_inside_another_names_it_as_its_parent() {
-        // Given out of order: the outer slot comes first whatever the map order.
-        let out = parents(&[2..4, 0..10, 5..8, 6..7]).unwrap();
-        let by_range = |r: Range<usize>| out.iter().position(|(_, x, _)| *x == r).unwrap() as u32;
-        let parent_of = |r: Range<usize>| out.iter().find(|(_, x, _)| *x == r).unwrap().2;
-        assert_eq!(by_range(0..10), 0);
-        assert_eq!(parent_of(0..10), None);
-        assert_eq!(parent_of(2..4), Some(by_range(0..10)));
-        assert_eq!(parent_of(5..8), Some(by_range(0..10)));
-        assert_eq!(parent_of(6..7), Some(by_range(5..8)));
-    }
-
-    #[test]
-    fn empty_ranges_are_left_out() {
-        let out = parents(&[4..4, 0..2]).unwrap();
-        assert_eq!(out.len(), 1);
-    }
-
-    #[test]
-    fn equal_ranges_nest_by_depth_and_overlapping_ones_are_declined() {
-        // The same range at the same depth cannot be told apart.
-        assert!(parents(&[0..4, 0..4]).is_none());
-        assert!(parents(&[0..4, 2..6]).is_none());
-        let by_depth = nest(&[(0, 0..4, 3), (1, 0..4, 1), (2, 0..4, 2)]).unwrap();
-        let keys: Vec<_> = by_depth.iter().map(|(k, _, p)| (*k, *p)).collect();
-        assert_eq!(keys, [(1, None), (2, Some(0)), (0, Some(1))]);
-    }
-
-    #[test]
-    fn a_chain_longer_than_the_shaders_follow_is_declined() {
-        let deep: Vec<_> = (0..=NODE_CHAIN_DEPTH).map(|i| i..20 - i).collect();
-        assert!(parents(&deep).is_none());
-        assert!(parents(&deep[..NODE_CHAIN_DEPTH]).is_some());
-    }
-
     fn slot(baseline: Pose) -> Slot {
         Slot {
             node: LayoutNodeId::default(),
-            range: 0..1,
+            ordinal: 1,
             parent: None,
             baseline,
             centre: (50.0, 40.0),
@@ -839,6 +748,7 @@ mod tests {
             last_rotation_rad: 0.0,
             last_opacity: 1.0,
             layer_push_index: None,
+            layer_config: None,
             centre: (10.0, 10.0),
             ambient_clip: None,
             last_screen_aabb: None,
@@ -862,33 +772,180 @@ mod tests {
         move |node| table.get(&node).cloned().unwrap_or_default()
     }
 
+    /// A batch of `prims` rects, each stamped with the ordinal in `stamps` at its index.
+    fn stamped(stamps: &[u32]) -> PrimitiveBatch {
+        let mut batch = batch_of(stamps.len());
+        for (p, ordinal) in batch.primitives.iter_mut().zip(stamps) {
+            p.set_node_ordinal(*ordinal);
+        }
+        batch
+    }
+
+    fn ordinals(pairs: &[(u64, u32)]) -> HashMap<LayoutNodeId, u32> {
+        pairs.iter().map(|(n, o)| (id(*n), *o)).collect()
+    }
+
     #[test]
     fn a_node_with_no_primitives_gets_a_slot_under_its_bound_ancestor() {
         // The outer node holds both primitives, the inner one has none and moves only text.
         let bindings = HashMap::from([(id(1), meta(0..2)), (id(2), meta(0..0))]);
         let ancestors = tree_of(&[(1, &[]), (2, &[1])]);
-        let slots = NodeRows::plan(&batch_of(2), &bindings, &ancestors).expect("a plan");
+        let slots = NodeRows::plan(
+            &stamped(&[1, 1]),
+            &bindings,
+            &ordinals(&[(1, 1), (2, 2)]),
+            &ancestors,
+        )
+        .expect("a plan");
         assert_eq!(slots.len(), 2);
         assert_eq!(slots[0].node, id(1));
         assert_eq!(slots[1].node, id(2));
         assert_eq!(slots[1].parent, Some(0));
-        assert!(slots[1].range.is_empty());
     }
 
     #[test]
-    fn a_range_that_is_not_an_ancestors_is_declined() {
-        // Node 2's range sits inside node 1's, but node 1 is not above it in the tree.
+    fn slots_follow_the_stamps_not_the_order_of_the_primitives() {
+        // Inner primitives sit between the outer's, and a primitive of the outer comes after:
+        // a range could not say which is which, the stamps can.
+        let batch = stamped(&[1, 2, 2, 1]);
         let bindings = HashMap::from([(id(1), meta(0..4)), (id(2), meta(1..3))]);
-        let ancestors = tree_of(&[(1, &[]), (2, &[])]);
-        assert!(NodeRows::plan(&batch_of(4), &bindings, &ancestors).is_none());
+        let ancestors = tree_of(&[(1, &[]), (2, &[1])]);
+        let slots = NodeRows::plan(&batch, &bindings, &ordinals(&[(1, 1), (2, 2)]), &ancestors)
+            .expect("a plan");
+        assert_eq!(slots[1].parent, Some(0));
+        assert_eq!(slots[0].ordinal, 1);
+        assert_eq!(slots[1].ordinal, 2);
+    }
+
+    fn group(opacity: f32, x: f32) -> blinc_core::LayerConfig {
+        blinc_core::LayerConfig {
+            position: Some(blinc_core::Point::new(x, 0.0)),
+            size: Some(blinc_core::Size::new(10.0, 10.0)),
+            opacity,
+            ..Default::default()
+        }
+    }
+
+    fn with_groups(
+        mut batch: PrimitiveBatch,
+        configs: &[blinc_core::LayerConfig],
+    ) -> PrimitiveBatch {
+        for config in configs {
+            batch.push_layer_command(LayerCommand::Push {
+                config: config.clone(),
+            });
+            batch.push_layer_command(LayerCommand::Pop);
+        }
+        batch
+    }
+
+    #[test]
+    fn a_group_is_found_by_what_it_was_pushed_with_and_only_when_that_is_one_group() {
+        let a = group(0.5, 0.0);
+        let b = group(0.5, 20.0);
+        let batch = with_groups(batch_of(1), &[a.clone(), b.clone()]);
+        assert_eq!(find_group(&batch, &b), Some(2));
+        assert_eq!(find_group(&batch, &group(0.5, 40.0)), None);
+        // Two groups pushed alike cannot be told apart.
+        let twins = with_groups(batch_of(1), &[a.clone(), a.clone()]);
+        assert_eq!(find_group(&twins, &a), None);
+    }
+
+    #[test]
+    fn a_bound_group_takes_its_slot_and_the_row_leaves_its_opacity_alone() {
+        let config = group(0.5, 0.0);
+        let mut bound = meta(0..1);
+        bound.layer_config = Some(config.clone());
+        let bindings = HashMap::from([(id(1), bound)]);
+        let batch = with_groups(stamped(&[1]), &[config]);
+        let slots = NodeRows::plan(
+            &batch,
+            &bindings,
+            &ordinals(&[(1, 1)]),
+            &tree_of(&[(1, &[])]),
+        )
+        .expect("a plan");
+        assert_eq!(slots[0].layer, Some(0));
+        let now = Pose {
+            translate: (0.0, 0.0),
+            scale: (1.0, 1.0),
+            rotation: 0.0,
+            opacity: 0.25,
+        };
+        let row = NodeRows::row(&slots[0], &now, 1.0, false).unwrap();
+        assert_eq!(row.pivot[3], 1.0, "the group's opacity is its command's");
+        let glyph_row = NodeRows::row(&slots[0], &now, 1.0, true).unwrap();
+        assert_eq!(glyph_row.pivot[3], 0.25, "glyphs are outside the group");
+    }
+
+    #[test]
+    fn a_blend_mode_or_a_3d_group_is_declined() {
+        let bindings = HashMap::from([(id(1), meta(0..1))]);
+        let ancestors = tree_of(&[(1, &[])]);
+        let plan = |config: blinc_core::LayerConfig| {
+            let batch = with_groups(stamped(&[1]), &[config]);
+            NodeRows::plan(&batch, &bindings, &ordinals(&[(1, 1)]), &ancestors)
+        };
+        assert!(plan(group(1.0, 0.0)).is_some());
+        let mut blended = group(1.0, 0.0);
+        blended.blend_mode = blinc_core::BlendMode::Multiply;
+        assert!(plan(blended).is_none());
+    }
+
+    #[test]
+    fn a_binding_in_the_static_batch_is_not_the_tables() {
+        let mut in_static = meta(0..1);
+        in_static.dynamic_batch = false;
+        let bindings = HashMap::from([(id(1), meta(0..1)), (id(2), in_static.clone())]);
+        let slots = NodeRows::plan(
+            &stamped(&[1]),
+            &bindings,
+            &ordinals(&[(1, 1), (2, 2)]),
+            &tree_of(&[(1, &[]), (2, &[])]),
+        )
+        .expect("a plan");
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0].node, id(1));
+        let rows = NodeRows::default();
+        // Settled where it was painted it is left be; a change asks for a repaint.
+        assert!(!rows.moved(&in_static, Some(&MotionBindings::default())));
+        assert!(rows.moved(&in_static, None));
+    }
+
+    #[test]
+    fn a_chain_longer_than_the_shaders_follow_is_declined() {
+        let nodes: Vec<u64> = (1..=(NODE_CHAIN_DEPTH as u64 + 1)).collect();
+        let bindings: HashMap<_, _> = nodes.iter().map(|n| (id(*n), meta(0..1))).collect();
+        let pairs: Vec<(u64, u32)> = nodes.iter().map(|n| (*n, *n as u32)).collect();
+        let tree: Vec<(u64, Vec<u64>)> = nodes
+            .iter()
+            .map(|n| (*n, (1..*n).rev().collect()))
+            .collect();
+        let tree_ref: Vec<(u64, &[u64])> = tree.iter().map(|(n, up)| (*n, up.as_slice())).collect();
+        let ancestors = tree_of(&tree_ref);
+        let batch = stamped(&[1]);
+        assert!(NodeRows::plan(&batch, &bindings, &ordinals(&pairs), &ancestors).is_none());
+        let shallow: HashMap<_, _> = nodes[..NODE_CHAIN_DEPTH]
+            .iter()
+            .map(|n| (id(*n), meta(0..1)))
+            .collect();
+        assert!(NodeRows::plan(&batch, &shallow, &ordinals(&pairs), &ancestors).is_some());
     }
 
     #[test]
     fn glyphs_take_the_text_row_of_the_nearest_bound_node() {
         let bindings = HashMap::from([(id(1), meta(0..2)), (id(2), meta(2..4))]);
         let ancestors = tree_of(&[(1, &[]), (2, &[]), (3, &[2]), (4, &[1])]);
-        let mut rows = NodeRows::default();
-        rows.slots = NodeRows::plan(&batch_of(4), &bindings, &ancestors).unwrap();
+        let rows = NodeRows {
+            slots: NodeRows::plan(
+                &stamped(&[1, 1, 2, 2]),
+                &bindings,
+                &ordinals(&[(1, 1), (2, 2)]),
+                &ancestors,
+            )
+            .unwrap(),
+            ..Default::default()
+        };
         let slot_of = |n: u64| rows.slots.iter().position(|s| s.node == id(n)).unwrap() as u32;
 
         let mut text = TextBatch::default();
@@ -908,8 +965,16 @@ mod tests {
     fn glyphs_with_no_bound_owner_are_left_alone() {
         let bindings = HashMap::from([(id(1), meta(0..2))]);
         let ancestors = tree_of(&[(1, &[]), (5, &[])]);
-        let mut rows = NodeRows::default();
-        rows.slots = NodeRows::plan(&batch_of(2), &bindings, &ancestors).unwrap();
+        let rows = NodeRows {
+            slots: NodeRows::plan(
+                &stamped(&[1, 1]),
+                &bindings,
+                &ordinals(&[(1, 1)]),
+                &ancestors,
+            )
+            .unwrap(),
+            ..Default::default()
+        };
         let mut text = TextBatch::default();
         text.primitives
             .push(blinc_gpu::GpuPrimitive::rect(0.0, 0.0, 2.0, 2.0));

@@ -277,6 +277,8 @@ pub struct RenderContext {
     last_binding_damage_rects: Vec<[f32; 4]>,
     /// The node table rows that move the dynamic batch's motion-bound primitives.
     node_rows: node_rows::NodeRows,
+    /// The texts painted inside groups of the dynamic batch, which the node table keeps sharp.
+    captured_runs: Vec<cached_text::CapturedRun>,
     /// Whether motion-bound subtrees may be baked to textures; the node table never bakes them.
     promote_motion: bool,
     /// Screen-space bounds of CSS records changed by the most recent patch.
@@ -609,6 +611,7 @@ impl RenderContext {
             image_fade_deadlines: std::collections::HashMap::new(),
             last_binding_damage_rects: Vec::new(),
             node_rows: node_rows::NodeRows::default(),
+            captured_runs: Vec::new(),
             promote_motion: true,
             last_css_damage_rects: Vec::new(),
             css_cache_owners: std::collections::HashMap::new(),

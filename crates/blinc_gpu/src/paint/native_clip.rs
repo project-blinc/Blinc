@@ -81,7 +81,8 @@ impl GpuPaintContext<'_> {
         self.push_native_primitive(primitive);
     }
 
-    pub(super) fn push_native_primitive(&mut self, primitive: GpuPrimitive) {
+    pub(super) fn push_native_primitive(&mut self, mut primitive: GpuPrimitive) {
+        primitive.set_node_ordinal(self.motion_node_ordinal);
         if self.emit_foreground() {
             self.active_batch_mut().push_foreground(primitive);
         } else {

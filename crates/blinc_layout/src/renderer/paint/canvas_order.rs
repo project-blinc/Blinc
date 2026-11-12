@@ -14,6 +14,31 @@ impl RenderTree {
     /// Overlay subtrees, glass and the foreground layer are drawn in passes of their own, and
     /// other canvases are ordered among themselves by z-layer; none of them counts.
     pub(crate) fn later_content_overlaps(&self, node: LayoutNodeId) -> bool {
+        self.later_content_overlaps_with(node, false)
+    }
+
+    /// As [`Self::later_content_overlaps`], for content that has to stay below what is painted
+    /// after it in every stream: the foreground layer counts, and so does anything that is not a
+    /// box, such as text, an image or a canvas. Overlay subtrees and glass still do not, which are
+    /// drawn after everything.
+    pub(crate) fn later_content_overlaps_any(&self, node: LayoutNodeId) -> bool {
+        self.later_content_overlaps_with(node, true)
+    }
+
+    /// Whether `node` has an image or an SVG somewhere below it, content that is drawn apart
+    /// from the primitive batch and takes a group's opacity in a pass of its own.
+    pub(crate) fn subtree_has_media(&self, node: LayoutNodeId) -> bool {
+        self.layout_tree.children(node).into_iter().any(|child| {
+            self.render_nodes.get(&child).is_some_and(|render| {
+                matches!(
+                    render.element_type,
+                    ElementType::Image(_) | ElementType::Svg(_)
+                )
+            }) || self.subtree_has_media(child)
+        })
+    }
+
+    fn later_content_overlaps_with(&self, node: LayoutNodeId, any: bool) -> bool {
         let Some(own) = self.get_absolute_bounds(node) else {
             return false;
         };
@@ -26,7 +51,7 @@ impl RenderTree {
             };
             if siblings[at + 1..]
                 .iter()
-                .any(|sibling| self.subtree_paints_over(*sibling, rect))
+                .any(|sibling| self.subtree_paints_over(*sibling, rect, any))
             {
                 return true;
             }
@@ -35,7 +60,7 @@ impl RenderTree {
         false
     }
 
-    fn subtree_paints_over(&self, node: LayoutNodeId, rect: [f32; 4]) -> bool {
+    fn subtree_paints_over(&self, node: LayoutNodeId, rect: [f32; 4], any: bool) -> bool {
         let Some(render) = self.render_nodes.get(&node) else {
             return false;
         };
@@ -55,11 +80,15 @@ impl RenderTree {
         // Boxes and their fills, the case a HUD or a panel over a canvas is. Text, SVG and image
         // content over a canvas draws after it as it always has, since a canvas that has to
         // repaint in order costs the static cache a repaint each frame.
-        let paints = matches!(render.element_type, ElementType::Div)
-            && (props.background.is_some()
+        let paints = if matches!(render.element_type, ElementType::Div) {
+            props.background.is_some()
                 || !props.shadow.is_empty()
-                || (props.border_width > 0.0 && props.border_color.is_some()));
-        if paints && overlaps && props.layer == crate::element::RenderLayer::Background {
+                || (props.border_width > 0.0 && props.border_color.is_some())
+        } else {
+            any
+        };
+        let layer_counts = any || props.layer == crate::element::RenderLayer::Background;
+        if paints && overlaps && layer_counts {
             return true;
         }
         // What a node that clips does not contain cannot reach the box.
@@ -69,6 +98,6 @@ impl RenderTree {
         self.layout_tree
             .children(node)
             .into_iter()
-            .any(|child| self.subtree_paints_over(child, rect))
+            .any(|child| self.subtree_paints_over(child, rect, any))
     }
 }

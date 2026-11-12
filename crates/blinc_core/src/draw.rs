@@ -1838,6 +1838,21 @@ pub trait DrawContext {
     /// Pair with [`Self::push_motion_subtree`]. Default no-op.
     fn pop_motion_subtree(&mut self) {}
 
+    /// Stamp the primitives emitted from now on with `ordinal`, the number the walker gave the
+    /// innermost motion-bound node being painted (zero for none), and return the previous one
+    /// to restore. Default no-op for contexts that do not stamp.
+    fn set_motion_node_ordinal(&mut self, _ordinal: u32) -> u32 {
+        0
+    }
+
+    /// Whether the shared groups of a motion subtree are painted into the dynamic batch, as a
+    /// caller that moves that batch without painting it again asks for, rather than kept where
+    /// they sit in the static paint order. Returns the previous setting to restore. Default
+    /// no-op for contexts with no such batch.
+    fn set_moving_groups_dynamic(&mut self, _on: bool) -> bool {
+        false
+    }
+
     /// Notify the context that the walker is entering an
     /// `is_overlay_root` subtree (portal / popover / dropdown /
     /// dialog / toast). The renderer uses the depth this tracks to

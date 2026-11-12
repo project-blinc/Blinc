@@ -7,6 +7,7 @@ All notable changes to `blinc_core` will be documented in this file.
 ### Added
 - `FrameClock`: one monotonic time per frame. A runner sets it with `begin_frame` (or `begin_frame_at` when it keeps its own time) before it ticks anything, and consumers read `now`, `now_secs`, `delta` and `frame` instead of taking a time of their own. The SDF uniforms carry it to the shaders; the animation integrators still use their own time.
 - `system_fonts::LINUX_SANS`: the Linux desktop UI sans families, best first, shared by the text registry and the Linux theme.
+- `DrawContext::set_motion_node_ordinal` and `set_moving_groups_dynamic` tell a context which bound node is being painted and whether its shared groups go to the dynamic batch. Both default to doing nothing and return the previous setting to restore.
 
 ### Fixed
 - Dropping a `BuildScope` disposes the builds it holds, so a closed window's effects and computeds stop.

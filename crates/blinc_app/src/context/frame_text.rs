@@ -737,3 +737,142 @@ impl RenderContext {
         self.cached_motion_subtree_text_prims = Some(text);
     }
 }
+
+impl RenderContext {
+    /// Prepare the text of `run` again at `k` and `snap` and put its glyphs over `indices` in
+    /// `batch`, with the node slot lanes `lane`, if it comes out the same size. With `bake` the
+    /// glyphs are placed through the node table's rows on the CPU, onto the display grid, and
+    /// carry no slot.
+    #[allow(clippy::too_many_arguments)]
+    fn place_captured(
+        &mut self,
+        batch: &mut blinc_gpu::PrimitiveBatch,
+        indices: &[usize],
+        run: &cached_text::CapturedRun,
+        k: f32,
+        snap: bool,
+        lane: [f32; 4],
+        bake: bool,
+        dpi: f32,
+    ) -> bool {
+        let viewport = self.renderer.viewport_size();
+        let fresh = self.prepare_captured_text_at(&run.element, viewport, dpi, k, Some(snap));
+        if fresh.primitives.len() != indices.len() {
+            return false;
+        }
+        let rows = bake.then(|| self.node_rows.rows().to_vec());
+        for (&i, new) in indices.iter().zip(fresh.primitives) {
+            let mut glyph = new;
+            glyph.node_slot = lane;
+            batch.primitives[i] = match &rows {
+                Some(rows) => {
+                    let mut placed = blinc_gpu::node_table::resolve_primitive(rows, &glyph);
+                    placed.bounds[0] = snap_px(placed.bounds[0]);
+                    placed.bounds[1] = snap_px(placed.bounds[1]);
+                    placed
+                }
+                None => glyph,
+            };
+        }
+        true
+    }
+
+    /// What [`refine_motion_text`](Self::refine_motion_text) does for the texts painted inside
+    /// groups, whose glyphs sit in the dynamic batch among the group's other content: the same
+    /// three states, found by the run id each glyph carries.
+    pub(super) fn refine_captured_text(&mut self, tree: &blinc_layout::RenderTree, dpi: f32) {
+        if self.captured_runs.is_empty() {
+            return;
+        }
+        let Some(mut batch) = self.cached_dynamic_batch.take() else {
+            return;
+        };
+        let ancestors = |n: super::LayoutNodeId| tree.layout_tree.ancestors(n);
+        let mut by_id: std::collections::HashMap<u32, Vec<usize>> =
+            std::collections::HashMap::new();
+        for (i, p) in batch.primitives.iter().enumerate() {
+            let id = p.node_slot[3] as u32;
+            if id > 0 {
+                by_id.entry(id).or_default().push(i);
+            }
+        }
+        let mut runs = std::mem::take(&mut self.captured_runs);
+        for run in &mut runs {
+            let Some(indices) = by_id.get(&run.id) else {
+                continue;
+            };
+            let moving = chain_moving(tree, run.element.node);
+            let lane = batch.primitives[indices[0]].node_slot;
+            match (moving, run.baked) {
+                // Moving again: back to the painted pose, at the size it now needs.
+                (true, Some(saved)) => {
+                    let needed = needed_raster(tree, &run.element, true);
+                    let snapshot = run.clone();
+                    if self.place_captured(
+                        &mut batch, indices, &snapshot, needed, false, saved, false, dpi,
+                    ) {
+                        run.k = needed;
+                        run.snapped = false;
+                        run.baked = None;
+                    }
+                }
+                // Moving: smooth, and the bitmap follows the scale it is heading for.
+                (true, None) => {
+                    let needed = needed_raster(tree, &run.element, true);
+                    if (needed - run.k).abs() < 1e-3 && !run.snapped {
+                        continue;
+                    }
+                    let snapshot = run.clone();
+                    if self.place_captured(
+                        &mut batch, indices, &snapshot, needed, false, lane, false, dpi,
+                    ) {
+                        run.k = needed;
+                        run.snapped = false;
+                    }
+                }
+                // Stopped: bake the pose it ended at, or back onto the grid if it is where it began.
+                (false, None) => {
+                    let Some(row) = self
+                        .node_rows
+                        .text_row(run.element.node, &ancestors)
+                        .map(|r| r - 1)
+                    else {
+                        continue;
+                    };
+                    if !is_axis_aligned(run.element.css_affine) {
+                        continue;
+                    }
+                    let snapshot = run.clone();
+                    if self.node_rows.chain_is_rest(row) {
+                        if !run.snapped {
+                            let k = raster_size(affine_scale(run.element.css_affine), false);
+                            if self.place_captured(
+                                &mut batch, indices, &snapshot, k, true, lane, false, dpi,
+                            ) {
+                                run.k = k;
+                                run.snapped = true;
+                            }
+                        }
+                        continue;
+                    }
+                    let Some(scale) = self.node_rows.uniform_scale(row) else {
+                        continue;
+                    };
+                    let k = ((affine_scale(run.element.css_affine) * scale).clamp(0.25, 4.0)
+                        * 100.0)
+                        .round()
+                        / 100.0;
+                    if self
+                        .place_captured(&mut batch, indices, &snapshot, k, false, lane, true, dpi)
+                    {
+                        run.k = k;
+                        run.baked = Some(lane);
+                    }
+                }
+                (false, Some(_)) => {}
+            }
+        }
+        self.captured_runs = runs;
+        self.cached_dynamic_batch = Some(batch);
+    }
+}

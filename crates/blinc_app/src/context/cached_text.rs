@@ -1,6 +1,22 @@
 //! Cached text retains auxiliary ownership through selection and replay.
 use super::{Arc, GpuGlyph, GpuPrimitive, LayoutNodeId, PrimitiveBatch, RenderContext};
 
+/// A text painted inside a group, whose glyph primitives sit in the dynamic batch among the
+/// group's other content and are found there by the run id in their node slot's last lane.
+#[derive(Clone)]
+pub(super) struct CapturedRun {
+    pub(super) id: u32,
+    /// The text, as painted, so it can be prepared again.
+    pub(super) element: super::TextElement,
+    /// How many times finer than its laid-out size it was rasterized.
+    pub(super) k: f32,
+    /// Whether the glyphs sit snapped to the display grid at the painted pose.
+    pub(super) snapped: bool,
+    /// Set while the glyphs are baked at the pose their node settled at, with no row: the node
+    /// slot lanes they had before.
+    pub(super) baked: Option<[f32; 4]>,
+}
+
 /// The glyph primitives one text produced.
 #[derive(Clone)]
 pub(super) struct TextRun {

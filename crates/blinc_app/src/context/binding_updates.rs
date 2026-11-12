@@ -27,7 +27,8 @@ impl RenderContext {
                 self.last_binding_damage_rects.clear();
                 tree.set_visible_anim_active(active);
                 self.refine_motion_text(tree, scale);
-                return !(active && self.motion_overlay_unmovable());
+                self.refine_captured_text(tree, scale);
+                return !(active && self.motion_overlay_unmovable(tree));
             }
             Some(Outcome::Declined) => {
                 tracing::info!(target: "blinc_app::node_rows", outcome = "declined", "node_rows");
@@ -389,6 +390,7 @@ impl RenderContext {
             self.cached_motion_subtree_text_prims.as_mut(),
             &mut bindings,
             tree.motion_bindings_map(),
+            &tree.binding_ordinals(),
             &|node| tree.layout_tree.ancestors(node),
             dpi,
             adopt,
@@ -396,12 +398,15 @@ impl RenderContext {
     }
 
     /// Whether what a motion subtree has outside the dynamic batch is something rows cannot
-    /// move: an SVG, glyphs that are not primitives, or glyphs a CSS animation patches. Glyph
-    /// primitives that the table has slotted are moved, and the table checks for them.
-    fn motion_overlay_unmovable(&self) -> bool {
-        self.cached_motion_subtree_svgs
-            .as_ref()
-            .is_some_and(|v| !v.is_empty())
+    /// move: an image or SVG inside a bound node, glyphs that are not primitives, or glyphs a
+    /// CSS animation patches. Glyph primitives that the table has slotted are moved, and the
+    /// table checks for them.
+    fn motion_overlay_unmovable(&self, tree: &blinc_layout::RenderTree) -> bool {
+        tree.bound_subtree_has_media()
+            || self
+                .cached_motion_subtree_svgs
+                .as_ref()
+                .is_some_and(|v| !v.is_empty())
             || !self.motion_subtree_text_patch.is_empty()
             || self
                 .cached_motion_subtree_text_prims

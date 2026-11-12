@@ -146,8 +146,20 @@ fn run_logged(scene: &Scene, path: Path) -> Option<(Vec<CapturedFrame>, Vec<Stri
     let mut ui = session(path)?;
     let mut script = (scene.build)(&mut ui);
     ui.settle();
-    // The cache the patched path patches comes from a full paint of the scene at rest.
-    ui.snapshot().expect("a frame");
+    // Content that loads in the background, an image, has to be in before the scene starts: the
+    // frame is taken until three in a row are the same. The last is a full paint of the scene at
+    // rest, which is the cache the patched path patches.
+    let mut rest = ui.snapshot().expect("a frame");
+    let mut same = 0;
+    for _ in 0..50 {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let next = ui.snapshot().expect("a frame");
+        same = if next.data == rest.data { same + 1 } else { 0 };
+        rest = next;
+        if same == 3 {
+            break;
+        }
+    }
     log.0.lock().unwrap().clear();
     let mut frames = Vec::new();
     let mut paths = Vec::new();
@@ -420,6 +432,47 @@ fn clip_scene(own: bool) -> Scene {
     }
 }
 
+/// A bound card with a layer effect (a drop shadow the group casts), which sizes its layer by
+/// what is under it.
+fn effect_scene(label: bool) -> Scene {
+    let steps = 12;
+    Scene {
+        name: if label {
+            "motion with a layer effect"
+        } else {
+            "motion with a layer effect, no text"
+        },
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let (x, s, r) = (bound(ui, 0.0), bound(ui, 1.0), bound(ui, 0.0));
+            let handles = (x.clone(), s.clone(), r.clone());
+            ui.mount(move |_| {
+                let card = card_at(label, 1.0).drop_shadow_effect(
+                    6.0,
+                    8.0,
+                    10.0,
+                    Color::rgba(0.0, 0.0, 0.0, 0.7),
+                );
+                stage().child(
+                    div().w(120.0).h(64.0).child(
+                        card.motion()
+                            .translate_x(x.clone())
+                            .scale(s.clone())
+                            .rotate(r.clone()),
+                    ),
+                )
+            });
+            Box::new(move |_, step| {
+                let t = (step + 1) as f32 / steps as f32;
+                handles.0.lock().unwrap().set_target(40.0 * t);
+                handles.1.lock().unwrap().set_target(1.0 + 0.3 * t);
+                handles.2.lock().unwrap().set_target(25.0 * t);
+            })
+        }),
+    }
+}
+
 /// Two overlapping children under one fading container. The group fades as one, so where they
 /// overlap the second does not show the first through it.
 fn overlap_fade_scene() -> Scene {
@@ -463,6 +516,94 @@ fn overlap_fade_scene() -> Scene {
             Box::new(move |_, step| {
                 let t = (step + 1) as f32 / steps as f32;
                 handle.lock().unwrap().set_target(1.0 - 0.7 * t);
+            })
+        }),
+    }
+}
+
+/// A 1x1 image the card shows, scaled up.
+const PIXEL: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg+M/wHwAEAQH/cetH5QAAAABJRU5ErkJggg==";
+
+/// A bound card holding an image, which is not a primitive in the batch.
+fn image_scene(name: &'static str, fade: bool) -> Scene {
+    let steps = 12;
+    Scene {
+        name,
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let (x, s, opacity) = (bound(ui, 0.0), bound(ui, 1.0), bound(ui, 1.0));
+            let handles = (x.clone(), s.clone(), opacity.clone());
+            ui.mount(move |_| {
+                let card = card(false).child(
+                    div().absolute().left(10.0).top(8.0).child(
+                        blinc_layout::image(PIXEL)
+                            .size(40.0, 40.0)
+                            .fade_in(std::time::Duration::ZERO),
+                    ),
+                );
+                let mut motion = card.motion();
+                if fade {
+                    motion = motion.opacity(opacity.clone());
+                } else {
+                    motion = motion.translate_x(x.clone()).scale(s.clone());
+                }
+                stage().child(div().w(120.0).h(64.0).child(motion))
+            });
+            Box::new(move |_, step| {
+                let t = (step + 1) as f32 / steps as f32;
+                handles.0.lock().unwrap().set_target(40.0 * t);
+                handles.1.lock().unwrap().set_target(1.0 + 0.3 * t);
+                handles.2.lock().unwrap().set_target(1.0 - 0.6 * t);
+            })
+        }),
+    }
+}
+
+/// A bound card with a static tile painted after it, over where the card passes. The tile stays
+/// above the card, as in a single paint in tree order. `fade` makes the card a group, and
+/// `foreground` gives that group a child painted in the foreground stream.
+fn later_tile_scene(name: &'static str, fade: bool, foreground: bool) -> Scene {
+    let steps = 12;
+    Scene {
+        name,
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let (x, opacity) = (bound(ui, 0.0), bound(ui, 1.0));
+            let handles = (x.clone(), opacity.clone());
+            ui.mount(move |_| {
+                let mut card = card(false);
+                if foreground {
+                    card = card.child(
+                        div()
+                            .absolute()
+                            .left(10.0)
+                            .top(8.0)
+                            .w(60.0)
+                            .h(40.0)
+                            .foreground()
+                            .bg(Color::rgb(0.2, 0.8, 0.4)),
+                    );
+                }
+                let mut motion = card.motion().translate_x(x.clone());
+                if fade {
+                    motion = motion.opacity(opacity.clone());
+                }
+                // An ordinary flex sibling, pulled back over the card.
+                let tile = div()
+                    .w(40.0)
+                    .h(24.0)
+                    .ml(-20.0)
+                    .bg(Color::rgb(0.95, 0.85, 0.2));
+                stage()
+                    .child(div().w(120.0).h(64.0).child(motion))
+                    .child(tile)
+            });
+            Box::new(move |_, step| {
+                let t = (step + 1) as f32 / steps as f32;
+                handles.0.lock().unwrap().set_target(40.0 * t);
+                handles.1.lock().unwrap().set_target(1.0 - 0.5 * t);
             })
         }),
     }
@@ -555,6 +696,13 @@ fn scenes() -> Vec<Scene> {
         beside_settled_scene(),
         clip_scene(false),
         clip_scene(true),
+        effect_scene(false),
+        effect_scene(true),
+        image_scene("motion, an image", false),
+        image_scene("motion fade, an image", true),
+        later_tile_scene("motion, a tile after it", false, false),
+        later_tile_scene("motion fade, a tile after it", true, false),
+        later_tile_scene("motion fade, foreground, a tile after it", true, true),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
         keyframe_scene("css keyframes", true),
@@ -568,8 +716,9 @@ const LEVELS: u8 = 2;
 
 /// Scenes in which the patched path is known to differ from a full paint. They are listed so the
 /// rest are held to the reference; a scene that stops differing is an error until it is taken off
-/// the list. A label stays where the last full paint put it while a bound value moves, and an
-/// outer binding moving an inner one leaves the inner box and its shadow in the wrong place.
+/// the list. A label stays where the last full paint put it while a bound value moves, an outer
+/// binding moving an inner one leaves the inner box and its shadow in the wrong place, and an
+/// image does not follow the card it is in.
 const KNOWN_DIFFERENT: &[&str] = &[
     "motion translate",
     "motion scale",
@@ -578,6 +727,7 @@ const KNOWN_DIFFERENT: &[&str] = &[
     "motion nested, no text",
     "motion in a clipped box",
     "motion with its own clip",
+    "motion, an image",
 ];
 
 struct Report {
@@ -728,9 +878,7 @@ fn the_patched_path_against_the_reference() {
 }
 
 /// Scenes whose every frame the node table moves alone: no full paint, rows only, so a
-/// difference from the vector paint is the table's. The scenes left out are an opacity group
-/// with text in it (fade, all four channels), which takes the cross-stream path and is painted
-/// in full each frame.
+/// difference from the vector paint is the table's.
 const ON_ROWS: &[&str] = &[
     "motion translate",
     "motion translate, no text",
@@ -738,7 +886,9 @@ const ON_ROWS: &[&str] = &[
     "motion scale, no text",
     "motion rotate",
     "motion rotate, no text",
+    "motion fade",
     "motion fade, no text",
+    "motion all",
     "motion all, no text",
     "motion nested",
     "motion nested, no text",
@@ -769,14 +919,12 @@ fn the_node_table_against_the_reference() {
             std::fs::create_dir_all(format!("{dir}/table")).unwrap();
             ScreenshotExporter::save_png(&sheet(&reference, &painted, &steps), file).unwrap();
         }
-        if !ON_ROWS.contains(&report.name) {
-            continue;
-        }
+        // Every scene is held to the vector paint; those in ON_ROWS must also be moved by rows.
         let on_patcher = paths
             .iter()
             .filter(|p| p.starts_with("full") || !p.ends_with("rows:applied"))
             .count();
-        if on_patcher > 0 {
+        if on_patcher > 0 && ON_ROWS.contains(&report.name) {
             off.push(format!(
                 "{}: {on_patcher} of {} frames were not moved by rows",
                 report.name, report.steps
