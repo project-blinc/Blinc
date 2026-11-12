@@ -309,3 +309,70 @@ fn a_list_scrolled_by_rows_shows_what_a_full_paint_shows() {
         );
     }
 }
+
+/// Not a check: what moving the pointer over a long list costs a frame when a stylesheet has class
+/// rules and `:hover` rules (`SCROLL_ROWS`, default 20000). A rule such as `.list:hover .row` is
+/// not in it: it restyles every row while the list is hovered, which is what the rule says. The state-style pass runs when the
+/// hovered set changes, as in a window.
+#[test]
+#[ignore]
+fn what_hovering_a_long_list_costs() {
+    if !Headless::available() {
+        return;
+    }
+    let rows = env_number("SCROLL_ROWS", 20_000.0) as usize;
+    let css = ".row { border-radius: 6px; } .row:hover { background: #ffffff33; } \
+               .row + .row:hover { border-color: #ffffff55; }";
+    let mut ui = Headless::with_motion_paint(W, H, MotionPaint::Vector).expect("a session");
+    ui.theme(HybridTheme::bundle().with_css(css), ColorScheme::Dark);
+    ui.gate_state_styles();
+    ui.load_font_data(
+        include_bytes!("../../../examples/blinc_component_demos/assets/NotoSans-Regular.ttf")
+            .to_vec(),
+    );
+    ui.mount(move |_| {
+        let mut list = div().flex_col().w(W as f32).class("group");
+        for i in 0..rows {
+            list = list.child(row(i).class("row"));
+        }
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .bg(Color::rgb(0.09, 0.1, 0.13))
+            .child(scroll().w(W as f32).h(H as f32).child(list))
+    });
+    ui.settle();
+    ui.snapshot().expect("a first paint");
+    // From the pointer move to the painted frame: the move (which runs the frame it lands in, the
+    // state-style pass among it), and the paint of what a window would paint after it.
+    let mut costs = Vec::new();
+    let mut paints = Vec::new();
+    let moves = env_number("SCROLL_HOVERS", 40.0) as usize;
+    eprintln!("READY hovering");
+    for step in 0..moves {
+        // A different row under the pointer each time, so the hovered set changes.
+        let started = std::time::Instant::now();
+        ui.move_to(60.0, 15.0 + ROW_HEIGHT * (step % 18) as f32);
+        ui.frame(16);
+        costs.push(started.elapsed().as_secs_f64() * 1000.0);
+        let (_, render) = ui.paint_timed(true).expect("a paint");
+        if std::env::var("SCROLL_TRACE").is_ok() && render > 3.0 {
+            eprintln!("slow hover paint at step {step}: {render:.1} ms");
+        }
+        paints.push(render);
+    }
+    paints.sort_by(|a, b| a.total_cmp(b));
+    eprintln!(
+        "{rows} rows, hover moves, paint ms: median {:.2}  p90 {:.2}  max {:.2}",
+        paints[paints.len() / 2],
+        paints[paints.len() * 9 / 10],
+        paints[paints.len() - 1]
+    );
+    costs.sort_by(|a, b| a.total_cmp(b));
+    eprintln!(
+        "{rows} rows, hover moves, move and frame ms: median {:.2}  p90 {:.2}  max {:.2}",
+        costs[costs.len() / 2],
+        costs[costs.len() * 9 / 10],
+        costs[costs.len() - 1]
+    );
+}

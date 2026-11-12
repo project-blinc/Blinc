@@ -4,7 +4,9 @@
 //! the revision is the one it was derived at. A mutable borrow that changes nothing still counts,
 //! so a revision only ever errs towards deriving again.
 
-use indexmap::IndexMap;
+use super::structure::Structural;
+use indexmap::{Equivalent, IndexMap};
+use std::hash::{BuildHasher, Hash};
 use std::ops::{Deref, DerefMut};
 
 pub(crate) struct Tracked<T> {
@@ -20,6 +22,55 @@ impl<T> Tracked<T> {
     /// How many times the value has been borrowed mutably.
     pub(crate) fn revision(&self) -> u64 {
         self.revision
+    }
+}
+
+/// A mutable borrow of one value in a tracked map. The revision moves when it is dropped, and
+/// only if the part of the value that derived data reads has changed.
+pub(crate) struct Touched<'a, V: Structural> {
+    value: &'a mut V,
+    revision: &'a mut u64,
+    before: Option<V::Structure>,
+}
+
+impl<V: Structural> Deref for Touched<'_, V> {
+    type Target = V;
+
+    fn deref(&self) -> &V {
+        self.value
+    }
+}
+
+impl<V: Structural> DerefMut for Touched<'_, V> {
+    fn deref_mut(&mut self) -> &mut V {
+        self.value
+    }
+}
+
+impl<V: Structural> Drop for Touched<'_, V> {
+    fn drop(&mut self) {
+        if let Some(before) = self.before.take()
+            && before != self.value.structure()
+        {
+            *self.revision = self.revision.wrapping_add(1);
+        }
+    }
+}
+
+impl<K: Hash + Eq, V: Structural, S: BuildHasher> Tracked<IndexMap<K, V, S>> {
+    /// A mutable borrow of the value at `key`; see [`Touched`].
+    pub(crate) fn get_mut<Q>(&mut self, key: &Q) -> Option<Touched<'_, V>>
+    where
+        Q: ?Sized + Hash + Equivalent<K>,
+    {
+        let Tracked { value, revision } = self;
+        let value = value.get_mut(key)?;
+        let before = Some(value.structure());
+        Some(Touched {
+            value,
+            revision,
+            before,
+        })
     }
 }
 

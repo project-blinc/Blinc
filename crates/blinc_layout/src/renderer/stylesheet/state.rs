@@ -211,7 +211,7 @@ impl RenderTree {
 
         // Apply state-specific styles in order of precedence
         let mut applied = false;
-        let render_node = match self.render_nodes.get_mut(&node_id) {
+        let mut render_node = match self.render_nodes.get_mut(&node_id) {
             Some(node) => node,
             None => return false,
         };
@@ -293,6 +293,8 @@ impl RenderTree {
             applied = true;
         }
 
+        // The borrow of the node ends here, where the revision of the nodes is settled.
+        drop(render_node);
         if layers.is_empty() {
             self.state_layers.remove(&node_id);
         } else {
@@ -545,7 +547,7 @@ impl RenderTree {
             }
 
             // Evaluate and apply to RenderProps
-            if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+            if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
                 // If any dynamic properties are transform-related (SkewX, SkewY, Rotate, etc.),
                 // reset props.transform to its base value first to prevent frame-compounding.
                 // Without this, compose_affine() would accumulate onto the previous frame's
@@ -592,7 +594,7 @@ impl RenderTree {
                 if let Some(base) = self.base_styles.get_mut(&node_id) {
                     write(base);
                 }
-                if let Some(node) = self.render_nodes.get_mut(&node_id) {
+                if let Some(mut node) = self.render_nodes.get_mut(&node_id) {
                     for style in &layers {
                         Self::apply_element_style_to_props(&mut node.props, style);
                     }

@@ -520,7 +520,7 @@ impl RenderTree {
             .unwrap_or_default();
         let state_layers = self.state_layers.get(&node).cloned().unwrap_or_default();
 
-        if let (Some(base), Some(render_node)) = (
+        if let (Some(base), Some(mut render_node)) = (
             self.base_styles.get(&node),
             self.render_nodes.get_mut(&node),
         ) {

@@ -193,3 +193,29 @@ fn a_short_list_is_scanned() {
         scanned(&tree, node, (0.0, 0.0), view)
     );
 }
+
+#[test]
+fn a_hit_test_keeps_the_foreground_rows_a_paint_culls() {
+    let (tree, node) = tree_of(ROWS, |i| {
+        if i == ROWS - 10 {
+            plain(i).foreground()
+        } else {
+            plain(i)
+        }
+    });
+    let far = tree.layout_tree.children(node)[ROWS - 10];
+    let view = [0.0, 0.0, 200.0, 100.0];
+    for _ in 0..2 {
+        let painted = tree.visible_children(node, (0.0, 0.0), view);
+        let hit = tree.hit_candidates(node, (0.0, 0.0), view);
+        assert!(
+            !painted.contains(&far),
+            "a foreground row far away was painted"
+        );
+        assert!(hit.contains(&far), "a hit test culled a foreground row");
+        assert!(
+            painted.iter().all(|c| hit.contains(c)),
+            "a hit test dropped a row that is painted"
+        );
+    }
+}

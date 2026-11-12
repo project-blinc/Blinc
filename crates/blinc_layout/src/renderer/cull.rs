@@ -16,6 +16,11 @@ fn intersects(b: CullRect, view: CullRect, overscan: f32) -> bool {
     b[0] + b[2] > x0 && b[0] < x1 && b[1] + b[3] > y0 && b[1] < y1
 }
 
+/// Whether the transform is one that moves what is drawn.
+pub(super) fn moves_by_transform(t: &Option<Transform>) -> bool {
+    !is_identity(t)
+}
+
 fn is_identity(t: &Option<Transform>) -> bool {
     match t {
         None => true,

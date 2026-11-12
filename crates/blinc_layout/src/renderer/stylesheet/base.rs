@@ -99,7 +99,7 @@ impl RenderTree {
                 if let Some(class_name) = selector.simple_class_name() {
                     if let Some(node_ids) = class_to_nodes.get(class_name) {
                         for &node_id in node_ids {
-                            if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+                            if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
                                 Self::apply_element_style_to_props(&mut render_node.props, style);
                             }
                         }
@@ -112,7 +112,7 @@ impl RenderTree {
                 for &node_id in &all_node_ids {
                     if self
                         .complex_selector_matches(selector, node_id, &empty_set, &empty_set, None)
-                        && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+                        && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
                     {
                         Self::apply_element_style_to_props(&mut render_node.props, style);
                     }
@@ -154,7 +154,7 @@ impl RenderTree {
 
         for (element_id, node_id) in &registered_ids {
             if let Some(base_style) = stylesheet.get(element_id)
-                && let Some(render_node) = self.render_nodes.get_mut(node_id)
+                && let Some(mut render_node) = self.render_nodes.get_mut(node_id)
             {
                 Self::apply_element_style_to_props(&mut render_node.props, base_style);
             }
@@ -293,7 +293,7 @@ impl RenderTree {
                     }
                 }
                 if !tag_styles.is_empty()
-                    && let Some(render_node) = self.render_nodes.get_mut(&svg_node)
+                    && let Some(mut render_node) = self.render_nodes.get_mut(&svg_node)
                 {
                     render_node.props.svg_tag_styles = tag_styles;
                 }
@@ -342,7 +342,7 @@ impl RenderTree {
             });
             if let Some((td, td_color, td_thick, ws, to, ta, fill, stroke, stroke_w, fstyle)) =
                 parent_text_props
-                && let Some(node) = self.render_nodes.get_mut(&node_id)
+                && let Some(mut node) = self.render_nodes.get_mut(&node_id)
             {
                 if node.props.text_decoration.is_none() {
                     node.props.text_decoration = td;
@@ -421,7 +421,7 @@ impl RenderTree {
                     if let Some(node_ids) = class_to_nodes.get(class_name) {
                         for &node_id in node_ids {
                             if subtree_set.contains(&node_id)
-                                && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+                                && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
                             {
                                 Self::apply_element_style_to_props(&mut render_node.props, style);
                             }
@@ -434,7 +434,7 @@ impl RenderTree {
                 for &node_id in subtree_nodes {
                     if self
                         .complex_selector_matches(selector, node_id, &empty_set, &empty_set, None)
-                        && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+                        && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
                     {
                         Self::apply_element_style_to_props(&mut render_node.props, style);
                     }
@@ -467,7 +467,7 @@ impl RenderTree {
         for &node_id in subtree_nodes {
             if let Some(element_id) = self.element_registry.get_id(node_id)
                 && let Some(base_style) = stylesheet.get(&element_id)
-                && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+                && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
             {
                 Self::apply_element_style_to_props(&mut render_node.props, base_style);
             }
@@ -601,7 +601,7 @@ impl RenderTree {
         inherited: InheritedText,
     ) -> InheritedText {
         match self.render_nodes.get_mut(&node_id) {
-            Some(node) => {
+            Some(mut node) => {
                 let p = &mut node.props;
                 p.text_decoration = p.text_decoration.or(inherited.decoration);
                 p.text_decoration_color = p.text_decoration_color.or(inherited.decoration_color);
@@ -623,7 +623,7 @@ impl RenderTree {
                         text_data.align = align;
                     }
                 }
-                InheritedText::from_node(node)
+                InheritedText::from_node(&node)
             }
             // A layout node with no render node inherits nothing of its
             // own, but must not break the chain to its children.
@@ -744,7 +744,7 @@ mod inherit_tests {
 
         // Repaint the ancestor blue, as a theme switch or :hover would.
         let root = tree.root().expect("root");
-        if let Some(n) = tree.render_nodes.get_mut(&root) {
+        if let Some(mut n) = tree.render_nodes.get_mut(&root) {
             n.props.text_color = Some([0.0, 0.0, 1.0, 1.0]);
         }
 

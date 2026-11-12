@@ -651,7 +651,7 @@ impl RenderTree {
         };
         for (stable_id, props) in stopped {
             if let Some(node_id) = self.layout_id(stable_id)
-                && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+                && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
             {
                 Self::apply_keyframe_props_to_render(&mut render_node.props, &props);
             }
@@ -670,7 +670,7 @@ impl RenderTree {
             if bakeable {
                 continue;
             }
-            if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+            if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
                 Self::apply_keyframe_props_to_render(&mut render_node.props, &props);
             }
         }

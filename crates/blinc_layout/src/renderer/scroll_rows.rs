@@ -85,6 +85,21 @@ impl RenderTree {
         })
     }
 
+    /// A number that changes when the offset of any scroll container does. With the layout epoch
+    /// it says whether what is under a still pointer may have moved.
+    pub fn scroll_signature(&self) -> u64 {
+        let mut signature = 0u64;
+        for (node, physics) in &self.scroll_physics {
+            if let Ok(p) = physics.try_lock() {
+                let mixed = node.to_raw().wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                    ^ (p.offset_x.to_bits() as u64)
+                    ^ ((p.offset_y.to_bits() as u64) << 32);
+                signature = signature.wrapping_add(mixed.wrapping_mul(0xBF58_476D_1CE4_E5B9));
+            }
+        }
+        signature
+    }
+
     /// Whether the layout has changed since the containers on rows were painted: rows mounted or
     /// removed, or restyled, as a virtual list does when its window moves. What was painted is
     /// then not what is there, and moving it by a row shows the old.

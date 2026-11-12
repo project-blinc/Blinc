@@ -59,6 +59,7 @@ mod registries;
 mod scroll;
 mod scroll_gesture;
 mod scroll_rows;
+mod structure;
 mod tracked;
 pub use scroll_gesture::ScrollGesturePhase;
 pub(crate) mod stylesheet;
@@ -689,6 +690,8 @@ struct NodeScan {
     has_glass: bool,
     has_foreground: bool,
     canvases: Vec<LayoutNodeId>,
+    /// The nodes the selector registry types as `svg`.
+    svgs: Vec<LayoutNodeId>,
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
@@ -777,6 +780,9 @@ pub struct RenderTree {
     /// What a scan of the render nodes found, and the revision of the nodes it was made at: the
     /// layers that have nodes on them, and the canvases.
     node_scan: RefCell<Option<NodeScan>>,
+    /// The revision of the render nodes at which every text node was last brought to the font its
+    /// properties ask for; see `sync_text_measure_contexts`.
+    text_synced_revision: Cell<Option<u64>>,
     /// The offset of every scroll container at the last paint.
     scroll_painted: RefCell<HashMap<LayoutNodeId, (f32, f32)>>,
     /// The offsets the rows were last written for.
@@ -1224,6 +1230,7 @@ impl RenderTree {
             scroll_row_nodes: RefCell::new(HashMap::new()),
             child_indexes: RefCell::new(HashMap::new()),
             node_scan: RefCell::new(None),
+            text_synced_revision: Cell::new(None),
             scroll_painted: RefCell::new(HashMap::new()),
             scroll_applied: RefCell::new(HashMap::new()),
             scroll_painted_epoch: Cell::new(None),
@@ -1508,12 +1515,16 @@ impl RenderTree {
                 has_glass: false,
                 has_foreground: false,
                 canvases: Vec::new(),
+                svgs: Vec::new(),
             };
             for (id, node) in self.render_nodes.iter() {
                 found.has_glass |= node.props.is_glass();
                 found.has_foreground |= matches!(node.props.layer, RenderLayer::Foreground);
                 if matches!(node.element_type, ElementType::Canvas(_)) {
                     found.canvases.push(*id);
+                }
+                if self.element_registry.get_element_type(*id) == Some("svg") {
+                    found.svgs.push(*id);
                 }
             }
             *scan = Some(found);
@@ -2520,7 +2531,7 @@ impl RenderTree {
     /// to match: its text data, its measure context or fixed size, and its
     /// baseline.
     fn apply_text_look(&mut self, id: LayoutNodeId, look: TextLook) {
-        let Some(render_node) = self.render_nodes.get_mut(&id) else {
+        let Some(mut render_node) = self.render_nodes.get_mut(&id) else {
             return;
         };
         let ElementType::Text(text) = &mut render_node.element_type else {
@@ -2571,11 +2582,28 @@ impl RenderTree {
         self.layout_tree.refresh_text_baseline(id, baseline);
     }
 
+    /// Whether a layout is due since the layout tree was at `epoch`: a style or the tree changed,
+    /// or a text node's font did. A pass that restyles nodes asks this to know whether to lay
+    /// out, rather than laying out for any style it applied.
+    pub fn layout_due_since(&self, epoch: u64) -> bool {
+        self.layout_tree.epoch() != epoch
+            || self.text_synced_revision.get() != Some(self.render_nodes.revision())
+            // A layout or visual animation is stepped by the layouts that are run while it plays.
+            || self.has_active_layout_animations()
+            || self.has_active_visual_animations()
+            || self.has_active_flip_animations()
+    }
+
     /// Compute layout for the given viewport size
     pub fn compute_layout(&mut self, width: f32, height: f32) {
         // Before measuring: CSS text properties that affect measurement
-        // reach the contexts here, not at build time.
-        self.sync_text_measure_contexts();
+        // reach the contexts here, not at build time. A text node's font is part of what the
+        // revision of the nodes counts, so with none changed there is nothing to bring up to date.
+        if self.text_synced_revision.get() != Some(self.render_nodes.revision()) {
+            self.sync_text_measure_contexts();
+            self.text_synced_revision
+                .set(Some(self.render_nodes.revision()));
+        }
 
         if let Some(root) = self.root {
             // Step 1: Check for existing collapsing animations and apply their constraints
@@ -3262,7 +3290,7 @@ impl RenderTree {
     where
         F: FnOnce(&mut RenderProps),
     {
-        if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+        if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
             f(&mut render_node.props);
         }
     }
@@ -3356,7 +3384,7 @@ impl RenderTree {
     /// the paint path wraps and decorates what is now there. False when the
     /// node is not a text node or the content is unchanged.
     pub fn set_text_content(&mut self, node_id: LayoutNodeId, content: String) -> bool {
-        let Some(render_node) = self.render_nodes.get_mut(&node_id) else {
+        let Some(mut render_node) = self.render_nodes.get_mut(&node_id) else {
             return false;
         };
         let ElementType::Text(text) = &mut render_node.element_type else {

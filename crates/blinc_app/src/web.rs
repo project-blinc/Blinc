@@ -2871,8 +2871,9 @@ impl WebApp {
         if let Some(ref mut tree) = self.current_tree
             && tree.stylesheet().is_some()
         {
+            let epoch = tree.layout_tree.epoch();
             let state_changed = tree.apply_stylesheet_state_styles(&self.ctx.event_router);
-            if state_changed {
+            if state_changed && tree.layout_due_since(epoch) {
                 tree.compute_layout(self.ctx.width, self.ctx.height);
                 tree.update_flip_bounds();
             }

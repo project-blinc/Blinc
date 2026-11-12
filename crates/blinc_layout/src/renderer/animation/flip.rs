@@ -237,7 +237,7 @@ impl RenderTree {
             .collect();
 
         for (node_id, anim_props) in props_data {
-            if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+            if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
                 Self::apply_keyframe_props_to_render(&mut render_node.props, &anim_props);
             }
         }

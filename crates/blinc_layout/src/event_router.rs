@@ -298,6 +298,14 @@ impl EventRouter {
         self.pressed_target.is_some()
     }
 
+    /// Forget where the last hit was, so the next move runs the whole pipeline: what is under the
+    /// pointer may have moved without it, and a cursor "still inside the last leaf" is then the
+    /// leaf's old place.
+    pub fn forget_last_hit(&mut self) {
+        self.last_hit_bounds_width = 0.0;
+        self.last_hit_bounds_height = 0.0;
+    }
+
     /// `true` when `(x, y)` lies within the AABB of the deepest hit
     /// node from the most recent hit test. When this returns true,
     /// the hover set can't have changed and the entire dispatch
@@ -1618,6 +1626,29 @@ impl EventRouter {
     ///
     /// Returns the hit result for the frontmost (last in child order) element
     /// that contains the point.
+    /// The children of `node` a hit test goes through: all of them, or inside a culling scroll
+    /// those that draw within its viewport, as the paint path culls: off-viewport subtrees are
+    /// neither painted nor hit-testable, and visible nested scrolls are still walked and remain
+    /// the first scroll target in the hit chain.
+    fn hit_children(
+        &self,
+        tree: &RenderTree,
+        node: LayoutNodeId,
+        base_child_offset: (f32, f32),
+        cull_viewport: Option<(f32, f32, f32, f32)>,
+    ) -> Vec<LayoutNodeId> {
+        if let Some((cx, cy, cw, ch)) = cull_viewport
+            && let Some(abs) = tree.layout().get_absolute_bounds(node)
+        {
+            return tree.hit_candidates(
+                node,
+                (base_child_offset.0 - abs.x, base_child_offset.1 - abs.y),
+                [cx, cy, cw, ch],
+            );
+        }
+        tree.layout().children(node)
+    }
+
     pub fn hit_test(&self, tree: &RenderTree, x: f32, y: f32) -> Option<HitTestResult> {
         let root = tree.root()?;
         let mut ancestors = Vec::new();
@@ -1741,7 +1772,7 @@ impl EventRouter {
         // Foreground-aware: if a child subtree yields a foreground hit,
         // it takes priority over non-foreground hits from siblings that
         // appear later in tree order but visually behind the foreground.
-        let children = tree.layout().children(node);
+        let children = self.hit_children(tree, node, base_child_offset, cull_viewport);
         tracing::trace!(
             "hit_test_node: node={:?}, bounds=({:.1}, {:.1}, {:.1}x{:.1}), children={:?}",
             node,
@@ -1784,22 +1815,7 @@ impl EventRouter {
                 new_cumulative_scroll
             };
 
-            // Match the paint path for `scroll().viewport_cull(true)`: once
-            // a culling scroll is active, ordinary off-viewport child subtrees
-            // are neither painted nor hit-testable. Visible nested scrolls are
-            // still walked and remain the first scroll target in the hit chain.
-            if let Some((cx, cy, cw, ch)) = cull_viewport
-                && !child_is_fg
-                && let Some(abs) = tree.layout().get_absolute_bounds(node)
-                && tree.draws_outside(
-                    child,
-                    (child_offset.0 - abs.x, child_offset.1 - abs.y),
-                    [cx, cy, cw, ch],
-                )
-            {
-                continue;
-            }
-
+            // Off-viewport children were left out of `children` already: see `hit_children`.
             if let Some(mut result) = self.hit_test_node(
                 tree,
                 child,
@@ -1992,7 +2008,7 @@ impl EventRouter {
         };
 
         // Check children
-        let children = tree.layout().children(node);
+        let children = self.hit_children(tree, node, base_child_offset, cull_viewport);
 
         for child in children {
             let child_render = tree.get_render_node(child);
@@ -2019,22 +2035,6 @@ impl EventRouter {
             } else {
                 new_cumulative_scroll
             };
-
-            if let Some((cx, cy, cw, ch)) = cull_viewport {
-                let child_is_fg = child_render
-                    .map(|n| n.props.layer == crate::element::RenderLayer::Foreground)
-                    .unwrap_or(false);
-                if !child_is_fg
-                    && let Some(abs) = tree.layout().get_absolute_bounds(node)
-                    && tree.draws_outside(
-                        child,
-                        (child_offset.0 - abs.x, child_offset.1 - abs.y),
-                        [cx, cy, cw, ch],
-                    )
-                {
-                    continue;
-                }
-            }
 
             self.hit_test_node_all(
                 tree,

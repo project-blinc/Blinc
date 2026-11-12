@@ -422,7 +422,7 @@ impl RenderTree {
                     if let Some(node_ids) = class_to_nodes.get(class_name) {
                         for &node_id in node_ids {
                             // Apply visual styles
-                            if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+                            if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
                                 Self::apply_element_style_to_props(&mut render_node.props, style);
                             }
                             // Collect layout overrides
@@ -441,7 +441,7 @@ impl RenderTree {
                         .complex_selector_matches(selector, node_id, &empty_set, &empty_set, None)
                     {
                         // Apply visual styles
-                        if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+                        if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
                             Self::apply_element_style_to_props(&mut render_node.props, style);
                         }
                         // Collect layout overrides
@@ -473,7 +473,7 @@ impl RenderTree {
         for (element_id, node_id) in &registered_ids {
             if let Some(base_style) = stylesheet.get(element_id) {
                 // Apply visual styles
-                if let Some(render_node) = self.render_nodes.get_mut(node_id) {
+                if let Some(mut render_node) = self.render_nodes.get_mut(node_id) {
                     Self::apply_element_style_to_props(&mut render_node.props, base_style);
                 }
                 // Collect layout overrides
@@ -614,7 +614,7 @@ impl RenderTree {
                     }
                 }
                 if !tag_styles.is_empty()
-                    && let Some(render_node) = self.render_nodes.get_mut(&svg_node)
+                    && let Some(mut render_node) = self.render_nodes.get_mut(&svg_node)
                 {
                     render_node.props.svg_tag_styles = tag_styles;
                 }
@@ -646,7 +646,7 @@ impl RenderTree {
             });
             if let Some((td, td_color, td_thick, ws, to, ta, fill, stroke, stroke_w, fstyle)) =
                 parent_text_props
-                && let Some(node) = self.render_nodes.get_mut(&node_id)
+                && let Some(mut node) = self.render_nodes.get_mut(&node_id)
             {
                 if node.props.text_decoration.is_none() {
                     node.props.text_decoration = td;

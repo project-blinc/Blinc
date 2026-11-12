@@ -33,6 +33,8 @@ pub(super) struct ChildIndex {
     reach: Vec<f32>,
     /// Children that are never culled: something under them moves.
     always: Vec<u32>,
+    /// Children on the foreground layer, which a hit test does not cull.
+    foreground: Vec<u32>,
     /// Whether every node under the container passes the checks that do not change by the frame.
     qualifies: bool,
 }
@@ -61,7 +63,7 @@ impl RenderTree {
                 view[0] + view[2] - shift.0 + overscan,
                 view[1] + view[3] - shift.1 + overscan,
             ];
-            ix.within(lo, hi)
+            ix.within(lo, hi, false)
         });
         if let Some(found) = found {
             return found;
@@ -70,6 +72,39 @@ impl RenderTree {
             .children(node)
             .into_iter()
             .filter(|child| !self.draws_outside(*child, shift, view))
+            .collect()
+    }
+
+    /// The children of `node` a hit at a point in `view` can reach: those that `visible_children`
+    /// gives, and the children on the foreground layer, which draw above what clips them and are
+    /// not culled.
+    pub fn hit_candidates(
+        &self,
+        node: LayoutNodeId,
+        shift: (f32, f32),
+        view: super::cull::CullRect,
+    ) -> Vec<LayoutNodeId> {
+        let overscan = self.cull_overscan();
+        let found = self.with_child_index(node, |ix| {
+            let lo = [view[0] - shift.0 - overscan, view[1] - shift.1 - overscan];
+            let hi = [
+                view[0] + view[2] - shift.0 + overscan,
+                view[1] + view[3] - shift.1 + overscan,
+            ];
+            ix.within(lo, hi, true)
+        });
+        if let Some(found) = found {
+            return found;
+        }
+        let foreground = |child: &LayoutNodeId| {
+            self.render_nodes
+                .get(child)
+                .is_some_and(|n| n.props.layer == crate::element::RenderLayer::Foreground)
+        };
+        self.layout_tree
+            .children(node)
+            .into_iter()
+            .filter(|child| foreground(child) || !self.draws_outside(*child, shift, view))
             .collect()
     }
 
@@ -123,6 +158,7 @@ impl RenderTree {
         let children = self.layout_tree.children(node);
         let mut extent = Vec::with_capacity(children.len());
         let mut always = Vec::new();
+        let mut foreground = Vec::new();
         let mut qualifies = true;
         for (position, child) in children.iter().enumerate() {
             let mut walked = Walked {
@@ -138,6 +174,13 @@ impl RenderTree {
             self.walk_for_index(*child, origin, true, &mut walked);
             if walked.mover {
                 always.push(position as u32);
+            }
+            if self
+                .render_nodes
+                .get(child)
+                .is_some_and(|n| n.props.layer == crate::element::RenderLayer::Foreground)
+            {
+                foreground.push(position as u32);
             }
             qualifies &= walked.qualifies;
             extent.push(walked.rect);
@@ -167,6 +210,7 @@ impl RenderTree {
             order,
             reach,
             always,
+            foreground,
             qualifies,
         }
     }
@@ -240,7 +284,7 @@ impl RenderTree {
 
 impl ChildIndex {
     /// The children whose extent comes within the rect `[lo, hi]`, in order, and those that move.
-    fn within(&self, lo: [f32; 2], hi: [f32; 2]) -> Vec<LayoutNodeId> {
+    fn within(&self, lo: [f32; 2], hi: [f32; 2], with_foreground: bool) -> Vec<LayoutNodeId> {
         let axis = self.axis;
         let cross = 1 - axis;
         let before = self
@@ -256,6 +300,9 @@ impl ChildIndex {
             }
         }
         hits.extend(self.always.iter().copied());
+        if with_foreground {
+            hits.extend(self.foreground.iter().copied());
+        }
         hits.sort_unstable();
         hits.dedup();
         hits.into_iter()

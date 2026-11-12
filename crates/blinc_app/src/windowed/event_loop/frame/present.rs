@@ -95,11 +95,13 @@ pub(super) fn render_and_schedule(
             let current_fp = windowed_ctx.event_router.state_fingerprint();
             let should_apply = ws.last_router_state_fp != Some(current_fp);
             if should_apply {
+                let epoch = tree.layout_tree.epoch();
                 let state_changed = tree.apply_stylesheet_state_styles(&windowed_ctx.event_router);
                 ws.last_router_state_fp = Some(current_fp);
                 // Recompute layout if state styles affected layout properties
-                // (e.g. visibility: hidden → display: none, or height changes on hover)
-                if state_changed {
+                // (e.g. visibility: hidden → display: none, or height changes on hover): a
+                // style that only repaints leaves the layout as it is.
+                if state_changed && tree.layout_due_since(epoch) {
                     tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
                     tree.update_flip_bounds();
                 }

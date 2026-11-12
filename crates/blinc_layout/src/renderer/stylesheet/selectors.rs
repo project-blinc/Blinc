@@ -433,8 +433,16 @@ impl RenderTree {
         // focus by `LayoutNodeId`, so just ask it directly.
         let focused_node: Option<LayoutNodeId> = router.focused();
 
-        // Collect ALL render node IDs (not just those with IDs — .class selectors can match any node)
-        let all_node_ids: Vec<LayoutNodeId> = self.render_nodes.keys().copied().collect();
+        // The nodes that hold a pointer or focus state now: a rule with a state can only match
+        // what is reachable from them.
+        let mut holders: Vec<LayoutNodeId> = hovered_nodes
+            .iter()
+            .chain(pressed_nodes.iter())
+            .copied()
+            .chain(focused_node)
+            .collect();
+        holders.sort_unstable();
+        holders.dedup();
 
         // Reset previously state-affected nodes to their base props so that
         // styles from rules that no longer match (e.g. :hover ended) are removed
@@ -455,7 +463,7 @@ impl RenderTree {
         for &node_id in &prev_affected {
             self.state_layers.remove(&node_id);
             if let Some(base) = self.base_styles.get(&node_id)
-                && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+                && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
             {
                 render_node.props = base.clone();
             }
@@ -483,7 +491,7 @@ impl RenderTree {
                         &hovered_nodes,
                         &pressed_nodes,
                         focused_node,
-                    ) && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+                    ) && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
                     {
                         Self::apply_element_style_to_props(&mut render_node.props, style);
                     }
@@ -497,7 +505,7 @@ impl RenderTree {
             for &node_id in &prev_affected {
                 if let Some(element_id) = self.element_registry.get_id(node_id)
                     && let Some(base_style) = stylesheet.get(&element_id)
-                    && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+                    && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
                 {
                     Self::apply_element_style_to_props(&mut render_node.props, base_style);
                 }
@@ -522,7 +530,14 @@ impl RenderTree {
                 continue;
             }
 
-            for &node_id in &all_node_ids {
+            let candidates = self.state_rule_candidates(
+                selector,
+                &holders,
+                &hovered_nodes,
+                &pressed_nodes,
+                focused_node,
+            );
+            for &node_id in &candidates {
                 if self.complex_selector_matches(
                     selector,
                     node_id,
@@ -584,7 +599,7 @@ impl RenderTree {
                         None
                     };
 
-                    if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+                    if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
                         Self::apply_element_style_to_props(&mut render_node.props, style);
                         self.state_layers
                             .entry(node_id)
@@ -665,6 +680,72 @@ impl RenderTree {
         }
 
         any_applied
+    }
+
+    /// The nodes a rule with a pointer or focus state can match: those reachable from a node that
+    /// holds the state, through the combinators that follow the state's compound, each step kept
+    /// only if it matches the next compound. A superset of the matches, which
+    /// `complex_selector_matches` then decides, so what the rule matches is what matching every
+    /// node finds, in a cost that follows the nodes holding the state and not the tree.
+    fn state_rule_candidates(
+        &self,
+        selector: &ComplexSelector,
+        holders: &[LayoutNodeId],
+        hovered: &HashSet<LayoutNodeId>,
+        pressed: &HashSet<LayoutNodeId>,
+        focused: Option<LayoutNodeId>,
+    ) -> Vec<LayoutNodeId> {
+        let segments = &selector.segments;
+        let Some(from) = segments
+            .iter()
+            .rposition(|(compound, _)| compound.has_state())
+        else {
+            return Vec::new();
+        };
+        let matches = |compound: &CompoundSelector, node: LayoutNodeId| {
+            self.compound_matches(compound, node, hovered, pressed, focused)
+        };
+        let mut frontier: Vec<LayoutNodeId> = holders
+            .iter()
+            .copied()
+            .filter(|n| matches(&segments[from].0, *n))
+            .collect();
+        for i in from..segments.len() - 1 {
+            if frontier.is_empty() {
+                break;
+            }
+            let combinator = segments[i].1.unwrap_or(Combinator::Descendant);
+            let next = &segments[i + 1].0;
+            let mut reached: Vec<LayoutNodeId> = Vec::new();
+            for &node in &frontier {
+                match combinator {
+                    Combinator::Child => reached.extend(self.element_registry.get_children(node)),
+                    Combinator::Descendant => {
+                        let mut stack = self.element_registry.get_children(node);
+                        while let Some(n) = stack.pop() {
+                            // Only what matches the next compound is kept, but the walk goes on
+                            // through everything under the node.
+                            stack.extend(self.element_registry.get_children(n));
+                            reached.push(n);
+                        }
+                    }
+                    Combinator::AdjacentSibling => reached.extend(
+                        self.element_registry
+                            .get_following_siblings(node)
+                            .into_iter()
+                            .take(1),
+                    ),
+                    Combinator::GeneralSibling => {
+                        reached.extend(self.element_registry.get_following_siblings(node))
+                    }
+                }
+            }
+            reached.retain(|n| matches(next, *n));
+            reached.sort_unstable();
+            reached.dedup();
+            frontier = reached;
+        }
+        frontier
     }
 
     /// The `transition` a node has: its id rule's, else that of a base complex
@@ -778,7 +859,7 @@ impl RenderTree {
                     self.base_taffy_styles.insert(node_id, taffy_style);
                 }
                 self.complex_state_affected.insert(node_id);
-                if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+                if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
                     Self::apply_element_style_to_props(&mut render_node.props, style);
                     self.state_layers
                         .entry(node_id)
@@ -834,12 +915,7 @@ impl RenderTree {
         };
 
         // Find all SVG layout nodes
-        let svg_nodes: Vec<LayoutNodeId> = self
-            .render_nodes
-            .keys()
-            .copied()
-            .filter(|&nid| self.element_registry.get_element_type(nid) == Some("svg"))
-            .collect();
+        let svg_nodes: Vec<LayoutNodeId> = self.with_node_scan(|scan| scan.svgs.clone());
 
         if svg_nodes.is_empty() {
             return false;
@@ -958,13 +1034,13 @@ impl RenderTree {
 
             // Apply tag styles to render props
             if !tag_styles.is_empty() {
-                if let Some(render_node) = self.render_nodes.get_mut(&svg_node)
+                if let Some(mut render_node) = self.render_nodes.get_mut(&svg_node)
                     && render_node.props.svg_tag_styles != tag_styles
                 {
                     render_node.props.svg_tag_styles = tag_styles;
                     any_changed = true;
                 }
-            } else if let Some(render_node) = self.render_nodes.get_mut(&svg_node)
+            } else if let Some(mut render_node) = self.render_nodes.get_mut(&svg_node)
                 && !render_node.props.svg_tag_styles.is_empty()
             {
                 render_node.props.svg_tag_styles.clear();
@@ -973,5 +1049,101 @@ impl RenderTree {
         }
 
         any_changed
+    }
+}
+
+#[cfg(test)]
+mod candidate_tests {
+    use super::*;
+    use crate::css_parser::Stylesheet;
+    use crate::div::div;
+
+    /// A tree with containers, rows and leaves, classed so every combinator has something to
+    /// relate.
+    fn tree() -> RenderTree {
+        let leaf = |c: &str| div().class(c).w(10.0).h(10.0);
+        let row = |c: &str| {
+            div()
+                .class(c)
+                .w(100.0)
+                .h(30.0)
+                .child(leaf("c"))
+                .child(leaf("d"))
+        };
+        let group = |c: &str| {
+            div()
+                .class(c)
+                .flex_col()
+                .child(row("b"))
+                .child(row("b"))
+                .child(row("e"))
+                .child(row("b"))
+        };
+        let ui = div()
+            .class("a")
+            .flex_col()
+            .child(group("g"))
+            .child(group("g"))
+            .child(row("b"));
+        let mut tree = RenderTree::from_element(&ui);
+        tree.compute_layout(200.0, 600.0);
+        tree
+    }
+
+    /// Whatever a rule with a state matches, for any node holding the state, is among its
+    /// candidates.
+    #[test]
+    fn candidates_hold_every_match() {
+        let rules = [
+            ".b:hover { opacity: 0.9; }",
+            ".g:hover .c { opacity: 0.9; }",
+            ".g:hover > .b { opacity: 0.9; }",
+            ".b:hover + .b { opacity: 0.9; }",
+            ".b:hover ~ .e { opacity: 0.9; }",
+            ".b + .b:hover { opacity: 0.9; }",
+            ".b ~ .e:hover { opacity: 0.9; }",
+            ".a .g:active .d { opacity: 0.9; }",
+            ".a > .g:hover > .b:hover .c { opacity: 0.9; }",
+            ".c:focus { opacity: 0.9; }",
+            ".b:focus .d { opacity: 0.9; }",
+            ".b:hover:active .c { opacity: 0.9; }",
+            ".g:hover .b + .b .c { opacity: 0.9; }",
+            ".b:hover .c:not(.d) { opacity: 0.9; }",
+        ];
+        let tree = tree();
+        let nodes: Vec<LayoutNodeId> = tree.render_nodes.keys().copied().collect();
+        for css in rules {
+            let stylesheet = Stylesheet::parse(css).expect("css");
+            let mut matched = 0;
+            for (selector, _) in stylesheet.complex_rules() {
+                for &holder in &nodes {
+                    // What a hit on `holder` makes hover and press: it and what holds it.
+                    let mut chain: HashSet<LayoutNodeId> = tree
+                        .element_registry
+                        .ancestors(holder)
+                        .into_iter()
+                        .collect();
+                    chain.insert(holder);
+                    let focused = Some(holder);
+                    let mut holders: Vec<LayoutNodeId> = chain.iter().copied().collect();
+                    holders.push(holder);
+                    holders.sort_unstable();
+                    holders.dedup();
+                    let candidates =
+                        tree.state_rule_candidates(selector, &holders, &chain, &chain, focused);
+                    for &node in &nodes {
+                        if tree.complex_selector_matches(selector, node, &chain, &chain, focused) {
+                            matched += 1;
+                            assert!(
+                                candidates.contains(&node),
+                                "`{css}`: a node it matches, with a hit on {holder:?}, was not a candidate"
+                            );
+                        }
+                    }
+                }
+            }
+            // A rule that matches nothing proves nothing.
+            assert!(matched > 0, "`{css}` matched no node for any holder");
+        }
     }
 }

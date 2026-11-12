@@ -378,7 +378,6 @@ impl LayoutTree {
 
     /// Set the style for a node
     pub fn set_style(&mut self, id: LayoutNodeId, style: Style) {
-        self.epoch = self.epoch.wrapping_add(1);
         if let Some(&taffy_node) = self.node_map.get(id) {
             // Setting a style marks the node and its ancestors for layout.
             // An unchanged one is left alone, so a pass that writes every
@@ -390,6 +389,7 @@ impl LayoutTree {
             {
                 return;
             }
+            self.epoch = self.epoch.wrapping_add(1);
             let _ = self.taffy.set_style(taffy_node, style);
         }
     }
