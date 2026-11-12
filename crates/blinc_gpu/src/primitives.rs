@@ -62,7 +62,8 @@ pub use viewport3d::{GpuRect, ParticleViewport3D, Sdf3DUniform, Viewport3D};
 /// - corner_shape: `vec4<f32>`    (16 bytes) - superellipse n per corner (1.0=round, 0.0=bevel, 2.0=squircle)
 /// - clip_fade: `vec4<f32>`       (16 bytes) - overflow fade distances (top, right, bottom, left) in pixels
 /// - type_info: `vec4<u32>`       (16 bytes) - (primitive_type, fill_type, clip_type, z_layer)
-///   Total: 544 bytes (34 x vec4). Asserted against the WGSL
+/// - node_slot: `vec4<f32>`       (16 bytes) - (slot + 1, 0, 0, 0): the animated node it follows
+///   Total: 560 bytes (35 x vec4). Asserted against the WGSL
 ///   declaration in `tests/primitive_layout.rs`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -166,6 +167,10 @@ pub struct GpuPrimitive {
     /// and shape parameters, followed by polygon points two per row. A polygon
     /// offset is relative to that header, so moving a run only rebases this pointer.
     pub clip_shape: [f32; 4],
+    /// The animated node this primitive follows: `slot + 1` in x, zero for none (exact as an
+    /// f32 up to 2^24). The node table in the GPU holds that node's transform and opacity
+    /// deltas. yzw are reserved.
+    pub node_slot: [f32; 4],
 }
 
 #[cfg(test)]
@@ -282,5 +287,42 @@ mod simple_core_tests {
         let mut nan = simple();
         nan.mask_info[0] = f32::NAN;
         assert!(!nan.is_simple_core());
+    }
+}
+
+#[cfg(test)]
+mod node_slot_tests {
+    use super::*;
+
+    #[test]
+    fn a_primitive_follows_no_node_until_told() {
+        let mut p = GpuPrimitive::default();
+        assert_eq!(p.node_slot(), None);
+        p.set_node_slot(Some(0));
+        assert_eq!(p.node_slot(), Some(0), "slot 0 is a slot, not none");
+        assert_eq!(p.node_slot[0], 1.0);
+        p.set_node_slot(None);
+        assert_eq!(p.node_slot(), None);
+    }
+
+    /// The slot rides in an f32, which holds whole numbers exactly up to 2^24.
+    #[test]
+    fn a_slot_survives_the_f32_it_rides_in() {
+        for slot in [0, 1, 255, 65_535, 1 << 20, (1 << 24) - 2] {
+            let mut p = GpuPrimitive::default();
+            p.set_node_slot(Some(slot));
+            assert_eq!(p.node_slot(), Some(slot));
+        }
+    }
+
+    #[test]
+    fn a_glyph_drawn_as_a_primitive_keeps_its_node() {
+        let glyph = GpuGlyph::default().with_node_slot(Some(7));
+        assert_eq!(glyph.node_slot(), Some(7));
+        assert_eq!(GpuPrimitive::from_glyph(&glyph).node_slot(), Some(7));
+        assert_eq!(
+            GpuPrimitive::from_glyph(&GpuGlyph::default()).node_slot(),
+            None
+        );
     }
 }

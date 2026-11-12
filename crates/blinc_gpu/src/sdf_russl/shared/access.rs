@@ -57,6 +57,7 @@ russl::russl! {
             p.clip_fade_bounds = PRIM_DATA.load(IVec2::new(31, y), 0);
             p.notch_info = PRIM_DATA.load(IVec2::new(32, y), 0);
             p.clip_shape = PRIM_DATA.load(IVec2::new(33, y), 0);
+            p.node_slot = PRIM_DATA.load(IVec2::new(34, y), 0);
             return p;
         }
     #else

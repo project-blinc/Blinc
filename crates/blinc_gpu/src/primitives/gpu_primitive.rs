@@ -273,6 +273,7 @@ impl Default for GpuPrimitive {
             clip_fade_bounds: [0.0; 4],
             notch_info: [0.0; 4],
             clip_shape: [0.0; 4],
+            node_slot: [0.0; 4],
         }
     }
 }
@@ -492,6 +493,16 @@ impl GpuPrimitive {
         self.type_info[3] = layer;
     }
 
+    /// The animated node this primitive follows, if any.
+    pub fn node_slot(&self) -> Option<u32> {
+        (self.node_slot[0] >= 1.0).then(|| self.node_slot[0] as u32 - 1)
+    }
+
+    /// Follow the animated node in `slot`, or none.
+    pub fn set_node_slot(&mut self, slot: Option<u32>) {
+        self.node_slot[0] = slot.map_or(0.0, |s| (s + 1) as f32);
+    }
+
     /// Create a text glyph primitive from a GpuGlyph
     ///
     /// This converts a text glyph into a unified primitive that can be rendered
@@ -551,6 +562,7 @@ impl GpuPrimitive {
             clip_fade_bounds: [0.0; 4],
             notch_info: [0.0; 4],
             clip_shape: [glyph.flags[1], 0.0, 0.0, 0.0],
+            node_slot: [glyph.flags[2], 0.0, 0.0, 0.0],
         }
     }
 
@@ -602,6 +614,7 @@ impl GpuPrimitive {
             clip_fade_bounds: [0.0; 4],
             notch_info: [0.0; 4],
             clip_shape: [0.0; 4],
+            node_slot: [0.0; 4],
         }
     }
 }

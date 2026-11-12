@@ -83,5 +83,7 @@ russl::russl! {
         pub notch_info: Vec4,
         // One more than the AUX_DATA header offset for an ABI shape clip, zero for none.
         pub clip_shape: Vec4,
+        // The animated node it follows: slot + 1 in x, zero for none.
+        pub node_slot: Vec4,
     }
 }

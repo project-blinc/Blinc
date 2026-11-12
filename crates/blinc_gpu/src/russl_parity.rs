@@ -1197,6 +1197,7 @@ fn the_cpu_primitive_lays_out_as_the_shader_reads_it() {
         clip_fade_bounds,
         notch_info,
         clip_shape,
+        node_slot,
     );
 }
 

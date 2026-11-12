@@ -22,9 +22,10 @@ pub struct GpuGlyph {
     pub clip_bounds: [f32; 4],
     /// Overflow fade distances (top, right, bottom, left) in pixels
     pub clip_fade: [f32; 4],
-    /// Flags: [is_color, path_header, unused, unused]. The path header is a
+    /// Flags: [is_color, path_header, node_slot, unused]. The path header is a
     /// one-based auxiliary row in the owning batch, or zero for no shape clip.
-    /// is_color: 1.0 for color emoji (use color atlas), 0.0 for grayscale (use main atlas)
+    /// is_color: 1.0 for color emoji (use color atlas), 0.0 for grayscale (use main atlas).
+    /// node_slot: the animated node the glyph follows, as `slot + 1`, or zero for none.
     pub flags: [f32; 4],
 }
 
@@ -43,6 +44,17 @@ impl Default for GpuGlyph {
 }
 
 impl GpuGlyph {
+    /// The animated node this glyph follows, if any.
+    pub fn node_slot(&self) -> Option<u32> {
+        (self.flags[2] >= 1.0).then(|| self.flags[2] as u32 - 1)
+    }
+
+    /// Follow the animated node in `slot`, or none.
+    pub fn with_node_slot(mut self, slot: Option<u32>) -> Self {
+        self.flags[2] = slot.map_or(0.0, |s| (s + 1) as f32);
+        self
+    }
+
     /// Set rectangular clip bounds for this glyph
     pub fn with_clip_rect(mut self, x: f32, y: f32, width: f32, height: f32) -> Self {
         self.clip_bounds = [x, y, width, height];

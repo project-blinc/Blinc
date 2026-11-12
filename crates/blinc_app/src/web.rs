@@ -634,7 +634,7 @@ impl WebApp {
         // `BLINC_GPU_MAX_PRIMITIVES` env var, but `std::env::var` is
         // a no-op on wasm32.  20k covers every current example with
         // comfortable headroom
-        // (20,000 × 544 bytes per GpuPrimitive ≈ 10.9 MB total).
+        // (20,000 × 560 bytes per GpuPrimitive ≈ 11.2 MB total).
         let config = BlincConfig {
             max_primitives: 20_000,
             sample_count: 1, // SDF pipelines do their own shader-level AA
