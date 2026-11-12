@@ -147,18 +147,9 @@ where
 
                             #[cfg(target_os = "linux")]
                             {
-                                // On Wayland, once the scene goes static the
-                                // event loop parks (epoll) and stops
-                                // presenting; the compositor then stops
-                                // releasing swapchain buffers and the next
-                                // get_current_texture() starves for ~1s
-                                // ("paints once then dead"). Detect a genuine
-                                // Wayland backend (not X11/XWayland) and keep
-                                // the swapchain cycling: the frame loop
-                                // self-drives request_redraw(), which winit
-                                // paces to vsync through pre_present_notify —
-                                // steady ~7% CPU, not a busy spin. Override
-                                // with BLINC_KEEP_ALIVE=1/0.
+                                // Off by default: a static scene presents only when something changes.
+                                // BLINC_KEEP_ALIVE=1 turns on presents at vsync while the scene is static;
+                                // it applies on a Wayland backend only (not X11/XWayland).
                                 let on_wayland = {
                                     use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
                                     window
@@ -169,18 +160,13 @@ where
                                         })
                                         .unwrap_or(false)
                                 };
-                                ws.wayland_keep_alive =
-                                    match std::env::var("BLINC_KEEP_ALIVE").ok().as_deref() {
-                                        Some("0") | Some("false") | Some("off") => false,
-                                        Some("1") | Some("true") | Some("on") => true,
-                                        _ => on_wayland,
-                                    };
-                                if ws.wayland_keep_alive {
-                                    tracing::info!(
-                                        "wayland keep-alive active: \
-                                                 self-driven vsync-paced presents \
-                                                 keep the swapchain from starving"
+                                ws.wayland_keep_alive = on_wayland
+                                    && matches!(
+                                        std::env::var("BLINC_KEEP_ALIVE").ok().as_deref(),
+                                        Some("1" | "true" | "on")
                                     );
+                                if ws.wayland_keep_alive {
+                                    tracing::info!("wayland keep-alive active");
                                 }
                                 ws.surface = Some(surf);
                             }

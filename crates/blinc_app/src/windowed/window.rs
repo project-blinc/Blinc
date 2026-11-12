@@ -105,10 +105,8 @@ pub(crate) struct WindowState {
     #[cfg(all(feature = "wayland-frame-gate", target_os = "linux"))]
     pub wayland_gate: Option<crate::wayland_frame_gate::WaylandFrameGate>,
     #[cfg(target_os = "linux")]
-    /// Wayland only: keep the swapchain cycling when the scene is static
-    /// (self-driven, vsync-paced presents) so the compositor never starves
-    /// the next `get_current_texture()`. Set at surface creation from the
-    /// detected display backend; override with `BLINC_KEEP_ALIVE=1/0`.
+    /// Keep presenting at vsync while the scene is static. Off by default;
+    /// on only for a Wayland backend with `BLINC_KEEP_ALIVE=1`, decided at surface creation.
     pub wayland_keep_alive: bool,
     /// Whether any CSS animation/transition was active last frame.
     /// Falling edge triggers a one-shot render-cache invalidation so
