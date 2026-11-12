@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1794443116,"nonce":"xqql2D47aX3k15qIM02lY8qRDWs=","added":["bug","area:layout","area:animation","area:gpu"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794443116,"nonce":"+AW+JZ+WfGjEJbDPp4pd1VDi0Ss=","message":"Found while building the visual harness for the GPU-deferral plan: 122c606, umbrella da827f7.","files":null}]}
