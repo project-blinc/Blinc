@@ -1389,8 +1389,120 @@ fn zoomed_text_is_as_sharp_as_text_laid_out_at_that_size() {
     }
     for (path, ratio) in report {
         assert!(
-            ratio > 0.8,
+            ratio > 0.95,
             "{path:?}: zoomed text is {ratio:.2} as sharp as text laid out at that size"
+        );
+    }
+}
+
+/// A card with a label at rest, under a motion container or not.
+fn rest_scene(in_motion: bool, label: bool) -> Scene {
+    Scene {
+        name: "rest",
+        steps: 1,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let x = bound(ui, 0.0);
+            ui.mount(move |_| {
+                let card = card_at(label, 1.0);
+                // An odd-sized holder puts the label at a fractional position.
+                let holder = div().w(121.0).h(65.0);
+                stage().child(if in_motion {
+                    holder.child(card.motion().translate_x(x.clone()))
+                } else {
+                    holder.child(card)
+                })
+            });
+            Box::new(|_, _| {})
+        }),
+    }
+}
+
+#[test]
+fn text_under_a_motion_container_is_as_sharp_as_static_text() {
+    for density in ["1", "2"] {
+        // SAFETY: the test runs alone in its process under nextest.
+        unsafe { std::env::set_var("BLINC_ANIM_PATHS_SCALE", density) };
+        let mut sharp = Vec::new();
+        for in_motion in [false, true] {
+            let (Some(with), Some(without)) = (
+                run(&rest_scene(in_motion, true), Path::Vector),
+                run(&rest_scene(in_motion, false), Path::Vector),
+            ) else {
+                return;
+            };
+            sharp.push(sharpness(&with[0], &without[0]));
+        }
+        eprintln!(
+            "REST density {density}: static {:.3}, under a motion container {:.3}, ratio {:.2}",
+            sharp[0],
+            sharp[1],
+            sharp[1] / sharp[0]
+        );
+        assert!(
+            sharp[1] / sharp[0] > 0.97,
+            "density {density}: a label under a motion container is {:.2} as sharp as a static one",
+            sharp[1] / sharp[0]
+        );
+    }
+}
+
+/// A labelled card moved to a fractional offset by a spring and left to settle.
+fn settle_scene(label: bool, dx: f32, to_scale: f32) -> Scene {
+    Scene {
+        name: "settle",
+        steps: 90,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let (x, s) = (bound(ui, 0.0), bound(ui, 1.0));
+            let handles = (x.clone(), s.clone());
+            ui.mount(move |_| {
+                stage().child(
+                    div().w(120.0).h(64.0).child(
+                        card_at(label, 1.0)
+                            .motion()
+                            .translate_x(x.clone())
+                            .scale(s.clone()),
+                    ),
+                )
+            });
+            Box::new(move |_, step| {
+                if step == 0 {
+                    handles.0.lock().unwrap().set_target(dx);
+                    handles.1.lock().unwrap().set_target(to_scale);
+                }
+            })
+        }),
+    }
+}
+
+#[test]
+fn text_settled_after_an_animation_is_as_sharp_as_text_at_rest() {
+    for (dx, scale) in [(30.37, 1.0), (0.0, 1.5), (23.61, 1.35)] {
+        let (Some(with), Some(without)) = (
+            run(&settle_scene(true, dx, scale), Path::Table),
+            run(&settle_scene(false, dx, scale), Path::Table),
+        ) else {
+            return;
+        };
+        let last = with.len() - 1;
+        let settled = sharpness(&with[last], &without[last]);
+        // The same pose painted fully, with nothing in flight: what the label should look like.
+        let (Some(vw), Some(vo)) = (
+            run(&settle_scene(true, dx, scale), Path::Vector),
+            run(&settle_scene(false, dx, scale), Path::Vector),
+        ) else {
+            return;
+        };
+        let painted = sharpness(&vw[last], &vo[last]);
+        eprintln!(
+            "SETTLE dx {dx} scale {scale}: table {settled:.3}, full paint {painted:.3}, ratio {:.2}",
+            settled / painted
+        );
+        assert!(
+            settled / painted > 0.97,
+            "dx {dx} scale {scale}: the settled label is {:.2} as sharp as a full paint of that pose",
+            settled / painted
         );
     }
 }

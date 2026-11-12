@@ -460,6 +460,56 @@ impl NodeRows {
         true
     }
 
+    /// The row, in the table, of the glyphs owned by the nearest bound node at or above `node`.
+    pub(super) fn text_row(
+        &self,
+        node: LayoutNodeId,
+        ancestors: &dyn Fn(LayoutNodeId) -> Vec<LayoutNodeId>,
+    ) -> Option<u32> {
+        self.owner(node, ancestors).map(|slot| slot * 2 + 1)
+    }
+
+    /// The rows last written to the table.
+    pub(super) fn rows(&self) -> &[NodeRow] {
+        &self.rows
+    }
+
+    /// Whether the chain of rows from `row` changes nothing.
+    pub(super) fn chain_is_rest(&self, row: u32) -> bool {
+        let mut next = Some(row);
+        while let Some(r) = next.and_then(|r| self.rows.get(r as usize)) {
+            let [tx, ty, sx, sy] = r.motion;
+            let [_, _, turn, opacity] = r.pivot;
+            let rest = tx.abs() < 1e-3
+                && ty.abs() < 1e-3
+                && (sx - 1.0).abs() < 1e-4
+                && (sy - 1.0).abs() < 1e-4
+                && turn.abs() < 1e-4
+                && (opacity - 1.0).abs() < 1e-4;
+            if !rest {
+                return false;
+            }
+            next = r.parent();
+        }
+        true
+    }
+
+    /// The one scale the chain of rows from `row` amounts to, or `None` if one of them turns or
+    /// stretches.
+    pub(super) fn uniform_scale(&self, row: u32) -> Option<f32> {
+        let mut scale = 1.0;
+        let mut next = Some(row);
+        while let Some(r) = next.and_then(|r| self.rows.get(r as usize)) {
+            let [_, _, sx, sy] = r.motion;
+            if (sx - sy).abs() > 1e-3 || r.pivot[2].abs() > 1e-4 {
+                return None;
+            }
+            scale *= sx;
+            next = r.parent();
+        }
+        Some(scale)
+    }
+
     /// The slot of the nearest bound node at or above `node`, if any.
     fn owner(
         &self,
@@ -484,11 +534,11 @@ impl NodeRows {
             return false;
         }
         let mut owned = vec![None; text.primitives.len()];
-        for (range, node, _, _) in &text.owners {
-            let Some(slot) = self.owner(*node, ancestors) else {
+        for run in &text.owners {
+            let Some(slot) = self.owner(run.node, ancestors) else {
                 return false;
             };
-            for i in range.clone() {
+            for i in run.range.clone() {
                 if let Some(o) = owned.get_mut(i) {
                     *o = Some(slot * 2 + 1);
                 }
@@ -765,6 +815,17 @@ mod tests {
         assert!(NodeRows::row(&slot(invisible), &invisible, 1.0, false).is_some());
     }
 
+    fn run(range: Range<usize>, node: LayoutNodeId) -> super::super::cached_text::TextRun {
+        super::super::cached_text::TextRun {
+            range,
+            node,
+            element: 0,
+            k: 1.0,
+            snapped: true,
+            baked: None,
+        }
+    }
+
     fn id(n: u64) -> LayoutNodeId {
         slotmap::KeyData::from_ffi((1 << 32) | n).into()
     }
@@ -836,7 +897,7 @@ mod tests {
                 .push(blinc_gpu::GpuPrimitive::rect(0.0, 0.0, 2.0, 2.0));
         }
         // Run 0..2 belongs to node 3 (under 2), run 2..3 to node 4 (under 1).
-        text.owners = vec![(0..2, id(3), 0, 1.0), (2..3, id(4), 1, 1.0)];
+        text.owners = vec![run(0..2, id(3)), run(2..3, id(4))];
         assert!(rows.give_text_slots(&mut text, &ancestors));
         assert_eq!(text.primitives[0].node_slot(), Some(slot_of(2) * 2 + 1));
         assert_eq!(text.primitives[1].node_slot(), Some(slot_of(2) * 2 + 1));
@@ -852,7 +913,7 @@ mod tests {
         let mut text = TextBatch::default();
         text.primitives
             .push(blinc_gpu::GpuPrimitive::rect(0.0, 0.0, 2.0, 2.0));
-        text.owners = vec![(0..1, id(5), 0, 1.0)];
+        text.owners = vec![run(0..1, id(5))];
         assert!(!rows.give_text_slots(&mut text, &ancestors));
         assert_eq!(text.primitives[0].node_slot(), None);
     }

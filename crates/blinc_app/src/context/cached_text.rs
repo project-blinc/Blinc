@@ -1,15 +1,32 @@
 //! Cached text retains auxiliary ownership through selection and replay.
 use super::{Arc, GpuGlyph, GpuPrimitive, LayoutNodeId, PrimitiveBatch, RenderContext};
 
+/// The glyph primitives one text produced.
+#[derive(Clone)]
+pub(super) struct TextRun {
+    pub(super) range: std::ops::Range<usize>,
+    /// The node that owns the text.
+    pub(super) node: LayoutNodeId,
+    /// The index in `TextBatch::elements` of the text it came from.
+    pub(super) element: usize,
+    /// How many times finer than its laid-out size it was rasterized.
+    pub(super) k: f32,
+    /// Whether the glyphs sit snapped to whole device pixels at the painted pose, as they do while
+    /// their node is at rest. They are not while it moves, so that they move smoothly with it.
+    pub(super) snapped: bool,
+    /// Set while the glyphs are baked at the pose their node settled at, with no row: the node
+    /// slot lane they had before, which they take again when the node moves.
+    pub(super) baked: Option<[f32; 4]>,
+}
+
 #[derive(Clone, Default)]
 pub(super) struct TextBatch {
     pub(super) glyphs: Vec<GpuGlyph>,
     pub(super) primitives: Vec<GpuPrimitive>,
     pub(super) aux_data: Arc<Vec<[f32; 4]>>,
-    /// The node that owns each run of `primitives`, the index in `elements` of the text it came
-    /// from and how many times finer than its laid-out size it was rasterized. Kept only for the
-    /// glyphs of motion subtrees.
-    pub(super) owners: Vec<(std::ops::Range<usize>, LayoutNodeId, usize, f32)>,
+    /// The runs of `primitives` that came from one text each, with the node that owns it. Kept
+    /// only for the glyphs of motion subtrees.
+    pub(super) owners: Vec<TextRun>,
     /// The texts the runs were prepared from, so a run can be prepared again at another size.
     pub(super) elements: Arc<Vec<super::TextElement>>,
     /// Which assignment of node slots the primitives carry, zero for none.

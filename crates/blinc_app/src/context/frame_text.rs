@@ -12,18 +12,66 @@ pub(super) struct PreparedFrameText {
     pub(super) fg_decorations_by_layer: std::collections::HashMap<u32, Vec<GpuPrimitive>>,
 }
 
-/// The raster size for text shown `k` times larger than it is laid out: rounded up to a quarter
-/// so the atlas does not fill with a new size every frame, 1 when it is not shown larger.
-pub(super) fn quantize_raster(k: f32) -> f32 {
-    if !k.is_finite() || k < 1.05 {
+/// The raster size for text shown `k` times larger than it is laid out, 1 when it is not shown
+/// larger. In flight it is rounded up to a quarter so the atlas does not fill with a new size
+/// every frame; at rest it is the exact scale, so the glyphs land 1:1 on the display.
+pub(super) fn raster_size(k: f32, moving: bool) -> f32 {
+    if !k.is_finite() {
         return 1.0;
     }
-    (k.min(4.0) * 4.0).ceil() / 4.0
+    // A node at rest shown slightly smaller (a pressed button) is rasterized at that size too.
+    if !moving && (0.5..1.05).contains(&k) {
+        return (k * 100.0).round() / 100.0;
+    }
+    if k < 1.05 {
+        return 1.0;
+    }
+    let k = k.min(4.0);
+    if moving {
+        (k * 4.0).ceil() / 4.0
+    } else {
+        (k * 100.0).round() / 100.0
+    }
+}
+
+/// Whether an affine only moves and scales, so glyphs laid out on the pixel grid stay on it when
+/// their origins are snapped to whole device pixels.
+pub(super) fn is_axis_aligned(affine: Option<[f32; 6]>) -> bool {
+    affine.is_none_or(|[a, b, c, d, ..]| b.abs() < 1e-4 && c.abs() < 1e-4 && (a - d).abs() < 1e-3)
+}
+
+/// A coordinate rounded to a whole device pixel. A value on the half pixel goes the same way
+/// however much float noise the path that made it carries.
+pub(super) fn snap_px(v: f32) -> f32 {
+    (v - 1e-3).round()
+}
+
+/// Put each glyph in `batch` on the display grid, as static text is, for text whose transform
+/// keeps it axis-aligned: the scale in its local affine is folded into its quad, so the quad is
+/// the size of its bitmap and drawn with no transform, and the quad's top-left is rounded to a
+/// whole device pixel.
+pub(super) fn snap_to_pixels(batch: &mut PrimitiveBatch) {
+    for p in &mut batch.primitives {
+        let [x, y, w, h] = p.bounds;
+        let (sx, sy) = (p.local_affine[0], p.local_affine[3]);
+        let (fw, fh) = (w * sx.abs(), h * sy.abs());
+        let (left, top) = (x + w * 0.5 - fw * 0.5, y + h * 0.5 - fh * 0.5);
+        p.bounds = [snap_px(left), snap_px(top), fw, fh];
+        p.local_affine = [1.0, 0.0, 0.0, 1.0];
+    }
 }
 
 /// How much an affine `[a, b, c, d, tx, ty]` scales along its stronger axis.
 pub(super) fn affine_scale(affine: Option<[f32; 6]>) -> f32 {
     affine.map_or(1.0, |[a, b, c, d, ..]| a.hypot(b).max(c.hypot(d)))
+}
+
+/// Whether a bound node at or above `node` is moving.
+pub(super) fn chain_moving(tree: &blinc_layout::RenderTree, node: super::LayoutNodeId) -> bool {
+    let bindings = tree.motion_bindings_map();
+    std::iter::once(node)
+        .chain(tree.layout_tree.ancestors(node))
+        .any(|n| bindings.get(&n).is_some_and(|b| b.is_any_animating()))
 }
 
 /// The raster size motion text needs now: what its bound ancestors scale it by (or will, with
@@ -33,19 +81,19 @@ pub(super) fn needed_raster(
     text: &TextElement,
     by_target: bool,
 ) -> f32 {
-    raster_scale(tree, text.node, by_target).max(quantize_raster(affine_scale(text.css_affine)))
+    let (scale, moving) = raster_scale(tree, text.node, by_target);
+    raster_size(scale.max(affine_scale(text.css_affine)), moving)
 }
 
-/// How much finer than its laid-out size the glyphs of a motion subtree's text are rasterized:
-/// the scale its bound ancestors have, or with `by_target` will have when their springs arrive,
-/// rounded up to a quarter so the atlas does not fill with a new size every frame. Layout stays
-/// at the base size and the quads shrink back, so the text is placed where it always was and is
-/// sharp when the card has grown to it. 1 when nothing scales it up.
+/// How much its bound ancestors scale the text of `node`, now or (with `by_target`, while they
+/// move) when their springs arrive, and whether they are moving. Layout stays at the base size
+/// and the glyphs are rasterized finer, with the quads shrunk back, so the text is placed where
+/// it always was and is sharp when the card has grown to it.
 pub(super) fn raster_scale(
     tree: &blinc_layout::RenderTree,
     node: super::LayoutNodeId,
     by_target: bool,
-) -> f32 {
+) -> (f32, bool) {
     let value = |v: &Option<blinc_animation::SharedAnimatedValue>, target: bool| -> f32 {
         v.as_ref()
             .and_then(|v| {
@@ -66,7 +114,15 @@ pub(super) fn raster_scale(
             then *= axis(b, true);
         }
     }
-    quantize_raster(if by_target { now.max(then) } else { now })
+    let moving = chain_moving(tree, node);
+    (
+        if moving && by_target {
+            now.max(then)
+        } else {
+            now
+        },
+        moving,
+    )
 }
 
 impl RenderContext {
@@ -77,7 +133,7 @@ impl RenderContext {
         fg_texts: &[TextElement],
         motion_subtree_texts: &[TextElement],
         motion_subtree_svgs: &[SvgElement],
-        raster_scales: &std::collections::HashMap<super::LayoutNodeId, f32>,
+        raster_scales: &std::collections::HashMap<super::LayoutNodeId, (f32, bool)>,
         viewport: (u32, u32),
         scale_factor: f32,
     ) -> PreparedFrameText {
@@ -205,7 +261,7 @@ impl RenderContext {
 
             // Text a CSS transform scales up is rasterized at the size it is shown, laid out at the
             // base size.
-            let k = quantize_raster(affine_scale(text.css_affine));
+            let k = raster_size(affine_scale(text.css_affine), false);
             match self
                 .text_ctx
                 .prepare_text_with_style(
@@ -245,6 +301,9 @@ impl RenderContext {
                     let mut owned = text_clip::prepare_glyphs(text, glyphs, (width, height));
                     if let Some(affine) = text.css_affine {
                         cached_text::convert_affine(&mut owned, affine, scale_factor, text.z_index);
+                        if is_axis_aligned(Some(affine)) {
+                            snap_to_pixels(&mut owned);
+                        }
                         css_transformed_text_prims.merge(owned);
                     } else {
                         // Snap glyph origins to physical pixels for sharp atlas sampling.
@@ -364,12 +423,16 @@ impl RenderContext {
         for (index, text) in motion_subtree_texts.iter().enumerate() {
             let patch_start = motion_subtree_text_prims.primitives.len();
             // Rasterize finer than the laid-out size when the card will be shown larger.
-            let k = raster_scales
+            let (binding_scale, moving) = raster_scales
                 .get(&text.node)
                 .copied()
-                .unwrap_or(1.0)
-                .max(quantize_raster(affine_scale(text.css_affine)));
-            if let Some(owned) = self.prepare_motion_text(text, k, scale_factor, (width, height)) {
+                .unwrap_or((1.0, false));
+            let k = raster_size(binding_scale.max(affine_scale(text.css_affine)), moving);
+            // Text snaps to the display grid at rest and moves smoothly with its node.
+            let snap = !moving;
+            if let Some(owned) =
+                self.prepare_motion_text(text, k, scale_factor, (width, height), snap)
+            {
                 motion_subtree_text_prims.append(owned);
             }
             // Record the emitted range for the dispatch-time live
@@ -377,12 +440,14 @@ impl RenderContext {
             // ancestor (its alpha was baked at BASE, factor excluded).
             let patch_end = motion_subtree_text_prims.primitives.len();
             if patch_end > patch_start {
-                motion_subtree_text_prims.owners.push((
-                    patch_start..patch_end,
-                    text.node,
-                    index,
+                motion_subtree_text_prims.owners.push(cached_text::TextRun {
+                    range: patch_start..patch_end,
+                    node: text.node,
+                    element: index,
                     k,
-                ));
+                    snapped: snap,
+                    baked: None,
+                });
             }
             if patch_end > patch_start
                 && let Some(ancestor) = text.composite_ancestor
@@ -431,6 +496,7 @@ impl RenderContext {
         k: f32,
         scale_factor: f32,
         viewport: (u32, u32),
+        snap: bool,
     ) -> Option<PrimitiveBatch> {
         let (width, height) = viewport;
         if let Some([clip_x, clip_y, clip_w, clip_h]) = text.clip_bounds {
@@ -524,42 +590,148 @@ impl RenderContext {
             scale_factor,
             text.z_index,
         );
+        if snap && is_axis_aligned(text.css_affine) {
+            snap_to_pixels(&mut owned);
+        }
         Some(owned)
     }
 }
 
 impl RenderContext {
-    /// Prepare again, at the size they now need, the glyphs of motion text whose springs are
-    /// heading for a different scale than they were rasterized for, in place: each keeps its slot and the pose it was
-    /// painted at, so only its bitmap changes and nothing else is repainted.
+    /// Keep the glyphs of motion text sharp as their nodes move and when they stop, in place:
+    /// each run keeps its slot and the pose it was painted at while its node moves, and only its
+    /// bitmap is prepared again when the scale its springs are heading for changes. When the
+    /// node stops, the run is prepared at the exact scale it ended at, placed through the rows
+    /// on the CPU and snapped to whole device pixels, and drawn with no row, so it sits on the
+    /// display grid as static text does. When the node moves again the run returns to its
+    /// painted pose and its slot.
     pub(super) fn refine_motion_text(&mut self, tree: &blinc_layout::RenderTree, dpi: f32) {
         let Some(mut text) = self.cached_motion_subtree_text_prims.take() else {
             return;
         };
-        if text.aux_data.is_empty() {
+        if text.aux_data.is_empty() && text.glyphs.is_empty() {
             let viewport = self.renderer.viewport_size();
+            let bindings = tree.motion_bindings_map();
+            let ancestors = |n: super::LayoutNodeId| tree.layout_tree.ancestors(n);
             for i in 0..text.owners.len() {
-                let (range, node, element, k) = text.owners[i].clone();
-                let Some(source) = text.elements.get(element).cloned() else {
+                let run = text.owners[i].clone();
+                let Some(source) = text.elements.get(run.element).cloned() else {
                     continue;
                 };
-                let needed = needed_raster(tree, &source, true);
-                if (needed - k).abs() < 1e-3 {
-                    continue;
-                }
-                let Some(fresh) = self.prepare_motion_text(&source, needed, dpi, viewport) else {
+                let Some(lane) = text.primitives.get(run.range.start).map(|p| p.node_slot) else {
                     continue;
                 };
-                if fresh.primitives.len() != range.len() {
-                    continue;
+                let moving = chain_moving(tree, run.node);
+                match (moving, run.baked) {
+                    // Moving again: back to the painted pose, at the size it now needs.
+                    (true, Some(slot_lane)) => {
+                        let needed = needed_raster(tree, &source, true);
+                        if let Some(fresh) =
+                            self.prepare_motion_text(&source, needed, dpi, viewport, false)
+                            && fresh.primitives.len() == run.range.len()
+                        {
+                            for (old, new) in text.primitives[run.range.clone()]
+                                .iter_mut()
+                                .zip(fresh.primitives)
+                            {
+                                *old = new;
+                                old.node_slot = slot_lane;
+                            }
+                            text.owners[i].k = needed;
+                            text.owners[i].snapped = false;
+                            text.owners[i].baked = None;
+                        }
+                    }
+                    // Moving: the bitmap follows the scale it is heading for.
+                    (true, None) => {
+                        let needed = needed_raster(tree, &source, true);
+                        if (needed - run.k).abs() < 1e-3 && !run.snapped {
+                            continue;
+                        }
+                        // Unsnapped, so it moves smoothly with the card.
+                        let Some(fresh) =
+                            self.prepare_motion_text(&source, needed, dpi, viewport, false)
+                        else {
+                            continue;
+                        };
+                        if fresh.primitives.len() != run.range.len() {
+                            continue;
+                        }
+                        for (old, new) in text.primitives[run.range.clone()]
+                            .iter_mut()
+                            .zip(fresh.primitives)
+                        {
+                            // The slot and the clip lane stay as they were given.
+                            *old = new;
+                            old.node_slot = lane;
+                        }
+                        text.owners[i].k = needed;
+                        text.owners[i].snapped = false;
+                    }
+                    // Stopped: bake the pose it ended at.
+                    (false, None) => {
+                        let Some(row) = self.node_rows.text_row(run.node, &ancestors) else {
+                            continue;
+                        };
+                        if !is_axis_aligned(source.css_affine) {
+                            continue;
+                        }
+                        if self.node_rows.chain_is_rest(row) {
+                            // Back where it was painted: onto the display grid again.
+                            if !run.snapped {
+                                let k = ((affine_scale(source.css_affine)).clamp(0.25, 4.0)
+                                    * 100.0)
+                                    .round()
+                                    / 100.0;
+                                if let Some(fresh) =
+                                    self.prepare_motion_text(&source, k, dpi, viewport, true)
+                                    && fresh.primitives.len() == run.range.len()
+                                {
+                                    for (old, new) in text.primitives[run.range.clone()]
+                                        .iter_mut()
+                                        .zip(fresh.primitives)
+                                    {
+                                        *old = new;
+                                        old.node_slot = lane;
+                                    }
+                                    text.owners[i].k = k;
+                                    text.owners[i].snapped = true;
+                                }
+                            }
+                            continue;
+                        }
+                        let Some(scale) = self.node_rows.uniform_scale(row) else {
+                            continue;
+                        };
+                        let k = ((affine_scale(source.css_affine) * scale).clamp(0.25, 4.0)
+                            * 100.0)
+                            .round()
+                            / 100.0;
+                        let Some(fresh) =
+                            self.prepare_motion_text(&source, k, dpi, viewport, false)
+                        else {
+                            continue;
+                        };
+                        if fresh.primitives.len() != run.range.len() {
+                            continue;
+                        }
+                        let rows = self.node_rows.rows();
+                        for (old, new) in text.primitives[run.range.clone()]
+                            .iter_mut()
+                            .zip(fresh.primitives)
+                        {
+                            let mut glyph = new;
+                            glyph.node_slot = lane;
+                            let mut placed = blinc_gpu::node_table::resolve_primitive(rows, &glyph);
+                            placed.bounds[0] = snap_px(placed.bounds[0]);
+                            placed.bounds[1] = snap_px(placed.bounds[1]);
+                            *old = placed;
+                        }
+                        text.owners[i].k = k;
+                        text.owners[i].baked = Some(lane);
+                    }
+                    (false, Some(_)) => {}
                 }
-                for (old, new) in text.primitives[range].iter_mut().zip(fresh.primitives) {
-                    // The slot and the clip lane stay as they were given.
-                    let lane = old.node_slot;
-                    *old = new;
-                    old.node_slot = lane;
-                }
-                text.owners[i].3 = needed;
             }
         }
         self.cached_motion_subtree_text_prims = Some(text);

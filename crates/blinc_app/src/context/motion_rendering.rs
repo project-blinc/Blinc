@@ -369,10 +369,11 @@ impl RenderContext {
 
         // Text that a bound ancestor scales up is rasterized at the size it will be shown.
         let by_target = self.renderer.node_table_enabled() || !self.promote_motion;
-        let raster_scales: std::collections::HashMap<LayoutNodeId, f32> = motion_subtree_texts
-            .iter()
-            .map(|t| (t.node, frame_text::raster_scale(tree, t.node, by_target)))
-            .collect();
+        let raster_scales: std::collections::HashMap<LayoutNodeId, (f32, bool)> =
+            motion_subtree_texts
+                .iter()
+                .map(|t| (t.node, frame_text::raster_scale(tree, t.node, by_target)))
+                .collect();
 
         let PreparedFrameText {
             glyphs_by_layer,
