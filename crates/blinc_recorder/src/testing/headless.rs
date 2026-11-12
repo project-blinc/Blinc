@@ -57,6 +57,9 @@ fn shared_scheduler() -> Arc<Mutex<AnimationScheduler>> {
     SCHEDULER
         .get_or_init(|| {
             let scheduler = AnimationScheduler::new();
+            // Frames step by a fixed `dt`; the render state's own tick must not add the time the
+            // test took to run.
+            scheduler.set_manual_stepping(true);
             if !blinc_animation::is_scheduler_initialized() {
                 let handle = scheduler.handle();
                 blinc_animation::set_global_scheduler(handle.clone());

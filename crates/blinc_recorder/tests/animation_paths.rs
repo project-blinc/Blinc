@@ -426,12 +426,9 @@ fn scenes() -> Vec<Scene> {
     ]
 }
 
-/// A pixel differs when a channel is further than this from the reference. The edges of a moving
-/// box vary a little between runs; a wrong position or a missing element varies far more.
-const LEVELS: u8 = 24;
-
-/// Pixels a frame may differ in without the paths being said to differ.
-const EDGE_NOISE: usize = 16;
+/// A pixel differs when a channel is further than this from the reference: edge rounding is not a
+/// difference.
+const LEVELS: u8 = 2;
 
 /// Scenes in which the patched path is known to differ from a full paint. They are listed so the
 /// rest are held to the reference; a scene that stops differing is an error until it is taken off
@@ -462,11 +459,10 @@ impl Report {
             .unwrap()
     }
 
-    /// Steps that differ by more than the handful of edge pixels rounding moves.
     fn differing_steps(&self) -> usize {
         self.per_step
             .iter()
-            .filter(|(pixels, _)| *pixels > EDGE_NOISE)
+            .filter(|(pixels, _)| *pixels > 0)
             .count()
     }
 }

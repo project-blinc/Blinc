@@ -301,6 +301,8 @@ pub struct AnimationScheduler {
     /// to keep poking it from the bg thread on every tick. Reset to
     /// `false` whenever the bg thread ticks while inactive.
     last_active: Arc<AtomicBool>,
+    /// The caller steps time with [`Self::tick_by`]; `tick` leaves the animations alone.
+    manual_stepping: Arc<AtomicBool>,
 }
 
 // SAFETY: On wasm32 the wake callback is `Arc<dyn Fn()>` (no `Send +
@@ -341,7 +343,16 @@ impl AnimationScheduler {
             wake_callback: None,
             wakeup: Arc::new((Mutex::new(false), Condvar::new())),
             last_active: Arc::new(AtomicBool::new(false)),
+            manual_stepping: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Hand time to the caller: with it on, [`Self::tick`] steps nothing and reports whether
+    /// anything is active, and only [`Self::tick_by`] moves the animations. An offscreen or test
+    /// driver that steps a fixed `dt` sets this so a tick made on the way by a frame (the render
+    /// state's) does not add the time since the last frame.
+    pub fn set_manual_stepping(&self, on: bool) {
+        self.manual_stepping.store(on, Ordering::Relaxed);
     }
 
     /// Wake the background thread if it's parked.
@@ -919,6 +930,9 @@ impl AnimationScheduler {
         if self.thread_handle.is_some() {
             return self.has_active_animations();
         }
+        if self.manual_stepping.load(Ordering::Relaxed) {
+            return self.has_active_animations();
+        }
 
         let dt = {
             let mut inner = self.inner.lock().unwrap();
@@ -1273,6 +1287,7 @@ impl Clone for AnimationScheduler {
             wake_callback: self.wake_callback.clone(),
             wakeup: Arc::clone(&self.wakeup),
             last_active: Arc::clone(&self.last_active),
+            manual_stepping: Arc::clone(&self.manual_stepping),
         }
     }
 }
@@ -2661,6 +2676,29 @@ mod tests {
             "{first:?}"
         );
         assert_eq!(first, run());
+    }
+
+    /// With manual stepping on, a tick that reads the clock steps nothing, so the values depend
+    /// on the fixed steps alone.
+    #[test]
+    fn a_tick_by_the_clock_steps_nothing_when_time_is_manual() {
+        let run = |sleep: bool| {
+            let scheduler = AnimationScheduler::new();
+            scheduler.set_manual_stepping(true);
+            let mut value = AnimatedValue::new(scheduler.handle(), 0.0, SpringConfig::snappy());
+            value.set_target(100.0);
+            let mut seen = Vec::new();
+            for _ in 0..10 {
+                scheduler.tick_by(1.0 / 60.0);
+                if sleep {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                scheduler.tick();
+                seen.push(value.get());
+            }
+            seen
+        };
+        assert_eq!(run(false), run(true));
     }
 
     #[test]
