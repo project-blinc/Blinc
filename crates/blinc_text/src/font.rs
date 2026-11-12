@@ -148,8 +148,13 @@ impl FontMetrics {
     }
 }
 
+/// Numbers the faces loaded, so work made for one can be kept against it.
+static NEXT_FACE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
 /// A parsed font face
 pub struct FontFace {
+    /// Names this face among those loaded; its data does not change.
+    id: u64,
     /// Raw font data (kept alive for ttf-parser) - can be owned or memory-mapped
     data: FontData,
     /// Face index within the font file (for TTC files)
@@ -234,6 +239,7 @@ impl FontFace {
         let glyph_count = face.number_of_glyphs();
 
         Ok(Self {
+            id: NEXT_FACE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             data,
             face_index,
             metrics,
@@ -278,6 +284,16 @@ impl FontFace {
     pub fn family_name(&self) -> &str {
         &self.family_name
     }
+    /// The data this face was parsed from, shared rather than copied.
+    pub(crate) fn font_data(&self) -> &FontData {
+        &self.data
+    }
+
+    /// Names this face among those loaded. Two faces with one id are the same data.
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+
     /// The `wght` axis value to apply when shaping and rasterizing, if
     /// this face is variable and was asked for a weight its default
     /// instance does not provide.
