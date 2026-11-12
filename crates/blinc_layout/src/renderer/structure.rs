@@ -17,6 +17,9 @@ pub(crate) trait Structural {
     type Structure: PartialEq;
 
     fn structure(&self) -> Self::Structure;
+
+    /// Whether what a text node takes its font from changed between two structures.
+    fn font_changed(before: &Self::Structure, after: &Self::Structure) -> bool;
 }
 
 /// What the passes derived from the render nodes read of one.
@@ -66,6 +69,10 @@ struct Font {
 
 impl Structural for RenderNode {
     type Structure = Structure;
+
+    fn font_changed(before: &Structure, after: &Structure) -> bool {
+        before.font != after.font
+    }
 
     fn structure(&self) -> Structure {
         let p = &self.props;

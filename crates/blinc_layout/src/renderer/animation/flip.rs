@@ -31,9 +31,11 @@ impl RenderTree {
     /// keyed by stable string IDs, not volatile LayoutNodeIds.
     pub fn update_flip_bounds(&mut self) {
         self.flip_previous_bounds.clear();
-        for (node_id, _render_node) in &self.render_nodes {
-            if let Some(element_id) = self.element_registry.get_id(*node_id)
-                && let Some(bounds) = self.layout_tree.get_absolute_bounds(*node_id)
+        // The elements with ids: the registered ids, not every node.
+        for element_id in self.element_registry.all_ids() {
+            if let Some(node_id) = self.element_registry.get(&element_id)
+                && self.render_nodes.contains_key(&node_id)
+                && let Some(bounds) = self.layout_tree.get_absolute_bounds(node_id)
             {
                 self.flip_previous_bounds.insert(element_id, bounds);
             }

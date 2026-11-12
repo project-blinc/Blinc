@@ -162,18 +162,53 @@ impl RenderTree {
     /// Start the animations the stateless rules give nodes that play none,
     /// whatever the rule keys on: an attribute, a class in a compound, a
     /// descendant.
-    pub(crate) fn start_rule_animations(&mut self) {
+    pub(crate) fn start_rule_animations(
+        &mut self,
+        class_to_nodes: &std::collections::HashMap<String, Vec<LayoutNodeId>>,
+    ) {
+        use crate::css_parser::RuleKey;
         let Some(stylesheet) = self.stylesheet.clone() else {
             return;
         };
-        if !stylesheet
-            .complex_rules()
-            .iter()
-            .any(|(selector, style)| style.animation.is_some() && !selector.has_state())
-        {
+        let rules = stylesheet.complex_rules();
+        let animating: Vec<usize> = (0..rules.len())
+            .filter(|i| rules[*i].1.animation.is_some() && !rules[*i].0.has_state())
+            .collect();
+        if animating.is_empty() {
             return;
         }
-        let nodes: Vec<LayoutNodeId> = self.render_nodes.keys().copied().collect();
+        // Only the nodes an animation rule can reach are asked: those with the class, the
+        // attribute or the id it is keyed on. A rule keyed on a type, or on nothing, asks them all.
+        let mut reached: HashSet<LayoutNodeId> = HashSet::new();
+        let mut all = false;
+        for &i in &animating {
+            match stylesheet.rule_key(i) {
+                RuleKey::Class(class) => {
+                    if let Some(ids) = class_to_nodes.get(class) {
+                        reached.extend(ids);
+                    }
+                }
+                RuleKey::Attribute(name) => {
+                    for (entry, ids) in class_to_nodes {
+                        if entry.split_once('=').is_some_and(|(n, _)| n == name) {
+                            reached.extend(ids);
+                        }
+                    }
+                }
+                RuleKey::Id(id) => {
+                    reached.extend(self.element_registry.get(id));
+                }
+                RuleKey::Type(_) | RuleKey::Universal => all = true,
+            }
+        }
+        let nodes: Vec<LayoutNodeId> = if all {
+            self.render_nodes.keys().copied().collect()
+        } else {
+            reached
+                .into_iter()
+                .filter(|n| self.render_nodes.contains_key(n))
+                .collect()
+        };
         for node in nodes {
             let Some(stable) = self.stable_id(node) else {
                 continue;

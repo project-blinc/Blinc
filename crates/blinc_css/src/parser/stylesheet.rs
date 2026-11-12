@@ -69,45 +69,71 @@ struct RuleIndex {
     universal: Vec<u32>,
 }
 
+/// What a rule's subject needs of an element, as far as the index is concerned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RuleKey<'a> {
+    Id(&'a str),
+    Class(&'a str),
+    /// The name of an attribute, which an element has as a `name=value` class entry.
+    Attribute(&'a str),
+    Type(&'a str),
+    /// Nothing the index can tell: any element may match.
+    Universal,
+}
+
+impl RuleKey<'_> {
+    fn of(selector: &ComplexSelector) -> RuleKey<'_> {
+        let Some((subject, _)) = selector.segments.last() else {
+            return RuleKey::Universal;
+        };
+        let find = |want: fn(&SelectorPart) -> Option<&str>| subject.parts.iter().find_map(want);
+        if let Some(id) = find(|p| match p {
+            SelectorPart::Id(id) => Some(id.as_str()),
+            _ => None,
+        }) {
+            RuleKey::Id(id)
+        } else if let Some(class) = find(|p| match p {
+            SelectorPart::Class(c) => Some(c.as_str()),
+            _ => None,
+        }) {
+            RuleKey::Class(class)
+        } else if let Some(name) = find(|p| match p {
+            SelectorPart::Attribute { name, .. } => Some(name.as_str()),
+            _ => None,
+        }) {
+            RuleKey::Attribute(name)
+        } else if let Some(element) = find(|p| match p {
+            SelectorPart::Type(t) => Some(t.as_str()),
+            _ => None,
+        }) {
+            RuleKey::Type(element)
+        } else {
+            RuleKey::Universal
+        }
+    }
+}
+
 impl RuleIndex {
     fn of(rules: &[(ComplexSelector, ElementStyle)]) -> Self {
         let mut index = RuleIndex::default();
         for (i, (selector, _)) in rules.iter().enumerate() {
             let i = i as u32;
-            let Some((subject, _)) = selector.segments.last() else {
-                continue;
-            };
-            let key = |want: fn(&SelectorPart) -> Option<&str>| subject.parts.iter().find_map(want);
-            if let Some(id) = key(|p| match p {
-                SelectorPart::Id(id) => Some(id.as_str()),
-                _ => None,
-            }) {
-                index.by_id.entry(id.to_string()).or_default().push(i);
-            } else if let Some(class) = key(|p| match p {
-                SelectorPart::Class(c) => Some(c.as_str()),
-                _ => None,
-            }) {
-                index.by_class.entry(class.to_string()).or_default().push(i);
-            } else if let Some(name) = key(|p| match p {
-                SelectorPart::Attribute { name, .. } => Some(name.as_str()),
-                _ => None,
-            }) {
-                index
+            match RuleKey::of(selector) {
+                RuleKey::Id(id) => index.by_id.entry(id.to_string()).or_default().push(i),
+                RuleKey::Class(class) => {
+                    index.by_class.entry(class.to_string()).or_default().push(i)
+                }
+                RuleKey::Attribute(name) => index
                     .by_attribute
                     .entry(name.to_string())
                     .or_default()
-                    .push(i);
-            } else if let Some(element) = key(|p| match p {
-                SelectorPart::Type(t) => Some(t.as_str()),
-                _ => None,
-            }) {
-                index
+                    .push(i),
+                RuleKey::Type(element) => index
                     .by_type
                     .entry(element.to_string())
                     .or_default()
-                    .push(i);
-            } else {
-                index.universal.push(i);
+                    .push(i),
+                RuleKey::Universal => index.universal.push(i),
             }
         }
         index
@@ -501,6 +527,14 @@ impl Stylesheet {
     /// Get all complex selector rules
     pub fn complex_rules(&self) -> &[(ComplexSelector, ElementStyle)] {
         &self.complex_rules
+    }
+
+    /// What the rule at `index` of [`Self::complex_rules`] needs of the elements it matches, by
+    /// its subject: the key it is indexed under.
+    pub fn rule_key(&self, index: usize) -> RuleKey<'_> {
+        self.complex_rules
+            .get(index)
+            .map_or(RuleKey::Universal, |(selector, _)| RuleKey::of(selector))
     }
 
     /// The indices into [`Self::complex_rules`] of the rules that can match an element with this

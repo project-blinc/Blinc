@@ -581,7 +581,7 @@ impl RenderTree {
 
         // Rules keyed on more than one class: attributes, compounds,
         // descendants.
-        self.start_rule_animations();
+        self.start_rule_animations(&class_to_nodes);
     }
 
     /// Write the playing CSS animations' current values onto their nodes.

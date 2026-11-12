@@ -480,25 +480,31 @@ impl LayoutTree {
     /// parent, which is the control an author is entitled to. Only the
     /// value `w_fit`/`h_fit` set to prevent stretching yields, and only
     /// to a parent that actually names an alignment.
-    fn resolve_incidental_align_self(&mut self, root: LayoutNodeId) {
+    fn resolve_incidental_align_self(&mut self, _root: LayoutNodeId) {
         if self.incidental_align_self.is_empty() {
             return;
         }
-        let mut stack = vec![root];
-        while let Some(id) = stack.pop() {
-            let children = self.children(id);
-            if self.get_style(id).is_some_and(|s| s.align_items.is_some()) {
-                for &child in &children {
-                    if self.incidental_align_self.contains(&child)
-                        && let Some(mut style) = self.get_style(child)
-                        && style.align_self.is_some()
-                    {
-                        style.align_self = None;
-                        self.set_style(child, style);
-                    }
-                }
+        // The nodes marked, each against its parent: what has to change is among them, so the
+        // tree is not walked.
+        let marked: Vec<LayoutNodeId> = self.incidental_align_self.iter().copied().collect();
+        for child in marked {
+            let Some(&node) = self.node_map.get(child) else {
+                continue;
+            };
+            let Some(parent) = self.taffy.parent(node) else {
+                continue;
+            };
+            let parent_names_alignment = self
+                .taffy
+                .style(parent)
+                .is_ok_and(|s| s.align_items.is_some());
+            if parent_names_alignment
+                && let Some(mut style) = self.get_style(child)
+                && style.align_self.is_some()
+            {
+                style.align_self = None;
+                self.set_style(child, style);
             }
-            stack.extend(children);
         }
     }
 

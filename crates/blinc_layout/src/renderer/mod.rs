@@ -728,7 +728,7 @@ pub struct RenderTree {
     /// The underlying layout tree
     pub layout_tree: LayoutTree,
     /// Render data for each node (ordered by insertion/tree order)
-    render_nodes: tracked::Tracked<IndexMap<LayoutNodeId, RenderNode>>,
+    render_nodes: tracked::Tracked<IndexMap<LayoutNodeId, RenderNode>, LayoutNodeId>,
     ime_bindings: HashMap<LayoutNodeId, crate::ime::ImeBinding>,
     accessibility_bindings: HashMap<LayoutNodeId, crate::accessibility::AccessibilityBinding>,
     /// Root node ID
@@ -2512,19 +2512,49 @@ impl RenderTree {
         let pending: Vec<(LayoutNodeId, TextLook)> = self
             .render_nodes
             .iter()
-            .filter_map(|(&id, render_node)| {
-                let ElementType::Text(text) = &render_node.element_type else {
-                    return None;
-                };
-                let inherited = self.inherited_font(id);
-                let wanted = TextLook::wanted(text, &render_node.props, &inherited);
-                (wanted != TextLook::of(text)).then_some((id, wanted))
+            .filter_map(|(&id, render_node)| self.text_look_due(id, render_node))
+            .collect();
+
+        for (id, look) in pending {
+            self.apply_text_look(id, look);
+        }
+    }
+
+    /// `sync_text_measure_contexts` for the nodes a change log names: each, and what takes its
+    /// font from it where its own font inputs changed.
+    fn sync_text_measure_contexts_for(&mut self, changes: &[(LayoutNodeId, bool)]) {
+        let mut check: HashSet<LayoutNodeId> = HashSet::new();
+        for &(id, font_changed) in changes {
+            check.insert(id);
+            if font_changed {
+                check.extend(self.element_registry.get_descendants(id));
+            }
+        }
+        let pending: Vec<(LayoutNodeId, TextLook)> = check
+            .into_iter()
+            .filter_map(|id| {
+                let render_node = self.render_nodes.get(&id)?;
+                self.text_look_due(id, render_node)
             })
             .collect();
 
         for (id, look) in pending {
             self.apply_text_look(id, look);
         }
+    }
+
+    /// The look a text node should be measured at, when it is not the one it was.
+    fn text_look_due(
+        &self,
+        id: LayoutNodeId,
+        render_node: &RenderNode,
+    ) -> Option<(LayoutNodeId, TextLook)> {
+        let ElementType::Text(text) = &render_node.element_type else {
+            return None;
+        };
+        let inherited = self.inherited_font(id);
+        let wanted = TextLook::wanted(text, &render_node.props, &inherited);
+        (wanted != TextLook::of(text)).then_some((id, wanted))
     }
 
     /// Measure a text node at `look` and bring everything that depends on it
@@ -2600,7 +2630,12 @@ impl RenderTree {
         // reach the contexts here, not at build time. A text node's font is part of what the
         // revision of the nodes counts, so with none changed there is nothing to bring up to date.
         if self.text_synced_revision.get() != Some(self.render_nodes.revision()) {
-            self.sync_text_measure_contexts();
+            // What changed since the last sync, when the log can say: the nodes inserted and
+            // those whose font inputs changed, with what takes its font from them.
+            match self.render_nodes.take_changes() {
+                Some(changes) => self.sync_text_measure_contexts_for(&changes),
+                None => self.sync_text_measure_contexts(),
+            }
             self.text_synced_revision
                 .set(Some(self.render_nodes.revision()));
         }
@@ -2781,10 +2816,11 @@ impl RenderTree {
         // Clear the previous cache
         self.element_registry.clear_bounds();
 
-        // Iterate through all render nodes and cache bounds for those with string IDs
-        for (node_id, _render_node) in &self.render_nodes {
-            if let Some(string_id) = self.element_registry.get_id(*node_id)
-                && let Some(bounds) = self.get_absolute_bounds(*node_id)
+        // Cache bounds for the elements with string IDs: the registered ids, not every node.
+        for string_id in self.element_registry.all_ids() {
+            if let Some(node_id) = self.element_registry.get(&string_id)
+                && self.render_nodes.contains_key(&node_id)
+                && let Some(bounds) = self.get_absolute_bounds(node_id)
             {
                 self.element_registry.update_bounds(
                     &string_id,
@@ -3668,6 +3704,44 @@ mod tests {
         tree.compute_layout(400.0, 200.0);
 
         assert_eq!(tree.get_bounds(text_node).unwrap().width, first);
+    }
+
+    /// A font set on a container reaches the text under it, however deep, by the log of what
+    /// changed: the layout is brought up to date with the nodes that changed and what takes its
+    /// font from them, not by looking at every text node.
+    #[test]
+    fn a_font_set_on_a_container_reaches_the_text_under_it() {
+        let ui = div()
+            .w(400.0)
+            .h(200.0)
+            .child(div().child(div().child(crate::text::text("abcdefghij"))));
+        let mut tree = RenderTree::from_element(&ui);
+        let text_node = tree
+            .render_nodes
+            .keys()
+            .copied()
+            .find(|&id| tree.layout_tree.text_context(id).is_some())
+            .expect("a text node with a measure context");
+        let container = tree.root().unwrap();
+
+        tree.compute_layout(400.0, 200.0);
+        let small = tree.get_bounds(text_node).unwrap().width;
+
+        // A change that is not a font does not move the text.
+        tree.update_render_props(container, |p| p.opacity = 0.5);
+        tree.compute_layout(400.0, 200.0);
+        assert_eq!(tree.get_bounds(text_node).unwrap().width, small);
+
+        // The container's font size does, two levels down.
+        tree.update_render_props(container, |p| p.font_size = Some(40.0));
+        tree.compute_layout(400.0, 200.0);
+        let large = tree.get_bounds(text_node).unwrap().width;
+        assert!(large > small * 1.5, "{small} then {large}");
+
+        // And back.
+        tree.update_render_props(container, |p| p.font_size = None);
+        tree.compute_layout(400.0, 200.0);
+        assert_eq!(tree.get_bounds(text_node).unwrap().width, small);
     }
 
     /// A rebuild queued against a tree that has since been replaced
