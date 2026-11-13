@@ -957,6 +957,48 @@ fn keyframe_scene(name: &'static str, label: bool) -> Scene {
     }
 }
 
+const FLIP_CSS: &str = ".slide { transition: transform 300ms ease-out; }";
+
+/// Cards that a banner appearing above them pushes down, each sliding from where it was to where
+/// layout puts it (a FLIP transition): laid out and painted at the new place, drawn offset from it.
+fn flip_scene(name: &'static str, label: bool) -> Scene {
+    Scene {
+        name,
+        steps: 22,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let open = signal(false);
+            ui.css(FLIP_CSS);
+            ui.mount(move |_| {
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .flex_col()
+                    .items_center()
+                    .gap(8.0)
+                    .p(8.0)
+                    .when(open, |d| {
+                        d.child(
+                            div()
+                                .w(200.0)
+                                .h(46.0)
+                                .rounded(8.0)
+                                .bg(Color::rgb(0.9, 0.5, 0.2)),
+                        )
+                    })
+                    .child(card(label).id("slide-a").class("slide"))
+                    .child(card(label).id("slide-b").class("slide"))
+            });
+            Box::new(move |_, step| {
+                if step == 0 {
+                    open.set(true);
+                }
+            })
+        }),
+    }
+}
+
 fn scenes() -> Vec<Scene> {
     let all = Channels {
         translate: true,
@@ -1033,6 +1075,9 @@ fn scenes() -> Vec<Scene> {
         transition_scene("css transition, no text", false),
         keyframe_scene("css keyframes", true),
         keyframe_scene("css keyframes, no text", false),
+        flip_scene("flip", true),
+        flip_scene("flip, no text", false),
+        flip_grid_scene(30),
     ]
 }
 
@@ -2260,6 +2305,112 @@ fn the_scrollbar_of_a_container_on_rows_is_drawn_and_follows_the_scroll() {
                     "the thumb did not follow the scroll"
                 );
             }
+        }
+    }
+}
+
+/// A FLIP slide plays on rows: the cards move for most of the frames and the frames the walker
+/// paints are the one where layout changed and the one where the slide ends.
+#[test]
+fn a_flip_slide_is_moved_by_rows() {
+    for scene in [flip_scene("flip", true), flip_scene("flip, no text", false)] {
+        let Some((frames, paths)) = run_logged(&scene, Path::Rows) else {
+            return;
+        };
+        let moved = frames.windows(2).filter(|w| w[0].data != w[1].data).count();
+        assert!(
+            moved >= 12,
+            "{}: the picture changed in only {moved} frames: it does not slide",
+            scene.name
+        );
+        let by_rows = paths.iter().filter(|p| p.ends_with("rows:applied")).count();
+        let full = paths.iter().filter(|p| p.starts_with("full")).count();
+        assert!(
+            by_rows >= 14 && full <= 3,
+            "{}: {by_rows} frames moved by rows, {full} painted in full: {paths:?}",
+            scene.name
+        );
+    }
+}
+
+/// A banner that appears above a wrapped grid of `count` tiles and pushes every one down, each
+/// sliding from where it was (FLIP).
+fn flip_grid_scene(count: usize) -> Scene {
+    Scene {
+        name: "flip grid",
+        steps: 24,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let open = signal(false);
+            ui.css(FLIP_CSS);
+            ui.mount(move |_| {
+                let mut grid = div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .flex_row()
+                    .flex_wrap()
+                    .gap(4.0)
+                    .p(4.0)
+                    .when(open, |d| {
+                        d.child(
+                            div()
+                                .w_full()
+                                .h(40.0)
+                                .rounded(8.0)
+                                .bg(Color::rgb(0.9, 0.5, 0.2)),
+                        )
+                    });
+                for i in 0..count {
+                    grid = grid.child(
+                        div()
+                            .id(format!("tile-{i}"))
+                            .class("slide")
+                            .w(34.0)
+                            .h(34.0)
+                            .rounded(6.0)
+                            .bg(Color::rgb(0.2, 0.45, 0.9))
+                            .border(2.0, Color::rgba(1.0, 1.0, 1.0, 0.8))
+                            .child(text(format!("{i}")).size(11.0).color(Color::WHITE)),
+                    );
+                }
+                grid
+            });
+            Box::new(move |_, step| {
+                if step == 0 {
+                    open.set(true);
+                }
+            })
+        }),
+    }
+}
+
+/// Not a check: what a frame of a FLIP slide costs, written into render props and painted in
+/// full, against moved by rows. Run with `--run-ignored all --no-capture`.
+#[test]
+#[ignore]
+fn what_a_flip_frame_costs() {
+    for count in [20, 48, 90] {
+        let scene = flip_grid_scene(count);
+        eprintln!(
+            "{count} tiles, {} frames each (median / p90 ms):",
+            scene.steps
+        );
+        for (name, path) in [
+            ("props, full paint", Path::Full),
+            ("rows on the CPU", Path::Rows),
+            ("node table", Path::Table),
+        ] {
+            let Some(mut times) = frame_times(&scene, path) else {
+                return;
+            };
+            times.drain(..3);
+            times.sort_by(|a, b| a.total_cmp(b));
+            eprintln!(
+                "  {name:<20} {:>7.2} / {:>7.2}",
+                times[times.len() / 2],
+                times[times.len() * 9 / 10]
+            );
         }
     }
 }

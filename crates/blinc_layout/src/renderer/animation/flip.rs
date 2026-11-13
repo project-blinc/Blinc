@@ -201,6 +201,110 @@ impl RenderTree {
         }
     }
 
+    /// Whether the FLIP animation on `node` can be carried by a motion binding: the renderer moves
+    /// bound nodes by rows (not baked into textures, which leave a label where it was painted),
+    /// and the node has a binding that is the animation's own, or none and a scheduler to hold its
+    /// values. A node the application binds itself keeps the animation in its render props.
+    fn flip_can_bind(&self, node: LayoutNodeId) -> bool {
+        !self.motion_promotion.get()
+            && blinc_animation::try_get_scheduler().is_some()
+            && (self.flip_bound.contains_key(&node) || !self.motion_bindings.contains_key(&node))
+    }
+
+    /// How far a FLIP animation has the node drawn from where layout put it, when it moves the
+    /// node through a binding of its own; `(0, 0)` otherwise. An animation that writes render
+    /// props is in the node's transform.
+    pub fn flip_offset(&self, node: LayoutNodeId) -> (f32, f32) {
+        if !self.flip_bound.contains_key(&node) {
+            return (0.0, 0.0);
+        }
+        let read = |value: &Option<blinc_animation::SharedAnimatedValue>| {
+            value
+                .as_ref()
+                .and_then(|v| v.lock().ok().map(|v| v.get()))
+                .unwrap_or(0.0)
+        };
+        self.motion_bindings
+            .get(&node)
+            .map_or((0.0, 0.0), |b| (read(&b.translate_x), read(&b.translate_y)))
+    }
+
+    /// Whether a FLIP animation is playing that is not carried by a binding: it writes render
+    /// props each frame and the frame has to be painted in full.
+    pub fn has_flip_animations_off_rows(&self) -> bool {
+        self.flip_animations.keys().any(|element_id| {
+            self.element_registry
+                .get(element_id)
+                .is_some_and(|node| !self.flip_can_bind(node))
+        })
+    }
+
+    /// Give the node a motion binding with the offset of its FLIP animation, or update the one
+    /// it has. False when the node cannot be bound: the caller writes props.
+    fn drive_flip_binding(
+        &mut self,
+        node: LayoutNodeId,
+        element_id: &str,
+        properties: &blinc_animation::KeyframeProperties,
+    ) -> bool {
+        if !self.flip_can_bind(node) {
+            return false;
+        }
+        if !self.flip_bound.contains_key(&node) {
+            let Some(handle) = blinc_animation::try_get_scheduler() else {
+                return false;
+            };
+            let value = || {
+                std::sync::Arc::new(std::sync::Mutex::new(
+                    blinc_animation::AnimatedValue::with_default(handle.clone(), 0.0),
+                ))
+            };
+            self.motion_bindings.insert(
+                node,
+                crate::motion::MotionBindings {
+                    translate_x: Some(value()),
+                    translate_y: Some(value()),
+                    ..Default::default()
+                },
+            );
+            self.flip_bound.insert(node, element_id.to_string());
+        }
+        if let Some(bindings) = self.motion_bindings.get(&node) {
+            let offset = [
+                (&bindings.translate_x, properties.translate_x.unwrap_or(0.0)),
+                (&bindings.translate_y, properties.translate_y.unwrap_or(0.0)),
+            ];
+            for (value, current) in offset {
+                // On its way to where layout put the node.
+                if let Some(mut value) = value.as_ref().and_then(|v| v.lock().ok()) {
+                    value.drive(current, 0.0);
+                }
+            }
+        }
+        true
+    }
+
+    /// Take away the bindings of FLIP animations that have ended, and of nodes that were replaced:
+    /// the next frame is painted in full without them.
+    fn release_flip_bindings(&mut self) {
+        if self.flip_bound.is_empty() {
+            return;
+        }
+        let gone: Vec<LayoutNodeId> = self
+            .flip_bound
+            .iter()
+            .filter(|(node, element_id)| {
+                !self.flip_animations.contains_key(*element_id)
+                    || self.element_registry.get(element_id) != Some(**node)
+            })
+            .map(|(node, _)| *node)
+            .collect();
+        for node in gone {
+            self.flip_bound.remove(&node);
+            self.motion_bindings.remove(&node);
+        }
+    }
+
     /// Tick all active FLIP animations by `dt_ms` milliseconds.
     /// Removes completed animations. Returns `true` if any are still playing.
     pub fn tick_flip_animations(&mut self, dt_ms: f32) -> bool {
@@ -222,11 +326,13 @@ impl RenderTree {
     /// Apply current FLIP animation values to render props.
     /// Resolves string element IDs → LayoutNodeIds via element_registry.
     pub fn apply_flip_animation_props(&mut self) {
+        self.release_flip_bindings();
         if self.flip_animations.is_empty() {
             return;
         }
         // Collect data first to avoid borrow conflict with render_nodes
         let props_data: Vec<(
+            String,
             crate::tree::LayoutNodeId,
             blinc_animation::KeyframeProperties,
         )> = self
@@ -234,11 +340,16 @@ impl RenderTree {
             .iter()
             .filter_map(|(element_id, anim)| {
                 let node_id = self.element_registry.get(element_id)?;
-                Some((node_id, anim.current_properties.clone()))
+                Some((element_id.clone(), node_id, anim.current_properties.clone()))
             })
             .collect();
 
-        for (node_id, anim_props) in props_data {
+        for (element_id, node_id, anim_props) in props_data {
+            // The offset is a binding where the node allows one, which the renderer moves as a
+            // row; otherwise it is written into the node's props.
+            if self.drive_flip_binding(node_id, &element_id, &anim_props) {
+                continue;
+            }
             if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
                 Self::apply_keyframe_props_to_render(&mut render_node.props, &anim_props);
             }

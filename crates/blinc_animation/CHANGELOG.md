@@ -5,6 +5,7 @@ All notable changes to `blinc_animation` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `AnimatedValue::drive(value, target)` sets the value with no spring, as something else that plays an animation moves it, and reads as animating until it reaches `target`: a timed animation that is not a spring can drive a motion binding.
 - `AnimationScheduler::set_manual_stepping` makes `tick` step nothing, so only `tick_by` moves the animations. A driver that steps a fixed `dt` sets it so a tick made on the way by a frame does not add the time since the last frame.
 - `AnimationDescriptor`: an animation as data, `{ start_ms, duration_ms, from, to, curve, initial_velocity }`, with `evaluate`, `velocity`, `is_finished` and `retarget`. Nothing is stepped, so a value and its velocity at any time come straight from the descriptor and a stalled frame skips ahead as a CSS animation does. `descriptor::now_ms` reads the frame clock on the scale descriptors use.
 - `Curve`: `Linear`, `CubicBezier`, `Steps` with `StepJump`, `Power` with `PowerMode` (the polynomial easings, exactly) and `Spring`, a damped spring in closed form for under, critical and over damping. A spring's duration is when it has settled, within a thousandth of the distance it moved.

@@ -1864,6 +1864,8 @@ pub struct AnimatedValue {
     current: f32,
     /// The target value we're animating towards
     target: f32,
+    /// Driven by hand (`drive`): on its way to `target` until it gets there, with no spring.
+    driven: bool,
 }
 
 impl AnimatedValue {
@@ -1876,6 +1878,7 @@ impl AnimatedValue {
             config,
             current: initial,
             target: initial,
+            driven: false,
         }
     }
 
@@ -1887,6 +1890,7 @@ impl AnimatedValue {
     /// Set the target value - starts animation if different from current
     pub fn set_target(&mut self, target: f32) {
         self.target = target;
+        self.driven = false;
 
         // If we have a spring, just update its target (spring persists until dropped)
         if let Some(id) = self.spring_id {
@@ -1923,8 +1927,26 @@ impl AnimatedValue {
         (descriptor.duration_ms > 0.0).then_some(descriptor)
     }
 
+    /// Set the value to `value` with no spring, as something else that plays an animation moves
+    /// it: the value is `value` and is on its way to `target`, so it reads as animating until it
+    /// gets there. A timed animation that is not a spring drives a binding this way.
+    pub fn drive(&mut self, value: f32, target: f32) {
+        if let Some(id) = self.spring_id.take() {
+            self.handle.remove_spring(id);
+        }
+        let changed = (self.current - value).abs() > f32::EPSILON
+            || (self.target - target).abs() > f32::EPSILON;
+        self.current = value;
+        self.target = target;
+        self.driven = true;
+        if changed {
+            self.handle.wake();
+        }
+    }
+
     /// Set value immediately without animation
     pub fn set_immediate(&mut self, value: f32) {
+        self.driven = false;
         // Remove any active spring
         if let Some(id) = self.spring_id.take() {
             self.handle.remove_spring(id);
@@ -1973,7 +1995,7 @@ impl AnimatedValue {
             // Check actual settled state, not just existence
             !self.handle.is_spring_settled(id)
         } else {
-            false
+            self.driven && (self.current - self.target).abs() > f32::EPSILON
         }
     }
 

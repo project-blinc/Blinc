@@ -160,6 +160,8 @@ pub struct Headless {
     state_fingerprint: Option<u64>,
     /// The scroll offsets and layout the pointer was last tested against; see `refresh_hover`.
     hover_stamp: Option<(u64, u64)>,
+    /// The layout epoch of the last paint.
+    painted_epoch: Option<u64>,
 }
 
 /// Sets the process-wide context state for the first session; a later session leaves it. Sessions
@@ -302,6 +304,7 @@ impl Headless {
             gate_state_styles: false,
             state_fingerprint: None,
             hover_stamp: None,
+            painted_epoch: None,
         })
     }
 
@@ -1133,16 +1136,7 @@ impl Headless {
         self.frame(0);
         let session = started.elapsed();
         let rendered = std::time::Instant::now();
-        let tree = self.tree.as_ref().expect("nothing is mounted");
-        self.app.render_tree_with_motion_opt(
-            tree,
-            &self.render_state,
-            &self.view,
-            Some(&self.texture),
-            self.width,
-            self.height,
-            try_fast_paint,
-        )?;
+        self.render(try_fast_paint)?;
         let render = rendered.elapsed();
         Ok((
             session.as_secs_f64() * 1000.0,
@@ -1152,9 +1146,16 @@ impl Headless {
 
     fn paint(&mut self, try_fast_paint: bool) -> Result<()> {
         self.frame(0);
+        self.render(try_fast_paint)
+    }
+
+    /// Paint the frame, in full when a window would: a scroll container's paint went stale, or
+    /// the layout was run since the last paint.
+    fn render(&mut self, try_fast_paint: bool) -> Result<()> {
         let tree = self.tree.as_ref().expect("nothing is mounted");
-        // A window paints in full a frame in which a scroll container's paint went stale.
-        let try_fast_paint = try_fast_paint && !tree.scroll_paint_stale();
+        let epoch = tree.layout_tree.epoch();
+        let try_fast_paint =
+            try_fast_paint && !tree.scroll_paint_stale() && self.painted_epoch == Some(epoch);
         self.app.render_tree_with_motion_opt(
             tree,
             &self.render_state,
@@ -1164,6 +1165,7 @@ impl Headless {
             self.height,
             try_fast_paint,
         )?;
+        self.painted_epoch = Some(epoch);
         Ok(())
     }
 

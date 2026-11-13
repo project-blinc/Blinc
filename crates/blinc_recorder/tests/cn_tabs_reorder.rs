@@ -211,7 +211,8 @@ fn the_tabs_reorder_while_the_drag_is_held() {
     ui.mouse_up();
 }
 
-/// Where trigger `value` is drawn: laid out, then moved by its transform.
+/// Where trigger `value` is drawn: laid out, then moved by its transform and by the slide an
+/// animation plays through a binding.
 fn drawn_x(ui: &Headless, value: &str) -> f32 {
     let node = ui.find(&format!("#{}", trigger_id(ui, value))).unwrap();
     let laid_out = ui.tree().get_absolute_bounds(node).unwrap().x;
@@ -219,7 +220,7 @@ fn drawn_x(ui: &Headless, value: &str) -> f32 {
         Some(blinc_core::Transform::Affine2D(a)) => a.elements[4],
         _ => 0.0,
     };
-    laid_out + shift
+    laid_out + shift + ui.tree().flip_offset(node).0
 }
 
 #[test]

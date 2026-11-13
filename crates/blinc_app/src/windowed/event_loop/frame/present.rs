@@ -257,7 +257,7 @@ pub(super) fn render_and_schedule(
         let bounds_anim_active = ws.render_tree.as_ref().is_some_and(|t| {
             t.has_active_visual_animations()
                 || t.has_active_layout_animations()
-                || t.has_active_flip_animations()
+                || t.has_flip_animations_off_rows()
         });
         // Block the fast path while an overlay /
         // toast is structurally changing or animating.

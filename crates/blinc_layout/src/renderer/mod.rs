@@ -1142,6 +1142,10 @@ pub struct RenderTree {
     /// Unlike css_anim_store.transitions (keyed by LayoutNodeId), these survive node recreation
     /// because they resolve string IDs → LayoutNodeIds at apply time via element_registry.
     flip_animations: HashMap<String, crate::render_state::ActiveCssAnimation>,
+    /// The nodes a FLIP animation moves through a motion binding of its own, with the element id
+    /// of the animation: the node is painted where layout put it and the binding carries the
+    /// offset, so a frame of the slide changes a value and not what is painted.
+    flip_bound: HashMap<LayoutNodeId, String>,
 
     /// Cached "does the pointer pipeline need to run on a bare mouse-move?"
     /// predicate. Equivalent to:
@@ -1305,6 +1309,7 @@ impl RenderTree {
             complex_state_affected: HashSet::new(),
             flip_previous_bounds: HashMap::new(),
             flip_animations: HashMap::new(),
+            flip_bound: HashMap::new(),
             mouse_move_pipeline_cache: std::sync::atomic::AtomicI8::new(0),
             // Phase 1 stable-id foundation — see `project_stable_node_id_design`.
             stable_to_layout: HashMap::new(),
@@ -2621,7 +2626,7 @@ impl RenderTree {
             // A layout or visual animation is stepped by the layouts that are run while it plays.
             || self.has_active_layout_animations()
             || self.has_active_visual_animations()
-            || self.has_active_flip_animations()
+            || self.has_flip_animations_off_rows()
     }
 
     /// Compute layout for the given viewport size

@@ -118,7 +118,7 @@ impl RenderContext {
         let other_animations_active = render_state.has_active_motions()
             || tree.has_active_visual_animations()
             || tree.has_active_layout_animations()
-            || tree.has_active_flip_animations();
+            || tree.has_flip_animations_off_rows();
         // Use CSS-only replay when other animation systems do not require a fresh walk.
         let css_only_active = css_anim_active && !other_animations_active;
         // Diagnostic: name the predicate that's invalidating the
@@ -707,7 +707,7 @@ impl RenderContext {
         let needs_walker = render_state.has_active_motions()
             || tree.has_active_visual_animations()
             || tree.has_active_layout_animations()
-            || tree.has_active_flip_animations()
+            || tree.has_flip_animations_off_rows()
             // Animated scroll offsets change cached geometry without input events.
             || tree.has_animating_scroll_physics()
             || {

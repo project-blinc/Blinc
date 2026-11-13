@@ -145,7 +145,8 @@ pub(super) fn tick_animations(
         // Composite-promotable predicate ignores FLIP
         // (FLIP animations re-layout under the hood,
         // so they always need the slow path).
-        let promotable = !flip && tree.css_active_all_composite_promotable();
+        let promotable =
+            !tree.has_flip_animations_off_rows() && tree.css_active_all_composite_promotable();
         (active, promotable)
     } else {
         (false, true)
