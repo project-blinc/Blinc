@@ -254,11 +254,13 @@ When `data` order changes and the container rebuilds, each `.sort-item` slides f
 3. compute_layout()            — taffy computes new positions
 4. apply_flip_transitions()    — compare old vs new, create translate animations
 5. tick_flip_animations(dt)    — advance by frame delta
-6. apply_flip_animation_props()— apply current transform to render props
+6. apply_flip_animation_props()— move the node by the current offset
 7. Render
 ```
 
 FLIP animations are stored keyed by string element ID (not `LayoutNodeId`), so they survive subtree rebuilds. Elements with an existing `transform` (e.g., a dragged item) are automatically excluded.
+
+The node is painted once where layout put it, and the slide is the offset of a motion binding that the animation makes for the node. The renderer moves bound nodes as rows over the cached layer, so the frames of a slide are not painted in full. The frame that starts the slide (the layout changed) and the frame after it ends are. A node the application binds itself keeps the slide in its render props and is painted in full while it plays, as does every frame when `BLINC_MOTION_PROMOTION` bakes bound nodes into textures.
 
 ### Customizing the Animation
 
@@ -304,6 +306,7 @@ FLIP computes dx/dy from bounding boxes, so horizontal and vertical movement are
 | Animates position | Yes | Yes |
 | Animates size | Yes | No |
 | Clip during animation | Yes (`clip_to_animated`) | No |
+| Painting while it plays | Whole tree, every frame | Moved as a row over the cached layer |
 | Configuration | Rust builder API | CSS `transition` property |
 | Best for | Accordions, sidebars, panels | Sortable lists, grid reorder |
 | Identity tracking | `.with_key("...")` | `.id("...")` |

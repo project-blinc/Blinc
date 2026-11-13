@@ -318,7 +318,8 @@ A few cases bypass the cache and require a full repaint:
 
 - Layout-affecting CSS changes (width, padding, gap, flex direction).
 - Scroll physics that move the visible window.
-- Bounds, clip, or size animations.
+- Bounds, clip, or size animations (`animate_bounds`, `animate_layout`). A CSS
+  FLIP slide is not one of these: it moves as a row.
 - Overlay open / close transitions.
 - Canvas closures (called every frame by contract).
 - Structural rebuilds from stateful flips or signal-driven subtree changes.
