@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1794554244,"nonce":"4P6ISr1pIUKsTbjP7P6n/T5qyos=","added":["perf","area:animation","area:layout","area:app"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794554260,"nonce":"XdgeJyOACb6zbjb1HMoWWYvrD54=","message":"iOS and Android are efa5528. A window check is 77fc97d.","files":null}]}
