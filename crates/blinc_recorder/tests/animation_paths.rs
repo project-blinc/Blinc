@@ -2414,3 +2414,214 @@ fn what_a_flip_frame_costs() {
         }
     }
 }
+
+// ---- cn components whose open and close are visual or layout animations ----------------------
+
+/// What the cn disclosure components stand on: a column on the scene's ground.
+fn cn_stage() -> Div {
+    div()
+        .w(W as f32)
+        .h(H as f32)
+        .bg(Color::rgb(0.09, 0.1, 0.13))
+        .flex_col()
+        .gap(8.0)
+        .p(8.0)
+}
+
+/// Lines of text, the content of a section that opens.
+fn lines(count: usize) -> Div {
+    (0..count).fold(div().w_full().p(4.0).flex_col().gap(4.0), |d, i| {
+        d.child(text(format!("Line {i}")).size(12.0).color(Color::WHITE))
+    })
+}
+
+const CN_ICON: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>"#;
+
+/// A cn disclosure scene: what is mounted, and what happens at step 0.
+fn cn_scene(
+    name: &'static str,
+    steps: usize,
+    mount: impl Fn(&mut Headless) -> Box<dyn Fn(&mut Headless)> + 'static,
+) -> Scene {
+    Scene {
+        name,
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let start = mount(ui);
+            Box::new(move |ui, step| {
+                if step == 0 {
+                    start(ui);
+                }
+            })
+        }),
+    }
+}
+
+/// A collapsible section opening above a card.
+fn cn_collapsible_scene() -> Scene {
+    cn_scene("cn collapsible section", 30, |ui| {
+        let open = signal(false);
+        ui.mount(move |_| {
+            cn_stage()
+                .child(blinc_cn::cn::collapsible_section("Details", open, || {
+                    lines(5)
+                }))
+                .child(card(true))
+        });
+        Box::new(move |_| open.set(true))
+    })
+}
+
+/// An accordion opening one section, with a second section and a card below it.
+fn cn_accordion_scene() -> Scene {
+    cn_scene("cn accordion", 30, |ui| {
+        let first = signal(false);
+        let second = signal(false);
+        ui.mount(move |_| {
+            cn_stage()
+                .child(
+                    blinc_cn::cn::accordion()
+                        .item_with_state("a", "First", first, || lines(4))
+                        .item_with_state("b", "Second", second, || lines(3)),
+                )
+                .child(card(true))
+        });
+        Box::new(move |_| first.set(true))
+    })
+}
+
+/// A tree expanding its first group over a second.
+fn cn_tree_scene() -> Scene {
+    cn_scene("cn tree", 30, |ui| {
+        ui.mount(move |_| {
+            cn_stage().child(
+                blinc_cn::cn::tree_view()
+                    .node("src", "src/", |n| {
+                        n.child("main", "main.rs", |n| n)
+                            .child("lib", "lib.rs", |n| n)
+                            .child("util", "util.rs", |n| n)
+                            .child("mod", "mod.rs", |n| n)
+                    })
+                    .node("docs", "docs/", |n| n.child("readme", "README.md", |n| n))
+                    .node("cargo", "Cargo.toml", |n| n),
+            )
+        });
+        Box::new(|ui| {
+            ui.click(".cn-tree-row");
+        })
+    })
+}
+
+/// A sidebar collapsing to its icons beside a card.
+fn cn_sidebar_scene() -> Scene {
+    cn_scene("cn sidebar", 30, |ui| {
+        let collapsed = signal(false);
+        ui.mount(move |_| {
+            div()
+                .w(W as f32)
+                .h(H as f32)
+                .bg(Color::rgb(0.09, 0.1, 0.13))
+                .flex_row()
+                .child(
+                    blinc_cn::cn::sidebar(collapsed)
+                        .item_active("Dashboard", CN_ICON, || {})
+                        .item("Search", CN_ICON, || {})
+                        .item("Inbox", CN_ICON, || {})
+                        .section("Account")
+                        .item("Profile", CN_ICON, || {})
+                        .content(|_| div().p(16.0).child(card(true))),
+                )
+        });
+        Box::new(move |_| collapsed.set(true))
+    })
+}
+
+/// Tabs switching: the indicator slides from one trigger to the next.
+fn cn_tabs_scene() -> Scene {
+    cn_scene("cn tabs", 30, |ui| {
+        let state = signal("account".to_string());
+        ui.mount(move |_| {
+            cn_stage().child(
+                blinc_cn::cn::tabs(state.clone())
+                    .tab("account", "Account", || lines(2))
+                    .tab("password", "Password", || lines(3))
+                    .tab("billing", "Billing", || lines(2)),
+            )
+        });
+        Box::new(move |_| state.set("billing".to_string()))
+    })
+}
+
+fn cn_scenes() -> Vec<Scene> {
+    vec![
+        cn_collapsible_scene(),
+        cn_accordion_scene(),
+        cn_tree_scene(),
+        cn_sidebar_scene(),
+        cn_tabs_scene(),
+    ]
+}
+
+/// Each cn scene really animates: the picture changes over many of its frames, and then stops.
+/// Without this a scene that never opens would measure a static frame and say it is cheap.
+#[test]
+fn the_cn_disclosure_scenes_animate() {
+    for scene in cn_scenes() {
+        let Some((frames, _)) = run_logged(&scene, Path::Full) else {
+            return;
+        };
+        let moved = frames.windows(2).filter(|w| w[0].data != w[1].data).count();
+        let changed = difference(&frames[0], frames.last().unwrap(), LEVELS).differing;
+        assert!(
+            moved >= 6 && changed > 200,
+            "{}: the picture changed in {moved} frames and {changed} px between the first and last",
+            scene.name
+        );
+    }
+}
+
+/// Not a check: how each cn disclosure scene is painted and what its moving frames cost, painted
+/// in full and as a window paints a frame with only animated values changed. Run with
+/// `--run-ignored all --no-capture`; `BLINC_ANIM_PATHS_SCALE=2` runs it at a retina density.
+#[test]
+#[ignore]
+fn how_the_cn_disclosures_are_painted() {
+    for scene in cn_scenes() {
+        eprintln!("{} ({} frames):", scene.name, scene.steps);
+        for (name, path) in [
+            ("full paint", Path::Full),
+            ("promoted, patched", Path::Patched),
+            ("rows on the CPU", Path::Rows),
+        ] {
+            let Some((frames, paths)) = run_logged(&scene, path) else {
+                return;
+            };
+            // The frames in which the picture moves, the first included: what is measured is
+            // these, since the frames after the animation ends are cached whatever the path.
+            let moving: Vec<bool> = (0..frames.len())
+                .map(|i| i == 0 || frames[i].data != frames[i - 1].data)
+                .collect();
+            let in_full = (0..paths.len())
+                .filter(|&i| moving[i] && paths[i].starts_with("full"))
+                .count();
+            let animated = moving.iter().filter(|m| **m).count();
+            let Some(times) = frame_times(&scene, path) else {
+                return;
+            };
+            let mut cost: Vec<f64> = times
+                .iter()
+                .enumerate()
+                .skip(2)
+                .filter(|(i, _)| moving[*i])
+                .map(|(_, t)| *t)
+                .collect();
+            cost.sort_by(|a, b| a.total_cmp(b));
+            eprintln!(
+                "  {name:<18} {in_full:>2} of {animated:>2} moving frames in full, {:>6.2} / {:>6.2} ms (median / p90)",
+                cost[cost.len() / 2],
+                cost[cost.len() * 9 / 10]
+            );
+        }
+    }
+}
