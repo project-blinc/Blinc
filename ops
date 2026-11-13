@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1794554244,"nonce":"eP54WSCgcFiKQi4QhW6EjupCzy0=","added":["perf","area:platform","area:app"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794554260,"nonce":"fZZnNjBBk2L4hq+6WcKGzX9OOm0=","message":"The animations that matter most for cn are in b79e0b9; this issue only decides whether a mobile frame may take the fast path the desktop already does.","files":null}]}
