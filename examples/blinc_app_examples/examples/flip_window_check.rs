@@ -12,6 +12,9 @@
 //! - `PERIOD`: seconds between reorders (default 2).
 //! - `SLIDE_MS`: length of the slide in milliseconds (default 600).
 //! - `EXIT_AFTER`: seconds until the process exits; unset keeps the window open.
+//! - `POS`: `x,y` of the window in logical pixels (default: the OS's choice).
+//! - `MAX`: `1` opens the window maximized, which covers a window opened earlier and shows
+//!   that the covered one stops rendering.
 //!
 //! Every reorder moves the first tile to the end, so one tile slides the length of the column
 //! and the others one place. The title says how bound nodes are painted; `BLINC_MOTION_TRACE`
@@ -115,6 +118,11 @@ fn main() -> Result<()> {
         title: format!("FLIP check: {} tiles, {}", tiles(), mode()),
         width: 480,
         height: 40 + tiles() as u32 * 46 + 60,
+        position: std::env::var("POS").ok().and_then(|v| {
+            let (x, y) = v.split_once(',')?;
+            Some((x.parse().ok()?, y.parse().ok()?))
+        }),
+        maximized: flag("MAX"),
         ..Default::default()
     };
     WindowedApp::run(config, build_ui)

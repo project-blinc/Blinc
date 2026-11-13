@@ -256,6 +256,11 @@ never opened costs nothing and a closed one draws nothing. A tab that is not
 selected is not built at all, and `show(when, ..)` builds nothing while `when`
 is false.
 
+On macOS a window that is fully covered by another, minimized or on another
+Space is not rendered at all: its frames are dropped until the OS reports it
+visible again, and the first frame after paints whatever changed meanwhile.
+Animations in it stop with it.
+
 ## Avoid the slow path
 
 These changes trip the compositor fast path and require a full walker run:
