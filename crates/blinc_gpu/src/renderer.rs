@@ -38,6 +38,8 @@ mod accessors;
 mod bind_group_layouts;
 mod blit;
 mod buffers;
+#[cfg(test)]
+mod capacity_tests;
 mod config;
 mod construction;
 mod device_setup;

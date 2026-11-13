@@ -47,6 +47,18 @@ impl GpuRenderer {
         if glyphs.is_empty() {
             return;
         }
+        // The glyph buffer holds `max_glyphs`; drawing more would overrun it.
+        let max_glyphs = self.config.max_glyphs;
+        let glyphs = if glyphs.len() > max_glyphs {
+            tracing::warn!(
+                "Glyph count {} exceeds buffer capacity {}, truncating",
+                glyphs.len(),
+                max_glyphs
+            );
+            &glyphs[..max_glyphs]
+        } else {
+            glyphs
+        };
 
         // Update uniforms
         let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
