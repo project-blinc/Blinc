@@ -317,6 +317,11 @@ went: when the style and animation pass finished and when the paint did,
 measured from the start of the phase. What is left of `p4` after `render`
 is presenting the frame.
 
+On macOS a trace of a new window has one gap of a fraction of a second after
+the first frame. The window is waiting for the app to become active, and no
+event, a scheduled wake included, is delivered until it is. It is not a slow
+frame, and it does not recur.
+
 ```sh
 BLINC_MOTION_TRACE=/tmp/motion.jsonl cargo run -p blinc_app_examples --example cn_demo --features cn
 ```
