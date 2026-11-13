@@ -128,6 +128,8 @@ pub(super) fn render_and_schedule(
         }
     }
 
+    let p4_styles_done = phase4_start.elapsed();
+
     // Update continuous pointer query state
     if !windowed_ctx.pointer_query.is_empty() {
         let (mx, my) = windowed_ctx.event_router.mouse_position();
@@ -337,6 +339,8 @@ pub(super) fn render_and_schedule(
 
         blinc_app.clear_blend_target();
     }
+
+    let p4_render_done = phase4_start.elapsed();
 
     // =========================================================
     // PHASE 4b: Overlay state management (overlays now in main tree)
@@ -854,6 +858,14 @@ pub(super) fn render_and_schedule(
                 "p3": t_phase3.as_micros() as u64,
                 "p4": t_phase4.as_micros() as u64,
                 "p5": t_phase5.as_micros() as u64,
+            }),
+        );
+        // Offsets from the start of phase 4: what is left of `p4` after the second is the present.
+        crate::motion_trace::note(
+            "p4_done_us",
+            serde_json::json!({
+                "styles": p4_styles_done.as_micros() as u64,
+                "render": p4_render_done.as_micros() as u64,
             }),
         );
     }

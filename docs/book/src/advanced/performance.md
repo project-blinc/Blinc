@@ -311,6 +311,12 @@ which path, what asked for another frame, and the progress of every CSS
 animation, transition and motion still running. It finds an animation that
 stalls, skips or waits for input. Unset, it costs nothing.
 
+`cost_us` gives what each phase of the frame took, in microseconds. For a
+frame whose `p4` (render) is long, `p4_done_us` says where in it the time
+went: when the style and animation pass finished and when the paint did,
+measured from the start of the phase. What is left of `p4` after `render`
+is presenting the frame.
+
 ```sh
 BLINC_MOTION_TRACE=/tmp/motion.jsonl cargo run -p blinc_app_examples --example cn_demo --features cn
 ```
