@@ -208,7 +208,9 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                     .color(Color::rgb(0.6, 0.65, 0.75)),
                 ),
         )
-        .child(div().w_full().flex_grow().child_box(list))
+        // A flex item's minimum height is its content's unless it is set, which would make the
+        // list as tall as all of its rows and leave it nothing to scroll.
+        .child(div().w_full().flex_grow().min_h(0.0).child_box(list))
 }
 
 #[cfg(target_arch = "wasm32")]
