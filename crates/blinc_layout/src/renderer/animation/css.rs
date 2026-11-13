@@ -322,6 +322,7 @@ impl RenderTree {
         props: &blinc_animation::KeyframeProperties,
     ) -> bool {
         props.is_composite_promotable()
+            && !self.css_bound.contains_key(&node)
             && !self.subtree_draws_outside_layer(node)
             && !self.inside_overlay_root(node)
     }
@@ -383,7 +384,43 @@ impl RenderTree {
                     .map(|(stable, _)| stable),
             )
             .filter_map(|stable| self.stable_to_layout.get(stable).copied())
+            .filter(|layout| !self.css_bound.contains_key(layout))
             .all(|layout| !self.subtree_draws_outside_layer(layout))
+    }
+
+    /// Whether the CSS animation of `node` is carried by a motion binding of its own.
+    pub fn css_carried(&self, node: LayoutNodeId) -> bool {
+        self.css_bound.contains_key(&node)
+    }
+
+    /// Whether a CSS animation or transition is playing that a binding does not carry, or one has
+    /// stopped and its final values are still to be written: what keeps a frame off the rows.
+    pub fn css_active_off_rows(&self) -> bool {
+        let store = self.css_anim_store.lock().unwrap();
+        if self
+            .css_anim_written
+            .iter()
+            .any(|id| store.animations.get(id).is_some_and(|a| !a.is_playing))
+            || self
+                .css_trans_written
+                .iter()
+                .any(|id| store.transitions.get(id).is_some_and(|t| !t.is_playing))
+        {
+            return true;
+        }
+        let off_rows = |stable: &crate::tree::StableNodeId| {
+            self.stable_to_layout
+                .get(stable)
+                .is_none_or(|node| !self.css_bound.contains_key(node))
+        };
+        store
+            .animations
+            .iter()
+            .any(|(stable, a)| a.is_playing && off_rows(stable))
+            || store
+                .transitions
+                .iter()
+                .any(|(stable, t)| t.is_playing && off_rows(stable))
     }
 
     /// Whether every currently-playing CSS animation / transition on
@@ -434,7 +471,7 @@ impl RenderTree {
             let Some(layout) = self.stable_to_layout.get(stable).copied() else {
                 continue;
             };
-            if !painted.contains(&layout) {
+            if !painted.contains(&layout) || self.css_bound.contains_key(&layout) {
                 continue;
             }
             // Layout-affecting animations on a *visible* node force
@@ -657,11 +694,19 @@ impl RenderTree {
             }
         }
         let mut still_playing = HashSet::new();
+        let mut carried = HashSet::new();
         for (stable_id, props) in playing {
             let Some(node_id) = self.layout_id(stable_id) else {
                 continue;
             };
             still_playing.insert(stable_id);
+            // The animation is a binding where the node allows one, which the renderer moves as
+            // a row; otherwise it is baked or written into the node's props.
+            if !transitions && self.css_can_bind(node_id, &props) {
+                self.drive_css_binding(node_id, stable_id, &props);
+                carried.insert(stable_id);
+                continue;
+            }
             let bakeable = if transitions {
                 self.css_transition_bakeable(node_id, &props)
             } else {
@@ -674,7 +719,143 @@ impl RenderTree {
                 Self::apply_keyframe_props_to_render(&mut render_node.props, &props);
             }
         }
+        if !transitions {
+            self.release_css_bindings(&carried);
+        }
         still_playing
+    }
+
+    /// Whether the CSS animation of `node` can be carried by a motion binding: the renderer moves
+    /// bound nodes by rows (not baked into textures), the animation only moves, scales or turns
+    /// the node about its centre, and nothing else owns a binding on it. The animation replaces
+    /// the node's transform, and a binding is applied over it, so a node that has its own is left
+    /// to the props. An animation of opacity is left to them as well: a bound opacity is a group
+    /// drawn in an offscreen layer, which costs more than the layer the animation is baked into.
+    fn css_can_bind(
+        &self,
+        node: LayoutNodeId,
+        props: &blinc_animation::KeyframeProperties,
+    ) -> bool {
+        let moves = props.translate_x.is_some()
+            || props.translate_y.is_some()
+            || props.scale_x.is_some()
+            || props.scale_y.is_some()
+            || props.rotate.is_some();
+        // The same properties the bake takes, and a turn as well, which rows apply and a blit
+        // does not.
+        let without_turn = blinc_animation::KeyframeProperties {
+            rotate: None,
+            // Something the bake takes, so that a turn alone is not an empty set.
+            translate_x: props.translate_x.or(Some(0.0)),
+            ..props.clone()
+        };
+        if !moves
+            || props.opacity.is_some()
+            || !without_turn.is_composite_promotable()
+            || self.motion_promotion.get()
+            || blinc_animation::try_get_scheduler().is_none()
+            || self.inside_overlay_root(node)
+            || (self.motion_bindings.contains_key(&node) && !self.css_bound.contains_key(&node))
+        {
+            return false;
+        }
+        self.render_nodes.get(&node).is_some_and(|render| {
+            render.props.transform.is_none() && render.props.transform_origin.is_none()
+        })
+    }
+
+    /// Give the node a motion binding with the values of its CSS animation, or update the one it
+    /// has. The values are written as playing: the animation has its own end, which the binding
+    /// does not know. The map is borrowed mutably only to add a binding or a value, since each
+    /// mutable borrow counts as a change and invalidates what the renderer derived from it.
+    fn drive_css_binding(
+        &mut self,
+        node: LayoutNodeId,
+        stable: crate::tree::StableNodeId,
+        props: &blinc_animation::KeyframeProperties,
+    ) {
+        let Some(handle) = blinc_animation::try_get_scheduler() else {
+            return;
+        };
+        let wants = [
+            props.translate_x.is_some(),
+            props.translate_y.is_some(),
+            props.scale_x.is_some(),
+            props.scale_y.is_some(),
+            props.rotate.is_some(),
+        ];
+        let has = |b: &crate::motion::MotionBindings| {
+            [
+                b.translate_x.is_some(),
+                b.translate_y.is_some(),
+                b.scale_x.is_some(),
+                b.scale_y.is_some(),
+                b.rotation.is_some(),
+            ]
+        };
+        let complete = self
+            .motion_bindings
+            .get(&node)
+            .is_some_and(|b| has(b).iter().zip(wants).all(|(have, want)| *have || !want));
+        if !complete {
+            self.motion_bindings.entry(node).or_default();
+            let value = |initial: Option<f32>| {
+                initial.map(|v| {
+                    std::sync::Arc::new(std::sync::Mutex::new(
+                        blinc_animation::AnimatedValue::with_default(handle.clone(), v),
+                    ))
+                })
+            };
+            if let Some(bindings) = self.motion_bindings.get_mut(&node) {
+                bindings.translate_x = bindings
+                    .translate_x
+                    .take()
+                    .or_else(|| value(props.translate_x));
+                bindings.translate_y = bindings
+                    .translate_y
+                    .take()
+                    .or_else(|| value(props.translate_y));
+                bindings.scale_x = bindings.scale_x.take().or_else(|| value(props.scale_x));
+                bindings.scale_y = bindings.scale_y.take().or_else(|| value(props.scale_y));
+                bindings.rotation = bindings.rotation.take().or_else(|| value(props.rotate));
+            }
+        }
+        self.css_bound.insert(node, stable);
+        let Some(bindings) = self.motion_bindings.get(&node) else {
+            return;
+        };
+        let drive = |slot: &Option<blinc_animation::SharedAnimatedValue>, value: Option<f32>| {
+            if let (Some(shared), Some(value)) = (slot, value)
+                && let Ok(mut shared) = shared.lock()
+            {
+                shared.drive_playing(value);
+            }
+        };
+        drive(&bindings.translate_x, props.translate_x);
+        drive(&bindings.translate_y, props.translate_y);
+        drive(&bindings.scale_x, props.scale_x);
+        drive(&bindings.scale_y, props.scale_y);
+        drive(&bindings.rotation, props.rotate);
+    }
+
+    /// Take away the bindings of CSS animations that are not carried this frame: those that have
+    /// stopped, and those of nodes that were replaced. The node is painted in full without them.
+    fn release_css_bindings(&mut self, carried: &HashSet<crate::tree::StableNodeId>) {
+        if self.css_bound.is_empty() {
+            return;
+        }
+        let gone: Vec<LayoutNodeId> = self
+            .css_bound
+            .iter()
+            .filter(|(node, stable)| {
+                !carried.contains(*stable) || self.stable_to_layout.get(*stable) != Some(*node)
+            })
+            .map(|(node, _)| *node)
+            .collect();
+        for node in gone {
+            self.css_bound.remove(&node);
+            self.motion_bindings.remove(&node);
+        }
     }
 
     /// Apply animated layout properties from CSS animations/transitions to taffy styles

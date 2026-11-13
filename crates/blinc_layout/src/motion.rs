@@ -322,7 +322,7 @@ impl MotionBindings {
         let far = |v: &Option<SharedAnimatedValue>, eps: f32| {
             v.as_ref()
                 .and_then(|s| s.lock().ok())
-                .is_some_and(|g| (g.get() - g.target()).abs() > eps)
+                .is_some_and(|g| g.is_playing() || (g.get() - g.target()).abs() > eps)
         };
         far(&self.translate_x, PIXELS)
             || far(&self.translate_y, PIXELS)

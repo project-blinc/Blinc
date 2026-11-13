@@ -18,8 +18,10 @@ impl RenderContext {
             let store = tree.css_anim_store();
             let store = store.lock().unwrap();
             for (stable, animation) in &store.animations {
+                // A binding carries the animation of a node: the cache holds its pose at rest.
                 if animation.is_playing
                     && let Some(node) = tree.layout_id(*stable)
+                    && !tree.css_carried(node)
                 {
                     next.entry(node).or_default().animation = animation.animation.playback_id();
                 }
@@ -27,6 +29,7 @@ impl RenderContext {
             for (stable, transition) in &store.transitions {
                 if transition.is_playing
                     && let Some(node) = tree.layout_id(*stable)
+                    && !tree.css_carried(node)
                 {
                     next.entry(node).or_default().transition = transition.animation.playback_id();
                 }

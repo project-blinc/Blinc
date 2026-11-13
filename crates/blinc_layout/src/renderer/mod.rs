@@ -1146,6 +1146,10 @@ pub struct RenderTree {
     /// of the animation: the node is painted where layout put it and the binding carries the
     /// offset, so a frame of the slide changes a value and not what is painted.
     flip_bound: HashMap<LayoutNodeId, String>,
+    /// The nodes a CSS animation moves through a motion binding of its own, with the stable id of
+    /// the animation's node: the node is painted at its base and the binding carries the
+    /// animation, so a frame of it changes a value and not what is painted.
+    css_bound: HashMap<LayoutNodeId, crate::tree::StableNodeId>,
 
     /// Cached "does the pointer pipeline need to run on a bare mouse-move?"
     /// predicate. Equivalent to:
@@ -1263,7 +1267,7 @@ impl RenderTree {
             css_trans_written: HashSet::new(),
             css_layout_written: HashSet::new(),
             subtree_texture_candidates: RefCell::new(std::collections::HashSet::new()),
-            motion_promotion: Cell::new(true),
+            motion_promotion: Cell::new(false),
             binding_ordinals: RefCell::new(HashMap::new()),
             bound_svg: Cell::new(false),
             motion_subtree_bake_registry: RefCell::new(
@@ -1310,6 +1314,7 @@ impl RenderTree {
             flip_previous_bounds: HashMap::new(),
             flip_animations: HashMap::new(),
             flip_bound: HashMap::new(),
+            css_bound: HashMap::new(),
             mouse_move_pipeline_cache: std::sync::atomic::AtomicI8::new(0),
             // Phase 1 stable-id foundation — see `project_stable_node_id_design`.
             stable_to_layout: HashMap::new(),
@@ -4234,6 +4239,8 @@ mod tests {
     fn subtree_texture_animating_root_clean_subtree_is_candidate() {
         let ui = div().child(div()).child(div().child(div()));
         let mut tree = RenderTree::from_element(&ui);
+        // These exercise baked motion subtrees.
+        tree.set_motion_promotion(true);
         let root = tree.root().unwrap();
         let (sv, _scheduler) = animating_shared();
         tree.motion_bindings.insert(
@@ -4254,6 +4261,8 @@ mod tests {
     fn subtree_texture_opacity_only_animating_root_is_candidate() {
         let ui = div().child(div());
         let mut tree = RenderTree::from_element(&ui);
+        // These exercise baked motion subtrees.
+        tree.set_motion_promotion(true);
         let root = tree.root().unwrap();
         let (sv, _scheduler) = animating_shared();
         tree.motion_bindings.insert(
@@ -4274,6 +4283,8 @@ mod tests {
     fn subtree_texture_descendant_motion_disqualifies_root() {
         let ui = div().child(div().child(div()));
         let mut tree = RenderTree::from_element(&ui);
+        // These exercise baked motion subtrees.
+        tree.set_motion_promotion(true);
         let root = tree.root().unwrap();
         let child = tree.layout_tree.children(root)[0];
 
@@ -4374,6 +4385,8 @@ mod tests {
     fn subtree_texture_compute_animation_status_populates_candidates() {
         let ui = div().child(div());
         let mut tree = RenderTree::from_element(&ui);
+        // These exercise baked motion subtrees.
+        tree.set_motion_promotion(true);
         let root = tree.root().unwrap();
         let (sv, _scheduler) = animating_shared();
         tree.motion_bindings.insert(
@@ -4469,6 +4482,8 @@ mod tests {
     #[test]
     fn demote_lapsed_keeps_records_for_active_candidates() {
         let mut tree = RenderTree::from_element(&div().child(div()));
+        // These exercise baked motion subtrees.
+        tree.set_motion_promotion(true);
         let root = tree.root().unwrap();
         let (sv, _scheduler) = animating_shared();
         tree.motion_bindings.insert(

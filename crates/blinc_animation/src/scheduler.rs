@@ -1866,6 +1866,9 @@ pub struct AnimatedValue {
     target: f32,
     /// Driven by hand (`drive`): on its way to `target` until it gets there, with no spring.
     driven: bool,
+    /// Driven by something that plays with no end in view (`drive_playing`): animating until it
+    /// is set by another route.
+    playing: bool,
 }
 
 impl AnimatedValue {
@@ -1879,6 +1882,7 @@ impl AnimatedValue {
             current: initial,
             target: initial,
             driven: false,
+            playing: false,
         }
     }
 
@@ -1891,6 +1895,7 @@ impl AnimatedValue {
     pub fn set_target(&mut self, target: f32) {
         self.target = target;
         self.driven = false;
+        self.playing = false;
 
         // If we have a spring, just update its target (spring persists until dropped)
         if let Some(id) = self.spring_id {
@@ -1939,14 +1944,35 @@ impl AnimatedValue {
         self.current = value;
         self.target = target;
         self.driven = true;
+        self.playing = false;
         if changed {
             self.handle.wake();
         }
     }
 
+    /// Set the value to `value` as something that plays with no end in view moves it, a CSS
+    /// animation that repeats: the value reads as animating, and as visibly moving, until it is
+    /// set by another route. The player of the animation paces the frames, so this does not ask
+    /// for one: a wake from every write would keep the event loop running between them.
+    pub fn drive_playing(&mut self, value: f32) {
+        if let Some(id) = self.spring_id.take() {
+            self.handle.remove_spring(id);
+        }
+        self.current = value;
+        self.target = value;
+        self.driven = true;
+        self.playing = true;
+    }
+
+    /// Whether the value is driven by something that is playing (`drive_playing`).
+    pub fn is_playing(&self) -> bool {
+        self.driven && self.playing
+    }
+
     /// Set value immediately without animation
     pub fn set_immediate(&mut self, value: f32) {
         self.driven = false;
+        self.playing = false;
         // Remove any active spring
         if let Some(id) = self.spring_id.take() {
             self.handle.remove_spring(id);
@@ -1995,7 +2021,7 @@ impl AnimatedValue {
             // Check actual settled state, not just existence
             !self.handle.is_spring_settled(id)
         } else {
-            self.driven && (self.current - self.target).abs() > f32::EPSILON
+            self.driven && (self.playing || (self.current - self.target).abs() > f32::EPSILON)
         }
     }
 

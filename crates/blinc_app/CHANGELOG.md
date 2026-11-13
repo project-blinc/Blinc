@@ -9,6 +9,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - The registered iOS Rust builder uses the complete UI build path, including queued core styles, overlays and build-scope cleanup.
 
 ### Changed
+- The compositor and the cache check treat a CSS animation that a binding carries as a bound node: its frames are rows, not a CSS patch or a baked layer, so no texture is kept for it.
 - On macOS the desktop runner no longer renders a window the OS reports as occluded (covered, minimized or on another Space). Its frames are dropped, so a covered window stops using the GPU and CPU and no longer blocks the main thread in the drawable acquire; the first frame after it is visible again paints what changed.
 - `BLINC_MOTION_TRACE` records `p4_done_us` for each drawn frame: when the style and animation pass and the paint finished, as offsets from the start of the render phase, so a long render phase says whether it was spent styling, painting or presenting.
 - A FLIP slide no longer turns off the fast paint path while it plays when bound nodes are moved by rows: the window, the compositor and the CSS composite check ask `has_flip_animations_off_rows`. The iOS and Android runners still paint in full for any FLIP slide.

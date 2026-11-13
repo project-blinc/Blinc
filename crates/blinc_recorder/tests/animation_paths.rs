@@ -957,6 +957,33 @@ fn keyframe_scene(name: &'static str, label: bool) -> Scene {
     }
 }
 
+const KEYFRAME_TRANSFORM_CSS: &str = "
+@keyframes bob-turn {
+  from { transform: translateY(0px) scale(1) rotate(0deg); }
+  to { transform: translateY(-14px) scale(1.15) rotate(8deg); }
+}
+.card { animation: bob-turn 320ms ease-in-out infinite alternate; }
+";
+
+/// Cards under a CSS keyframe animation of transform alone, which a binding carries so that rows
+/// move it.
+fn keyframe_transform_scene(name: &'static str, label: bool) -> Scene {
+    Scene {
+        name,
+        steps: 20,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            ui.css(KEYFRAME_TRANSFORM_CSS);
+            ui.mount(move |_| {
+                (0..2).fold(stage().gap(6.0), |row, _| {
+                    row.child(card(label).class("card"))
+                })
+            });
+            Box::new(|_, _| {})
+        }),
+    }
+}
+
 const FLIP_CSS: &str = ".slide { transition: transform 300ms ease-out; }";
 
 /// Cards that a banner appearing above them pushes down, each sliding from where it was to where
@@ -1075,6 +1102,7 @@ fn scenes() -> Vec<Scene> {
         transition_scene("css transition, no text", false),
         keyframe_scene("css keyframes", true),
         keyframe_scene("css keyframes, no text", false),
+        keyframe_transform_scene("css keyframes, transform only, no text", false),
         flip_scene("flip", true),
         flip_scene("flip, no text", false),
         flip_grid_scene(30),
@@ -1278,6 +1306,7 @@ const ON_ROWS: &[&str] = &[
     "motion, a rounded image",
     "motion nested, an image",
     "motion in a clipped box, an image",
+    "css keyframes, transform only, no text",
     "scroll a list",
     "scroll a list, scrollbar always",
     "scroll a list, no scrollbar",
@@ -2333,6 +2362,59 @@ fn a_flip_slide_is_moved_by_rows() {
     }
 }
 
+/// A CSS animation of transform that rows carry moves the label with its card, to within what the
+/// glyphs allow: the label is the card's centre and turns with it, and the picture is the full
+/// paint's in all but the glyph edges. Every frame after the first is moved by rows.
+#[test]
+fn a_css_animated_label_follows_its_card_on_rows() {
+    let with = keyframe_transform_scene("css keyframes, transform only", true);
+    let without = keyframe_transform_scene("css keyframes, transform only, no text", false);
+    let (Some((rows, paths)), Some(bare), Some(reference)) = (
+        run_logged(&with, Path::Rows),
+        run(&without, Path::Rows),
+        run(&with, Path::Vector),
+    ) else {
+        return;
+    };
+    let by_rows = paths.iter().filter(|p| p.ends_with("rows:applied")).count();
+    assert!(
+        by_rows >= with.steps - 3,
+        "{by_rows} of {} frames moved by rows: {paths:?}",
+        with.steps
+    );
+    for step in 0..with.steps {
+        let card = card_blob(&bare[step]);
+        let label = label_blob(&rows[step], &bare[step]);
+        assert!(label.pixels > 30, "step {step}: the label left no pixels");
+        let off = ((label.centre.0 - card.centre.0).powi(2)
+            + (label.centre.1 - card.centre.1).powi(2))
+        .sqrt();
+        let d = difference(&rows[step], &reference[step], 8);
+        // The ink of the label is the full paint's: a label that is smeared has less of it.
+        let ours = ink(&rows[step], &bare[step]);
+        let theirs = ink(&reference[step], &bare[step]);
+        eprintln!(
+            "step {step:>2}: label {off:>3.1} px from the card's centre, {} px differ from the full paint, ink {:.2} of it",
+            d.differing,
+            ours / theirs
+        );
+        assert!(
+            off <= 3.0,
+            "step {step}: the label is {off} px off its card"
+        );
+        assert!(
+            d.differing < 1200,
+            "step {step}: {} px differ from the full paint",
+            d.differing
+        );
+        assert!(
+            ours >= theirs * 0.9,
+            "step {step}: the label has {:.0}% of the ink of the full paint",
+            100.0 * ours / theirs
+        );
+    }
+}
+
 /// A banner that appears above a wrapped grid of `count` tiles and pushes every one down, each
 /// sliding from where it was (FLIP).
 fn flip_grid_scene(count: usize) -> Scene {
@@ -2624,4 +2706,155 @@ fn how_the_cn_disclosures_are_painted() {
             );
         }
     }
+}
+
+// ---- many cards under a CSS animation ---------------------------------------------------------
+
+/// A CSS animation of transform alone, which a binding carries so that rows move it.
+const CSS_GRID_TRANSFORM: &str = "
+@keyframes pulse {
+  from { transform: translateY(0px) scale(1); }
+  to { transform: translateY(-3px) scale(1.12); }
+}
+.pulse { animation: pulse 400ms ease-in-out infinite alternate; }
+";
+
+/// One of transform and opacity, which is baked, or painted in full with text in it.
+const CSS_GRID_FADE: &str = "
+@keyframes pulse {
+  from { transform: translateY(0px) scale(1); opacity: 1; }
+  to { transform: translateY(-3px) scale(1.12); opacity: 0.6; }
+}
+.pulse { animation: pulse 400ms ease-in-out infinite alternate; }
+";
+
+/// A grid of `count` small cards, each under a CSS keyframe animation of transform and opacity,
+/// with a label if asked.
+fn css_grid_scene(count: usize, label: bool, css: &'static str) -> Scene {
+    Scene {
+        name: "css grid",
+        steps: 40,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            ui.css(css);
+            ui.mount(move |_| {
+                let mut grid = div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .flex_row()
+                    .flex_wrap();
+                for i in 0..count {
+                    let mut card = div()
+                        .class("pulse")
+                        .w(26.0)
+                        .h(14.0)
+                        .rounded(3.0)
+                        .bg(Color::rgb(0.2, 0.45, 0.9))
+                        .border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.9))
+                        .flex_row()
+                        .items_center()
+                        .justify_center();
+                    if label {
+                        card =
+                            card.child(text(format!("{}", i % 10)).size(8.0).color(Color::WHITE));
+                    }
+                    grid = grid.child(div().w(30.0).h(16.0).child(card));
+                }
+                grid
+            });
+            Box::new(|_, _| {})
+        }),
+    }
+}
+
+/// Not a check: what a frame costs with many cards under a CSS animation, painted in full, as a
+/// window paints it with its bound nodes baked, and moved by rows. Run with
+/// `--run-ignored all --no-capture`.
+#[test]
+#[ignore]
+fn what_a_css_animated_frame_costs() {
+    for (kind, css) in [
+        ("transform", CSS_GRID_TRANSFORM),
+        ("transform and opacity", CSS_GRID_FADE),
+    ] {
+        for label in [true, false] {
+            for count in [20, 60, 140] {
+                let scene = css_grid_scene(count, label, css);
+                eprintln!(
+                    "{count} cards, {kind}, {}, {} frames each (median / p90 ms, frames in full):",
+                    if label { "with text" } else { "no text" },
+                    scene.steps
+                );
+                for (name, path) in [
+                    ("full paint", Path::Full),
+                    ("baked, patched", Path::Patched),
+                    ("rows on the CPU", Path::Rows),
+                ] {
+                    let Some((_, paths)) = run_logged(&scene, path) else {
+                        return;
+                    };
+                    let in_full = paths
+                        .iter()
+                        .skip(3)
+                        .filter(|p| p.starts_with("full"))
+                        .count();
+                    let Some(mut times) = frame_times(&scene, path) else {
+                        return;
+                    };
+                    times.drain(..3);
+                    times.sort_by(|a, b| a.total_cmp(b));
+                    eprintln!(
+                        "  {name:<18} {:>7.2} / {:>7.2}   {in_full:>2} of {} in full",
+                        times[times.len() / 2],
+                        times[times.len() * 9 / 10],
+                        paths.len() - 3
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn resident_kb() -> u64 {
+    let out = std::process::Command::new("ps")
+        .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+        .output()
+        .expect("ps");
+    String::from_utf8_lossy(&out.stdout)
+        .trim()
+        .parse()
+        .unwrap_or(0)
+}
+
+/// Not a check: how far the process grows while 140 cards run a CSS animation, with the cards
+/// baked into textures (`MEM_PATH=patched`, the default) or moved by rows (`MEM_PATH=rows`). Run
+/// each in a process of its own, with `--run-ignored all --no-capture`.
+#[test]
+#[ignore]
+fn how_much_memory_css_animated_cards_hold() {
+    let path = if std::env::var("MEM_PATH").as_deref() == Ok("rows") {
+        Path::Rows
+    } else {
+        Path::Patched
+    };
+    let scene = css_grid_scene(140, false, CSS_GRID_TRANSFORM);
+    let Some(mut ui) = session(path) else { return };
+    let mut script = (scene.build)(&mut ui);
+    ui.settle();
+    ui.snapshot().expect("a frame");
+    let before = resident_kb();
+    let mut peak = before;
+    for step in 0..60 {
+        script(&mut ui, step);
+        ui.advance(scene.step_ms);
+        ui.snapshot_fast().expect("a frame");
+        peak = peak.max(resident_kb());
+    }
+    eprintln!(
+        "MEM {path:?}: before {} MB, peak {} MB, grew {} MB",
+        before / 1024,
+        peak / 1024,
+        (peak - before) / 1024
+    );
 }

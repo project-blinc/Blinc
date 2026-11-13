@@ -85,7 +85,7 @@ impl RenderContext {
 
         // Direct frames have no CSS cache patch pass; active CSS needs a full walk.
         let canvas_output =
-            (try_fast_paint && !self.captured_images_need_repaint && !tree.css_has_active())
+            (try_fast_paint && !self.captured_images_need_repaint && !tree.css_active_off_rows())
                 .then(|| self.redraw_canvas_output(tree, width, height))
                 .flatten()
                 .filter(|_| self.apply_binding_deltas(tree, scale_factor));

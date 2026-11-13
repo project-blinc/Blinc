@@ -97,14 +97,8 @@ impl RenderContext {
                 .values()
                 .any(|b| b.is_visibly_moving());
         // Read CSS activity separately from binding and structural animations.
-        let css_anim_active = {
-            let store = tree.css_anim_store();
-
-            match store.lock() {
-                Ok(g) => g.has_active_animations() || g.has_active_transitions(),
-                Err(_) => false,
-            }
-        };
+        // A CSS animation that a binding carries is moved by rows with the other bindings.
+        let css_anim_active = tree.css_active_off_rows();
         if css_anim_active
             && tree
                 .css_anim_paint_records()
@@ -710,14 +704,7 @@ impl RenderContext {
             || tree.has_flip_animations_off_rows()
             // Animated scroll offsets change cached geometry without input events.
             || tree.has_animating_scroll_physics()
-            || {
-                let store = tree.css_anim_store();
-                let guard = store.lock();
-                match guard {
-                    Ok(g) => g.has_active_animations() || g.has_active_transitions(),
-                    Err(_) => false,
-                }
-            };
+            || tree.css_active_off_rows();
         // A caller that asked for a full paint gets one: the inner call may reuse the cache only
         // when this frame was allowed to.
         let inner_try_fast = try_fast_paint && self.cached_bg_batch.is_some() && !needs_walker;
