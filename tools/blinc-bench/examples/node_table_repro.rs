@@ -8,9 +8,9 @@
 //! Run it twice and compare what you see:
 //!
 //! ```text
-//! cargo run -p blinc_app_examples --example node_table_repro
-//! BLINC_NODE_TABLE=1 cargo run -p blinc_app_examples --example node_table_repro
-//! BLINC_MOTION_PROMOTION=1 cargo run -p blinc_app_examples --example node_table_repro
+//! cargo run -p blinc-bench --example node_table_repro
+//! BLINC_NODE_TABLE=1 cargo run -p blinc-bench --example node_table_repro
+//! BLINC_MOTION_PROMOTION=1 cargo run -p blinc-bench --example node_table_repro
 //! ```
 //!
 //! The first paints each moving subtree as vectors once and moves it with rows applied on the CPU,

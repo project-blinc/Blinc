@@ -3,9 +3,9 @@
 //! slide costs.
 //!
 //! ```text
-//! cargo run --release -p blinc_app_examples --example flip_window_check
-//! BLINC_MOTION_TRACE=/tmp/flip.jsonl cargo run --release -p blinc_app_examples --example flip_window_check
-//! BLINC_MOTION_PROMOTION=1 cargo run --release -p blinc_app_examples --example flip_window_check
+//! cargo run --release -p blinc-bench --example flip_window_check
+//! BLINC_MOTION_TRACE=/tmp/flip.jsonl cargo run --release -p blinc-bench --example flip_window_check
+//! BLINC_MOTION_PROMOTION=1 cargo run --release -p blinc-bench --example flip_window_check
 //! ```
 //!
 //! - `TILES`: how many tiles (default 12).

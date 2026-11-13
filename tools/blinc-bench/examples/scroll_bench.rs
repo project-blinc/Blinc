@@ -2,10 +2,10 @@
 //! A long list in a window, for watching what scrolling costs.
 //!
 //! ```text
-//! cargo run --release -p blinc_app_examples --example scroll_bench
-//! ROWS=250000 SPEED=3000 cargo run --release -p blinc_app_examples --example scroll_bench
-//! BLINC_NODE_TABLE=1 cargo run --release -p blinc_app_examples --example scroll_bench
-//! BLINC_MOTION_PROMOTION=1 cargo run --release -p blinc_app_examples --example scroll_bench
+//! cargo run --release -p blinc-bench --example scroll_bench
+//! ROWS=250000 SPEED=3000 cargo run --release -p blinc-bench --example scroll_bench
+//! BLINC_NODE_TABLE=1 cargo run --release -p blinc-bench --example scroll_bench
+//! BLINC_MOTION_PROMOTION=1 cargo run --release -p blinc-bench --example scroll_bench
 //! ```
 //!
 //! - `ROWS`: how many rows (default 100000).
