@@ -733,11 +733,9 @@ impl IOSRenderContext {
                 .state_styles
                 .should_apply(self.windowed_ctx.event_router.state_fingerprint())
             && tree.apply_stylesheet_state_styles(&self.windowed_ctx.event_router);
-        if state_changed
-            || active
-            || !tree.css_transitions_empty()
-            || tree.has_active_flip_animations()
-        {
+        // What a binding carries or a baked layer shows leaves the cached paint usable; the rest
+        // of the animation work has the next frame paint in full.
+        if state_changed || tree.animation_needs_full_paint() {
             crate::mobile_paint::request_full_paint();
         }
         if active || !tree.css_transitions_empty() || tree.has_active_flip_animations() {

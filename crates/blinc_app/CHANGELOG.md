@@ -9,7 +9,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - The registered iOS Rust builder uses the complete UI build path, including queued core styles, overlays and build-scope cleanup.
 
 ### Changed
-- The Android runner asks `RenderTree::animation_needs_full_paint` for the full paint a CSS animation, transition or FLIP slide needs, instead of raising it on every frame any of them runs. A CSS animation or FLIP slide a binding carries, and a CSS animation baked into a layer, now take the cached-paint path there as they do in a desktop window.
+- The iOS and Android runners ask `RenderTree::animation_needs_full_paint` for the full paint a CSS animation, transition or FLIP slide needs, instead of raising it on every frame any of them runs. A CSS animation or FLIP slide a binding carries, and a CSS animation baked into a layer, now take the cached-paint path there as they do in a desktop window.
 - The compositor and the cache check treat a CSS animation that a binding carries as a bound node: its frames are rows, not a CSS patch or a baked layer, so no texture is kept for it.
 - On macOS the desktop runner no longer renders a window the OS reports as occluded (covered, minimized or on another Space). Its frames are dropped, so a covered window stops using the GPU and CPU and no longer blocks the main thread in the drawable acquire; the first frame after it is visible again paints what changed.
 - `BLINC_MOTION_TRACE` records `p4_done_us` for each drawn frame: when the style and animation pass and the paint finished, as offsets from the start of the render phase, so a long render phase says whether it was spent styling, painting or presenting.
