@@ -1,4 +1,4 @@
-//! Benchmark scenes, chosen by the `BLINC_BENCH` environment variable: `cards`, `cards_plain`,
+//! Benchmark scenes, chosen by the `BLINC_BENCH` parameter (see [`crate::param`]): `cards`, `cards_plain`,
 //! `list`, `spinners` or `flow`. Each animates by itself; `list` is driven by the runner's
 //! scripted touches (`BLINC_BENCH_SCROLL`).
 
@@ -38,8 +38,7 @@ pub fn scene(name: &str, ctx: &WindowedContext) -> Option<Div> {
 /// Small cards, 200 unless `BLINC_BENCH_CARDS` says otherwise, each easing transform and opacity
 /// through a CSS animation.
 fn cards(with_text: bool) -> Div {
-    let count = std::env::var("BLINC_BENCH_CARDS")
-        .ok()
+    let count = crate::param("BLINC_BENCH_CARDS")
         .and_then(|v| v.parse().ok())
         .unwrap_or(200);
     (0..count).fold(
