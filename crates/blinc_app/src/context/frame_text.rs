@@ -94,6 +94,23 @@ pub(super) fn needed_raster(
     raster_size(scale.max(affine_scale(text.css_affine)), moving)
 }
 
+/// The raster size for text in a group that the node table does not move, and whether it is in
+/// flight: what its own affine scales it by, which is the scale of a CSS transform painted into
+/// the frame. While a CSS animation of the scale plays on it or an ancestor the size is rounded up
+/// to a quarter, as motion text's is; an animation of anything else leaves it as at rest.
+pub(super) fn grouped_raster(tree: &blinc_layout::RenderTree, text: &TextElement) -> (f32, bool) {
+    let scaling = std::iter::once(text.node)
+        .chain(tree.layout_tree.ancestors(text.node))
+        .any(|n| {
+            tree.has_css_animation(n)
+                && tree
+                    .get_css_animation_properties(n)
+                    .is_some_and(|p| p.scale_x.is_some() || p.scale_y.is_some())
+        });
+    let moving = scaling || chain_moving(tree, text.node);
+    (raster_size(affine_scale(text.css_affine), moving), moving)
+}
+
 /// How much its bound ancestors scale the text of `node`, now or (with `by_target`, while they
 /// move) when their springs arrive, and whether they are moving. Layout stays at the base size
 /// and the glyphs are rasterized finer, with the quads shrunk back, so the text is placed where

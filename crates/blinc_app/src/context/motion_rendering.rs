@@ -274,7 +274,16 @@ impl RenderContext {
                             Some(!moving),
                         )
                     } else {
-                        self.prepare_captured_text(&text, (width, height), scale_factor)
+                        // Not moved by the node table: laid out at the base size and rasterized at
+                        // the size its card shows it, so a scaled card is as sharp faded or not.
+                        let (k, moving) = frame_text::grouped_raster(tree, &text);
+                        self.prepare_captured_text_at(
+                            &text,
+                            (width, height),
+                            scale_factor,
+                            k,
+                            text.css_affine.map(|_| !moving),
+                        )
                     };
                     for p in &mut prepared.primitives {
                         p.set_node_ordinal(ordinal);

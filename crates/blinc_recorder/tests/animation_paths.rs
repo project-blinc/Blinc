@@ -2020,6 +2020,88 @@ fn zoomed_text_is_as_sharp_as_text_laid_out_at_that_size() {
     }
 }
 
+/// A card scaled to 2x and held there by a CSS keyframe animation, with a fade too when `fade`.
+fn css_zoom_scene(label: bool, fade: bool) -> Scene {
+    Scene {
+        name: "css zoom",
+        steps: 40,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            ui.css(if fade {
+                "@keyframes zoom { from { transform: scale(1); opacity: 1; } \
+                 to { transform: scale(2); opacity: 0.9; } } \
+                 .zoom { animation: zoom 300ms linear forwards; }"
+            } else {
+                "@keyframes zoom { from { transform: scale(1); } to { transform: scale(2); } } \
+                 .zoom { animation: zoom 300ms linear forwards; }"
+            });
+            ui.mount(move |_| {
+                stage().child(
+                    div()
+                        .w(120.0)
+                        .h(64.0)
+                        .child(card_at(label, 1.0).class("zoom")),
+                )
+            });
+            Box::new(|_, _| {})
+        }),
+    }
+}
+
+#[test]
+fn text_zoomed_by_a_css_animation_is_as_sharp_as_text_laid_out_at_that_size() {
+    let mut report = Vec::new();
+    for fade in [false, true] {
+        for path in [Path::Vector, Path::Table, Path::Rows] {
+            let (Some(with), Some(without)) = (
+                run(&css_zoom_scene(true, fade), path),
+                run(&css_zoom_scene(false, fade), path),
+            ) else {
+                return;
+            };
+            let (Some(native_with), Some(native_without)) = (
+                run(&native_scene(2.0, true), Path::Vector),
+                run(&native_scene(2.0, false), Path::Vector),
+            ) else {
+                return;
+            };
+            let zoomed = sharpness(with.last().unwrap(), without.last().unwrap());
+            let native = sharpness(&native_with[0], &native_without[0]);
+            eprintln!(
+                "CSS SHARP fade {fade} {path:?}: zoomed {zoomed:.3}, native {native:.3}, ratio {:.2}",
+                zoomed / native
+            );
+            report.push((fade, path, zoomed / native));
+        }
+    }
+    // In flight, text of a faded card is as sharp as text of a card that is not faded.
+    let sharp_at = |fade: bool| -> Option<Vec<f64>> {
+        let with = run(&css_zoom_scene(true, fade), Path::Vector)?;
+        let without = run(&css_zoom_scene(false, fade), Path::Vector)?;
+        Some(
+            [4_usize, 8, 12]
+                .map(|step| sharpness(&with[step], &without[step]))
+                .to_vec(),
+        )
+    };
+    let (Some(plain), Some(faded)) = (sharp_at(false), sharp_at(true)) else {
+        return;
+    };
+    for (plain, faded) in plain.into_iter().zip(faded) {
+        assert!(
+            faded > plain * 0.95,
+            "in flight a faded card's text is {:.2} as sharp as an unfaded card's",
+            faded / plain
+        );
+    }
+    for (fade, path, ratio) in report {
+        assert!(
+            ratio > 0.95,
+            "fade {fade}, {path:?}: css-zoomed text is {ratio:.2} as sharp as text laid out at that size"
+        );
+    }
+}
+
 /// A card with a label at rest, under a motion container or not.
 fn rest_scene(in_motion: bool, label: bool) -> Scene {
     Scene {
