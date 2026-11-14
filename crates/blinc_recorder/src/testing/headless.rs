@@ -157,6 +157,8 @@ pub struct Headless {
     /// Whether the state-style pass runs only when hover, press or focus changed, as a window
     /// does, rather than on every frame.
     gate_state_styles: bool,
+    /// Apply CSS and FLIP animation values only on a frame a tick found one active.
+    gate_animation_apply: bool,
     state_fingerprint: Option<u64>,
     /// The scroll offsets and layout the pointer was last tested against; see `refresh_hover`.
     hover_stamp: Option<(u64, u64)>,
@@ -302,6 +304,7 @@ impl Headless {
             frames: 0,
             recording: None,
             gate_state_styles: false,
+            gate_animation_apply: false,
             state_fingerprint: None,
             hover_stamp: None,
             painted_epoch: None,
@@ -313,6 +316,14 @@ impl Headless {
     /// every node and rewrites the styles of those a stylesheet reaches.
     pub fn gate_state_styles(&mut self) -> &mut Self {
         self.gate_state_styles = true;
+        self
+    }
+
+    /// Apply CSS and FLIP animation values only on a frame in which an animation, a transition or
+    /// a FLIP slide was running or had just stopped, as a window does. By default they are applied
+    /// on every frame, which hides an animation whose last step is never applied.
+    pub fn gate_animation_apply(&mut self) -> &mut Self {
+        self.gate_animation_apply = true;
         self
     }
 
@@ -400,10 +411,12 @@ impl Headless {
         self.render_state.process_global_motion_starts();
         let _ = self.render_state.tick(self.now_ms);
 
+        let mut animation_active = false;
         if let Some(tree) = self.tree.as_mut() {
             let store = tree.css_anim_store();
-            store.lock().unwrap().tick(dt);
-            tree.tick_flip_animations(dt);
+            let (animations, transitions) = store.lock().unwrap().tick(dt);
+            let flip = tree.tick_flip_animations(dt);
+            animation_active = animations || transitions || flip || tree.css_has_active();
         }
         self.render_state.sync_shared_motion_states();
         let _ = ThemeState::get().tick();
@@ -452,12 +465,14 @@ impl Headless {
                     tree.update_flip_bounds();
                 }
             }
-            tree.apply_all_css_animation_props();
-            tree.apply_all_css_transition_props();
-            tree.apply_flip_animation_props();
-            if tree.apply_animated_layout_props() {
-                tree.compute_layout(w, h);
-                tree.update_flip_bounds();
+            if !self.gate_animation_apply || animation_active || !tree.css_transitions_empty() {
+                tree.apply_all_css_animation_props();
+                tree.apply_all_css_transition_props();
+                tree.apply_flip_animation_props();
+                if tree.apply_animated_layout_props() {
+                    tree.compute_layout(w, h);
+                    tree.update_flip_bounds();
+                }
             }
             tree.remove_completed_transitions();
             blinc_layout::recorder_bridge::record_frame(

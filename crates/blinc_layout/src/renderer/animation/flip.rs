@@ -306,21 +306,32 @@ impl RenderTree {
     }
 
     /// Tick all active FLIP animations by `dt_ms` milliseconds.
-    /// Removes completed animations. Returns `true` if any are still playing.
+    /// Removes completed animations. Returns `true` if any are still playing, or a finished one
+    /// still has its binding on a node: the caller applies the animations, which takes the
+    /// binding away so the node is painted where layout put it. That stays true until the apply
+    /// has run, so a frame that is skipped does not lose it.
     pub fn tick_flip_animations(&mut self, dt_ms: f32) -> bool {
-        if self.flip_animations.is_empty() {
-            return false;
-        }
-        let dt_ms = dt_ms.min(crate::render_state::MAX_ANIMATION_STEP_MS);
         let mut any_playing = false;
-        for anim in self.flip_animations.values_mut() {
-            if anim.tick(dt_ms) {
-                any_playing = true;
+        if !self.flip_animations.is_empty() {
+            let dt_ms = dt_ms.min(crate::render_state::MAX_ANIMATION_STEP_MS);
+            for anim in self.flip_animations.values_mut() {
+                if anim.tick(dt_ms) {
+                    any_playing = true;
+                }
             }
+            // Remove completed animations
+            self.flip_animations.retain(|_, a| a.is_playing);
         }
-        // Remove completed animations
-        self.flip_animations.retain(|_, a| a.is_playing);
-        any_playing
+        any_playing || self.flip_release_pending(None)
+    }
+
+    /// Whether a node still carries the binding of a FLIP slide that has ended. With `painted`,
+    /// only a node in it counts.
+    fn flip_release_pending(&self, painted: Option<&HashSet<LayoutNodeId>>) -> bool {
+        self.flip_bound.iter().any(|(node, element_id)| {
+            !self.flip_animations.contains_key(element_id)
+                && painted.is_none_or(|painted| painted.contains(node))
+        })
     }
 
     /// Apply current FLIP animation values to render props.
@@ -372,7 +383,7 @@ impl RenderTree {
             self.element_registry
                 .get(element_id)
                 .is_some_and(|nid| painted.contains(&nid))
-        })
+        }) || self.flip_release_pending(Some(painted))
     }
 }
 

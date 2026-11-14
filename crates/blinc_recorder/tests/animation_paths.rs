@@ -83,6 +83,8 @@ fn session(path: Path) -> Option<Headless> {
     // The state-style pass runs when hover or focus changes, as in a window; run every frame it
     // restyles nodes, and each frame would look like a change to the layout.
     ui.gate_state_styles();
+    // Animation values are applied on the frames a tick finds one running, as in a window.
+    ui.gate_animation_apply();
     ui.load_font_data(
         include_bytes!("../../../examples/blinc_component_demos/assets/NotoSans-Regular.ttf")
             .to_vec(),
@@ -2420,6 +2422,40 @@ fn a_flip_slide_is_moved_by_rows() {
             scene.name
         );
     }
+}
+
+/// When a FLIP slide ends its binding is taken away and the card is drawn where layout put it, as
+/// a full paint has it. The window applies animation values only on a frame in which something
+/// was running, and the frame a slide ends in is one of those.
+#[test]
+fn a_flip_slide_leaves_nothing_bound_when_it_ends() {
+    let mut scene = flip_scene("flip, no text", false);
+    // The slide is about 19 frames; the rest are frames at rest.
+    scene.steps += 6;
+    let Some(reference) = run(&scene, Path::Vector) else {
+        return;
+    };
+    let Some(mut ui) = session(Path::Rows) else {
+        return;
+    };
+    let mut script = (scene.build)(&mut ui);
+    ui.settle();
+    ui.snapshot().expect("a frame");
+    let mut last = None;
+    for step in 0..scene.steps {
+        script(&mut ui, step);
+        ui.advance(scene.step_ms);
+        last = Some(ui.snapshot_fast().expect("a frame"));
+    }
+    assert!(
+        ui.tree().motion_bindings_map().is_empty(),
+        "the slide ended and its binding is still on the card"
+    );
+    let d = difference(&last.unwrap(), reference.last().unwrap(), LEVELS);
+    assert_eq!(
+        d.differing, 0,
+        "the card is not where a full paint puts it at rest"
+    );
 }
 
 /// A CSS animation of transform that rows carry moves the label with its card, to within what the
