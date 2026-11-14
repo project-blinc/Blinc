@@ -1817,7 +1817,9 @@ impl AndroidApp {
                                 tree.apply_stylesheet_state_styles(&windowed_ctx.event_router);
                         }
                     }
-                    if state_changed || css_active || !tree.css_transitions_empty() {
+                    // What a binding carries or a baked layer shows leaves the cached paint
+                    // usable; the rest of the animation work has the next frame paint in full.
+                    if state_changed || tree.animation_needs_full_paint() {
                         crate::mobile_paint::request_full_paint();
                     }
                     if css_active

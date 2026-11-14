@@ -142,12 +142,9 @@ pub(super) fn tick_animations(
         drop(s);
         let flip = tree.tick_flip_animations(dt_ms);
         let active = anim || trans || flip || tree.css_has_active();
-        // Composite-promotable predicate ignores FLIP
-        // (FLIP animations re-layout under the hood,
-        // so they always need the slow path).
-        let promotable =
-            !tree.has_flip_animations_off_rows() && tree.css_active_all_composite_promotable();
-        (active, promotable)
+        // A FLIP slide no binding carries re-lays out under the hood, so it needs the slow
+        // path.
+        (active, !tree.animation_needs_full_paint())
     } else {
         (false, true)
     };

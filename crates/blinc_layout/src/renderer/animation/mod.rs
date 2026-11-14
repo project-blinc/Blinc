@@ -17,3 +17,16 @@
 pub mod css;
 pub mod flip;
 pub mod visual;
+
+use crate::renderer::RenderTree;
+
+impl RenderTree {
+    /// Whether an animation, transition or FLIP slide that is running, or has just stopped,
+    /// keeps the frame from reusing the cached paint. One a binding carries is moved by rows, and
+    /// a CSS animation baked into a layer is blitted, so neither does; a CSS animation or
+    /// transition that is neither, one that lays out, a stopped one whose final values are still
+    /// to be written, and a FLIP slide no binding carries, do. False when nothing is running.
+    pub fn animation_needs_full_paint(&self) -> bool {
+        self.has_flip_animations_off_rows() || !self.css_active_all_composite_promotable()
+    }
+}
