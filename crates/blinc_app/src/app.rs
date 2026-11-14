@@ -80,7 +80,8 @@ impl BlincApp {
     ///
     /// This is used internally for platform-specific initialization (Android, iOS)
     /// where the GPU setup is done differently.
-    pub(crate) fn from_context(ctx: RenderContext, config: BlincConfig) -> Self {
+    pub(crate) fn from_context(mut ctx: RenderContext, config: BlincConfig) -> Self {
+        ctx.set_promote_motion(config.motion_promotion);
         Self { ctx, config }
     }
 
@@ -941,5 +942,27 @@ impl BlincApp {
         let app = Self { ctx, config };
 
         Ok((app, surface))
+    }
+}
+
+#[cfg(test)]
+mod from_context_tests {
+    use super::*;
+
+    /// The mobile runners build the app from a context they made themselves, and the configuration
+    /// decides whether bound nodes are baked into textures or moved by rows.
+    #[test]
+    fn a_context_takes_the_motion_promotion_of_its_configuration() {
+        let config = |motion_promotion| BlincConfig {
+            node_table: false,
+            motion_promotion,
+            ..BlincConfig::default()
+        };
+        let Ok(app) = BlincApp::with_config(config(true)) else {
+            return;
+        };
+        assert!(!app.ctx.rows_mode());
+        let app = BlincApp::from_context(app.ctx, config(false));
+        assert!(app.ctx.rows_mode());
     }
 }
