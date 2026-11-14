@@ -40,6 +40,8 @@
 
 #[path = "ios/accessibility.rs"]
 mod accessibility;
+#[path = "ios/bench.rs"]
+mod bench;
 #[path = "ios/ime.rs"]
 mod ime;
 
@@ -1281,6 +1283,8 @@ pub extern "C" fn blinc_build_frame(ctx: *mut IOSRenderContext) {
         return;
     }
 
+    let _build_timer = bench::BuildTimer::start();
+
     unsafe {
         let ctx = &mut *ctx;
 
@@ -1509,6 +1513,14 @@ pub extern "C" fn blinc_create_context(
 pub extern "C" fn blinc_needs_render(ctx: *mut IOSRenderContext) -> bool {
     if ctx.is_null() {
         return false;
+    }
+    // The display link asks this on every tick, whether or not it then draws, so a scripted
+    // touch advances on idle ticks too.
+    if bench::scroll_on() {
+        let (w, h) = unsafe { ((*ctx).windowed_ctx.width, (*ctx).windowed_ctx.height) };
+        if let Some((x, y, phase)) = bench::scripted_touch(bench::next_frame(), w, h) {
+            blinc_handle_touch(ctx, 1, x, y, phase);
+        }
     }
     unsafe { (*ctx).needs_render() }
 }
@@ -2139,6 +2151,7 @@ pub extern "C" fn blinc_render_frame(gpu: *mut IOSGpuRenderer) -> bool {
         };
 
         // Get surface texture
+        let acquire_start = bench::stats_on().then(std::time::Instant::now);
         let surface_texture = match gpu.surface.get_current_texture() {
             Ok(st) => st,
             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
@@ -2167,7 +2180,12 @@ pub extern "C" fn blinc_render_frame(gpu: *mut IOSGpuRenderer) -> bool {
             }
         };
 
+        if let Some(start) = acquire_start {
+            bench::note_acquire(start.elapsed());
+        }
+
         // Render
+        let render_start = bench::stats_on().then(std::time::Instant::now);
         let view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -2194,7 +2212,13 @@ pub extern "C" fn blinc_render_frame(gpu: *mut IOSGpuRenderer) -> bool {
             return false;
         }
 
+        if let Some(start) = render_start {
+            bench::note_render(start.elapsed());
+        }
         surface_texture.present();
+        if render_start.is_some() {
+            bench::frame_done();
+        }
         true
     }
 }

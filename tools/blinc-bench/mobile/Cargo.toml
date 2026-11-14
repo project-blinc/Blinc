@@ -1,0 +1,31 @@
+[package]
+name = "blinc-bench-mobile"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Benchmark scenes for a phone: an iOS static library that runs the scene named by BLINC_BENCH"
+
+# Standalone project (not part of the parent workspace), like mobile/example.
+[workspace]
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+blinc_core = { path = "../../../crates/blinc_core" }
+blinc_layout = { path = "../../../crates/blinc_layout" }
+blinc_cn = { path = "../../../crates/blinc_cn" }
+blinc_theme = { path = "../../../crates/blinc_theme" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+blinc_app = { path = "../../../crates/blinc_app", default-features = false, features = ["ios"] }
+blinc_platform_ios = { path = "../../../extensions/blinc_platform_ios" }
+
+# The same release profile as mobile/example, so the numbers compare.
+[profile.release]
+lto = "fat"
+opt-level = "z"
+strip = "symbols"
+codegen-units = 1
+panic = "abort"

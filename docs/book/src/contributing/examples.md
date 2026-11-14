@@ -221,7 +221,8 @@ desktop build is untouched, and the example continues to work as
 Benchmarks and measurement harnesses do not belong here at all, opted out or
 not: every file in this directory is a candidate for the examples page. They
 live in `tools/blinc-bench`, which is not published
-(`cargo run --release -p blinc-bench --example <name>`).
+(`cargo run --release -p blinc-bench --example <name>`). Scenes for a phone are in
+`tools/blinc-bench/mobile`, not in `mobile/example`.
 
 Currently opted out:
 
