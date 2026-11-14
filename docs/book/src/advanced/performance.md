@@ -185,7 +185,9 @@ painted once into a texture and the compositor moves it each frame. That holds o
 nothing in the subtree is drawn in a pass of its own. A subtree with text, an
 SVG or a canvas in it is painted with the animation applied on every frame,
 so the text moves, scales and fades with its container about its
-`transform-origin`.
+`transform-origin`. Fading siblings of that kind, a grid of cards with labels,
+share one offscreen atlas and are composited in one pass, so the cost of the
+grid does not grow by a few render passes per card.
 
 Each animation step is capped, so after a long frame (a stall, a debugger
 pause) an animation slows down instead of jumping to its end.

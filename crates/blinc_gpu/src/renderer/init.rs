@@ -406,6 +406,8 @@ impl GpuRenderer {
             saved_viewport_size: None,
             pending_scissor: None,
             pending_damage_scissor: None,
+            batch_opacity_layers: true,
+            opacity_atlases: 0,
             memory_budget: GpuMemoryBudget::new(config.gpu_memory_budget),
             config,
             texture_format,

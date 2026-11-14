@@ -1,6 +1,6 @@
 //! Ordered native layer composition over an existing target.
 use super::{GpuRenderer, LayerTexture, PrimitiveBatch};
-use crate::primitives::{ClipType, FillType, LayerCommand, PathBatch, PrimitiveType};
+use crate::primitives::{ClipType, FillType, GpuPrimitive, LayerCommand, PathBatch, PrimitiveType};
 use blinc_core::{BlendMode, LayerConfig, LayerEffect};
 use std::borrow::Cow;
 use std::collections::BTreeSet;
@@ -9,6 +9,7 @@ mod alpha;
 mod glass;
 mod glass_backdrop;
 mod gpu_pass;
+mod layer_batch;
 mod named;
 pub(super) use alpha::AlphaPass;
 
@@ -398,6 +399,35 @@ pub(super) fn translate_clip_frames(
     changed
 }
 
+/// Moves a primitive and the geometry it carries by `(dx, dy)`; mesh and clip-frame payloads in the
+/// aux buffer are the caller's.
+fn shift_primitive(p: &mut GpuPrimitive, dx: f32, dy: f32) {
+    p.bounds[0] += dx;
+    p.bounds[1] += dy;
+    if has_clip(p.clip_bounds) {
+        p.clip_bounds[0] += dx;
+        p.clip_bounds[1] += dy;
+    }
+    if matches!(p.type_info[2], 2 | 3) {
+        p.clip_radius[0] += dx;
+        p.clip_radius[1] += dy;
+    }
+    if p.clip_fade_bounds[2] > 0.0 {
+        p.clip_fade_bounds[0] += dx;
+        p.clip_fade_bounds[1] += dy;
+    }
+    if p.type_info[0] != PrimitiveType::Text as u32 {
+        if p.type_info[1] == FillType::LinearGradient as u32 {
+            p.gradient_params[2] += dx;
+            p.gradient_params[3] += dy;
+        }
+        if p.type_info[1] != FillType::Solid as u32 {
+            p.gradient_params[0] += dx;
+            p.gradient_params[1] += dy;
+        }
+    }
+}
+
 fn translated(
     batch: &PrimitiveBatch,
     start: Cursor,
@@ -434,30 +464,7 @@ fn translated(
     let mut meshes = BTreeSet::new();
     for p in &batch.primitives[start.primitive..end.primitive] {
         let mut p = *p;
-        p.bounds[0] += dx;
-        p.bounds[1] += dy;
-        if has_clip(p.clip_bounds) {
-            p.clip_bounds[0] += dx;
-            p.clip_bounds[1] += dy;
-        }
-        if matches!(p.type_info[2], 2 | 3) {
-            p.clip_radius[0] += dx;
-            p.clip_radius[1] += dy;
-        }
-        if p.clip_fade_bounds[2] > 0.0 {
-            p.clip_fade_bounds[0] += dx;
-            p.clip_fade_bounds[1] += dy;
-        }
-        if p.type_info[0] != PrimitiveType::Text as u32 {
-            if p.type_info[1] == FillType::LinearGradient as u32 {
-                p.gradient_params[2] += dx;
-                p.gradient_params[3] += dy;
-            }
-            if p.type_info[1] != FillType::Solid as u32 {
-                p.gradient_params[0] += dx;
-                p.gradient_params[1] += dy;
-            }
-        }
+        shift_primitive(&mut p, dx, dy);
         if p.type_info[0] == PrimitiveType::Mesh as u32 {
             let at = p.border[2] as usize;
             if at + 1 < out.aux_data.len() && meshes.insert(at) {
@@ -705,7 +712,10 @@ impl GpuRenderer {
             min: origin,
             max: [origin[0] + size.0 as f32, origin[1] + size.1 as f32],
         };
-        for node in items {
+        let mut at = 0;
+        while at < items.len() {
+            let node = &items[at];
+            at += 1;
             match node {
                 Node::Glass(glass) => {
                     if let Some(frame) = outputs
@@ -740,6 +750,18 @@ impl GpuRenderer {
                 }
                 Node::Layer(config, children) => {
                     let named_id = config.id.filter(|id| outputs.wanted.contains(id));
+                    if let Some(next) = self.draw_opacity_layers(
+                        target,
+                        batch,
+                        items,
+                        at - 1,
+                        origin,
+                        samples,
+                        outputs,
+                    ) {
+                        at = next;
+                        continue;
+                    }
                     if config.opacity <= 0.0 {
                         if let Some(old) = named_id.and_then(|id| outputs.textures.remove(&id)) {
                             self.layer_texture_cache.release(old.texture);

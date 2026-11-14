@@ -379,6 +379,11 @@ pub struct GpuRenderer {
     /// `None` = no damage scissor (default; blit uses its own
     /// visible-bounds scissor only).
     pending_damage_scissor: Option<(u32, u32, u32, u32)>,
+    /// Whether consecutive plain opacity groups are drawn through one atlas and composited in
+    /// one pass; off draws each group on its own.
+    batch_opacity_layers: bool,
+    /// Atlases the batched opacity groups have been drawn through.
+    opacity_atlases: u64,
     /// Renderer configuration
     config: RendererConfig,
     /// Resolved texture format used by pipelines

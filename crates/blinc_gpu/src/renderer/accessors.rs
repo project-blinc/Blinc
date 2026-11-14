@@ -118,6 +118,17 @@ impl GpuRenderer {
         self.pending_damage_scissor = Some(rect);
     }
 
+    /// Draw consecutive plain opacity groups one at a time (`false`) or through a shared atlas
+    /// (`true`, the default). The two paint the same pixels; the switch is for comparing them.
+    pub fn set_batch_opacity_layers(&mut self, on: bool) {
+        self.batch_opacity_layers = on;
+    }
+
+    /// How many atlases opacity groups have been drawn through since the renderer was made.
+    pub fn opacity_atlas_count(&self) -> u64 {
+        self.opacity_atlases
+    }
+
     /// Clear the damage scissor — subsequent layer composites use
     /// their own visible-bounds scissor only.
     pub fn clear_pending_damage_scissor(&mut self) {
