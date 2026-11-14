@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1794649656,"nonce":"JFDqZvcFT2r+fZl+R0CM2Vm60xA=","added":["bug","perf","area:app","area:platform"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794649666,"nonce":"sSQU8WgVMRReNO5Ud3G40JQp510=","message":"Fixed in 2b32f600. Android takes the same fix and is not run on a device.","files":null}]}
