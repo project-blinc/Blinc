@@ -1830,8 +1830,8 @@ impl RenderTree {
         self.bound_svg.get()
     }
 
-    /// Allow (the default) or forbid baking motion-bound subtrees to textures. Set before the
-    /// animation status is computed.
+    /// Allow or forbid baking motion-bound subtrees to textures. A tree starts with it forbidden
+    /// and a renderer sets it for each frame. Set before the animation status is computed.
     pub fn set_motion_promotion(&self, enabled: bool) {
         self.motion_promotion.set(enabled);
     }

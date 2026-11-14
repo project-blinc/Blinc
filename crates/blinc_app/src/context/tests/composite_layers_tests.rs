@@ -185,6 +185,7 @@ fn composite_layers_promoted_walker_bakes_base_groups_and_blits_live_opacity_onc
         .motion()
         .opacity(opacity.clone());
     let mut tree = blinc_layout::RenderTree::from_element(&ui);
+    tree.set_motion_promotion(true);
     tree.compute_layout(160.0, 120.0);
     tree.compute_animation_status();
     let root = tree.root().unwrap();
