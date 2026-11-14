@@ -1,6 +1,6 @@
 #![allow(deprecated, dead_code)]
-//! A grid of cards under a CSS keyframe animation of transform, in a window, for watching what a
-//! frame costs.
+//! A grid of cards under a CSS keyframe animation of transform, or of plain blocks fading, in a
+//! window, for watching what a frame costs.
 //!
 //! ```text
 //! cargo run --release -p blinc-bench --example css_window_check
@@ -10,6 +10,8 @@
 //!
 //! - `CARDS`: how many cards (default 140).
 //! - `FADE`: `1` animates opacity as well, which keeps the animation off rows.
+//! - `BLOCKS`: `1` makes each card a plain filled rectangle (no border, no label) that fades and
+//!   does not move, which rides rows.
 //! - `TEXT`: `0` leaves the label off the cards (default 1).
 //! - `FPS_CAP`: frames a second the animation is held to (default: the display's).
 //! - `EXIT_AFTER`: seconds until the process exits; unset keeps the window open.
@@ -41,6 +43,14 @@ fn mode() -> &'static str {
 }
 
 fn stylesheet() -> String {
+    if flag("BLOCKS", false) {
+        return "@keyframes pulse {
+            from { opacity: 1; }
+            to { opacity: 0.35; }
+        }
+        .pulse { animation: pulse 500ms ease-in-out infinite alternate; }"
+            .into();
+    }
     let fade = if flag("FADE", false) {
         " opacity: 0.6;"
     } else {
@@ -86,7 +96,8 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
     if ctx.rebuild_count == 0 {
         ctx.add_css(&stylesheet());
     }
-    let label = flag("TEXT", true);
+    let blocks = flag("BLOCKS", false);
+    let label = flag("TEXT", true) && !blocks;
     let mut grid = div()
         .w(ctx.width)
         .h(ctx.height)
@@ -102,10 +113,12 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
             .h(28.0)
             .rounded(6.0)
             .bg(Color::rgb(0.2, 0.45, 0.9))
-            .border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.9))
             .flex_row()
             .items_center()
             .justify_center();
+        if !blocks {
+            card = card.border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.9));
+        }
         if label {
             card = card.child(text(format!("{i}")).size(12.0).color(Color::WHITE));
         }
