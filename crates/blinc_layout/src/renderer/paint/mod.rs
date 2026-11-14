@@ -31,6 +31,7 @@ pub mod basic;
 mod canvas_order;
 pub mod collect;
 pub(in crate::renderer) mod cross_stream;
+mod fade;
 pub mod helpers;
 pub mod layered;
 pub mod layout_renderer;

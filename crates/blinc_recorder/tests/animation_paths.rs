@@ -984,6 +984,54 @@ fn keyframe_transform_scene(name: &'static str, label: bool) -> Scene {
     }
 }
 
+const KEYFRAME_FADE_CSS: &str = "
+@keyframes breathe {
+  from { opacity: 1; }
+  to { opacity: 0.25; }
+}
+.block { animation: breathe 320ms ease-in-out infinite alternate; }
+";
+
+/// A fade in from nothing, which a node painted at no opacity has no ratio to grow from.
+const KEYFRAME_FADE_IN_CSS: &str = "
+@keyframes appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.block { animation: appear 320ms ease-out infinite alternate; }
+";
+
+/// Blocks under a CSS keyframe animation of opacity alone, each a single filled rectangle (a
+/// skeleton placeholder), which fade without a group and so ride rows. `bordered` gives each one a
+/// border, which makes it two draws that a fade has to treat as one picture, so it keeps its group.
+fn keyframe_fade_scene(name: &'static str, css: &'static str, bordered: bool) -> Scene {
+    Scene {
+        name,
+        steps: 20,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            ui.css(css);
+            ui.mount(move |_| {
+                (0..3).fold(stage().gap(10.0), |row, _| {
+                    let block = div()
+                        .w(70.0)
+                        .h(40.0)
+                        .rounded(8.0)
+                        .bg(Color::rgb(0.2, 0.45, 0.9))
+                        .class("block");
+                    let block = if bordered {
+                        block.border(3.0, Color::rgba(1.0, 1.0, 1.0, 0.9))
+                    } else {
+                        block
+                    };
+                    row.child(block)
+                })
+            });
+            Box::new(|_, _| {})
+        }),
+    }
+}
+
 const FLIP_CSS: &str = ".slide { transition: transform 300ms ease-out; }";
 
 /// Cards that a banner appearing above them pushes down, each sliding from where it was to where
@@ -1103,6 +1151,17 @@ fn scenes() -> Vec<Scene> {
         keyframe_scene("css keyframes", true),
         keyframe_scene("css keyframes, no text", false),
         keyframe_transform_scene("css keyframes, transform only, no text", false),
+        keyframe_fade_scene(
+            "css keyframes, opacity, one primitive",
+            KEYFRAME_FADE_CSS,
+            false,
+        ),
+        keyframe_fade_scene("css keyframes, opacity, bordered", KEYFRAME_FADE_CSS, true),
+        keyframe_fade_scene(
+            "css keyframes, fade in, one primitive",
+            KEYFRAME_FADE_IN_CSS,
+            false,
+        ),
         flip_scene("flip", true),
         flip_scene("flip, no text", false),
         flip_grid_scene(30),
@@ -1307,6 +1366,7 @@ const ON_ROWS: &[&str] = &[
     "motion nested, an image",
     "motion in a clipped box, an image",
     "css keyframes, transform only, no text",
+    "css keyframes, opacity, one primitive",
     "scroll a list",
     "scroll a list, scrollbar always",
     "scroll a list, no scrollbar",
@@ -2415,6 +2475,31 @@ fn a_css_animated_label_follows_its_card_on_rows() {
     }
 }
 
+/// A CSS animation of opacity on a block of one primitive is moved by rows and shows: the block's
+/// centre is the stage's at the faint end and the block's at the opaque end.
+#[test]
+fn a_css_fade_of_a_single_primitive_rides_rows_and_shows() {
+    let scene = keyframe_fade_scene(
+        "css keyframes, opacity, one primitive",
+        KEYFRAME_FADE_CSS,
+        false,
+    );
+    let Some((frames, paths)) = run_logged(&scene, Path::Rows) else {
+        return;
+    };
+    let by_rows = paths.iter().filter(|p| p.ends_with("rows:applied")).count();
+    assert_eq!(by_rows, scene.steps, "{paths:?}");
+    let blue = |f: &CapturedFrame| pixel(f, (W / 2) as usize, (H / 2) as usize)[2];
+    let (lo, hi) = frames
+        .iter()
+        .map(blue)
+        .fold((255, 0), |(lo, hi): (i32, i32), b| (lo.min(b), hi.max(b)));
+    assert!(
+        hi - lo > 80,
+        "the block's centre only moved from blue {lo} to {hi}"
+    );
+}
+
 /// A banner that appears above a wrapped grid of `count` tiles and pushes every one down, each
 /// sliding from where it was (FLIP).
 fn flip_grid_scene(count: usize) -> Scene {
@@ -2635,6 +2720,41 @@ fn cn_tabs_scene() -> Scene {
     })
 }
 
+/// cn skeletons and an indeterminate progress bar: childless filled blocks under a CSS fade.
+fn cn_skeleton_scene() -> Scene {
+    cn_scene("cn skeletons", 40, |ui| {
+        ui.mount(move |_| {
+            cn_stage()
+                .child(blinc_cn::cn::skeleton().w(200.0).h(16.0))
+                .child(blinc_cn::cn::skeleton().w(140.0).h(16.0))
+                .child(blinc_cn::cn::skeleton_circle(40.0))
+                .child(blinc_cn::cn::progress_indeterminate().w(180.0))
+        });
+        Box::new(|_| {})
+    })
+}
+
+/// cn skeletons fade on rows, as a full paint draws them, and the fade shows.
+#[test]
+fn cn_skeletons_fade_on_rows() {
+    let scene = cn_skeleton_scene();
+    let Some((report, _, painted, paths)) = compare(&scene, Path::Rows) else {
+        return;
+    };
+    let by_rows = paths.iter().filter(|p| p.ends_with("rows:applied")).count();
+    assert!(
+        by_rows >= scene.steps - 3,
+        "{by_rows} of {} frames on rows: {paths:?}",
+        scene.steps
+    );
+    assert_eq!(report.differing_steps(), 0, "{:?}", report.per_step);
+    let moved = painted
+        .windows(2)
+        .filter(|w| w[0].data != w[1].data)
+        .count();
+    assert!(moved >= 20, "the picture changed in only {moved} frames");
+}
+
 fn cn_scenes() -> Vec<Scene> {
     vec![
         cn_collapsible_scene(),
@@ -2728,9 +2848,27 @@ const CSS_GRID_FADE: &str = "
 .pulse { animation: pulse 400ms ease-in-out infinite alternate; }
 ";
 
+/// A fade of opacity alone, which fades a block of one primitive on rows and bakes a bordered card.
+const CSS_GRID_OPACITY: &str = "
+@keyframes pulse {
+  from { opacity: 1; }
+  to { opacity: 0.35; }
+}
+.pulse { animation: pulse 400ms ease-in-out infinite alternate; }
+";
+
 /// A grid of `count` small cards, each under a CSS keyframe animation of transform and opacity,
 /// with a label if asked.
 fn css_grid_scene(count: usize, label: bool, css: &'static str) -> Scene {
+    css_grid(count, label, true, css)
+}
+
+/// A grid of `count` plain filled blocks, each under a CSS keyframe animation: a skeleton page.
+fn css_blocks_scene(count: usize, css: &'static str) -> Scene {
+    css_grid(count, false, false, css)
+}
+
+fn css_grid(count: usize, label: bool, bordered: bool, css: &'static str) -> Scene {
     Scene {
         name: "css grid",
         steps: 40,
@@ -2751,10 +2889,12 @@ fn css_grid_scene(count: usize, label: bool, css: &'static str) -> Scene {
                         .h(14.0)
                         .rounded(3.0)
                         .bg(Color::rgb(0.2, 0.45, 0.9))
-                        .border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.9))
                         .flex_row()
                         .items_center()
                         .justify_center();
+                    if bordered {
+                        card = card.border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.9));
+                    }
                     if label {
                         card =
                             card.child(text(format!("{}", i % 10)).size(8.0).color(Color::WHITE));
@@ -2774,13 +2914,21 @@ fn css_grid_scene(count: usize, label: bool, css: &'static str) -> Scene {
 #[test]
 #[ignore]
 fn what_a_css_animated_frame_costs() {
-    for (kind, css) in [
-        ("transform", CSS_GRID_TRANSFORM),
-        ("transform and opacity", CSS_GRID_FADE),
+    for (kind, css, blocks) in [
+        ("transform", CSS_GRID_TRANSFORM, false),
+        ("transform and opacity", CSS_GRID_FADE, false),
+        ("opacity, plain blocks", CSS_GRID_OPACITY, true),
     ] {
         for label in [true, false] {
+            if blocks && label {
+                continue;
+            }
             for count in [20, 60, 140] {
-                let scene = css_grid_scene(count, label, css);
+                let scene = if blocks {
+                    css_blocks_scene(count, css)
+                } else {
+                    css_grid_scene(count, label, css)
+                };
                 eprintln!(
                     "{count} cards, {kind}, {}, {} frames each (median / p90 ms, frames in full):",
                     if label { "with text" } else { "no text" },
@@ -2828,8 +2976,8 @@ fn resident_kb() -> u64 {
 }
 
 /// Not a check: how far the process grows while 140 cards run a CSS animation, with the cards
-/// baked into textures (`MEM_PATH=patched`, the default) or moved by rows (`MEM_PATH=rows`). Run
-/// each in a process of its own, with `--run-ignored all --no-capture`.
+/// baked into textures (`MEM_PATH=patched`, the default) or moved by rows (`MEM_PATH=rows`), or with
+/// `MEM_SCENE=blocks` 140 plain blocks fading. Run each in a process of its own, with `--run-ignored all --no-capture`.
 #[test]
 #[ignore]
 fn how_much_memory_css_animated_cards_hold() {
@@ -2838,7 +2986,11 @@ fn how_much_memory_css_animated_cards_hold() {
     } else {
         Path::Patched
     };
-    let scene = css_grid_scene(140, false, CSS_GRID_TRANSFORM);
+    let scene = if std::env::var("MEM_SCENE").as_deref() == Ok("blocks") {
+        css_blocks_scene(140, CSS_GRID_OPACITY)
+    } else {
+        css_grid_scene(140, false, CSS_GRID_TRANSFORM)
+    };
     let Some(mut ui) = session(path) else { return };
     let mut script = (scene.build)(&mut ui);
     ui.settle();

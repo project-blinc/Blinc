@@ -729,8 +729,9 @@ impl RenderTree {
     /// bound nodes by rows (not baked into textures), the animation only moves, scales or turns
     /// the node about its centre, and nothing else owns a binding on it. The animation replaces
     /// the node's transform, and a binding is applied over it, so a node that has its own is left
-    /// to the props. An animation of opacity is left to them as well: a bound opacity is a group
-    /// drawn in an offscreen layer, which costs more than the layer the animation is baked into.
+    /// to the props. An animation of opacity is carried only on a node that fades without a group
+    /// ([`Self::fades_without_group`]): a bound opacity otherwise is a group drawn in an offscreen
+    /// layer, which costs more than the layer the animation is baked into.
     fn css_can_bind(
         &self,
         node: LayoutNodeId,
@@ -749,8 +750,10 @@ impl RenderTree {
             translate_x: props.translate_x.or(Some(0.0)),
             ..props.clone()
         };
-        if !moves
-            || props.opacity.is_some()
+        // An opacity rides along only where it fades one primitive, which needs no group.
+        let fades = props.opacity.is_some();
+        if !(moves || fades)
+            || (fades && !self.fades_without_group(node))
             || !without_turn.is_composite_promotable()
             || self.motion_promotion.get()
             || blinc_animation::try_get_scheduler().is_none()
@@ -760,7 +763,7 @@ impl RenderTree {
             return false;
         }
         self.render_nodes.get(&node).is_some_and(|render| {
-            render.props.transform.is_none() && render.props.transform_origin.is_none()
+            !moves || (render.props.transform.is_none() && render.props.transform_origin.is_none())
         })
     }
 
@@ -783,6 +786,7 @@ impl RenderTree {
             props.scale_x.is_some(),
             props.scale_y.is_some(),
             props.rotate.is_some(),
+            props.opacity.is_some(),
         ];
         let has = |b: &crate::motion::MotionBindings| {
             [
@@ -791,6 +795,7 @@ impl RenderTree {
                 b.scale_x.is_some(),
                 b.scale_y.is_some(),
                 b.rotation.is_some(),
+                b.opacity.is_some(),
             ]
         };
         let complete = self
@@ -818,6 +823,7 @@ impl RenderTree {
                 bindings.scale_x = bindings.scale_x.take().or_else(|| value(props.scale_x));
                 bindings.scale_y = bindings.scale_y.take().or_else(|| value(props.scale_y));
                 bindings.rotation = bindings.rotation.take().or_else(|| value(props.rotate));
+                bindings.opacity = bindings.opacity.take().or_else(|| value(props.opacity));
             }
         }
         self.css_bound.insert(node, stable);
@@ -836,6 +842,7 @@ impl RenderTree {
         drive(&bindings.scale_x, props.scale_x);
         drive(&bindings.scale_y, props.scale_y);
         drive(&bindings.rotation, props.rotate);
+        drive(&bindings.opacity, props.opacity);
     }
 
     /// Take away the bindings of CSS animations that are not carried this frame: those that have

@@ -955,9 +955,17 @@ impl RenderTree {
         let use_3d_layer = has_3d_css_transform && !has_3d_shape;
         // Child count does not bound overlapping draws, including canvas output.
         let has_motion_opacity_binding = motion_bindings_ref.is_some_and(|b| b.opacity.is_some());
+        // A bound opacity on a node of one primitive is that primitive's alpha, which a row
+        // carries, so no group is pushed.
+        let fades_in_place = has_motion_opacity_binding
+            && !cross_stream_group
+            && glass_depth == 0
+            && !inside_foreground
+            && self.fades_without_group(node);
         // Keep the group at motion opacity endpoints. Background can patch its
         // command; foreground requests a full paint with its own command stream.
         let keep_motion_group = has_motion_opacity_binding
+            && !fades_in_place
             && (ctx.bg_batch_is_dynamic() || !ctx.can_promote_composite_layer())
             && matches!(
                 effective_layer,
@@ -973,7 +981,7 @@ impl RenderTree {
             || foreground_content_group
             || (cross_stream_group && in_motion_subtree)
             || keep_motion_group
-            || node_motion_opacity < 1.0
+            || (node_motion_opacity < 1.0 && !fades_in_place)
             || has_layer_effects
             || has_blend_mode
             || use_3d_layer;
