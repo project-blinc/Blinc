@@ -827,6 +827,21 @@ impl RenderTree {
         self.viewport_cull_scrolls.contains(&node_id)
     }
 
+    /// The scroll containers that are scrolled, as their raw ids and offsets, sorted by id: what a
+    /// trace of a frame records to show when a page's scroll changes.
+    pub fn scrolled_offsets(&self) -> Vec<(u64, f32, f32)> {
+        let mut scrolled: Vec<(u64, f32, f32)> = self
+            .scroll_physics
+            .keys()
+            .filter_map(|node| {
+                let (x, y) = self.get_scroll_offset(*node);
+                (x.abs() > 0.5 || y.abs() > 0.5).then(|| (node.to_raw(), x, y))
+            })
+            .collect();
+        scrolled.sort_by_key(|entry| entry.0);
+        scrolled
+    }
+
     pub fn get_scroll_offset(&self, node_id: LayoutNodeId) -> (f32, f32) {
         // Check scroll physics first (has direction-aware scroll from element)
         let (x, y) = if let Some(physics) = self.scroll_physics.get(&node_id) {

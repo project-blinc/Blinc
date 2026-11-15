@@ -158,12 +158,48 @@ fn session() -> Option<(Headless, PathLog)> {
     Some((ui, PathLog::default()))
 }
 
-/// Scroll until `selector` is painted, `None` when it never is.
+/// The node a selector names. `@indeterminate-bar` is the bar of the first indeterminate progress.
+fn find_node(ui: &Headless, selector: &str) -> Option<blinc_layout::tree::LayoutNodeId> {
+    if selector != "@indeterminate-bar" {
+        return ui.find(selector);
+    }
+    let tracks: Vec<_> = ui
+        .tree()
+        .element_registry()
+        .class_to_nodes_index()
+        .get("cn-progress")
+        .map(|set| set.iter().copied().collect())
+        .unwrap_or_default();
+    // There may be several; the one nearest the top of the page that is on it.
+    let mut bars: Vec<_> = tracks
+        .into_iter()
+        .filter(|n| {
+            ui.tree()
+                .element_registry()
+                .attribute(*n, "data-indeterminate")
+                .is_some()
+        })
+        .filter_map(|track| ui.tree().layout_tree.children(track).into_iter().next())
+        .filter_map(|bar| {
+            ui.tree()
+                .layout_tree
+                .get_absolute_bounds(bar)
+                .map(|b| (b.y, bar))
+        })
+        .filter(|(y, _)| *y > 0.0)
+        .collect();
+    bars.sort_by(|a, b| a.0.total_cmp(&b.0));
+    bars.first().map(|(_, bar)| *bar)
+}
+
+/// Scroll until the node is inside the window, `false` when it never is.
 fn bring_into_view(ui: &mut Headless, selector: &str) -> bool {
-    ui.move_to(450.0, 500.0);
+    ui.move_to(450.0, 400.0);
     for _ in 0..200 {
-        if let Some(node) = ui.find(selector)
-            && ui.tree().painted_node_ids().contains(&node)
+        if let Some(node) = find_node(ui, selector)
+            && let Some(b) = ui.tree().get_absolute_bounds(node)
+            && b.y > 60.0
+            && b.y + b.height < height() as f32 - 20.0
         {
             return true;
         }
@@ -353,6 +389,51 @@ fn main() {
         }
         ui.leave();
         rest(&mut ui);
+
+        // The pointer along the items inside each open dropdown, then on to the next trigger.
+        println!("  moving between the items of the dropdowns:");
+        for (i, (x, y, w, h)) in triggers.iter().enumerate().take(3) {
+            let offset = page(&ui);
+            ui.move_to(x + w / 2.0, y + h / 2.0 + offset);
+            for _ in 0..16 {
+                ui.advance(16);
+                let _ = ui.paint_timed(true);
+            }
+            let items: Vec<_> = ui
+                .tree()
+                .element_registry()
+                .class_to_nodes_index()
+                .get("cn-menubar-item")
+                .map(|set| set.iter().copied().collect::<Vec<_>>())
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|n| {
+                    ui.tree()
+                        .layout_tree
+                        .get_absolute_bounds(n)
+                        .map(|b| (b.x, b.y, b.width, b.height))
+                })
+                .collect();
+            let mut items = items;
+            items.sort_by(|a, b| a.1.total_cmp(&b.1));
+            println!("    menu {i}: {} items, page {}", items.len(), page(&ui));
+            for (j, (ix, iy, iw, ih)) in items.iter().enumerate() {
+                // Overlay nodes are laid out in window coordinates.
+                ui.move_to(ix + iw / 2.0, iy + ih / 2.0);
+                for _ in 0..10 {
+                    ui.advance(16);
+                    let _ = ui.paint_timed(true);
+                }
+                println!(
+                    "      item {j} at window y {:.0}: page {} (was {start}), hovered item row, overlay open {}",
+                    iy + ih / 2.0,
+                    page(&ui),
+                    overlay_open()
+                );
+            }
+        }
+        ui.leave();
+        rest(&mut ui);
     }
 
     // The first accordion, opened and closed three times.
@@ -383,8 +464,132 @@ fn main() {
         rest(scene.ui);
     }
 
+    if std::env::var("COSTS_FIND_DIAG").is_ok() {
+        for sel in [
+            ".cn-progress",
+            ".cn-progress-bar",
+            "[data-indeterminate]",
+            ".cn-progress[data-indeterminate]",
+            ".cn-switch",
+            ".cn-slider",
+            ".cn-menubar",
+        ] {
+            println!("find {sel:<36} -> {}", ui.find(sel).is_some());
+        }
+        for sel in ["@indeterminate-bar", ".cn-switch", ".cn-slider"] {
+            let n = find_node(&ui, sel);
+            let b = n.and_then(|n| ui.tree().get_absolute_bounds(n));
+            println!(
+                "node {sel:<22} -> {:?}",
+                b.map(|b| (b.x as i32, b.y as i32, b.width as i32, b.height as i32))
+            );
+        }
+        ui.move_to(450.0, 400.0);
+        for _ in 0..6 {
+            ui.scroll(0.0, -400.0);
+            ui.advance(16);
+            let _ = ui.paint_timed(true);
+            let n = find_node(&ui, "@indeterminate-bar");
+            let b = n.and_then(|n| ui.tree().get_absolute_bounds(n));
+            println!(
+                "after a wheel step: bar at {:?}",
+                b.map(|b| (b.x as i32, b.y as i32))
+            );
+        }
+        return;
+    }
+
+    if std::env::var("COSTS_BAR_STATE").is_ok() {
+        // Let the animations run a while, as a window does, then ask the gate.
+        for _ in 0..60 {
+            ui.advance(16);
+            let _ = ui.paint_timed(true);
+        }
+        {
+            let t = ui.tree();
+            println!(
+                "gate: needs full paint {}, all promotable {}, flip off rows {}",
+                t.animation_needs_full_paint(),
+                t.css_active_all_composite_promotable(),
+                t.has_flip_animations_off_rows()
+            );
+            let store = t.css_anim_store();
+            let g = store.lock().unwrap();
+            for (id, a) in g.animations.iter().filter(|(_, a)| a.is_playing) {
+                let p = &a.current_properties;
+                println!(
+                    "  playing animation {:?}: opacity {:?} tx {:?} ty {:?} sx {:?} rot {:?} bg {:?}",
+                    id,
+                    p.opacity.is_some(),
+                    p.translate_x.is_some(),
+                    p.translate_y.is_some(),
+                    p.scale_x.is_some(),
+                    p.rotate.is_some(),
+                    p.background_color.is_some()
+                );
+            }
+        }
+        let tracks: Vec<_> = ui
+            .tree()
+            .element_registry()
+            .class_to_nodes_index()
+            .get("cn-progress")
+            .map(|set| set.iter().copied().collect())
+            .unwrap_or_default();
+        for track in tracks {
+            if ui
+                .tree()
+                .element_registry()
+                .attribute(track, "data-indeterminate")
+                .is_none()
+            {
+                continue;
+            }
+            let t = ui.tree();
+            let Some(bar) = t.layout_tree.children(track).into_iter().next() else {
+                continue;
+            };
+            let render = t.get_render_node(bar);
+            println!(
+                "indeterminate bar: carried {}, bindings {}, css off rows {}, css active {}, y {:?}, opacity {:?}, background solid {}, children {}",
+                t.css_carried(bar),
+                t.has_motion_bindings(bar),
+                t.css_active_off_rows(),
+                t.css_has_active(),
+                t.get_absolute_bounds(bar).map(|b| b.y as i32),
+                render.map(|r| r.props.opacity),
+                render.is_some_and(|r| matches!(
+                    r.props.background,
+                    Some(blinc_core::Brush::Solid(_))
+                )),
+                t.layout_tree.children(bar).len(),
+            );
+        }
+        return;
+    }
+
+    // Whether the CSS animations playing are carried by rows, and what the gate sees.
+    if bring_into_view(
+        &mut ui,
+        ".cn-progress[data-indeterminate] > .cn-progress-bar",
+    ) {
+        rest(&mut ui);
+        let bar = find_node(&ui, "@indeterminate-bar").expect("the bar");
+        let t = ui.tree();
+        println!(
+            "indeterminate bar: carried by a binding {}, css off rows {}, css active {}, has bindings {}",
+            t.css_carried(bar),
+            t.css_active_off_rows(),
+            t.css_has_active(),
+            t.has_motion_bindings(bar),
+        );
+        if std::env::var("COSTS_BAR_ONLY").is_ok() {
+            return;
+        }
+    }
+
     // The indeterminate bar, brought into view and left to play.
-    if bring_into_view(&mut ui, ".cn-progress[data-indeterminate]") {
+    if bring_into_view(&mut ui, "@indeterminate-bar") {
         rest(&mut ui);
         let mut scene = Scene::new(&mut ui, log.clone());
         for _ in 0..90 {

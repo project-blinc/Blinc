@@ -299,6 +299,25 @@ impl RenderTree {
         out
     }
 
+    /// The stable ids of the playing CSS animations a motion binding carries, for a motion trace.
+    pub fn css_carried_samples(&self) -> Vec<u64> {
+        let store = self.css_anim_store.lock().unwrap();
+        let mut carried: Vec<u64> = store
+            .animations
+            .iter()
+            .chain(store.transitions.iter())
+            .filter(|(_, a)| a.is_playing)
+            .filter(|(stable, _)| {
+                self.stable_to_layout
+                    .get(*stable)
+                    .is_some_and(|node| self.css_bound.contains_key(node))
+            })
+            .map(|(stable, _)| stable.to_raw())
+            .collect();
+        carried.sort_unstable();
+        carried
+    }
+
     /// Check if the CSS animation store has any active work (animations or
     /// transitions), or an animation has stopped whose final values are still
     /// to be written (see [`Self::apply_all_css_animation_props`]).

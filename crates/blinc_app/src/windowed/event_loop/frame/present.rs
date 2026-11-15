@@ -321,6 +321,26 @@ pub(super) fn render_and_schedule(
             && ws.last_paint_time_ms != 0
             && blinc_app.has_render_cache();
         crate::motion_trace::note("fast", try_fast_paint);
+        if crate::motion_trace::enabled() {
+            if let Some(t) = ws.render_tree.as_ref() {
+                crate::motion_trace::note("scrolls", serde_json::json!(t.scrolled_offsets()));
+            }
+            crate::motion_trace::note(
+                "fast_gate",
+                serde_json::json!({
+                    "did_rebuild": did_rebuild,
+                    "needs_relayout": ws.needs_relayout,
+                    "css_blocks_fast": css_blocks_fast,
+                    "scroll_stale": ws.render_tree.as_ref().is_some_and(|t| t.scroll_paint_stale()),
+                    "scroll_gliding": scroll_animating
+                        && ws.render_tree.as_ref().is_some_and(|t| t.scroll_off_rows_animating()),
+                    "bounds_anim": bounds_anim_active,
+                    "overlay": new_overlay_active,
+                    "first_paint": ws.last_paint_time_ms == 0,
+                    "no_cache": !blinc_app.has_render_cache(),
+                }),
+            );
+        }
 
         // Render with motion animations
         // Use physical pixel dimensions for the render surface
