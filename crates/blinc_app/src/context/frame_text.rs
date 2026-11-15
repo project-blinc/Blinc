@@ -94,6 +94,14 @@ pub(super) fn chain_moving(tree: &blinc_layout::RenderTree, node: super::LayoutN
         .any(|n| bindings.get(&n).is_some_and(|b| b.is_any_animating()))
 }
 
+/// Whether `node` is inside a scroll container that the rows move.
+pub(super) fn under_scroll_row(tree: &blinc_layout::RenderTree, node: super::LayoutNodeId) -> bool {
+    tree.layout_tree
+        .ancestors(node)
+        .into_iter()
+        .any(|a| tree.is_scroll_row_node(a))
+}
+
 /// Whether a CSS animation that moves, scales or turns plays on `node` or an ancestor. One of
 /// opacity alone leaves the text as it is at rest.
 pub(super) fn css_transforming(tree: &blinc_layout::RenderTree, node: super::LayoutNodeId) -> bool {
@@ -857,6 +865,11 @@ impl RenderContext {
                 continue;
             };
             let moving = chain_moving(tree, run.element.node);
+            // Text a scroll container moves keeps its row: there is no pose to bake while the
+            // container scrolls, and the row is a translation the glyphs need no new bitmap for.
+            if !moving && under_scroll_row(tree, run.element.node) {
+                continue;
+            }
             let lane = batch.primitives[indices[0]].node_slot;
             match (moving, run.baked) {
                 // Moving again: back to the painted pose, at the size it now needs.

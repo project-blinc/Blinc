@@ -263,8 +263,6 @@ impl RenderTree {
         !self.moves_its_content(node)
             && !props.is_overlay_root
             && !props.is_glass()
-            && props.opacity >= 0.999
-            && props.layer_effects.is_empty()
             && props.clip_path.is_none()
             && !matches!(render.element_type, ElementType::Canvas(_))
     }
@@ -292,10 +290,6 @@ impl RenderTree {
                         Some("overlay root")
                     } else if p.is_glass() {
                         Some("glass")
-                    } else if p.opacity < 0.999 {
-                        Some("opacity")
-                    } else if !p.layer_effects.is_empty() {
-                        Some("layer effect")
                     } else if p.clip_path.is_some() {
                         Some("clip path")
                     } else if matches!(status.get(&node), Some(AnimationStatus::Animating(_))) {
@@ -379,12 +373,12 @@ mod tests {
         assert!(tree.scroll_content_qualifies(scroll));
         let list = tree.layout_tree.children(scroll)[0];
         let row = tree.layout_tree.children(list)[MIN_CHILDREN * 3];
-        tree.update_render_props(row, |props| props.opacity = 0.5);
+        tree.update_render_props(row, |props| props.is_overlay_root = true);
         assert!(
             !tree.scroll_content_qualifies(scroll),
-            "a faded row still qualified after the index was made"
+            "a row that became an overlay root still qualified after the index was made"
         );
-        tree.update_render_props(row, |props| props.opacity = 1.0);
+        tree.update_render_props(row, |props| props.is_overlay_root = false);
         assert!(tree.scroll_content_qualifies(scroll));
     }
 

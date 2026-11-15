@@ -1552,6 +1552,7 @@ const ON_ROWS: &[&str] = &[
     "css keyframes, opacity, one primitive",
     "motion fade, equal cards",
     "scroll a list with icons",
+    "scroll a translucent list",
     "motion, an svg",
     "scroll a list",
     "scroll a list, scrollbar always",
