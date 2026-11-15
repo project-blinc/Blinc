@@ -846,6 +846,47 @@ fn scroll_icons_scene(name: &'static str) -> Scene {
     }
 }
 
+/// A scrolled list whose rows are translucent, each a group with a label, which moves with the
+/// rows.
+fn scroll_translucent_scene(name: &'static str) -> Scene {
+    let steps = 20;
+    Scene {
+        name,
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let reference = blinc_layout::selector::ScrollRef::new();
+            let bound = reference.clone();
+            ui.mount(move |_| {
+                let mut list = div().flex_col().gap(2.0).w(W as f32 - 20.0).p(2.0);
+                for i in 0..60 {
+                    list = list.child(
+                        div()
+                            .w(W as f32 - 28.0)
+                            .h(28.0)
+                            .rounded(6.0)
+                            .bg(Color::rgb(0.2, 0.45, 0.7))
+                            .border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.8))
+                            .opacity(if i % 2 == 0 { 0.6 } else { 1.0 })
+                            .flex_row()
+                            .items_center()
+                            .child(text(format!("Row {i}")).size(13.0).color(Color::WHITE)),
+                    );
+                }
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .child(scroll().bind(&bound).w(W as f32).h(H as f32).child(list))
+            });
+            Box::new(move |ui, step| {
+                reference.set_scroll_offset(0.0, 12.0 * (step + 1) as f32);
+                ui.settle_scroll();
+            })
+        }),
+    }
+}
+
 /// A card that a binding moves and scales, with an SVG icon in it that moves and grows with it.
 fn motion_svg_scene(name: &'static str) -> Scene {
     let steps = 20;
@@ -1274,6 +1315,7 @@ fn scenes() -> Vec<Scene> {
         fade_beside_a_mover_scene(),
         fade_grid_scene_of(6),
         scroll_icons_scene("scroll a list with icons"),
+        scroll_translucent_scene("scroll a translucent list"),
         motion_svg_scene("motion, an svg"),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
