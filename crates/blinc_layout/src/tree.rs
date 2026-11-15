@@ -488,24 +488,34 @@ impl LayoutTree {
         // tree is not walked.
         let marked: Vec<LayoutNodeId> = self.incidental_align_self.iter().copied().collect();
         for child in marked {
-            let Some(&node) = self.node_map.get(child) else {
-                continue;
-            };
-            let Some(parent) = self.taffy.parent(node) else {
-                continue;
-            };
-            let parent_names_alignment = self
-                .taffy
-                .style(parent)
-                .is_ok_and(|s| s.align_items.is_some());
-            if parent_names_alignment
-                && let Some(mut style) = self.get_style(child)
-                && style.align_self.is_some()
+            if let Some(mut style) = self.get_style(child)
+                && self.yield_incidental_align_self(child, &mut style)
             {
-                style.align_self = None;
                 self.set_style(child, style);
             }
         }
+    }
+
+    /// Drop `style`'s `align_self` when it is the incidental one of `id` and the parent names an
+    /// alignment, as layout does. Whether it dropped one. Restyling a node passes its style
+    /// through this so a style that layout would change back is not set.
+    pub fn yield_incidental_align_self(&self, id: LayoutNodeId, style: &mut Style) -> bool {
+        if style.align_self.is_none() || !self.incidental_align_self.contains(&id) {
+            return false;
+        }
+        let parent_names_alignment = self
+            .node_map
+            .get(id)
+            .and_then(|&node| self.taffy.parent(node))
+            .is_some_and(|parent| {
+                self.taffy
+                    .style(parent)
+                    .is_ok_and(|s| s.align_items.is_some())
+            });
+        if parent_names_alignment {
+            style.align_self = None;
+        }
+        parent_names_alignment
     }
 
     /// Get the computed layout for a node

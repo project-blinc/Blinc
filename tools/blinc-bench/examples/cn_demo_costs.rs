@@ -499,6 +499,33 @@ fn main() {
         return;
     }
 
+    if std::env::var("COSTS_ROWS_DIAG").is_ok() {
+        let bar = ui.find(".cn-menubar").expect("the menubar");
+        let page = {
+            let t = ui.tree();
+            t.layout_tree
+                .ancestors(bar)
+                .into_iter()
+                .find(|n| t.is_scroll_container(*n))
+        };
+        ui.move_to(450.0, 500.0);
+        for i in 0..12 {
+            ui.scroll(0.0, -36.0);
+            ui.advance(16);
+            {
+                let t = ui.tree();
+                println!(
+                    "frame {i}: stale {} epoch {} rows {:?}",
+                    t.scroll_paint_stale(),
+                    t.layout_tree.epoch(),
+                    page.map(|p| t.is_scroll_row_node(p))
+                );
+            }
+            let _ = ui.paint_timed(true);
+        }
+        return;
+    }
+
     if std::env::var("COSTS_ROW_BLOCKERS").is_ok() {
         // The page's scroll container: the scroll ancestor of the menubar.
         let bar = ui.find(".cn-menubar").expect("the menubar");
