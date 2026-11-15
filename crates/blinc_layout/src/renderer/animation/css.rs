@@ -310,6 +310,37 @@ impl RenderTree {
         store.has_active_animations() || store.has_active_transitions()
     }
 
+    /// Whether an open overlay has a CSS animation or transition to keep drawing for: one that is
+    /// bound to end, or one inside an overlay. An animation that repeats with no end elsewhere,
+    /// a spinner in the page behind a menu, does not keep an overlay drawing; it is drawn while it
+    /// is visible, by the signal that is gated on what was painted.
+    pub fn css_has_active_for_overlay(&self) -> bool {
+        let store = self.css_anim_store.lock().unwrap();
+        // One that has stopped, with its final values still to be written, wants a frame.
+        if self
+            .css_anim_written
+            .iter()
+            .any(|id| store.animations.get(id).is_some_and(|a| !a.is_playing))
+            || self
+                .css_trans_written
+                .iter()
+                .any(|id| store.transitions.get(id).is_some_and(|t| !t.is_playing))
+        {
+            return true;
+        }
+        let counts = |stable: &crate::tree::StableNodeId,
+                      a: &crate::render_state::ActiveCssAnimation| {
+            a.is_playing
+                && (!a.is_infinite()
+                    || self
+                        .stable_to_layout
+                        .get(stable)
+                        .is_some_and(|node| self.inside_overlay_root(*node)))
+        };
+        store.animations.iter().any(|(s, a)| counts(s, a))
+            || store.transitions.iter().any(|(s, a)| counts(s, a))
+    }
+
     /// Whether a CSS-animated subtree can be baked into a texture and moved
     /// at composite time: its animated properties are ones a blit can apply,
     /// and nothing under it is drawn outside the texture. Text, SVG, images

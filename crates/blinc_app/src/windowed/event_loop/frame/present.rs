@@ -633,7 +633,10 @@ pub(super) fn render_and_schedule(
             .map(|s| s.has_visible_overlays())
             .unwrap_or(false);
         let overlay_present = mgr_present || stack_present;
-        let css_active = ws.render_tree.as_ref().is_some_and(|t| t.css_has_active());
+        let css_active = ws
+            .render_tree
+            .as_ref()
+            .is_some_and(|t| t.css_has_active_for_overlay());
         overlay_present && css_active
     };
 

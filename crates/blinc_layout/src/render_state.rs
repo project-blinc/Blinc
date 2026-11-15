@@ -350,6 +350,13 @@ impl ActiveCssAnimation {
         props
     }
 
+    /// Whether every lane that is playing repeats with no end, so the animation never settles on
+    /// its own.
+    pub fn is_infinite(&self) -> bool {
+        let mut playing = self.all().filter(|lane| lane.is_playing()).peekable();
+        playing.peek().is_some() && playing.all(|lane| lane.is_infinite())
+    }
+
     /// The values the animation ends on, over every lane.
     pub fn target(&self) -> blinc_animation::KeyframeProperties {
         let mut props = blinc_animation::KeyframeProperties::default();
