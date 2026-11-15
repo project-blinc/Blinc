@@ -24,6 +24,29 @@ russl::russl! {
         pub link: Vec4,
     }
 
+    // Whether the delta of `node` scales what it moves by at least half a hundredth, the step a
+    // glyph's raster size is rounded to.
+    pub fn scales_node(node: NodeRow) -> bool {
+        return abs(node.motion.z - 1.0) >= 0.005 || abs(node.motion.w - 1.0) >= 0.005;
+    }
+
+    // A glyph under a scaling row is put on a whole device pixel, the corner of its quad (which is
+    // drawn scaled about its centre by its own affine), so a bitmap drawn at its own size is
+    // sampled texel for texel as static text is. A glyph that is turned is left as it is.
+    pub fn snap_glyph(p_in: Primitive) -> Primitive {
+        let mut p = p_in;
+        if p.type_info.x == 7u32 && abs(p.rotation.x) < 0.0001 && abs(p.local_affine.y) < 0.0001 && abs(p.local_affine.z) < 0.0001 {
+            let w = p.bounds.z;
+            let h = p.bounds.w;
+            let left = p.bounds.x + w * 0.5 - w * p.local_affine.x * 0.5;
+            let top = p.bounds.y + h * 0.5 - h * p.local_affine.w * 0.5;
+            let dx = floor(left - 0.001 + 0.5) - left;
+            let dy = floor(top - 0.001 + 0.5) - top;
+            p.bounds = Vec4::new(p.bounds.x + dx, p.bounds.y + dy, w, h);
+        }
+        return p;
+    }
+
     // `p_in` as it is drawn under the delta of `node`.
     // `depth` is the row's place in the primitive's chain, zero for the node's own.
     pub fn apply_node(p_in: Primitive, node: NodeRow, depth: u32) -> Primitive {

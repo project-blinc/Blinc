@@ -251,11 +251,9 @@ impl RenderContext {
                     let mut run_id = 0u32;
                     let table = self.rows_mode();
                     let mut prepared = if table && ordinal != 0 {
-                        let (scale, moving) = frame_text::raster_scale(tree, text.node, true);
-                        let k = frame_text::raster_size(
-                            scale.max(frame_text::affine_scale(text.css_affine)),
-                            moving,
-                        );
+                        let (scale, moving) = frame_text::raster_scale(tree, text.node);
+                        let shown = scale.max(frame_text::affine_scale(text.css_affine));
+                        let k = frame_text::raster_size(shown, text.font_size, moving);
                         if table {
                             run_id = self.captured_runs.len() as u32 + 1;
                             self.captured_runs.push(cached_text::CapturedRun {
@@ -271,18 +269,22 @@ impl RenderContext {
                             (width, height),
                             scale_factor,
                             k,
-                            Some(!moving),
+                            Some(!moving || frame_text::scaled(shown)),
                         )
                     } else {
                         // Not moved by the node table: laid out at the base size and rasterized at
                         // the size its card shows it, so a scaled card is as sharp faded or not.
-                        let (k, moving) = frame_text::grouped_raster(tree, &text);
+                        let shown = frame_text::affine_scale(text.css_affine);
+                        let moving = frame_text::css_transforming(tree, text.node)
+                            || frame_text::chain_moving(tree, text.node);
+                        let k = frame_text::raster_size(shown, text.font_size, moving);
                         self.prepare_captured_text_at(
                             &text,
                             (width, height),
                             scale_factor,
                             k,
-                            text.css_affine.map(|_| !moving),
+                            text.css_affine
+                                .map(|_| !moving || frame_text::scaled(shown)),
                         )
                     };
                     for p in &mut prepared.primitives {
@@ -429,12 +431,11 @@ impl RenderContext {
         // Collect unique 3D layer IDs for rendering
         let layer_3d_ids: Vec<LayoutNodeId> = layer_3d_texts.keys().cloned().collect();
 
-        // Text that a bound ancestor scales up is rasterized at the size it will be shown.
-        let by_target = self.rows_mode();
+        // Text that a bound ancestor scales up is rasterized at the size it is shown.
         let raster_scales: std::collections::HashMap<LayoutNodeId, (f32, bool)> =
             motion_subtree_texts
                 .iter()
-                .map(|t| (t.node, frame_text::raster_scale(tree, t.node, by_target)))
+                .map(|t| (t.node, frame_text::raster_scale(tree, t.node)))
                 .collect();
 
         let PreparedFrameText {

@@ -5,7 +5,7 @@
 //! a row's `link` names its parent the same way. The table is a storage buffer and exists only on
 //! devices whose vertex stage can read one.
 
-use crate::primitives::GpuPrimitive;
+use crate::primitives::{GpuPrimitive, PrimitiveType};
 
 /// Rows the table holds. A frame needing more leaves the table unused.
 pub const NODE_TABLE_CAPACITY: usize = 1024;
@@ -48,6 +48,12 @@ impl NodeRow {
             pivot: [pivot[0], pivot[1], rotation, opacity],
             link: [parent.map_or(0.0, |slot| (slot + 1) as f32), 0.0, 0.0, 0.0],
         }
+    }
+
+    /// Whether the row scales what it moves by at least half a hundredth, the step a glyph's raster
+    /// size is rounded to.
+    pub fn scales(&self) -> bool {
+        (self.motion[2] - 1.0).abs() >= 0.005 || (self.motion[3] - 1.0).abs() >= 0.005
     }
 
     /// The slot of the parent node, if there is one.
@@ -213,15 +219,39 @@ impl NodeRow {
 pub fn resolve_primitive(rows: &[NodeRow], p: &GpuPrimitive) -> GpuPrimitive {
     let mut out = *p;
     let mut next = p.node_slot();
+    let mut scaled = false;
     for depth in 0..NODE_CHAIN_DEPTH as u32 {
         let Some(row) = next.and_then(|s| rows.get(s as usize)) else {
             break;
         };
+        scaled |= row.scales();
         out = row.apply_to_primitive(out, depth);
         next = row.parent();
     }
     out.set_node_slot(None);
+    if scaled {
+        snap_glyph(&mut out);
+    }
     out
+}
+
+/// A glyph under a scaling row is put on a whole device pixel, so a bitmap drawn at its own size
+/// is sampled texel for texel as static text is. The quad is drawn scaled about its centre by the
+/// glyph's own affine, so it is the corner of that quad that lands on the pixel. Only an upright
+/// glyph moves: a turned one is resampled whatever its origin is.
+pub fn snap_glyph(p: &mut GpuPrimitive) {
+    let [a, b, c, d] = p.local_affine;
+    if p.type_info[0] != PrimitiveType::Text as u32
+        || p.rotation[0].abs() > 1e-4
+        || b.abs() > 1e-4
+        || c.abs() > 1e-4
+    {
+        return;
+    }
+    let [x, y, w, h] = p.bounds;
+    let (left, top) = (x + w * 0.5 - w * a * 0.5, y + h * 0.5 - h * d * 0.5);
+    p.bounds[0] += (left - 1e-3 + 0.5).floor() - left;
+    p.bounds[1] += (top - 1e-3 + 0.5).floor() - top;
 }
 
 /// Where a primitive with bounds `b` and slot `slot` is drawn under `rows`: the rect after its

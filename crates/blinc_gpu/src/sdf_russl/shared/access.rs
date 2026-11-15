@@ -5,7 +5,7 @@
 
 russl::russl! {
     use super::primitive::{Primitive, Uniforms};
-    use super::node_table::{NodeRow, apply_node};
+    use super::node_table::{NodeRow, apply_node, scales_node, snap_glyph};
 
     #[pipeline] const TIER: u32 = 0;
     // 1 binds the animated node table and applies a node's delta to the primitives that follow it;
@@ -94,16 +94,24 @@ russl::russl! {
             }
         #endif
 
-        // Primitive `index` as it is drawn: under its node's delta, then each parent's, up to four.
+        // Primitive `index` as it is drawn: under its node's delta, then each parent's, up to four,
+        // and a glyph under a row that scales put on a whole device pixel.
         pub fn prim(index: u32) -> Primitive {
             let mut p = prim_rest(index);
             let mut slot = p.node_slot.x as u32;
+            let mut scaled = false;
             for depth in 0u32..4u32 {
                 if slot != 0u32 {
                     let row = node_row(slot - 1u32);
+                    if scales_node(row) {
+                        scaled = true;
+                    }
                     p = apply_node(p, row, depth);
                     slot = row.link.x as u32;
                 }
+            }
+            if scaled {
+                p = snap_glyph(p);
             }
             return p;
         }

@@ -2020,21 +2020,30 @@ fn zoomed_text_is_as_sharp_as_text_laid_out_at_that_size() {
     }
 }
 
-/// A card scaled to 2x and held there by a CSS keyframe animation, with a fade too when `fade`.
-fn css_zoom_scene(label: bool, fade: bool) -> Scene {
+/// A card scaled to 2x by a CSS keyframe animation over `ms`, with a fade too when `fade`. Held
+/// there when it ends, or, with `repeat`, started over for ever: the harness settles for ten
+/// seconds before the first frame, so a repeating animation of 1600 ms is a quarter through it
+/// and the frames that follow are in flight.
+fn css_zoom_scene(label: bool, fade: bool, ms: u32, repeat: bool) -> Scene {
     Scene {
         name: "css zoom",
         steps: 40,
         step_ms: 16,
         build: Box::new(move |ui| {
-            ui.css(if fade {
-                "@keyframes zoom { from { transform: scale(1); opacity: 1; } \
-                 to { transform: scale(2); opacity: 0.9; } } \
-                 .zoom { animation: zoom 300ms linear forwards; }"
+            let play = if repeat { "infinite" } else { "forwards" };
+            let css = if fade {
+                format!(
+                    "@keyframes zoom {{ from {{ transform: scale(1); opacity: 1; }} \
+                     to {{ transform: scale(2); opacity: 0.9; }} }} \
+                     .zoom {{ animation: zoom {ms}ms linear {play}; }}"
+                )
             } else {
-                "@keyframes zoom { from { transform: scale(1); } to { transform: scale(2); } } \
-                 .zoom { animation: zoom 300ms linear forwards; }"
-            });
+                format!(
+                    "@keyframes zoom {{ from {{ transform: scale(1); }} to {{ transform: scale(2); }} }} \
+                     .zoom {{ animation: zoom {ms}ms linear {play}; }}"
+                )
+            };
+            ui.css(&css);
             ui.mount(move |_| {
                 stage().child(
                     div()
@@ -2054,8 +2063,8 @@ fn text_zoomed_by_a_css_animation_is_as_sharp_as_text_laid_out_at_that_size() {
     for fade in [false, true] {
         for path in [Path::Vector, Path::Table, Path::Rows] {
             let (Some(with), Some(without)) = (
-                run(&css_zoom_scene(true, fade), path),
-                run(&css_zoom_scene(false, fade), path),
+                run(&css_zoom_scene(true, fade, 300, false), path),
+                run(&css_zoom_scene(false, fade, 300, false), path),
             ) else {
                 return;
             };
@@ -2074,31 +2083,144 @@ fn text_zoomed_by_a_css_animation_is_as_sharp_as_text_laid_out_at_that_size() {
             report.push((fade, path, zoomed / native));
         }
     }
-    // In flight, text of a faded card is as sharp as text of a card that is not faded.
-    let sharp_at = |fade: bool| -> Option<Vec<f64>> {
-        let with = run(&css_zoom_scene(true, fade), Path::Vector)?;
-        let without = run(&css_zoom_scene(false, fade), Path::Vector)?;
-        Some(
-            [4_usize, 8, 12]
-                .map(|step| sharpness(&with[step], &without[step]))
-                .to_vec(),
-        )
-    };
-    let (Some(plain), Some(faded)) = (sharp_at(false), sharp_at(true)) else {
-        return;
-    };
-    for (plain, faded) in plain.into_iter().zip(faded) {
-        assert!(
-            faded > plain * 0.95,
-            "in flight a faded card's text is {:.2} as sharp as an unfaded card's",
-            faded / plain
-        );
-    }
     for (fade, path, ratio) in report {
         assert!(
             ratio > 0.95,
             "fade {fade}, {path:?}: css-zoomed text is {ratio:.2} as sharp as text laid out at that size"
         );
+    }
+}
+
+/// Width of the ink a label adds, from the frames with and without it.
+fn ink_width(with: &CapturedFrame, without: &CapturedFrame) -> f64 {
+    let (w, h) = (with.width as usize, with.height as usize);
+    let (mut lo, mut hi) = (usize::MAX, 0);
+    for y in 0..h {
+        for x in 0..w {
+            let (p, q) = (pixel(with, x, y), pixel(without, x, y));
+            if (0..3).map(|i| (p[i] - q[i]).abs()).sum::<i32>() > 60 {
+                lo = lo.min(x);
+                hi = hi.max(x);
+            }
+        }
+    }
+    if hi >= lo { (hi - lo + 1) as f64 } else { 0.0 }
+}
+
+/// How sharp the label of a card at the middle of the stage is, from one frame: the energy of the
+/// gradient over the energy of the pixels, taken against the card's colour, in a window around the
+/// label that stays inside the card at scale `s`.
+fn label_sharpness(frame: &CapturedFrame, s: f32) -> f64 {
+    let (cx, cy) = (frame.width as f32 / 2.0, frame.height as f32 / 2.0);
+    let (x0, x1) = ((cx - 22.0 * s) as usize, (cx + 22.0 * s) as usize);
+    let (y0, y1) = ((cy - 12.0 * s) as usize, (cy + 12.0 * s) as usize);
+    let bg = pixel(frame, x0, y0);
+    let ink = |x: usize, y: usize| -> f64 {
+        let p = pixel(frame, x, y);
+        (0..3).map(|i| (p[i] - bg[i]).abs() as f64).sum::<f64>()
+    };
+    let (mut grad, mut energy) = (0.0, 0.0);
+    for y in y0 + 1..y1 {
+        for x in x0 + 1..x1 {
+            let v = ink(x, y);
+            let (dx, dy) = (ink(x + 1, y) - ink(x - 1, y), ink(x, y + 1) - ink(x, y - 1));
+            grad += dx * dx + dy * dy;
+            energy += v * v;
+        }
+    }
+    grad / energy.max(1.0)
+}
+
+/// How sharp the label of a card that a CSS animation scales is in flight, against the same label
+/// laid out natively at the scale the card has in that frame (read from the width of its ink in the
+/// run without a fade). The animation repeats, so the frames are in the middle of it.
+fn in_flight_ratios(fade: bool, path: Path, steps: &[usize]) -> Option<Vec<f64>> {
+    let w1 = ink_width(
+        &run(&native_scene(1.0, true), Path::Vector)?[0],
+        &run(&native_scene(1.0, false), Path::Vector)?[0],
+    );
+    let plain = (
+        run(&css_zoom_scene(true, false, 1600, true), path)?,
+        run(&css_zoom_scene(false, false, 1600, true), path)?,
+    );
+    let shown = if fade {
+        run(&css_zoom_scene(true, true, 1600, true), path)?
+    } else {
+        plain.0.clone()
+    };
+    steps
+        .iter()
+        .map(|&step| {
+            let s = (ink_width(&plain.0[step], &plain.1[step]) / w1) as f32;
+            let native = label_sharpness(&run(&native_scene(s, true), Path::Vector)?[0], s);
+            Some(label_sharpness(&shown[step], s) / native)
+        })
+        .collect()
+}
+
+#[test]
+fn text_zoomed_by_a_spring_is_sharp_while_it_moves() {
+    let w1 = {
+        let (Some(a), Some(b)) = (
+            run(&native_scene(1.0, true), Path::Vector),
+            run(&native_scene(1.0, false), Path::Vector),
+        ) else {
+            return;
+        };
+        ink_width(&a[0], &b[0])
+    };
+    for path in [Path::Vector, Path::Rows, Path::Table] {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let (Some(with), Some(without)) = (
+            run(&zoom_scene(2.0, true, seen.clone()), path),
+            run(&zoom_scene(2.0, false, seen), path),
+        ) else {
+            return;
+        };
+        let mut ratios = Vec::new();
+        for step in [4_usize, 7, 10, 13] {
+            let s = (ink_width(&with[step], &without[step]) / w1) as f32;
+            let Some(native) = run(&native_scene(s, true), Path::Vector) else {
+                return;
+            };
+            ratios.push(label_sharpness(&with[step], s) / label_sharpness(&native[0], s));
+        }
+        eprintln!("SPRING IN FLIGHT {path:?}: {ratios:.2?}");
+        for ratio in ratios {
+            // The scale is read from the width of the ink to a pixel, which is a few percent of
+            // it early in the zoom, when the scale changes most between frames.
+            assert!(
+                ratio > 0.9,
+                "{path:?}: a label under a zooming spring is {ratio:.2} as sharp as text laid out \
+                 at the scale it has"
+            );
+        }
+    }
+}
+
+#[test]
+fn text_scaled_by_a_css_animation_is_sharp_while_it_plays() {
+    for (fade, path) in [
+        (false, Path::Vector),
+        (false, Path::Rows),
+        (false, Path::Table),
+        (true, Path::Rows),
+    ] {
+        let Some(ratios) = in_flight_ratios(fade, path, &[2, 12, 22, 32]) else {
+            return;
+        };
+        eprintln!("IN FLIGHT fade {fade} {path:?}: {ratios:.2?}");
+        // The glyph atlas keeps one bitmap for each half pixel of size, so the raster size is
+        // on that step and a bitmap is a little off 1:1 with the scale between steps. The
+        // label was 0.81 to 0.91 as sharp before it followed the scale and was put on the
+        // pixel grid.
+        for ratio in ratios {
+            assert!(
+                ratio > 0.9,
+                "fade {fade}, {path:?}: a label under a scale animation is {ratio:.2} as sharp as \
+                 text laid out at the scale it has"
+            );
+        }
     }
 }
 

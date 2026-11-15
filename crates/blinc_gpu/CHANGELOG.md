@@ -5,6 +5,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- A glyph under a node row that scales is put on a whole device pixel, by `node_table::resolve_primitive` on the CPU (`snap_glyph`, `NodeRow::scales`) and by the table shader, so a bitmap drawn at its own size is sampled texel for texel while its node scales. A glyph that is turned, and one under rows that only move, are left as they are.
 - `Uniforms::new` builds the viewport uniforms stamped with `blinc_core::FrameClock`'s time, `with_msaa` sets the multisample flag and `time` reads the stamp. The shaders' `UNIFORMS.time` is the frame clock in seconds, in the lane that was padding; `GlassUniforms::time` follows the clock too.
 - `GpuRenderer::release_idle_memory` frees the static layer, the overlay targets, the pooled layer textures, the flow scene copy and the mesh pass's window-sized targets, and maintains the device so wgpu destroys them. `LayerTextureCache::clear_pools` drops the pooled textures and keeps the named ones.
 - `GpuRenderer::next_frame` starts a frame for the renderer's caches: the overlay passes' offscreen targets that no frame has drawn for 60 frames are freed, and the layer texture pool's idle clock moves, so a pool whose layered passes stopped is flushed as it is after 120 idle frames. A renderer never told keeps them.

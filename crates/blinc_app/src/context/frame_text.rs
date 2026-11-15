@@ -13,25 +13,36 @@ pub(super) struct PreparedFrameText {
 }
 
 /// The raster size for text shown `k` times larger than it is laid out, 1 when it is not shown
-/// larger. In flight it is rounded up to a quarter so the atlas does not fill with a new size
-/// every frame; at rest it is the exact scale, so the glyphs land 1:1 on the display.
-pub(super) fn raster_size(k: f32, moving: bool) -> f32 {
+/// larger, rounded to a hundredth. It follows the scale, in flight too, so the glyphs land close
+/// to 1:1 on the display. While the scale changes (`moving`) it is also moved to the glyph atlas's
+/// step: the atlas keeps one bitmap for all the sizes in a half pixel, the one asked for first, so
+/// asking for the step itself gives every path the same bitmap whatever it asked for before.
+pub(super) fn raster_size(k: f32, font_size: f32, moving: bool) -> f32 {
     if !k.is_finite() {
         return 1.0;
     }
-    // A node at rest shown slightly smaller (a pressed button) is rasterized at that size too.
-    if !moving && (0.5..1.05).contains(&k) {
-        return (k * 100.0).round() / 100.0;
-    }
-    if k < 1.05 {
-        return 1.0;
-    }
-    let k = k.min(4.0);
-    if moving {
-        (k * 4.0).ceil() / 4.0
-    } else {
+    let k = if (0.5..1.05).contains(&k) {
+        // Text shown slightly smaller (a pressed button) is rasterized at that size too.
         (k * 100.0).round() / 100.0
+    } else if k < 1.05 {
+        1.0
+    } else {
+        (k.min(4.0) * 100.0).round() / 100.0
+    };
+    if moving {
+        on_atlas_step(k, font_size)
+    } else {
+        k
     }
+}
+
+/// `k` moved to the nearest size, `font_size * k`, that is on the glyph atlas's step of half a
+/// pixel.
+fn on_atlas_step(k: f32, font_size: f32) -> f32 {
+    if (k - 1.0).abs() < 1e-3 || font_size.is_nan() || font_size <= 0.0 {
+        return k;
+    }
+    (font_size * k * 2.0).round().max(1.0) / 2.0 / font_size
 }
 
 /// Whether an affine only moves and scales, so glyphs laid out on the pixel grid stay on it when
@@ -83,72 +94,65 @@ pub(super) fn chain_moving(tree: &blinc_layout::RenderTree, node: super::LayoutN
         .any(|n| bindings.get(&n).is_some_and(|b| b.is_any_animating()))
 }
 
-/// The raster size motion text needs now: what its bound ancestors scale it by (or will, with
-/// `by_target`) and what its own affine already does.
-pub(super) fn needed_raster(
-    tree: &blinc_layout::RenderTree,
-    text: &TextElement,
-    by_target: bool,
-) -> f32 {
-    let (scale, moving) = raster_scale(tree, text.node, by_target);
-    raster_size(scale.max(affine_scale(text.css_affine)), moving)
-}
-
-/// The raster size for text in a group that the node table does not move, and whether it is in
-/// flight: what its own affine scales it by, which is the scale of a CSS transform painted into
-/// the frame. While a CSS animation of the scale plays on it or an ancestor the size is rounded up
-/// to a quarter, as motion text's is; an animation of anything else leaves it as at rest.
-pub(super) fn grouped_raster(tree: &blinc_layout::RenderTree, text: &TextElement) -> (f32, bool) {
-    let scaling = std::iter::once(text.node)
-        .chain(tree.layout_tree.ancestors(text.node))
+/// Whether a CSS animation that moves, scales or turns plays on `node` or an ancestor. One of
+/// opacity alone leaves the text as it is at rest.
+pub(super) fn css_transforming(tree: &blinc_layout::RenderTree, node: super::LayoutNodeId) -> bool {
+    std::iter::once(node)
+        .chain(tree.layout_tree.ancestors(node))
         .any(|n| {
             tree.has_css_animation(n)
-                && tree
-                    .get_css_animation_properties(n)
-                    .is_some_and(|p| p.scale_x.is_some() || p.scale_y.is_some())
-        });
-    let moving = scaling || chain_moving(tree, text.node);
-    (raster_size(affine_scale(text.css_affine), moving), moving)
+                && tree.get_css_animation_properties(n).is_some_and(|p| {
+                    p.scale_x.is_some()
+                        || p.scale_y.is_some()
+                        || p.translate_x.is_some()
+                        || p.translate_y.is_some()
+                        || p.rotate.is_some()
+                })
+        })
 }
 
-/// How much its bound ancestors scale the text of `node`, now or (with `by_target`, while they
-/// move) when their springs arrive, and whether they are moving. Layout stays at the base size
-/// and the glyphs are rasterized finer, with the quads shrunk back, so the text is placed where
-/// it always was and is sharp when the card has grown to it.
+/// The raster size motion text needs now: what its bound ancestors scale it by and what its own
+/// affine already does.
+pub(super) fn needed_raster(tree: &blinc_layout::RenderTree, text: &TextElement) -> f32 {
+    let (scale, _) = raster_scale(tree, text.node);
+    raster_size(
+        scale.max(affine_scale(text.css_affine)),
+        text.font_size,
+        true,
+    )
+}
+
+/// Whether text shown `s` times its laid-out size is being scaled, by at least half a hundredth as
+/// the node rows' check is, so that it is put on the display grid while it is: a bitmap drawn at
+/// its own size and origin is sampled texel for texel. Text that only moves keeps its smooth
+/// placement.
+pub(super) fn scaled(s: f32) -> bool {
+    s.is_finite() && (s - 1.0).abs() >= 0.005
+}
+
+/// How much its bound ancestors scale the text of `node` now, and whether they are moving. Layout
+/// stays at the base size and the glyphs are rasterized finer, with the quads shrunk back, so the
+/// text is placed where it always was and is sharp at the scale it has.
 pub(super) fn raster_scale(
     tree: &blinc_layout::RenderTree,
     node: super::LayoutNodeId,
-    by_target: bool,
 ) -> (f32, bool) {
-    let value = |v: &Option<blinc_animation::SharedAnimatedValue>, target: bool| -> f32 {
+    let value = |v: &Option<blinc_animation::SharedAnimatedValue>| -> f32 {
         v.as_ref()
-            .and_then(|v| {
-                v.lock()
-                    .ok()
-                    .map(|g| if target { g.target() } else { g.get() })
-            })
+            .and_then(|v| v.lock().ok().map(|g| g.get()))
             .unwrap_or(1.0)
     };
-    let axis = |b: &blinc_layout::motion::MotionBindings, target: bool| -> f32 {
-        value(&b.scale, target) * value(&b.scale_x, target).max(value(&b.scale_y, target))
+    let axis = |b: &blinc_layout::motion::MotionBindings| -> f32 {
+        value(&b.scale) * value(&b.scale_x).max(value(&b.scale_y))
     };
     let bindings = tree.motion_bindings_map();
-    let (mut now, mut then) = (1.0f32, 1.0f32);
+    let mut now = 1.0f32;
     for n in std::iter::once(node).chain(tree.layout_tree.ancestors(node)) {
         if let Some(b) = bindings.get(&n) {
-            now *= axis(b, false);
-            then *= axis(b, true);
+            now *= axis(b);
         }
     }
-    let moving = chain_moving(tree, node);
-    (
-        if moving && by_target {
-            now.max(then)
-        } else {
-            now
-        },
-        moving,
-    )
+    (now, chain_moving(tree, node))
 }
 
 impl RenderContext {
@@ -287,7 +291,7 @@ impl RenderContext {
 
             // Text a CSS transform scales up is rasterized at the size it is shown, laid out at the
             // base size.
-            let k = raster_size(affine_scale(text.css_affine), false);
+            let k = raster_size(affine_scale(text.css_affine), text.font_size, false);
             match self
                 .text_ctx
                 .prepare_text_with_style(
@@ -453,9 +457,11 @@ impl RenderContext {
                 .get(&text.node)
                 .copied()
                 .unwrap_or((1.0, false));
-            let k = raster_size(binding_scale.max(affine_scale(text.css_affine)), moving);
-            // Text snaps to the display grid at rest and moves smoothly with its node.
-            let snap = !moving;
+            let shown = binding_scale.max(affine_scale(text.css_affine));
+            let k = raster_size(shown, text.font_size, moving);
+            // Text snaps to the display grid at rest and while it is scaled, and moves smoothly
+            // with its node otherwise.
+            let snap = !moving || scaled(shown);
             if let Some(owned) =
                 self.prepare_motion_text(text, k, scale_factor, (width, height), snap)
             {
@@ -626,6 +632,24 @@ impl RenderContext {
 }
 
 impl RenderContext {
+    /// The raster size the moving text of `text` needs now: its own affine's scale and what the
+    /// rows scale it by, which is the scale it is shown at. With no rows to read, what its bound
+    /// ancestors scale it by.
+    fn moving_raster(
+        &self,
+        tree: &blinc_layout::RenderTree,
+        text: &TextElement,
+        ancestors: &dyn Fn(super::LayoutNodeId) -> Vec<super::LayoutNodeId>,
+    ) -> f32 {
+        self.node_rows
+            .text_row(text.node, ancestors)
+            .and_then(|row| self.node_rows.uniform_scale(row))
+            .map_or_else(
+                || needed_raster(tree, text),
+                |scale| raster_size(affine_scale(text.css_affine) * scale, text.font_size, true),
+            )
+    }
+
     /// Keep the glyphs of motion text sharp as their nodes move and when they stop, in place:
     /// each run keeps its slot and the pose it was painted at while its node moves, and only its
     /// bitmap is prepared again when the scale its springs are heading for changes. When the
@@ -656,7 +680,7 @@ impl RenderContext {
                 match (moving, run.baked) {
                     // Moving again: back to the painted pose, at the size it now needs.
                     (true, Some(slot_lane)) => {
-                        let needed = needed_raster(tree, &source, true);
+                        let needed = self.moving_raster(tree, &source, &ancestors);
                         if let Some(fresh) =
                             self.prepare_motion_text(&source, needed, dpi, viewport, false)
                             && fresh.primitives.len() == run.range.len()
@@ -675,7 +699,7 @@ impl RenderContext {
                     }
                     // Moving: the bitmap follows the scale it is heading for.
                     (true, None) => {
-                        let needed = needed_raster(tree, &source, true);
+                        let needed = self.moving_raster(tree, &source, &ancestors);
                         if (needed - run.k).abs() < 1e-3 && !run.snapped {
                             continue;
                         }
@@ -837,7 +861,7 @@ impl RenderContext {
             match (moving, run.baked) {
                 // Moving again: back to the painted pose, at the size it now needs.
                 (true, Some(saved)) => {
-                    let needed = needed_raster(tree, &run.element, true);
+                    let needed = self.moving_raster(tree, &run.element, &ancestors);
                     let snapshot = run.clone();
                     if self.place_captured(
                         &mut batch, indices, &snapshot, needed, false, saved, false, dpi,
@@ -849,7 +873,7 @@ impl RenderContext {
                 }
                 // Moving: smooth, and the bitmap follows the scale it is heading for.
                 (true, None) => {
-                    let needed = needed_raster(tree, &run.element, true);
+                    let needed = self.moving_raster(tree, &run.element, &ancestors);
                     if (needed - run.k).abs() < 1e-3 && !run.snapped {
                         continue;
                     }
@@ -876,7 +900,11 @@ impl RenderContext {
                     let snapshot = run.clone();
                     if self.node_rows.chain_is_rest(row) {
                         if !run.snapped {
-                            let k = raster_size(affine_scale(run.element.css_affine), false);
+                            let k = raster_size(
+                                affine_scale(run.element.css_affine),
+                                run.element.font_size,
+                                false,
+                            );
                             if self.place_captured(
                                 &mut batch, indices, &snapshot, k, true, lane, false, dpi,
                             ) {
