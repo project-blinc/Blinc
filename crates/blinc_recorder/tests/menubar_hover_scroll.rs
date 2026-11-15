@@ -142,3 +142,51 @@ fn hovering_between_menubar_items_keeps_the_page_scrolled_when_promoted() {
 fn hovering_between_menubar_items_keeps_the_page_scrolled_on_the_node_table() {
     moving_between_items_keeps_the_scroll(MotionPaint::NodeTable);
 }
+
+/// A menubar near the bottom edge of the window opens its dropdown inside the window, above the
+/// trigger, not off the top of it.
+#[test]
+fn a_menubar_near_the_bottom_edge_opens_its_dropdown_inside_the_window() {
+    if !Headless::available() {
+        return;
+    }
+    let mut ui = Headless::with_motion_paint(520, 360, MotionPaint::Vector).expect("a session");
+    ui.theme(
+        HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
+        ColorScheme::Dark,
+    );
+    ui.mount(move |_| {
+        div()
+            .w(520.0)
+            .h(360.0)
+            .flex_col()
+            .child(div().w_full().h(300.0).bg(Color::rgb(0.2, 0.3, 0.6)))
+            .child(
+                menubar()
+                    .trigger_mode(MenuTriggerMode::Hover)
+                    .menu("File", |m| {
+                        m.item("New", || {})
+                            .item("Open", || {})
+                            .separator()
+                            .item("Exit", || {})
+                    }),
+            )
+    });
+    ui.settle();
+    let trigger = *triggers(&ui).first().expect("a trigger");
+    let (x, y) = centre(&ui, trigger);
+    ui.move_to(x, y);
+    ui.advance(250);
+    let content = ui.find(".cn-menubar-content").expect("the dropdown opened");
+    let b = ui
+        .tree()
+        .layout_tree
+        .get_absolute_bounds(content)
+        .expect("bounds");
+    assert!(
+        b.y >= 0.0 && b.y + b.height <= 360.0 + 1.0,
+        "the dropdown is at y {} with height {}, outside a window 360 high",
+        b.y,
+        b.height
+    );
+}

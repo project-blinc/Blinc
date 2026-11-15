@@ -1121,9 +1121,18 @@ fn position_wrapper(
                     const MIN_BELOW: f32 = 96.0;
                     let open_upward = viewport.1 - *y < MIN_BELOW && *y - margin > MIN_BELOW;
                     if open_upward {
+                        // A box from the top of the viewport to just above the anchor, with the
+                        // panel at its bottom: it hangs from the anchor whatever its height, and
+                        // the placement does not depend on the size of the layer this sits in,
+                        // which can be a zero-sized box when the entry arrived after it was
+                        // built.
                         outer
                             .left(cx)
-                            .bottom((viewport.1 - *y + margin).max(margin))
+                            .top(0.0)
+                            .h((*y - margin).max(margin))
+                            .flex_col()
+                            .justify_end()
+                            .pointer_events_none()
                             .child(child)
                     } else {
                         outer.left(cx).top((*y).max(margin)).child(child)

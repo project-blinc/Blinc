@@ -22,7 +22,12 @@ use std::sync::{Arc, Mutex};
 use blinc_recorder::{Headless, MotionPaint};
 
 const W: u32 = 900;
-const H: u32 = 900;
+fn height() -> u32 {
+    std::env::var("COSTS_H")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(900)
+}
 
 #[derive(Clone, Default)]
 struct PathLog(Arc<Mutex<Vec<String>>>);
@@ -146,7 +151,7 @@ fn session() -> Option<(Headless, PathLog)> {
     if !Headless::available() {
         return None;
     }
-    let mut ui = Headless::with_motion_paint(W, H, MotionPaint::Vector).ok()?;
+    let mut ui = Headless::with_motion_paint(W, height(), MotionPaint::Vector).ok()?;
     ui.theme(cn_demo::theme_bundle(), blinc_theme::ColorScheme::Dark);
     ui.mount(|ctx| cn_demo::build_ui(ctx));
     ui.settle();
@@ -204,6 +209,26 @@ fn main() {
         return;
     }
 
+    // Which way a wheel delta scrolls the page, and whether it does.
+    if std::env::var("COSTS_SCROLL_DIAG").is_ok() {
+        let page = |ui: &Headless| -> f32 {
+            let bar = ui.find(".cn-menubar").expect("the menubar");
+            std::iter::once(bar)
+                .chain(ui.tree().layout_tree.ancestors(bar))
+                .map(|n| ui.tree().get_scroll_offset(n).1)
+                .fold(0.0, |a: f32, b| if b.abs() > a.abs() { b } else { a })
+        };
+        ui.move_to(450.0, 500.0);
+        println!("page offset at start {}", page(&ui));
+        for delta in [-200.0f32, -200.0, 400.0] {
+            ui.scroll(0.0, delta);
+            ui.advance(16);
+            let _ = ui.paint_timed(true);
+            println!("after wheel {delta}: page offset {}", page(&ui));
+        }
+        return;
+    }
+
     // What a frame at rest would have to be redrawn for.
     {
         let tree = ui.tree();
@@ -236,24 +261,38 @@ fn main() {
         scene.report("top of the page, at rest");
     }
 
-    // The pointer moved along the triggers of the hover menubar, with the page scrolled to it.
-    if bring_into_view(&mut ui, ".cn-menubar") {
-        rest(&mut ui);
-        let page_scroll = |ui: &Headless| -> f32 {
+    // The pointer moved along the triggers of the hover menubar, with the page scrolled a little.
+    {
+        let page = |ui: &Headless| -> f32 {
             let bar = ui.find(".cn-menubar").expect("the menubar");
             std::iter::once(bar)
                 .chain(ui.tree().layout_tree.ancestors(bar))
                 .map(|n| ui.tree().get_scroll_offset(n).1)
-                .fold(0.0, f32::max)
+                .fold(0.0, |a: f32, b| if b.abs() > a.abs() { b } else { a })
         };
-        let triggers: Vec<_> = ui
+        let scroll_by: f32 = std::env::var("COSTS_MENUBAR_SCROLL")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0.0);
+        ui.move_to(450.0, 400.0);
+        if scroll_by != 0.0 {
+            ui.scroll(0.0, -scroll_by);
+            ui.advance(16);
+        }
+        rest(&mut ui);
+        let overlay_open = || {
+            blinc_layout::overlay_state::overlay_stack()
+                .lock()
+                .map(|s| s.has_visible_overlays())
+                .unwrap_or(false)
+        };
+        let mut triggers: Vec<_> = ui
             .tree()
             .element_registry()
             .class_to_nodes_index()
             .get("cn-menubar-trigger")
-            .map(|set| set.iter().copied().collect())
-            .unwrap_or_default();
-        let mut triggers: Vec<_> = triggers
+            .map(|set| set.iter().copied().collect::<Vec<_>>())
+            .unwrap_or_default()
             .into_iter()
             .filter_map(|n| {
                 ui.tree()
@@ -263,31 +302,57 @@ fn main() {
             })
             .collect();
         triggers.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let start = page_scroll(&ui);
+        let start = page(&ui);
         println!(
-            "menubar: page scrolled to {start}, {} triggers",
+            "menubar: window {}x{}, page at {start}, trigger at y {:.0} in the content, {} triggers",
+            W,
+            height(),
+            triggers.first().map_or(0.0, |t| t.1),
             triggers.len()
         );
-        let mut scene = Scene::new(&mut ui, log.clone());
         for round in 0..2 {
             for (i, (x, y, w, h)) in triggers.iter().enumerate() {
-                let offset = page_scroll(scene.ui);
-                scene.ui.move_to(x + w / 2.0, y + h / 2.0 - offset);
-                for _ in 0..8 {
-                    scene.step();
+                let offset = page(&ui);
+                // The window position of the trigger's centre.
+                let (px, py) = (x + w / 2.0, y + h / 2.0 + offset);
+                ui.move_to(px, py);
+                for _ in 0..16 {
+                    ui.advance(16);
+                    let _ = ui.paint_timed(true);
+                }
+                let content = ui
+                    .find(".cn-menubar-content")
+                    .and_then(|n| ui.tree().layout_tree.get_absolute_bounds(n));
+                let viewport = blinc_layout::overlay_state::overlay_stack()
+                    .lock()
+                    .map(|s| s.viewport())
+                    .unwrap_or((-1.0, -1.0));
+                println!("    overlay stack viewport {viewport:?}");
+                if round == 0 && i == 0 && std::env::var("COSTS_CHAIN").is_ok() {
+                    if let Some(n) = ui.find(".cn-menubar-content") {
+                        for a in std::iter::once(n).chain(ui.tree().layout_tree.ancestors(n)) {
+                            let b = ui.tree().layout_tree.get_absolute_bounds(a);
+                            let id = ui.tree().element_registry().get_id(a);
+                            println!(
+                                "      chain: {id:?} {:?}",
+                                b.map(|b| (b.x, b.y, b.width, b.height))
+                            );
+                        }
+                    }
                 }
                 println!(
-                    "    round {round} trigger {i}: page scroll {} (was {start}), focused {:?}",
-                    page_scroll(scene.ui),
-                    scene.ui.focused()
+                    "    round {round} trigger {i} (window y {py:.0}): page {} (was {start}), overlay open {}, content {}",
+                    page(&ui),
+                    overlay_open(),
+                    content.map_or("none".to_string(), |b| format!(
+                        "x {:.0} y {:.0} w {:.0} h {:.0}",
+                        b.x, b.y, b.width, b.height
+                    ))
                 );
             }
         }
-        scene.report("menubar, pointer along the triggers");
-        scene.ui.leave();
-        rest(scene.ui);
-    } else {
-        println!("menubar: never painted");
+        ui.leave();
+        rest(&mut ui);
     }
 
     // The first accordion, opened and closed three times.
