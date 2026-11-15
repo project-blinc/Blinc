@@ -499,6 +499,98 @@ fn main() {
         return;
     }
 
+    // `COSTS_AT=<px>`: scroll the page that far down, then time frames at rest there and name
+    // what the slowest ones did.
+    if let Some(at) = std::env::var("COSTS_AT")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+    {
+        ui.move_to(450.0, 500.0);
+        let mut left = at;
+        while left > 0.0 {
+            let d = left.min(400.0);
+            ui.scroll(0.0, -d);
+            ui.advance(16);
+            let _ = ui.paint_timed(true);
+            left -= d;
+        }
+        ui.scroll_end();
+        for _ in 0..30 {
+            ui.advance(16);
+            let _ = ui.paint_timed(true);
+        }
+        // `COSTS_CLICK=<label>`: click the text with that label first, as a user opening it.
+        if let Ok(label) = std::env::var("COSTS_CLICK") {
+            let target = {
+                let t = ui.tree();
+                let mut stack: Vec<_> = t.root().into_iter().collect();
+                let mut found = None;
+                while let Some(node) = stack.pop() {
+                    stack.extend(t.layout_tree.children(node));
+                    if let Some(render) = t.get_render_node(node)
+                        && let blinc_layout::renderer::ElementType::Text(ref d) =
+                            render.element_type
+                        && d.content == label
+                    {
+                        found = t.get_absolute_bounds(node);
+                    }
+                }
+                found
+            };
+            let scrolled = {
+                let t = ui.tree();
+                let bar = ui.find(".cn-menubar").expect("the menubar");
+                t.layout_tree
+                    .ancestors(bar)
+                    .into_iter()
+                    .map(|n| t.get_scroll_offset(n).1)
+                    .fold(0.0f32, |a, b| if b.abs() > a.abs() { b } else { a })
+            };
+            let b = target.expect("the label");
+            let (x, y) = (b.x + b.width * 0.5, b.y + b.height * 0.5 + scrolled);
+            println!("    clicking {label:?} at ({x:.0}, {y:.0})");
+            ui.move_to(x, y);
+            ui.mouse_down();
+            ui.advance(16);
+            ui.mouse_up();
+            for _ in 0..40 {
+                ui.advance(16);
+                let _ = ui.paint_timed(true);
+            }
+        }
+        let mut worst: Vec<(f64, usize)> = Vec::new();
+        let mut scene = Scene::new(&mut ui, log.clone());
+        for i in 0..180 {
+            scene.step();
+            worst.push((scene.session[i], i));
+        }
+        scene.report(&format!("at rest {at} px down"));
+        {
+            let t = scene.ui.tree();
+            let mut seen: Vec<(i32, String)> = Vec::new();
+            let mut stack: Vec<_> = t.root().into_iter().collect();
+            while let Some(node) = stack.pop() {
+                stack.extend(t.layout_tree.children(node));
+                let Some(render) = t.get_render_node(node) else {
+                    continue;
+                };
+                if let blinc_layout::renderer::ElementType::Text(ref d) = render.element_type
+                    && d.font_size >= 17.0
+                    && let Some(b) = t.get_absolute_bounds(node)
+                    && b.y > at - 200.0
+                    && b.y < at + 1000.0
+                {
+                    seen.push((b.y as i32, d.content.clone()));
+                }
+            }
+            seen.sort();
+            println!("    headings in view: {seen:?}");
+        }
+        worst.sort_by(|a, b| b.0.total_cmp(&a.0));
+        println!("    slowest sessions: {:?}", &worst[..6]);
+        return;
+    }
+
     // `COSTS_BOTTOM=1`: scroll to the end of the page, then time frames at rest there, where the
     // loading section's spinners and skeletons keep it drawing.
     if std::env::var("COSTS_BOTTOM").is_ok() {

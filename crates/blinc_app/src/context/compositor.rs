@@ -32,6 +32,8 @@ impl RenderContext {
             self.renderer.invalidate_static_layer();
         }
 
+        // An image that finished loading is drawn by a full paint.
+        self.take_decoded_images();
         // Read fade deadlines before deciding whether the static cache can be reused.
         let now = web_time::Instant::now();
         self.image_fade_deadlines

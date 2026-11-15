@@ -61,6 +61,31 @@ impl RenderContext {
     }
 
     /// Load image sources and populate the bounded GPU cache before dispatch.
+    /// Put the images the worker has finished into the cache, and ask for a full paint when one
+    /// arrived, so it is drawn.
+    pub(super) fn take_decoded_images(&mut self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(decoder) = self.image_decode.as_mut() else {
+                return;
+            };
+            for decoded in decoder.take() {
+                let Some(image) = decoded.image else { continue };
+                self.image_cache.put(decoded.source.clone(), image);
+                let now = web_time::Instant::now();
+                self.image_load_times.insert(decoded.source.clone(), now);
+                if decoded.fade_duration_ms > 0
+                    && let Some(deadline) = now.checked_add(std::time::Duration::from_millis(
+                        decoded.fade_duration_ms as u64,
+                    ))
+                {
+                    self.image_fade_deadlines.insert(decoded.source, deadline);
+                }
+                self.captured_images_need_repaint = true;
+            }
+        }
+    }
+
     pub(super) fn preload_images(
         &mut self,
         images: &[ImageElement],
@@ -69,6 +94,7 @@ impl RenderContext {
     ) {
         // Buffer zone: load images that are within 100px of becoming visible
         const VISIBILITY_BUFFER: f32 = 100.0;
+        self.take_decoded_images();
 
         // Eagerly load placeholder images for any lazy element with placeholder_type == 2
         // (so the placeholder is already in cache when we go to render it).
@@ -141,6 +167,13 @@ impl RenderContext {
                     // Skip loading - image is not yet visible
                     continue;
                 }
+            }
+
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(decoder) = self.image_decode.as_mut() {
+                let bc = self.renderer.has_texture_compression_bc();
+                decoder.request(&image.source, image.fade_duration_ms, bc);
+                continue;
             }
 
             // Try to load the image - use from_uri to handle emoji://, data:, and file paths

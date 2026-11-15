@@ -257,6 +257,11 @@ Benefits:
 - **Faster startup.** No waiting for off-screen images.
 - **Automatic cleanup.** LRU cache evicts old images.
 
+In a window, an image is loaded on a worker thread: decoding, compression and
+upload do not hold up the frame that scrolls it into view. Its placeholder, or
+nothing, is drawn until it arrives, and the next frame draws it. Headless
+rendering loads images in the frame that needs them, so a snapshot has them.
+
 Emoji images (`emoji()` and `emoji_sized()`) are automatically lazy-loaded.
 The ~180MB system emoji font is only loaded when emoji characters actually
 appear on screen.

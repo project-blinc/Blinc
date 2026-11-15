@@ -72,6 +72,8 @@ where
                             if ws.transparent {
                                 blinc_app.set_clear_alpha(0.0);
                             }
+                            // A window draws on while an image decodes.
+                            blinc_app.context().set_async_image_decode(true);
                             let config = wgpu::SurfaceConfiguration {
                                 // COPY_DST is required by the layer
                                 // compositor's `composite_frame` step —

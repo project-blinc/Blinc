@@ -463,3 +463,32 @@ fn image_opacity_independent_collection_uses_the_resolved_node_value() {
         context.return_scratch_elements(texts, svgs, images);
     }
 }
+
+#[test]
+#[ignore] // Requires GPU
+fn an_image_decoded_on_the_worker_is_drawn_once_it_arrives() {
+    let mut context = super::main_text_clip_tests::context(true, 1);
+    context.set_async_image_decode(true);
+    let tree = scene(1.0);
+    let state = state();
+    // The first frame does not wait for the image: it shows the placeholder, not the green.
+    let first = frame(&mut context, &tree, &state, 0);
+    assert!(
+        first.get_pixel(50, 40).0[1] < 64,
+        "{:?}",
+        first.get_pixel(50, 40)
+    );
+    assert!(
+        context.has_pending_image_fade(),
+        "the window keeps drawing while it loads"
+    );
+    // Frames go on, as a window's do, until one has the image.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut page = frame(&mut context, &tree, &state, 0);
+    while page.get_pixel(50, 40).0[1] < 128 && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        page = frame(&mut context, &tree, &state, 0);
+    }
+    pixel(&page, (50, 40), blend(1.0));
+    assert!(!context.image_decode_busy());
+}

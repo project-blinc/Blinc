@@ -38,6 +38,8 @@ mod compositor;
 mod css_cache_lifecycle;
 mod css_updates;
 mod debug_rendering;
+#[cfg(not(target_arch = "wasm32"))]
+mod image_decode;
 mod image_rendering;
 mod mesh_rendering;
 mod node_rows;
@@ -334,6 +336,9 @@ pub struct RenderContext {
     /// Whether image fades require another frame, tracked independently of flow shaders.
     has_pending_image_fade: bool,
     captured_images_need_repaint: bool,
+    /// Decodes images on a worker thread when set; images load inline when not.
+    #[cfg(not(target_arch = "wasm32"))]
+    image_decode: Option<image_decode::ImageDecoder>,
     cached_tree_scope: Option<(u64, bool)>,
     // Frame counter for periodic cache stats logging
     frame_count: u64,
@@ -655,6 +660,8 @@ impl RenderContext {
             has_active_flows: false,
             has_pending_image_fade: false,
             captured_images_need_repaint: false,
+            #[cfg(not(target_arch = "wasm32"))]
+            image_decode: None,
             cached_tree_scope: None,
             frame_count: 0,
             clear_alpha: 1.0,
@@ -703,7 +710,34 @@ impl RenderContext {
     /// this signal, the fade ticks invisibly and the user has to
     /// jiggle the cursor for the image to finish fading in.
     pub fn has_pending_image_fade(&self) -> bool {
-        self.has_pending_image_fade
+        self.has_pending_image_fade || self.image_decode_busy()
+    }
+
+    /// Load images on a worker thread, so a frame does not wait for one to decode; an image is
+    /// drawn from the first paint after it arrives. Off by default, where every image is drawn
+    /// in the frame that first needs it. Has no effect on wasm.
+    pub fn set_async_image_decode(&mut self, on: bool) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.image_decode = on.then(|| {
+                image_decode::ImageDecoder::new(
+                    self.image_ctx.device().clone(),
+                    self.image_ctx.queue().clone(),
+                )
+            });
+        }
+        #[cfg(target_arch = "wasm32")]
+        let _ = on;
+    }
+
+    /// Whether an image is loading on the worker.
+    fn image_decode_busy(&self) -> bool {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.image_decode.as_ref().is_some_and(|d| d.busy())
+        }
+        #[cfg(target_arch = "wasm32")]
+        false
     }
 
     /// Set the current render target texture for blend mode two-pass compositing.
