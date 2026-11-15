@@ -9,6 +9,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - The registered iOS Rust builder uses the complete UI build path, including queued core styles, overlays and build-scope cleanup.
 
 ### Changed
+- An image keeps only scroll containers' clips as its scroll clip; any other clip, sharp or rounded, is intersected into its primary clip. A sharp clip inside a scroll container (a `stack()`) no longer becomes part of what stays with the viewport.
 - Consecutive images are drawn in one pass and one submission rather than one each; a placeholder or shadow between them ends the run, so the order is kept. A page whose images are redrawn every frame (content moved by rows while a spinner turns) spends far less CPU submitting them.
 - A path clip on a primitive that rows move follows the rows from the node that introduced it, turns included; one an ancestor introduced stays. The CPU rows give the moved clip its own points. A clip rect that is the unbounded default counts as no clip, so it does not stop a turn.
 - A scroll container with elements that have a transform of their own, or that a motion binding moves, is moved by rows as it scrolls; a bound element's row chains to the container's. Only something fixed or sticky, a layout animation, a `clip-path`, glass, an overlay root or a CSS animation that writes its values each frame still keeps a container off rows. `RenderTree::scroll_row_blockers` lists those for a container. A moving element's label inside a scrolled container is placed a glyph edge away from a full paint.

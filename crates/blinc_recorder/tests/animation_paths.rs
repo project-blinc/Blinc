@@ -1091,17 +1091,28 @@ fn scroll_inner_clips_scene(name: &'static str) -> Scene {
                                 .w(36.0)
                                 .h(36.0)
                                 .overflow_visible()
-                                .child(picture())
-                                .child(
-                                    div()
-                                        .w(10.0)
-                                        .h(10.0)
-                                        .rounded(5.0)
-                                        .bg(Color::rgb(0.2, 0.8, 0.3))
-                                        .absolute()
-                                        .right(0.0)
-                                        .bottom(0.0),
-                                ),
+                                .child_box(if std::env::var("SV").as_deref() == Ok("dotfirst") {
+                                    Box::new(div().w(10.0).h(10.0).bg(Color::rgb(0.2, 0.8, 0.3)))
+                                        as Box<dyn ElementBuilder>
+                                } else {
+                                    Box::new(picture())
+                                })
+                                .child_box(if std::env::var("SV").as_deref() == Ok("nodot") {
+                                    Box::new(div()) as Box<dyn ElementBuilder>
+                                } else if std::env::var("SV").as_deref() == Ok("dotfirst") {
+                                    Box::new(picture())
+                                } else {
+                                    Box::new(
+                                        div()
+                                            .w(10.0)
+                                            .h(10.0)
+                                            .rounded(5.0)
+                                            .bg(Color::rgb(0.2, 0.8, 0.3))
+                                            .absolute()
+                                            .right(0.0)
+                                            .bottom(0.0),
+                                    )
+                                }),
                         );
                     if i % 3 == 0 {
                         let mut lines = div().flex_col().gap(2.0);
@@ -1120,17 +1131,22 @@ fn scroll_inner_clips_scene(name: &'static str) -> Scene {
                     }
                     list = list.child(row);
                 }
+                // The viewport sits between a header and a footer, so content that leaves it
+                // would show over them.
                 div()
                     .w(W as f32)
                     .h(H as f32)
+                    .flex_col()
                     .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .child(div().w(W as f32).h(40.0).bg(Color::rgb(0.5, 0.2, 0.2)))
                     .child(
                         scroll()
                             .bind(&bound_ref)
                             .w(W as f32)
-                            .h(H as f32)
+                            .h(H as f32 - 80.0)
                             .child(list),
                     )
+                    .child(div().w(W as f32).h(40.0).bg(Color::rgb(0.5, 0.2, 0.2)))
             });
             Box::new(move |ui, step| {
                 reference.set_scroll_offset(0.0, 6.0 * (step + 1) as f32);

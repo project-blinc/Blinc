@@ -428,74 +428,34 @@ impl RenderContext {
             let this_has_radius = this_clip_radius
                 .map(|r| r.iter().any(|&v| v > 0.5))
                 .unwrap_or(false);
-            let parent_has_radius = current_clip_radius
-                .map(|r| r.iter().any(|&v| v > 0.5))
-                .unwrap_or(false);
 
-            if let Some(parent_clip) = current_clip {
-                if this_has_radius && !parent_has_radius {
-                    // This node is rounded (card), parent is sharp (scroll container).
-                    // Keep them separate to avoid SDF radius clamping/morphing.
-                    // Primary clip = this node's rounded clip (full card bounds).
-                    // Scroll clip = parent's sharp clip intersected with any existing scroll clip.
-                    (
-                        Some(this_clip),
-                        this_clip_radius,
-                        merge_scroll_clip(parent_clip, current_scroll_clip),
-                    )
-                } else if !this_has_radius && parent_has_radius {
-                    // This node is sharp (scroll), parent is rounded (card).
-                    // Keep parent as primary rounded clip, this as scroll clip
-                    // intersected with any existing scroll clip.
-                    (
-                        current_clip,
-                        current_clip_radius,
-                        merge_scroll_clip(this_clip, current_scroll_clip),
-                    )
-                } else {
-                    // Both have same kind of radius — intersect normally.
-                    let x1 = parent_clip[0].max(this_clip[0]);
-                    let y1 = parent_clip[1].max(this_clip[1]);
-                    let parent_right = parent_clip[0] + parent_clip[2];
-                    let parent_bottom = parent_clip[1] + parent_clip[3];
-                    let this_right = this_clip[0] + this_clip[2];
-                    let this_bottom = this_clip[1] + this_clip[3];
-                    let x2 = parent_right.min(this_right);
-                    let y2 = parent_bottom.min(this_bottom);
-                    let w = (x2 - x1).max(0.0);
-                    let h = (y2 - y1).max(0.0);
-                    let clip = Some([x1, y1, w, h]);
-
-                    let child_r = this_clip_radius.unwrap_or([0.0; 4]);
-                    let parent_r = current_clip_radius.unwrap_or([0.0; 4]);
-                    let radius = Some([
-                        child_r[0].max(parent_r[0]),
-                        child_r[1].max(parent_r[1]),
-                        child_r[2].max(parent_r[2]),
-                        child_r[3].max(parent_r[3]),
-                    ]);
-
-                    (clip, radius, current_scroll_clip)
-                }
+            // A sharp scroll container's clip is the scroll clip, kept apart from the primary
+            // clip so a rounded card it cuts keeps its corners, and so content moved inside the
+            // viewport is cut where the viewport stays. Any other clip, sharp or rounded, goes
+            // into the primary clip, which moves with the content it belongs to.
+            if !this_has_radius && tree.is_scroll_container(node) {
+                (
+                    current_clip,
+                    current_clip_radius,
+                    merge_scroll_clip(this_clip, current_scroll_clip),
+                )
+            } else if let Some(parent_clip) = current_clip {
+                let x1 = parent_clip[0].max(this_clip[0]);
+                let y1 = parent_clip[1].max(this_clip[1]);
+                let x2 = (parent_clip[0] + parent_clip[2]).min(this_clip[0] + this_clip[2]);
+                let y2 = (parent_clip[1] + parent_clip[3]).min(this_clip[1] + this_clip[3]);
+                let clip = Some([x1, y1, (x2 - x1).max(0.0), (y2 - y1).max(0.0)]);
+                let child_r = this_clip_radius.unwrap_or([0.0; 4]);
+                let parent_r = current_clip_radius.unwrap_or([0.0; 4]);
+                let radius = Some([
+                    child_r[0].max(parent_r[0]),
+                    child_r[1].max(parent_r[1]),
+                    child_r[2].max(parent_r[2]),
+                    child_r[3].max(parent_r[3]),
+                ]);
+                (clip, radius, current_scroll_clip)
             } else {
-                // No parent clip — this is the first clip level.
-                if this_has_radius {
-                    // Rounded clip becomes primary, scroll clip passes through.
-                    (Some(this_clip), this_clip_radius, current_scroll_clip)
-                } else {
-                    // Sharp clip becomes scroll clip; intersect with existing scroll clip
-                    // so nested sharp clips (scroll + stack wrapper) don't lose the outer boundary.
-                    let new_scroll_clip = if let Some(existing) = current_scroll_clip {
-                        let x1 = existing[0].max(this_clip[0]);
-                        let y1 = existing[1].max(this_clip[1]);
-                        let x2 = (existing[0] + existing[2]).min(this_clip[0] + this_clip[2]);
-                        let y2 = (existing[1] + existing[3]).min(this_clip[1] + this_clip[3]);
-                        [x1, y1, (x2 - x1).max(0.0), (y2 - y1).max(0.0)]
-                    } else {
-                        this_clip
-                    };
-                    (None, None, Some(new_scroll_clip))
-                }
+                (Some(this_clip), this_clip_radius, current_scroll_clip)
             }
         } else {
             (current_clip, current_clip_radius, current_scroll_clip)
