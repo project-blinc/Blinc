@@ -197,6 +197,13 @@ grid does not grow by a few render passes per card. Cards against the edge of
 the window are in the atlas too, and a grid of equal cards that each fade by a
 motion binding is moved by rows like any other bound node.
 
+While the only thing moving is a CSS animation of opacity or colour that repeats, an
+indeterminate progress bar or a skeleton, the window draws 30 frames a second, not
+the display's rate, and an idle window with one on screen costs about half what it
+did. A transform, a layout change, a clip reveal, a scroll or a rebuild draws at the
+display's rate as before. A frame that input asks for during an ambient animation
+can wait up to 33 ms.
+
 Each animation step is capped, so after a long frame (a stall, a debugger
 pause) an animation slows down instead of jumping to its end.
 
