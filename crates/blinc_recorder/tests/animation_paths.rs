@@ -944,6 +944,71 @@ fn scroll_canvas_scene(name: &'static str) -> Scene {
     }
 }
 
+/// A scrolled list whose rows have a transform of their own, and one row a card a binding moves,
+/// all of which the container's row carries.
+fn scroll_transformed_scene(name: &'static str) -> Scene {
+    let steps = 20;
+    Scene {
+        name,
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let reference = blinc_layout::selector::ScrollRef::new();
+            let bound_ref = reference.clone();
+            let x = bound(ui, 0.0);
+            let hx = x.clone();
+            ui.mount(move |_| {
+                let mut list = div().flex_col().gap(2.0).w(W as f32 - 20.0).p(2.0);
+                for i in 0..60 {
+                    let mut row = div()
+                        .w(W as f32 - 60.0)
+                        .h(28.0)
+                        .rounded(6.0)
+                        .bg(Color::rgb(0.2, 0.45, 0.7))
+                        .flex_row()
+                        .items_center();
+                    // The moving row has no label: a moving label inside a scrolled container is
+                    // placed a glyph edge away from a full paint (see the scroll issue).
+                    if i != 4 {
+                        row = row.child(text(format!("Row {i}")).size(13.0).color(Color::WHITE));
+                    }
+                    if i % 3 == 0 {
+                        row = row.transform(Transform::translate(12.0, 0.0));
+                    }
+                    if i == 4 {
+                        list = list.child(
+                            div()
+                                .w(W as f32 - 60.0)
+                                .h(28.0)
+                                .child(row.motion().translate_x(x.clone())),
+                        );
+                    } else {
+                        list = list.child(row);
+                    }
+                }
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .child(
+                        scroll()
+                            .bind(&bound_ref)
+                            .w(W as f32)
+                            .h(H as f32)
+                            .child(list),
+                    )
+            });
+            Box::new(move |ui, step| {
+                reference.set_scroll_offset(0.0, 8.0 * (step + 1) as f32);
+                hx.lock()
+                    .unwrap()
+                    .set_target(20.0 * (step + 1) as f32 / steps as f32);
+                ui.settle_scroll();
+            })
+        }),
+    }
+}
+
 /// A card that a binding moves and scales, with an SVG icon in it that moves and grows with it.
 fn motion_svg_scene(name: &'static str) -> Scene {
     let steps = 20;
@@ -1374,6 +1439,7 @@ fn scenes() -> Vec<Scene> {
         scroll_icons_scene("scroll a list with icons"),
         scroll_translucent_scene("scroll a translucent list"),
         scroll_canvas_scene("scroll a list of canvases"),
+        scroll_transformed_scene("scroll a list with transforms and a mover"),
         motion_svg_scene("motion, an svg"),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
@@ -1612,6 +1678,7 @@ const ON_ROWS: &[&str] = &[
     "scroll a list with icons",
     "scroll a translucent list",
     "scroll a list of canvases",
+    "scroll a list with transforms and a mover",
     "motion, an svg",
     "scroll a list",
     "scroll a list, scrollbar always",

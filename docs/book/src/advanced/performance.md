@@ -274,8 +274,12 @@ translucent or faded elements and canvases is painted once and moved by the
 renderer as it scrolls, so a scroll frame costs what a frame that only moves
 something does. A canvas in it is drawn again each frame where it was painted
 and moved with the rest; one whose drawing changes its number of shapes, or
-uses meshes or GPU passes, makes that frame a full paint. A container holding
-content that moves on its own is painted again on each frame it scrolls.
+uses meshes or GPU passes, makes that frame a full paint. Elements with a
+transform of their own, and elements a motion binding moves, are moved with
+the container too, the binding's change on top of the scroll. A container
+holding something fixed or sticky, an element with a `clip-path`, or a CSS
+animation that is not moved by rows is painted again on each frame it
+scrolls.
 
 Culling stops below anything that places its content apart from layout (a
 CSS or bound transform, a motion, a layout animation) and at fixed and sticky

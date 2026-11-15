@@ -260,7 +260,11 @@ impl RenderTree {
             return true;
         };
         let props = &render.props;
-        !self.moves_its_content(node)
+        // A transform that does not change is painted with the content, which the row moves
+        // whole; a bound node's row chains to the container's.
+        !props.is_fixed
+            && !props.is_sticky
+            && !self.is_layout_animating(node)
             && !props.is_overlay_root
             && !props.is_glass()
             && props.clip_path.is_none()
@@ -281,8 +285,12 @@ impl RenderTree {
                 None => None,
                 Some(render) => {
                     let p = &render.props;
-                    if self.moves_its_content(node) {
-                        Some("moves its content")
+                    if p.is_fixed {
+                        Some("fixed")
+                    } else if p.is_sticky {
+                        Some("sticky")
+                    } else if self.is_layout_animating(node) {
+                        Some("layout animation")
                     } else if p.is_overlay_root {
                         Some("overlay root")
                     } else if p.is_glass() {
@@ -291,7 +299,7 @@ impl RenderTree {
                         Some("clip path")
                     } else if matches!(
                         status.get(&node),
-                        Some(AnimationStatus::Animating(kind)) if *kind != AnimatedKind::Canvas
+                        Some(AnimationStatus::Animating(AnimatedKind::Css))
                     ) {
                         Some("animating")
                     } else {
@@ -310,7 +318,7 @@ impl RenderTree {
     pub(super) fn animating_under(&self, container: LayoutNodeId) -> bool {
         let status = self.current_animation_status.borrow();
         status.iter().any(|(node, status)| {
-            matches!(status, AnimationStatus::Animating(kind) if *kind != AnimatedKind::Canvas)
+            matches!(status, AnimationStatus::Animating(AnimatedKind::Css))
                 && (*node == container || self.layout_tree.ancestors(*node).contains(&container))
         })
     }

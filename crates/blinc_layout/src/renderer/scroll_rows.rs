@@ -181,11 +181,11 @@ impl RenderTree {
 
     fn scroll_subtree_qualifies(&self, node: LayoutNodeId) -> bool {
         self.scroll_node_qualifies(node)
-            // A canvas is replayed into the rows' batch each frame, so it does not count.
+            // A canvas is replayed into the rows' batch each frame, and a bound node is moved by
+            // a row of its own chained to the container's, so neither counts.
             && !matches!(
                 self.current_animation_status.borrow().get(&node),
-                Some(super::AnimationStatus::Animating(kind))
-                    if *kind != super::AnimatedKind::Canvas
+                Some(super::AnimationStatus::Animating(super::AnimatedKind::Css))
             )
             && self.children_qualify(node)
     }
