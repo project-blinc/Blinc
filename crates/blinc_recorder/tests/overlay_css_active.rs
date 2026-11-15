@@ -69,3 +69,56 @@ fn a_finite_animation_beside_an_infinite_one_still_counts() {
     };
     assert!(ui.tree().css_has_active_for_overlay());
 }
+
+/// A transition of a layout property that has finished stays in the store so the same target does
+/// not restart it. It does not ask for the display's frame rate afterwards.
+#[test]
+fn a_settled_layout_transition_does_not_ask_for_vsync() {
+    if !Headless::available() {
+        return;
+    }
+    let on = blinc_core::signal(false);
+    let mut ui = Headless::new(200, 120).expect("a session");
+    ui.theme(
+        HybridTheme::bundle().with_css(
+            ".bar { flex-grow: 1; transition: flex-grow 100ms linear; } .bar.on { flex-grow: 3; }",
+        ),
+        ColorScheme::Dark,
+    );
+    ui.mount(move |_| {
+        div().w(200.0).h(120.0).flex_row().child(
+            div()
+                .class("bar")
+                .class_when("on", on)
+                .h(20.0)
+                .bg(Color::rgb(0.2, 0.4, 0.8)),
+        )
+    });
+    ui.settle();
+    on.set(true);
+    ui.advance(60);
+    let _ = ui.paint_timed(true);
+    let during = {
+        let tree = ui.tree();
+        let store = tree.css_anim_store();
+        let guard = store.lock().unwrap();
+        guard.has_visible_vsync_class(&tree.painted_stable_ids())
+    };
+    assert!(
+        during,
+        "a layout transition that is playing does not ask for vsync"
+    );
+    ui.advance(400);
+    let _ = ui.paint_timed(true);
+    let tree = ui.tree();
+    let store = tree.css_anim_store();
+    let guard = store.lock().unwrap();
+    assert!(
+        !guard.transitions.is_empty(),
+        "the settled transition is not kept, so the test checks nothing"
+    );
+    assert!(
+        !guard.has_visible_vsync_class(&tree.painted_stable_ids()),
+        "a settled transition still asks for vsync"
+    );
+}
