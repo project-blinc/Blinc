@@ -272,6 +272,51 @@ impl RenderTree {
             )
     }
 
+    /// What keeps the content of the scroll container `container` off rows: for each reason, how
+    /// many nodes under it have it (the first that applies to a node). Empty when it qualifies.
+    pub fn scroll_row_blockers(
+        &self,
+        container: LayoutNodeId,
+    ) -> std::collections::BTreeMap<&'static str, usize> {
+        let mut out = std::collections::BTreeMap::new();
+        let mut stack = self.layout_tree.children(container);
+        let status = self.current_animation_status.borrow();
+        while let Some(node) = stack.pop() {
+            stack.extend(self.layout_tree.children(node));
+            let reason = match self.render_nodes.get(&node) {
+                None => None,
+                Some(render) => {
+                    let p = &render.props;
+                    if matches!(render.element_type, ElementType::Svg(_)) {
+                        Some("svg")
+                    } else if matches!(render.element_type, ElementType::Canvas(_)) {
+                        Some("canvas")
+                    } else if self.moves_its_content(node) {
+                        Some("moves its content")
+                    } else if p.is_overlay_root {
+                        Some("overlay root")
+                    } else if p.is_glass() {
+                        Some("glass")
+                    } else if p.opacity < 0.999 {
+                        Some("opacity")
+                    } else if !p.layer_effects.is_empty() {
+                        Some("layer effect")
+                    } else if p.clip_path.is_some() {
+                        Some("clip path")
+                    } else if matches!(status.get(&node), Some(AnimationStatus::Animating(_))) {
+                        Some("animating")
+                    } else {
+                        None
+                    }
+                }
+            };
+            if let Some(reason) = reason {
+                *out.entry(reason).or_insert(0) += 1;
+            }
+        }
+        out
+    }
+
     /// Whether anything under `container` is animating now.
     pub(super) fn animating_under(&self, container: LayoutNodeId) -> bool {
         let status = self.current_animation_status.borrow();

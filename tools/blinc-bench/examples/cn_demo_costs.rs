@@ -499,6 +499,22 @@ fn main() {
         return;
     }
 
+    if std::env::var("COSTS_ROW_BLOCKERS").is_ok() {
+        // The page's scroll container: the scroll ancestor of the menubar.
+        let bar = ui.find(".cn-menubar").expect("the menubar");
+        let t = ui.tree();
+        let page = t.layout_tree.ancestors(bar).into_iter().find(|n| {
+            t.scrolled_offsets().iter().any(|e| e.0 == n.to_raw()) || t.is_scroll_container(*n)
+        });
+        if let Some(page) = page {
+            println!("page on rows: {}", t.is_scroll_row_node(page));
+            for (reason, n) in t.scroll_row_blockers(page) {
+                println!("  {reason:<20} {n}");
+            }
+        }
+        return;
+    }
+
     if std::env::var("COSTS_BAR_STATE").is_ok() {
         // Let the animations run a while, as a window does, then ask the gate.
         for _ in 0..60 {
