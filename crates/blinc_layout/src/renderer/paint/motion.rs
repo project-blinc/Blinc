@@ -28,6 +28,10 @@ pub static LAST_ANIMATING_ON_SCREEN_Y: std::sync::atomic::AtomicI64 =
 pub static LAST_ANIMATING_SCROLL_Y: std::sync::atomic::AtomicI64 =
     std::sync::atomic::AtomicI64::new(0);
 
+/// Set on the id of the group of a node a motion binding moves, which no id a caller gives a layer
+/// has.
+const BOUND_GROUP_TAG: u64 = 1 << 63;
+
 impl RenderTree {
     /// Render with motion animations from RenderState
     ///
@@ -1038,7 +1042,11 @@ impl RenderTree {
                 None
             };
             let config = LayerConfig {
-                id: None,
+                // A bound node's group is found again by this, since its position and size are
+                // local to its parent and equal cards have the same ones.
+                id: motion_bindings_ref.map(|_| {
+                    blinc_core::LayerId::new(slotmap::Key::data(&node).as_ffi() | BOUND_GROUP_TAG)
+                }),
                 position: Some(blinc_core::Point::new(bounds.x, bounds.y)),
                 size: Some(blinc_core::Size::new(bounds.width, bounds.height)),
                 blend_mode: node_blend_mode,

@@ -142,8 +142,18 @@ pub(super) fn ordinal_of(tree: &blinc_layout::RenderTree, node: LayoutNodeId) ->
 }
 
 /// The index of the one `Push` in `batch` that was pushed with `config`, `None` when there is
-/// not exactly one.
+/// not exactly one. A group that has an id is found by it: equal cards in a grid have the same
+/// position, size and opacity.
 fn find_group(batch: &PrimitiveBatch, config: &blinc_core::LayerConfig) -> Option<usize> {
+    if let Some(id) = config.id {
+        let mut pushes = batch
+            .layer_commands
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| matches!(&entry.command, LayerCommand::Push { config: c } if c.id == Some(id)));
+        let first = pushes.next()?.0;
+        return pushes.next().is_none().then_some(first);
+    }
     let mut found = None;
     for (i, entry) in batch.layer_commands.iter().enumerate() {
         let LayerCommand::Push { config: c } = &entry.command else {

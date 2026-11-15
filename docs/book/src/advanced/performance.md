@@ -193,7 +193,9 @@ animation applied on every frame, so the text moves, scales and fades with
 its container about its
 `transform-origin`. Fading siblings of that kind, a grid of cards with labels,
 share one offscreen atlas and are composited in one pass, so the cost of the
-grid does not grow by a few render passes per card.
+grid does not grow by a few render passes per card. Cards against the edge of
+the window are in the atlas too, and a grid of equal cards that each fade by a
+motion binding is moved by rows like any other bound node.
 
 Each animation step is capped, so after a long frame (a stall, a debugger
 pause) an animation slows down instead of jumping to its end.

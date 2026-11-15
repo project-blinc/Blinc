@@ -1201,6 +1201,7 @@ fn scenes() -> Vec<Scene> {
             ScrollbarVisibility::Always,
         ),
         fade_beside_a_mover_scene(),
+        fade_grid_scene_of(6),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
         transition_css_scene(
@@ -1433,6 +1434,7 @@ const ON_ROWS: &[&str] = &[
     "motion in a clipped box, an image",
     "css keyframes, transform only, no text",
     "css keyframes, opacity, one primitive",
+    "motion fade, equal cards",
     "scroll a list",
     "scroll a list, scrollbar always",
     "scroll a list, no scrollbar",
@@ -2447,6 +2449,113 @@ fn grid_scene(count: usize) -> Scene {
                 }
             })
         }),
+    }
+}
+
+/// A grid of `count` small bordered cards with a label, each fading by a value of its own: every
+/// one paints more than one draw, so each fade is a group.
+fn fade_grid_scene(count: usize) -> Scene {
+    fade_grid(count, true)
+}
+
+fn fade_grid_scene_of(count: usize) -> Scene {
+    fade_grid(count, true)
+}
+
+fn fade_grid(count: usize, label: bool) -> Scene {
+    let steps = if count > 20 { 60 } else { 24 };
+    Scene {
+        name: "motion fade, equal cards",
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let values: Vec<_> = (0..count).map(|_| bound(ui, 1.0)).collect();
+            let handles = values.clone();
+            ui.mount(move |_| {
+                let mut grid = div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .flex_row()
+                    .flex_wrap();
+                for o in &values {
+                    let card = div()
+                        .w(26.0)
+                        .h(14.0)
+                        .rounded(3.0)
+                        .bg(Color::rgb(0.2, 0.45, 0.9))
+                        .border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.9))
+                        .flex_row()
+                        .items_center()
+                        .justify_center();
+                    let card = if label {
+                        card.child(text("ab").size(8.0).color(Color::WHITE))
+                    } else {
+                        card
+                    };
+                    grid = grid.child(
+                        div()
+                            .w(30.0)
+                            .h(16.0)
+                            .child(card.motion().opacity(o.clone())),
+                    );
+                }
+                grid
+            });
+            Box::new(move |_, step| {
+                let t = (step + 1) as f32 / steps as f32;
+                for o in &handles {
+                    o.lock().unwrap().set_target(1.0 - 0.6 * t);
+                }
+            })
+        }),
+    }
+}
+
+/// Not a check: what a frame costs with many cards each fading as a group. Run with
+/// `--run-ignored all --no-capture`.
+#[test]
+#[ignore]
+fn what_a_frame_costs_with_many_faded_cards() {
+    for (label, count) in [
+        (true, 10),
+        (true, 40),
+        (true, 140),
+        (false, 40),
+        (false, 140),
+    ] {
+        let scene = fade_grid(count, label);
+        eprintln!(
+            "{count} cards, {}, {} frames each (median / p90 ms):",
+            if label { "with text" } else { "no text" },
+            scene.steps
+        );
+        for (name, path) in [
+            ("promoted, full paint", Path::Full),
+            ("vectors, full paint", Path::Vector),
+            ("rows on the CPU", Path::Rows),
+            ("node table", Path::Table),
+        ] {
+            let Some((_, paths)) = run_logged(&scene, path) else {
+                return;
+            };
+            let in_full = paths
+                .iter()
+                .skip(3)
+                .filter(|p| p.starts_with("full"))
+                .count();
+            let Some(mut times) = frame_times(&scene, path) else {
+                return;
+            };
+            times.drain(..3);
+            times.sort_by(|a, b| a.total_cmp(b));
+            eprintln!(
+                "  {name:<22} {:>7.2} / {:>7.2}   {in_full:>2} of {} in full",
+                times[times.len() / 2],
+                times[times.len() * 9 / 10],
+                paths.len() - 3
+            );
+        }
     }
 }
 
