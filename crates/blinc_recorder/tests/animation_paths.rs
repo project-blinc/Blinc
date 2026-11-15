@@ -1009,6 +1009,57 @@ fn scroll_transformed_scene(name: &'static str) -> Scene {
     }
 }
 
+/// A scrolled list with a turning spinner in some rows: the arcs' clip paths follow their own
+/// turn and the container's offset.
+fn scroll_spinners_scene(name: &'static str) -> Scene {
+    Scene {
+        name,
+        steps: 16,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            ui.theme(
+                blinc_theme::HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
+                blinc_theme::ColorScheme::Dark,
+            );
+            let reference = blinc_layout::selector::ScrollRef::new();
+            let bound_ref = reference.clone();
+            ui.mount(move |_| {
+                let mut list = div().flex_col().gap(2.0).w(W as f32 - 20.0).p(2.0);
+                for i in 0..40 {
+                    let mut row = div()
+                        .w(W as f32 - 60.0)
+                        .h(28.0)
+                        .rounded(6.0)
+                        .bg(Color::rgb(0.2, 0.45, 0.7))
+                        .flex_row()
+                        .items_center()
+                        .gap(2.0)
+                        .child(text(format!("Row {i}")).size(13.0).color(Color::WHITE));
+                    if i % 2 == 0 {
+                        row = row.child(blinc_cn::spinner());
+                    }
+                    list = list.child(row);
+                }
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .child(
+                        scroll()
+                            .bind(&bound_ref)
+                            .w(W as f32)
+                            .h(H as f32)
+                            .child(list),
+                    )
+            });
+            Box::new(move |ui, step| {
+                reference.set_scroll_offset(0.0, 8.0 * (step + 1) as f32);
+                ui.settle_scroll();
+            })
+        }),
+    }
+}
+
 /// A card that a binding moves and scales, with an SVG icon in it that moves and grows with it.
 fn motion_svg_scene(name: &'static str) -> Scene {
     let steps = 20;
@@ -1363,6 +1414,27 @@ fn flip_scene(name: &'static str, label: bool) -> Scene {
     }
 }
 
+/// Spinners, whose arcs turn under a CSS keyframe rule and carry a clip path that turns with them.
+fn spinner_scene(name: &'static str) -> Scene {
+    Scene {
+        name,
+        steps: 12,
+        step_ms: 16,
+        build: Box::new(|ui| {
+            ui.theme(
+                blinc_theme::HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
+                blinc_theme::ColorScheme::Dark,
+            );
+            ui.mount(|_| {
+                (0..3).fold(stage().gap(6.0), |row, _| {
+                    row.child(blinc_cn::spinner().size(blinc_cn::SpinnerSize::Large))
+                })
+            });
+            Box::new(|_, _| {})
+        }),
+    }
+}
+
 fn scenes() -> Vec<Scene> {
     let all = Channels {
         translate: true,
@@ -1441,6 +1513,8 @@ fn scenes() -> Vec<Scene> {
         scroll_canvas_scene("scroll a list of canvases"),
         scroll_transformed_scene("scroll a list with transforms and a mover"),
         motion_svg_scene("motion, an svg"),
+        spinner_scene("css keyframes, spinners"),
+        scroll_spinners_scene("scroll a list of spinners"),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
         transition_css_scene(
@@ -1472,6 +1546,10 @@ fn scenes() -> Vec<Scene> {
         flip_scene("flip, no text", false),
         flip_grid_scene(30),
     ]
+    .into_iter()
+    // BLINC_ANIM_PATHS_ONLY=<text> keeps the scenes whose name contains it; safe to run with.
+    .filter(|s| std::env::var("BLINC_ANIM_PATHS_ONLY").map_or(true, |only| s.name.contains(&only)))
+    .collect()
 }
 
 /// A pixel differs when a channel is further than this from the reference: edge rounding is not a
@@ -1680,6 +1758,8 @@ const ON_ROWS: &[&str] = &[
     "scroll a list of canvases",
     "scroll a list with transforms and a mover",
     "motion, an svg",
+    "css keyframes, spinners",
+    "scroll a list of spinners",
     "scroll a list",
     "scroll a list, scrollbar always",
     "scroll a list, no scrollbar",

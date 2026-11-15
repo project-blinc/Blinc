@@ -30,7 +30,7 @@ impl GpuPaintContext<'_> {
             }));
     }
 
-    fn native_path_clip(&mut self) -> Option<f32> {
+    pub(super) fn native_path_clip(&mut self) -> Option<f32> {
         let start = self.composite_layer_clip_base.first().copied().unwrap_or(0);
         let index = self.clip_stack[start..].iter().rposition(|(shape, _, _)| {
             matches!(

@@ -5,6 +5,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- A path clip can follow the animated node table: `GpuPrimitive::set_node_path_from` says from which row of a primitive's chain it moves, and the SDF, notch and shadow shaders test it at the pixel taken back through those rows, its samples along screen axes. Rows that turn may move it. `node_table::follow_path_clip`, `chain_from` and `invert` do the same for a renderer that applies the rows itself, by moving a contour's points. `DrawContext::current_path_clip` gives the pointer a primitive emitted now would carry.
 - A glyph under a node row that scales is put on a whole device pixel, by `node_table::resolve_primitive` on the CPU (`snap_glyph`, `NodeRow::scales`) and by the table shader, so a bitmap drawn at its own size is sampled texel for texel while its node scales. A glyph that is turned, and one under rows that only move, are left as they are.
 - `Uniforms::new` builds the viewport uniforms stamped with `blinc_core::FrameClock`'s time, `with_msaa` sets the multisample flag and `time` reads the stamp. The shaders' `UNIFORMS.time` is the frame clock in seconds, in the lane that was padding; `GlassUniforms::time` follows the clock too.
 - `GpuRenderer::release_idle_memory` frees the static layer, the overlay targets, the pooled layer textures, the flow scene copy and the mesh pass's window-sized targets, and maintains the device so wgpu destroys them. `LayerTextureCache::clear_pools` drops the pooled textures and keeps the named ones.

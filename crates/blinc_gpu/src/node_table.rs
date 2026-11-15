@@ -270,6 +270,102 @@ pub fn drawn_bounds(rows: &[NodeRow], slot: u32, b: [f32; 4]) -> [f32; 4] {
     b
 }
 
+/// What the rows from `depth` up in the chain from `slot` do to a point: the affine a clip that
+/// follows them from there is drawn under. `None` when it changes nothing.
+pub fn chain_from(rows: &[NodeRow], slot: u32, depth: u32) -> Option<Affine> {
+    let mut affine: Affine = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+    let mut next = Some(slot);
+    for d in 0..NODE_CHAIN_DEPTH as u32 {
+        let Some(row) = next.and_then(|s| rows.get(s as usize)) else {
+            break;
+        };
+        if d >= depth {
+            affine = then(affine, row.affine());
+        }
+        next = row.parent();
+    }
+    (affine != [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]).then_some(affine)
+}
+
+/// The inverse of `a`, or `None` when it has none.
+pub fn invert(a: Affine) -> Option<Affine> {
+    let [a, b, c, d, tx, ty] = a;
+    let det = a * d - b * c;
+    if det.abs() < 1e-12 {
+        return None;
+    }
+    let (ia, ib, ic, id) = (d / det, -b / det, -c / det, a / det);
+    Some([ia, ib, ic, id, -(ia * tx + ic * ty), -(ib * tx + id * ty)])
+}
+
+/// For a renderer that applies the rows itself: give `p`'s path clip, when it follows the rows,
+/// a copy of its shape rows in `aux` moved as the shaders move it with the table. A contour's
+/// points are moved, as a full paint would have placed them; another shape's frame is given
+/// the inverse. Run before the slot is cleared.
+pub fn follow_path_clip(rows: &[NodeRow], p: &mut GpuPrimitive, aux: &mut Vec<[f32; 4]>) {
+    let (Some(slot), Some(from)) = (p.node_slot(), p.node_path_from()) else {
+        return;
+    };
+    let Some(forward) = chain_from(rows, slot, from) else {
+        return;
+    };
+    let base = p.clip_shape[0] as usize - 1;
+    let (Some(&frame), Some(&info), Some(&shape)) =
+        (aux.get(base), aux.get(base + 1), aux.get(base + 2))
+    else {
+        return;
+    };
+    let contour = info[2] > 2.5;
+    let len = if contour {
+        shape[0] as usize + (shape[1] as usize).div_ceil(2)
+    } else {
+        3
+    };
+    if base + len > aux.len() {
+        return;
+    }
+    let at = aux.len();
+    aux.extend_from_within(base..base + len);
+    if contour {
+        // Contours are in screen space under the frame; a point at 1e30 separates them.
+        let [a, b, c, d, tx, ty] = forward;
+        let mv = |x: f32, y: f32| {
+            if x >= 1e29 {
+                (x, y)
+            } else {
+                (a * x + c * y + tx, b * x + d * y + ty)
+            }
+        };
+        for row in &mut aux[at + shape[0] as usize..at + len] {
+            let (x0, y0) = mv(row[0], row[1]);
+            let (x1, y1) = mv(row[2], row[3]);
+            *row = [x0, y0, x1, y1];
+        }
+        // The shape is tested at `frame * pixel + info.xy`: a moved contour under a frame that
+        // is not the identity is the frame's points moved, which this does not do.
+        if frame != [1.0, 0.0, 0.0, 1.0] || info[0] != 0.0 || info[1] != 0.0 {
+            aux.truncate(at);
+            return;
+        }
+    } else {
+        let Some([ia, ib, ic, id, ux, uy]) = invert(forward) else {
+            aux.truncate(at);
+            return;
+        };
+        let [fx, fy, fz, fw] = frame;
+        aux[at] = [
+            fx * ia + fz * ib,
+            fy * ia + fw * ib,
+            fx * ic + fz * id,
+            fy * ic + fw * id,
+        ];
+        aux[at + 1][0] = fx * ux + fz * uy + info[0];
+        aux[at + 1][1] = fy * ux + fw * uy + info[1];
+    }
+    p.clip_shape[0] = (at + 1) as f32;
+    p.set_node_path_from(None);
+}
+
 impl Default for NodeRow {
     fn default() -> Self {
         Self::REST
@@ -341,5 +437,41 @@ mod tests {
         let child = NodeRow::new([0.0; 2], [1.0; 2], [0.0; 2], 0.0, 1.0, Some(0));
         assert_eq!(root.parent(), None);
         assert_eq!(child.parent(), Some(0));
+    }
+
+    #[test]
+    fn a_path_clip_that_follows_a_row_gets_its_points_moved() {
+        // A triangle contour block as a path clip writes it: frame, info, shape, then points.
+        let block = vec![
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 0.0, 3.0, 0.0],
+            [3.0, 4.0, 0.0, 0.0],
+            [0.0, 0.0, 10.0, 0.0],
+            [10.0, 10.0, 0.0, 0.0],
+        ];
+        let mut aux = vec![[9.0; 4]];
+        aux.extend(block);
+        let mut p = GpuPrimitive::default();
+        p.clip_shape[0] = 2.0;
+        p.set_node_slot(Some(0));
+        p.set_node_path_from(Some(0));
+        let rows = [NodeRow::new(
+            [5.0, -2.0],
+            [1.0, 1.0],
+            [0.0, 0.0],
+            0.0,
+            1.0,
+            None,
+        )];
+        follow_path_clip(&rows, &mut p, &mut aux);
+        assert_eq!(p.clip_shape[0], 7.0);
+        assert_eq!(p.node_path_from(), None);
+        assert_eq!(aux[6], [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(
+            &aux[9..],
+            &[[5.0, -2.0, 15.0, -2.0], [15.0, 8.0, 5.0, -2.0]]
+        );
+        // The block it came from is left for the primitives that do not move.
+        assert_eq!(aux[4], [0.0, 0.0, 10.0, 0.0]);
     }
 }

@@ -483,6 +483,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         self.current_clip_aabb_impl()
     }
 
+    fn current_path_clip(&mut self) -> f32 {
+        self.native_path_clip().unwrap_or(0.0)
+    }
+
     fn current_clip_rounded(&self) -> Option<([f32; 4], [f32; 4])> {
         // Same heuristic the inherent `ambient_clip_rounded` uses:
         // walk the full clip stack, intersect AABBs, and track the

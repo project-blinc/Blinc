@@ -4,7 +4,7 @@
 //! from the vertex buffer.
 
 russl::russl! {
-    use super::access::{UNIFORMS, prim};
+    use super::access::{UNIFORMS, prim, path_clip_alpha};
     use super::clip::{calculate_clip_alpha, calculate_polygon_clip_alpha, gradient_table_color, abi_shape_clip_alpha};
     use super::common::{erf, apply_css_filter, quarter_ellipse_sdf, sd_shaped_rect};
     use super::notch::{sd_notch, sd_abi_notch};
@@ -224,7 +224,7 @@ russl::russl! {
         // Early clip test - discard if completely outside clip region (screen space).
         // Polygon shape test deferred until sp is known — see `sdf_core`.
         let mut clip_alpha = calculate_clip_alpha(p, prim.clip_bounds, prim.clip_radius, prim.clip_corner_shape, clip_type, prim.clip_fade, prim.clip_fade_bounds);
-        clip_alpha = clip_alpha * abi_shape_clip_alpha(p, prim.clip_shape.x);
+        clip_alpha = clip_alpha * path_clip_alpha(prim, p);
         if clip_alpha < 0.001 {
             discard!();
         }

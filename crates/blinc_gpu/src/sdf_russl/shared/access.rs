@@ -6,6 +6,7 @@
 russl::russl! {
     use super::primitive::{Primitive, Uniforms};
     use super::node_table::{NodeRow, apply_node, scales_node, snap_glyph};
+    use super::clip::{abi_shape_clip_alpha, abi_shape_clip_alpha_back};
 
     #[pipeline] const TIER: u32 = 0;
     // 1 binds the animated node table and applies a node's delta to the primitives that follow it;
@@ -115,9 +116,65 @@ russl::russl! {
             }
             return p;
         }
+
+        // The path clip of `p` at `pixel`, taken back through the rows the clip follows (from
+        // depth `clip_shape.y - 1` of `p`'s chain up) so it is tested where it was painted.
+        pub fn path_clip_alpha(p: Primitive, pixel: Vec2) -> f32 {
+            if p.clip_shape.y < 0.5 {
+                return abi_shape_clip_alpha(pixel, p.clip_shape.x);
+            }
+            let from = (p.clip_shape.y as u32) - 1u32;
+            // x' = a x + c y + e, y' = b x + d y + f: the rows from `from` up, first row first.
+            let mut a = 1.0;
+            let mut b = 0.0;
+            let mut c = 0.0;
+            let mut d = 1.0;
+            let mut e = 0.0;
+            let mut f = 0.0;
+            let mut slot = p.node_slot.x as u32;
+            for depth in 0u32..4u32 {
+                if slot != 0u32 {
+                    let row = node_row(slot - 1u32);
+                    if depth >= from {
+                        let s = sin(row.pivot.z);
+                        let k = cos(row.pivot.z);
+                        let ra = k * row.motion.z;
+                        let rb = s * row.motion.z;
+                        let rc = -s * row.motion.w;
+                        let rd = k * row.motion.w;
+                        let re = row.pivot.x + row.motion.x - (ra * row.pivot.x + rc * row.pivot.y);
+                        let rf = row.pivot.y + row.motion.y - (rb * row.pivot.x + rd * row.pivot.y);
+                        let na = ra * a + rc * b;
+                        let nb = rb * a + rd * b;
+                        let nc = ra * c + rc * d;
+                        let nd = rb * c + rd * d;
+                        let ne = ra * e + rc * f + re;
+                        let nf = rb * e + rd * f + rf;
+                        a = na;
+                        b = nb;
+                        c = nc;
+                        d = nd;
+                        e = ne;
+                        f = nf;
+                    }
+                    slot = row.link.x as u32;
+                }
+            }
+            let det = a * d - b * c;
+            if abs(det) < 1e-12 {
+                return abi_shape_clip_alpha(pixel, p.clip_shape.x);
+            }
+            let back = Vec4::new(d, -b, -c, a) / det;
+            let shift = -Vec2::new(back.x * e + back.z * f, back.y * e + back.w * f);
+            return abi_shape_clip_alpha_back(pixel, p.clip_shape.x, back, shift, true);
+        }
     #else
         pub fn prim(index: u32) -> Primitive {
             return prim_rest(index);
+        }
+
+        pub fn path_clip_alpha(p: Primitive, pixel: Vec2) -> f32 {
+            return abi_shape_clip_alpha(pixel, p.clip_shape.x);
         }
     #endif
 }

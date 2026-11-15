@@ -581,6 +581,9 @@ pub struct CompositeBindingMeta {
     /// The clip (x, y, width, height, in screen pixels) in force when the node began painting,
     /// before any clip of its own: the one a clip on its primitives that is not its own equals.
     pub ambient_clip: Option<[f32; 4]>,
+    /// The path clip pointer in force when the node began painting, zero for none: the one a path
+    /// clip on its primitives that is not its own carries.
+    pub ambient_path: f32,
     /// For a scroll container painted as a node moved by rows: how far its scroll offset may move
     /// from the one it was painted at, in logical pixels, before it is painted again. `None` for
     /// every other binding.

@@ -59,9 +59,15 @@ impl GpuRenderer {
             return std::borrow::Cow::Borrowed(batch);
         }
         let mut resolved = batch.clone();
+        let rows = self.node_rows_cpu.lock().unwrap();
+        let mut aux = std::mem::take(&mut resolved.aux_data);
         for p in &mut resolved.primitives {
-            *p = self.resolve_node_slot(p);
+            crate::node_table::follow_path_clip(&rows, p, &mut aux);
+            if p.node_slot().is_some() {
+                *p = crate::node_table::resolve_primitive(&rows, p);
+            }
         }
+        resolved.aux_data = aux;
         resolved.node_slots_epoch = 0;
         std::borrow::Cow::Owned(resolved)
     }

@@ -107,6 +107,8 @@ struct Slot {
     layer: Option<usize>,
     /// The clip in force when the node began painting.
     ambient_clip: Option<[f32; 4]>,
+    /// The path clip pointer in force when the node began painting, zero for none.
+    ambient_path: f32,
     /// Whether a primitive's clip moves with this node's row, which cannot turn a clip.
     clip_moves: bool,
     /// How far the node may move from where it was painted, in logical pixels: a scroll container
@@ -175,9 +177,13 @@ fn find_group(batch: &PrimitiveBatch, config: &blinc_core::LayerConfig) -> Optio
     found
 }
 
-/// Whether `clip` (x, y, width, height) is the clip that was in force at `ambient`.
+/// Whether `clip` (x, y, width, height) is the clip that was in force at `ambient`. The unbounded
+/// rect a primitive carries for no clip is the clip of no ambient one.
 fn same_clip(clip: [f32; 4], ambient: Option<[f32; 4]>) -> bool {
-    ambient.is_some_and(|a| clip.iter().zip(a).all(|(c, a)| (c - a).abs() < 0.5))
+    match ambient {
+        Some(a) => clip.iter().zip(a).all(|(c, a)| (c - a).abs() < 0.5),
+        None => clip[2] >= 50000.0 && clip[3] >= 50000.0,
+    }
 }
 
 fn next_epoch() -> u64 {
@@ -308,6 +314,7 @@ impl NodeRows {
                 centre: meta.centre,
                 layer,
                 ambient_clip: meta.ambient_clip,
+                ambient_path: meta.ambient_path,
                 clip_moves: false,
                 limit: meta.scroll_margin,
             });
@@ -427,14 +434,41 @@ impl NodeRows {
         Ok(None)
     }
 
-    /// Say, on each primitive that has a clip, which rows move it. `false` when one cannot.
-    fn follow_clips(&mut self, prims: &mut [GpuPrimitive]) -> bool {
+    /// Where in the chain of rows from `slot` the path clip of `prim` begins to follow them, found
+    /// as [`clip_from`](Self::clip_from) finds the rectangle's. A path is taken back through
+    /// the rows where it is tested, so it may follow a turn.
+    fn path_from(&self, slot: u32, prim: &GpuPrimitive) -> Option<u32> {
+        let pointer = prim.clip_shape[0];
+        if pointer < 0.5 {
+            return None;
+        }
+        let mut depth = 0u32;
+        let mut up = Some(slot);
+        while let Some(s) = up {
+            let node = &self.slots[s as usize];
+            if (node.ambient_path - pointer).abs() > 0.5 {
+                return Some(depth);
+            }
+            depth += 1;
+            up = node.parent;
+        }
+        None
+    }
+
+    /// Say, on each primitive that has a clip, which rows move it. `false` when one cannot, or
+    /// when a path must move and `paths` says nothing here can take it back.
+    fn follow_clips(&mut self, prims: &mut [GpuPrimitive], paths: bool) -> bool {
         for p in prims {
             let Some(row) = p.node_slot() else { continue };
             match self.clip_from(row / 2, p) {
                 Ok(from) => p.set_node_clip_from(from),
                 Err(()) => return false,
             }
+            let path = self.path_from(row / 2, p);
+            if path.is_some() && !paths {
+                return false;
+            }
+            p.set_node_path_from(path);
         }
         true
     }
@@ -477,6 +511,19 @@ impl NodeRows {
                 }
             })
             .collect()
+    }
+
+    /// `batch`'s primitives as [`resolve_primitives`](Self::resolve_primitives) gives them, with
+    /// each path clip that follows the rows given its own shape rows, appended to the batch's aux
+    /// data. Returns the primitives that were there and the aux length to cut back to.
+    pub(super) fn resolve_batch(&self, batch: &mut PrimitiveBatch) -> (Vec<GpuPrimitive>, usize) {
+        let aux_len = batch.aux_data.len();
+        let mut prims = batch.primitives.clone();
+        for p in &mut prims {
+            blinc_gpu::node_table::follow_path_clip(&self.rows, p, &mut batch.aux_data);
+        }
+        let resolved = self.resolve_primitives(&prims);
+        (std::mem::replace(&mut batch.primitives, resolved), aux_len)
     }
 
     /// Whether the chain of rows from `row` changes nothing.
@@ -879,7 +926,7 @@ impl NodeRows {
             self.epoch = epoch;
             self.rows.clear();
             let mut primitives = std::mem::take(&mut batch.primitives);
-            let followed = self.follow_clips(&mut primitives);
+            let followed = self.follow_clips(&mut primitives, true);
             batch.primitives = primitives;
             if !followed {
                 return self.decline(true, batch, text, bindings);
@@ -890,7 +937,8 @@ impl NodeRows {
                 }
                 text.node_slots_epoch = epoch;
                 let mut primitives = std::mem::take(&mut text.primitives);
-                let followed = self.follow_clips(&mut primitives);
+                // Without the table, glyph primitives are moved with no aux rows to copy into.
+                let followed = self.follow_clips(&mut primitives, renderer.node_table_enabled());
                 text.primitives = primitives;
                 if !followed {
                     return self.decline(true, batch, Some(text), bindings);
@@ -1002,6 +1050,7 @@ mod tests {
             centre: (50.0, 40.0),
             layer: None,
             ambient_clip: None,
+            ambient_path: 0.0,
             clip_moves: false,
             limit: None,
         }
@@ -1095,6 +1144,7 @@ mod tests {
             layer_config: None,
             centre: (10.0, 10.0),
             ambient_clip: None,
+            ambient_path: 0.0,
             scroll_margin: None,
             last_screen_aabb: None,
         }

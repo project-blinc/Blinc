@@ -5,7 +5,7 @@
 
 russl::russl! {
     use super::common::{sd_circle, sd_ellipse, sd_shaped_rect, quarter_ellipse_sdf, erf, apply_css_filter, border_side_color};
-    use super::access::{UNIFORMS, GLYPH_ATLAS, GLYPH_SAMPLER, COLOR_GLYPH_ATLAS, prim};
+    use super::access::{UNIFORMS, GLYPH_ATLAS, GLYPH_SAMPLER, COLOR_GLYPH_ATLAS, prim, path_clip_alpha};
     use super::aux_data::aux;
     use super::clip::{calculate_clip_alpha, calculate_polygon_clip_alpha, gradient_table_color, abi_shape_clip_alpha};
 
@@ -295,7 +295,7 @@ russl::russl! {
         // rotate with motion-binding / CSS rotation automatically.
         let mut clip_alpha = calculate_clip_alpha(p, prim.clip_bounds, prim.clip_radius, prim.clip_corner_shape, clip_type, prim.clip_fade, prim.clip_fade_bounds);
         if FEAT_CLIP_SHAPE {
-            clip_alpha = clip_alpha * abi_shape_clip_alpha(p, prim.clip_shape.x);
+            clip_alpha = clip_alpha * path_clip_alpha(prim, p);
         }
         if clip_alpha < 0.001 {
             discard!();

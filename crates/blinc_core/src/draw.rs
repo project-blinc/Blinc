@@ -1919,6 +1919,12 @@ pub trait DrawContext {
         None
     }
 
+    /// The pointer a primitive emitted now would carry for its path clip (`clip_shape[0]`), zero
+    /// when the clip in force is not a path.
+    fn current_path_clip(&mut self) -> f32 {
+        0.0
+    }
+
     /// Snapshot the current ancestor clip as
     /// `(aabb_xywh, corner_radius_tl_tr_br_bl)`. Used by P4.3's
     /// motion-subtree bake to capture the parent's rounded-rect clip

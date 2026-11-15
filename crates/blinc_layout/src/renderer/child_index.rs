@@ -267,7 +267,6 @@ impl RenderTree {
             && !self.is_layout_animating(node)
             && !props.is_overlay_root
             && !props.is_glass()
-            && props.clip_path.is_none()
     }
 
     /// What keeps the content of the scroll container `container` off rows: for each reason, how
@@ -295,8 +294,6 @@ impl RenderTree {
                         Some("overlay root")
                     } else if p.is_glass() {
                         Some("glass")
-                    } else if p.clip_path.is_some() {
-                        Some("clip path")
                     } else if matches!(
                         status.get(&node),
                         Some(AnimationStatus::Animating(AnimatedKind::Css))

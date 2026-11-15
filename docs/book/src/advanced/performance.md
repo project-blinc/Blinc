@@ -176,7 +176,9 @@ let (x, y, scale) = timeline.lock().unwrap().configure(|t| {
 A CSS keyframe animation of `transform` alone (translate, scale, rotate) on
 an element with no `transform` of its own is the cheapest kind: the element
 is painted once and the renderer moves it each frame, its text, images, SVG
-icons and nested animations included, with no texture held for it. So is a CSS
+icons and nested animations included, with no texture held for it. An element
+with a `clip-path` polygon or path is moved the same way, its clip turning and
+moving with it, so a `cn::spinner` turns without painting again. So is a CSS
 transition of `transform` that scales uniformly, which may start and end on
 poses with a `transform` of their own (a card lifted on hover), and a
 keyframe animation or a transition of `opacity` on an element that paints a
@@ -276,9 +278,9 @@ something does. A canvas in it is drawn again each frame where it was painted
 and moved with the rest; one whose drawing changes its number of shapes, or
 uses meshes or GPU passes, makes that frame a full paint. Elements with a
 transform of their own, and elements a motion binding moves, are moved with
-the container too, the binding's change on top of the scroll. A container
-holding something fixed or sticky, an element with a `clip-path`, or a CSS
-animation that is not moved by rows is painted again on each frame it
+the container too, the binding's change on top of the scroll, and so are
+elements with a `clip-path`. A container holding something fixed or sticky, or
+a CSS animation that is not moved by rows, is painted again on each frame it
 scrolls.
 
 Culling stops below anything that places its content apart from layout (a
@@ -305,7 +307,7 @@ These changes trip the compositor fast path and require a full walker run:
 | Animating `width`, `height`, `padding`, `gap`, `margin` | Triggers Taffy re-layout                  |
 | Animating `clip-path` inset / circle radius             | Damage-rect path can't patch in place     |
 | Animating `filter: blur(…)` or `backdrop-filter`        | Out of scope for `apply_css_deltas`       |
-| Scroll physics actively moving                          | Cache invalidated by scroll offset        |
+| Scrolling a container that is not moved by rows         | Cache invalidated by scroll offset        |
 | Overlay / dialog / sheet open or close                  | Layer composition changes                 |
 | Stateful flips that change child structure              | Subtree rebuild                           |
 | CSS animation on a subtree with text, SVG or canvas     | Painted every frame instead of baked      |

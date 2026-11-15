@@ -2,7 +2,7 @@
 //! and CircleInnerShadow primitives. Each tier's entry points call these with the fields they read.
 
 russl::russl! {
-    use super::access::{UNIFORMS, prim};
+    use super::access::{UNIFORMS, prim, path_clip_alpha};
     use super::clip::{calculate_clip_alpha, calculate_polygon_clip_alpha, abi_shape_clip_alpha};
     use super::common::{sd_circle, sd_shaped_rect, erf, shadow_circle, shadow_spread_radius};
 
@@ -131,7 +131,7 @@ russl::russl! {
         // Early clip test - discard if completely outside clip region (screen space).
         // The polygon shape test waits until `sp` is known.
         let mut clip_alpha = calculate_clip_alpha(p, prim.clip_bounds, prim.clip_radius, prim.clip_corner_shape, clip_type, prim.clip_fade, prim.clip_fade_bounds);
-        clip_alpha = clip_alpha * abi_shape_clip_alpha(p, prim.clip_shape.x);
+        clip_alpha = clip_alpha * path_clip_alpha(prim, p);
         if clip_alpha < 0.001 {
             discard!();
         }

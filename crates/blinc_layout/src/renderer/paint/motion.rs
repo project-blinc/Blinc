@@ -653,6 +653,11 @@ impl RenderTree {
         // this fn alongside the legacy `composite_bindings` insert,
         // gated on the node's `AnimationStatus` being `Animating`.
         let ambient_clip = ctx.current_clip_aabb();
+        let ambient_path = if motion_bindings_ref.is_some() {
+            ctx.current_path_clip()
+        } else {
+            0.0
+        };
         let v2_motion_ambient = (in_motion_subtree && ctx.bg_batch_is_dynamic()).then(|| {
             (
                 ctx.current_affine_elements(),
@@ -1952,12 +1957,13 @@ impl RenderTree {
             let previous_ordinal = ctx.set_motion_node_ordinal(ordinal);
             let start = ctx.bg_primitive_count();
             let ambient_clip = ctx.current_clip_aabb();
+            let ambient_path = ctx.current_path_clip();
             let previous_overscan = self.set_cull_overscan(overscan);
             self.scroll_rows_depth.set(self.scroll_rows_depth.get() + 1);
             (
                 start,
                 previous_ordinal,
-                ambient_clip,
+                (ambient_clip, ambient_path),
                 previous_overscan,
                 overscan,
             )
@@ -2110,8 +2116,13 @@ impl RenderTree {
         // The content of a container on rows is painted: record it as a binding whose pose is
         // its scroll offset.
         let scroll_on_rows = scroll_rows.is_some();
-        if let Some((start, previous_ordinal, ambient_clip, previous_overscan, overscan)) =
-            scroll_rows
+        if let Some((
+            start,
+            previous_ordinal,
+            (ambient_clip, ambient_path),
+            previous_overscan,
+            overscan,
+        )) = scroll_rows
         {
             let end = ctx.bg_primitive_count();
             if effective_layer == target_layer {
@@ -2129,6 +2140,7 @@ impl RenderTree {
                         layer_config: None,
                         centre: (0.0, 0.0),
                         ambient_clip,
+                        ambient_path,
                         scroll_margin: Some(margin),
                         last_screen_aabb: None,
                     },
@@ -2401,6 +2413,7 @@ impl RenderTree {
                             layer_config: motion_binding_layer_push_index.and(group_config.clone()),
                             centre,
                             ambient_clip,
+                            ambient_path,
                             scroll_margin: None,
                             last_screen_aabb,
                         },

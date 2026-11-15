@@ -510,6 +510,7 @@ impl GpuPrimitive {
         self.node_slot[0] = slot.map_or(0.0, |s| (s + 1) as f32);
         if slot.is_none() {
             self.node_slot[1] = 0.0;
+            self.clip_shape[1] = 0.0;
         }
     }
 
@@ -535,6 +536,18 @@ impl GpuPrimitive {
     /// Set [`node_clip_from`](Self::node_clip_from).
     pub fn set_node_clip_from(&mut self, depth: Option<u32>) {
         self.node_slot[1] = depth.map_or(0.0, |d| (d + 1) as f32);
+    }
+
+    /// Where in the node's chain of rows the path clip (`clip_shape[0]`) begins to follow them,
+    /// as [`node_clip_from`](Self::node_clip_from) says for the rectangle. A path follows a turn.
+    pub fn node_path_from(&self) -> Option<u32> {
+        (self.clip_shape[0] > 0.5 && self.clip_shape[1] >= 1.0)
+            .then(|| self.clip_shape[1] as u32 - 1)
+    }
+
+    /// Set [`node_path_from`](Self::node_path_from).
+    pub fn set_node_path_from(&mut self, depth: Option<u32>) {
+        self.clip_shape[1] = depth.map_or(0.0, |d| (d + 1) as f32);
     }
 
     /// Create a text glyph primitive from a GpuGlyph
