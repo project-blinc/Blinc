@@ -728,7 +728,10 @@ pub struct RenderTree {
     /// The underlying layout tree
     pub layout_tree: LayoutTree,
     /// Render data for each node (ordered by insertion/tree order)
-    render_nodes: tracked::Tracked<IndexMap<LayoutNodeId, RenderNode>, LayoutNodeId>,
+    render_nodes: tracked::Tracked<
+        IndexMap<LayoutNodeId, RenderNode, rustc_hash::FxBuildHasher>,
+        LayoutNodeId,
+    >,
     ime_bindings: HashMap<LayoutNodeId, crate::ime::ImeBinding>,
     accessibility_bindings: HashMap<LayoutNodeId, crate::accessibility::AccessibilityBinding>,
     /// Root node ID

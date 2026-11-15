@@ -94,24 +94,54 @@ impl RenderTree {
         // contention we'd rather get a slightly-stale value than
         // block on a paint thread; the next frame catches up.
         for ancestor in self.layout_tree.ancestors(node) {
-            let (sx, sy) = if let Some(physics) = self.scroll_physics.get(&ancestor) {
-                if let Ok(p) = physics.try_lock() {
-                    (p.offset_x, p.offset_y)
-                } else {
-                    self.scroll_offsets
-                        .get(&ancestor)
-                        .copied()
-                        .unwrap_or((0.0, 0.0))
-                }
-            } else if let Some(&offset) = self.scroll_offsets.get(&ancestor) {
-                offset
-            } else {
+            let Some((sx, sy)) = self.container_scroll(ancestor) else {
                 continue;
             };
             bounds.x += sx;
             bounds.y += sy;
         }
         Some(bounds)
+    }
+
+    /// The offset of `node` as a scroll container, `None` when it is not one: the physics first,
+    /// the stored offset as a fallback, as `get_scroll_offset` reads them.
+    pub(crate) fn container_scroll(&self, node: LayoutNodeId) -> Option<(f32, f32)> {
+        if let Some(physics) = self.scroll_physics.get(&node) {
+            if let Ok(p) = physics.try_lock() {
+                Some((p.offset_x, p.offset_y))
+            } else {
+                Some(
+                    self.scroll_offsets
+                        .get(&node)
+                        .copied()
+                        .unwrap_or((0.0, 0.0)),
+                )
+            }
+        } else {
+            self.scroll_offsets.get(&node).copied()
+        }
+    }
+
+    /// The absolute bounds of `child` from those of its parent: the parent's, the child's offset in
+    /// the parent, and the parent's own scroll. What `get_absolute_bounds` adds up one ancestor at
+    /// a time, taken in one step by a walk that is going down the tree anyway.
+    pub(crate) fn child_absolute_bounds(
+        &self,
+        parent: LayoutNodeId,
+        parent_bounds: Option<ElementBounds>,
+        child: LayoutNodeId,
+    ) -> Option<ElementBounds> {
+        let Some(parent_bounds) = parent_bounds else {
+            return self.get_absolute_bounds(child);
+        };
+        let local = self.layout_tree.get_bounds(child, (0.0, 0.0))?;
+        let (sx, sy) = self.container_scroll(parent).unwrap_or((0.0, 0.0));
+        Some(ElementBounds {
+            x: parent_bounds.x + local.x + sx,
+            y: parent_bounds.y + local.y + sy,
+            width: local.width,
+            height: local.height,
+        })
     }
 
     /// Get render node data
@@ -140,5 +170,77 @@ impl RenderTree {
     /// Iterate over all nodes with their bounds and render props
     pub fn iter_nodes(&self) -> impl Iterator<Item = (LayoutNodeId, &RenderNode)> {
         self.render_nodes.iter().map(|(&id, node)| (id, node))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::div::div;
+    use crate::scroll::scroll;
+
+    fn close(a: &ElementBounds, b: &ElementBounds) -> bool {
+        (a.x - b.x).abs() < 0.01
+            && (a.y - b.y).abs() < 0.01
+            && (a.width - b.width).abs() < 0.01
+            && (a.height - b.height).abs() < 0.01
+    }
+
+    fn walk(
+        tree: &RenderTree,
+        node: LayoutNodeId,
+        bounds: Option<ElementBounds>,
+        seen: &mut usize,
+    ) {
+        for child in tree.layout_tree.children(node) {
+            let carried = tree.child_absolute_bounds(node, bounds, child);
+            let summed = tree.get_absolute_bounds(child);
+            match (carried, summed) {
+                (Some(a), Some(b)) => assert!(close(&a, &b), "{a:?} against {b:?}"),
+                (None, None) => {}
+                (a, b) => panic!("{a:?} against {b:?}"),
+            }
+            *seen += 1;
+            walk(tree, child, carried, seen);
+        }
+    }
+
+    /// A node's bounds taken from its parent's equal what adding up every ancestor gives, under
+    /// nested containers that are scrolled.
+    #[test]
+    fn child_bounds_carried_down_equal_the_sum_over_the_ancestors() {
+        let ui = div().w(300.0).h(300.0).p(7.0).child(
+            scroll().w(280.0).h(200.0).child(
+                div().w(260.0).flex_col().gap(5.0).p(3.0).child(
+                    scroll().w(200.0).h(120.0).child(
+                        div()
+                            .flex_col()
+                            .gap(4.0)
+                            .child(div().w(150.0).h(40.0))
+                            .child(div().w(150.0).h(40.0))
+                            .child(div().w(150.0).h(400.0)),
+                    ),
+                ),
+            ),
+        );
+        let mut tree = RenderTree::from_element(&ui);
+        tree.compute_layout(300.0, 300.0);
+        // Scroll both containers.
+        let mut scrolls = Vec::new();
+        let mut stack = vec![tree.root().unwrap()];
+        while let Some(n) = stack.pop() {
+            if tree.scroll_physics.contains_key(&n) {
+                scrolls.push(n);
+            }
+            stack.extend(tree.layout_tree.children(n));
+        }
+        assert!(scrolls.len() >= 2, "{} scroll containers", scrolls.len());
+        for (i, node) in scrolls.iter().enumerate() {
+            tree.set_scroll_offset(*node, 0.0, -(10.0 + 13.0 * i as f32));
+        }
+        let root = tree.root().unwrap();
+        let mut seen = 0;
+        walk(&tree, root, tree.get_absolute_bounds(root), &mut seen);
+        assert!(seen > 6, "only {seen} nodes were compared");
     }
 }

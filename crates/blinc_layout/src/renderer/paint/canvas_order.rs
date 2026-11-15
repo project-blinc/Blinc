@@ -71,6 +71,18 @@ impl RenderTree {
     }
 
     fn subtree_paints_over(&self, node: LayoutNodeId, rect: [f32; 4], any: bool) -> bool {
+        self.subtree_paints_over_at(node, rect, any, self.get_absolute_bounds(node))
+    }
+
+    /// [`Self::subtree_paints_over`] with the absolute bounds of `node` known, which a walk down
+    /// carries from each node to its children instead of adding up every ancestor again.
+    fn subtree_paints_over_at(
+        &self,
+        node: LayoutNodeId,
+        rect: [f32; 4],
+        any: bool,
+        bounds: Option<crate::element::ElementBounds>,
+    ) -> bool {
         let Some(render) = self.render_nodes.get(&node) else {
             return false;
         };
@@ -78,7 +90,6 @@ impl RenderTree {
         if props.is_overlay_root || !props.visible {
             return false;
         }
-        let bounds = self.get_absolute_bounds(node);
         let overlaps = bounds.is_some_and(|b| {
             b.width > 0.0
                 && b.height > 0.0
@@ -105,9 +116,13 @@ impl RenderTree {
         if props.clips_content && !overlaps {
             return false;
         }
-        self.layout_tree
-            .children(node)
-            .into_iter()
-            .any(|child| self.subtree_paints_over(child, rect, any))
+        self.layout_tree.children(node).into_iter().any(|child| {
+            self.subtree_paints_over_at(
+                child,
+                rect,
+                any,
+                self.child_absolute_bounds(node, bounds, child),
+            )
+        })
     }
 }

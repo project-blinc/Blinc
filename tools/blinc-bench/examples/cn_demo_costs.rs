@@ -164,6 +164,7 @@ fn bring_into_view(ui: &mut Headless, selector: &str) -> bool {
         }
         ui.scroll(0.0, -120.0);
         ui.advance(16);
+        let _ = ui.paint_timed(true);
     }
     false
 }
@@ -183,6 +184,25 @@ fn main() {
     let _guard = tracing::subscriber::set_default(log.clone());
     ui.settle();
     rest(&mut ui);
+
+    // `COSTS_ONLY_PAINT=<frames>`: nothing but full paints of the page, for a sampling profiler.
+    if let Some(frames) = std::env::var("COSTS_ONLY_PAINT")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+    {
+        let mut times = Vec::new();
+        for _ in 0..frames {
+            let (session, render) = ui.paint_timed(false).expect("a frame");
+            times.push(session + render);
+        }
+        times.sort_by(|a, b| a.total_cmp(b));
+        println!(
+            "full paint: median {:.2} ms, p90 {:.2} ms over {frames} frames",
+            times[times.len() / 2],
+            times[times.len() * 9 / 10]
+        );
+        return;
+    }
 
     // What a frame at rest would have to be redrawn for.
     {
@@ -214,6 +234,75 @@ fn main() {
             scene.step();
         }
         scene.report("top of the page, at rest");
+    }
+
+    // The pointer moved along the triggers of the hover menubar, with the page scrolled to it.
+    if bring_into_view(&mut ui, ".cn-menubar") {
+        rest(&mut ui);
+        let page_scroll = |ui: &Headless| -> f32 {
+            let bar = ui.find(".cn-menubar").expect("the menubar");
+            std::iter::once(bar)
+                .chain(ui.tree().layout_tree.ancestors(bar))
+                .map(|n| ui.tree().get_scroll_offset(n).1)
+                .fold(0.0, f32::max)
+        };
+        let triggers: Vec<_> = ui
+            .tree()
+            .element_registry()
+            .class_to_nodes_index()
+            .get("cn-menubar-trigger")
+            .map(|set| set.iter().copied().collect())
+            .unwrap_or_default();
+        let mut triggers: Vec<_> = triggers
+            .into_iter()
+            .filter_map(|n| {
+                ui.tree()
+                    .layout_tree
+                    .get_absolute_bounds(n)
+                    .map(|b| (b.x, b.y, b.width, b.height))
+            })
+            .collect();
+        triggers.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let start = page_scroll(&ui);
+        println!(
+            "menubar: page scrolled to {start}, {} triggers",
+            triggers.len()
+        );
+        let mut scene = Scene::new(&mut ui, log.clone());
+        for round in 0..2 {
+            for (i, (x, y, w, h)) in triggers.iter().enumerate() {
+                let offset = page_scroll(scene.ui);
+                scene.ui.move_to(x + w / 2.0, y + h / 2.0 - offset);
+                for _ in 0..8 {
+                    scene.step();
+                }
+                println!(
+                    "    round {round} trigger {i}: page scroll {} (was {start}), focused {:?}",
+                    page_scroll(scene.ui),
+                    scene.ui.focused()
+                );
+            }
+        }
+        scene.report("menubar, pointer along the triggers");
+        scene.ui.leave();
+        rest(scene.ui);
+    } else {
+        println!("menubar: never painted");
+    }
+
+    // The first accordion, opened and closed three times.
+    for round in 1..=3 {
+        for what in ["open", "close"] {
+            let mut scene = Scene::new(&mut ui, log.clone());
+            scene.ui.move_to(450.0, 120.0);
+            scene.ui.click(".cn-accordion-trigger");
+            for _ in 0..40 {
+                scene.step();
+            }
+            let total: f64 = scene.session.iter().chain(&scene.render).sum();
+            scene.report(&format!("accordion {what}, round {round}"));
+            println!("    total work over 40 frames: {total:.0} ms");
+        }
     }
 
     // An active scroll from the top.
