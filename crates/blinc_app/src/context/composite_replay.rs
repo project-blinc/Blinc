@@ -252,6 +252,7 @@ impl RenderContext {
                 }
             }
             let dpi = tree.scale_factor();
+            let svgs = self.node_rows.place_svgs(&svgs, dpi);
             self.render_rasterized_svgs(target_view, &svgs, dpi);
         }
     }

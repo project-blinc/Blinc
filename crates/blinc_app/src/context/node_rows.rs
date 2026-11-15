@@ -20,8 +20,8 @@ use blinc_gpu::node_table::{NODE_CHAIN_DEPTH, NODE_TABLE_CAPACITY, NodeRow, chai
 use blinc_gpu::primitives::LayerCommand;
 use blinc_gpu::{GpuPrimitive, GpuRenderer, PrimitiveBatch};
 
-use super::ImageElement;
 use super::cached_text::TextBatch;
+use super::{ImageElement, SvgElement};
 use blinc_layout::motion::MotionBindings;
 use blinc_layout::renderer::CompositeBindingMeta;
 use blinc_layout::tree::LayoutNodeId;
@@ -600,6 +600,124 @@ impl NodeRows {
         true
     }
 
+    /// A primitive standing for an SVG's clip, so the clip is followed as a primitive's is.
+    fn svg_clip_proxy(svg: &SvgElement) -> GpuPrimitive {
+        let proxy = GpuPrimitive::rect(svg.x, svg.y, svg.width, svg.height);
+        match svg.clip_bounds {
+            Some([x, y, w, h]) => proxy.with_clip_rect(x, y, w, h),
+            None => proxy,
+        }
+    }
+
+    /// Give each SVG the text row of the node that owns it, and say from which row its clip
+    /// moves. `false`, with the SVGs as they were, when one has no owner, follows a text path or
+    /// is drawn in a 3D layer, which the affine does not carry.
+    fn give_svg_slots(
+        &mut self,
+        svgs: &mut [SvgElement],
+        ancestors: &dyn Fn(LayoutNodeId) -> Vec<LayoutNodeId>,
+    ) -> bool {
+        let mut given = Vec::with_capacity(svgs.len());
+        for svg in svgs.iter() {
+            if svg.path_clip.is_some() || svg.transform_3d_layer.is_some() {
+                return false;
+            }
+            let Some(slot) = self.owner(svg.node, ancestors) else {
+                return false;
+            };
+            let Ok(from) = self.clip_from(slot, &Self::svg_clip_proxy(svg)) else {
+                return false;
+            };
+            given.push((slot * 2 + 1, from));
+        }
+        for (svg, (row, from)) in svgs.iter_mut().zip(given) {
+            svg.row = Some(row);
+            svg.clip_from = from;
+        }
+        true
+    }
+
+    /// `svgs` as they are drawn under the rows now. SVGs the table has not taken are returned as
+    /// they are.
+    pub(super) fn place_svgs(&self, svgs: &[SvgElement], scale: f32) -> Vec<SvgElement> {
+        svgs.iter()
+            .map(|svg| match svg.row {
+                Some(row) if !self.chain_is_rest(row) => self.place_svg(svg, row, scale),
+                _ => svg.clone(),
+            })
+            .collect()
+    }
+
+    /// `svg` under the chain of rows from `row`: faded by it, and moved, scaled and turned, as
+    /// [`Self::place_image`] places an image. The SVG is rasterized at the size its rect has, so a
+    /// scale folded into the rect is drawn sharp.
+    fn place_svg(&self, svg: &SvgElement, row: u32, scale: f32) -> SvgElement {
+        let moved = chain(&self.rows, row);
+        let [a, b, c, d, _, _] = moved.affine;
+        let (sx, sy) = (a.hypot(b), c.hypot(d));
+        let mut out = svg.clone();
+        out.motion_opacity *= moved.opacity;
+        if sx < 1e-6 || sy < 1e-6 {
+            return out;
+        }
+        let own = svg.css_affine.map_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0], |m| {
+            [m[0], m[1], m[2], m[3], m[4] * scale, m[5] * scale]
+        });
+        let diagonal = own[1].abs() < 1e-6 && own[2].abs() < 1e-6 && (own[0] - own[3]).abs() < 1e-6;
+        let folds = (sx - sy).abs() < 1e-4 * sx.max(sy) || diagonal;
+        let all = if folds {
+            let turn = [a / sx, b / sx, c / sy, d / sy, 0.0, 0.0];
+            let m = then(own, turn);
+            let (w, h) = (svg.width * sx, svg.height * sy);
+            let (cx, cy) = (svg.x + svg.width * 0.5, svg.y + svg.height * 0.5);
+            let go = then(own, moved.affine);
+            let (dx, dy) = (
+                go[0] * cx + go[2] * cy + go[4],
+                go[1] * cx + go[3] * cy + go[5],
+            );
+            out.x = cx - w * 0.5;
+            out.y = cy - h * 0.5;
+            out.width = w;
+            out.height = h;
+            [
+                m[0],
+                m[1],
+                m[2],
+                m[3],
+                dx - (m[0] * cx + m[2] * cy),
+                dy - (m[1] * cx + m[3] * cy),
+            ]
+        } else {
+            then(own, moved.affine)
+        };
+        let identity = (all[0] - 1.0).abs() < 1e-6
+            && all[1].abs() < 1e-6
+            && all[2].abs() < 1e-6
+            && (all[3] - 1.0).abs() < 1e-6;
+        if identity && svg.css_affine.is_none() {
+            // A plain move: the rect carries it, as a full paint draws an SVG with no transform.
+            out.x += all[4];
+            out.y += all[5];
+        } else {
+            out.css_affine = Some([
+                all[0],
+                all[1],
+                all[2],
+                all[3],
+                all[4] / scale,
+                all[5] / scale,
+            ]);
+        }
+        if svg.clip_bounds.is_some() {
+            let mut proxy = Self::svg_clip_proxy(svg);
+            proxy.set_node_slot(Some(row));
+            proxy.set_node_clip_from(svg.clip_from);
+            let proxy = blinc_gpu::node_table::resolve_primitive(&self.rows, &proxy);
+            out.clip_bounds = Some(proxy.clip_bounds);
+        }
+        out
+    }
+
     /// `images` as they are drawn under the rows now. Images the table has not taken are returned
     /// as they are.
     pub(super) fn place_images(&self, images: &[ImageElement], scale: f32) -> Vec<ImageElement> {
@@ -710,6 +828,7 @@ impl NodeRows {
         batch: &mut PrimitiveBatch,
         mut text: Option<&mut TextBatch>,
         mut images: Option<&mut Vec<ImageElement>>,
+        mut svgs: Option<&mut Vec<SvgElement>>,
         bindings: &mut HashMap<LayoutNodeId, CompositeBindingMeta>,
         motion: &HashMap<LayoutNodeId, MotionBindings>,
         ordinals: &HashMap<LayoutNodeId, u32>,
@@ -722,14 +841,18 @@ impl NodeRows {
         let has_text = text
             .as_ref()
             .is_some_and(|t| !t.primitives.is_empty() || !t.glyphs.is_empty());
-        let has_images = images.as_ref().is_some_and(|v| !v.is_empty());
+        let has_images = images.as_ref().is_some_and(|v| !v.is_empty())
+            || svgs.as_ref().is_some_and(|v| !v.is_empty());
         let given = self.describes(batch, bindings, ordinals)
             && text
                 .as_ref()
                 .is_none_or(|t| !has_text || t.node_slots_epoch == self.epoch)
             && images
                 .as_ref()
-                .is_none_or(|v| v.iter().all(|i| i.row.is_some()));
+                .is_none_or(|v| v.iter().all(|i| i.row.is_some()))
+            && svgs
+                .as_ref()
+                .is_none_or(|v| v.iter().all(|s| s.row.is_some()));
         if !given {
             self.release(batch, text.as_deref_mut(), bindings);
             if (has_text || has_images) && !adopt {
@@ -775,6 +898,11 @@ impl NodeRows {
             }
             if let Some(images) = images.as_mut()
                 && !self.give_image_slots(images, ancestors, loaded)
+            {
+                return self.decline(true, batch, text, bindings);
+            }
+            if let Some(svgs) = svgs.as_mut()
+                && !self.give_svg_slots(svgs, ancestors)
             {
                 return self.decline(true, batch, text, bindings);
             }

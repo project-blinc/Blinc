@@ -175,8 +175,8 @@ let (x, y, scale) = timeline.lock().unwrap().configure(|t| {
 
 A CSS keyframe animation of `transform` alone (translate, scale, rotate) on
 an element with no `transform` of its own is the cheapest kind: the element
-is painted once and the renderer moves it each frame, its text, images and
-nested animations included, with no texture held for it. So is a CSS
+is painted once and the renderer moves it each frame, its text, images, SVG
+icons and nested animations included, with no texture held for it. So is a CSS
 transition of `transform` that scales uniformly, which may start and end on
 poses with a `transform` of their own (a card lifted on hover), and a
 keyframe animation or a transition of `opacity` on an element that paints a
@@ -268,6 +268,12 @@ enter the static batch, the dynamic batch, or any damage rect, and it takes
 no pointer events. Animations on off-screen children still tick but don't
 request the next frame. A descendant that overflows its row into view keeps
 the row drawn.
+
+A scroll container whose content is boxes, text, images and SVG icons is
+painted once and moved by the renderer as it scrolls, so a scroll frame costs
+what a frame that only moves something does. One that holds a canvas, a
+translucent element or content that moves on its own is painted again on each
+frame it scrolls.
 
 Culling stops below anything that places its content apart from layout (a
 CSS or bound transform, a motion, a layout animation) and at fixed and sticky

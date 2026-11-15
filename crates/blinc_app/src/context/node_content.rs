@@ -418,6 +418,8 @@ impl RenderContext {
                         in_motion_subtree: inside_motion_subtree,
                         z_layer: *z_layer,
                         composite_ancestor: nearest_composite_ancestor,
+                        row: None,
+                        clip_from: None,
                     });
                 }
                 ElementType::Image(image_data) => {

@@ -804,6 +804,77 @@ fn scroll_scene(
     }
 }
 
+const ICON: &str = r##"<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" fill="#ffcc33"/><path d="M7 12h10" stroke="#222222" stroke-width="2"/></svg>"##;
+
+/// A scrolled list whose rows each carry an SVG icon, which moves with the rows.
+fn scroll_icons_scene(name: &'static str) -> Scene {
+    let steps = 20;
+    Scene {
+        name,
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let reference = blinc_layout::selector::ScrollRef::new();
+            let bound = reference.clone();
+            ui.mount(move |_| {
+                let mut list = div().flex_col().gap(2.0).w(W as f32 - 20.0).p(2.0);
+                for i in 0..60 {
+                    list = list.child(
+                        div()
+                            .w(W as f32 - 28.0)
+                            .h(28.0)
+                            .rounded(6.0)
+                            .bg(Color::rgb(0.2, 0.45, 0.7))
+                            .flex_row()
+                            .items_center()
+                            .gap(2.0)
+                            .child(blinc_layout::svg::svg(ICON).square(18.0))
+                            .child(text(format!("Row {i}")).size(13.0).color(Color::WHITE)),
+                    );
+                }
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .child(scroll().bind(&bound).w(W as f32).h(H as f32).child(list))
+            });
+            Box::new(move |ui, step| {
+                reference.set_scroll_offset(0.0, 12.0 * (step + 1) as f32);
+                ui.settle_scroll();
+            })
+        }),
+    }
+}
+
+/// A card that a binding moves and scales, with an SVG icon in it that moves and grows with it.
+fn motion_svg_scene(name: &'static str) -> Scene {
+    let steps = 20;
+    Scene {
+        name,
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let x = bound(ui, 0.0);
+            let s = bound(ui, 1.0);
+            let (hx, hs) = (x.clone(), s.clone());
+            ui.mount(move |_| {
+                stage().child(
+                    card(false)
+                        .child(blinc_layout::svg::svg(ICON).square(28.0))
+                        .motion()
+                        .translate_x(x.clone())
+                        .scale(s.clone()),
+                )
+            });
+            Box::new(move |_, step| {
+                let t = (step + 1) as f32 / steps as f32;
+                hx.lock().unwrap().set_target(40.0 * t);
+                hs.lock().unwrap().set_target(1.0 + 0.3 * t);
+            })
+        }),
+    }
+}
+
 /// A scroll list beside a card that moves, as in a window where other things are animating: the
 /// rows that move the card move the list too.
 fn scroll_beside_movers_scene() -> Scene {
@@ -1202,6 +1273,8 @@ fn scenes() -> Vec<Scene> {
         ),
         fade_beside_a_mover_scene(),
         fade_grid_scene_of(6),
+        scroll_icons_scene("scroll a list with icons"),
+        motion_svg_scene("motion, an svg"),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
         transition_css_scene(
@@ -1243,8 +1316,9 @@ const LEVELS: u8 = 2;
 /// rest are held to the reference; a scene that stops differing is an error until it is taken off
 /// the list. A label stays where the last full paint put it while a bound value moves, an outer
 /// binding moving an inner one leaves the inner box and its shadow in the wrong place, and an
-/// image does not follow the card it is in.
+/// image or an SVG does not follow the card it is in.
 const KNOWN_DIFFERENT: &[&str] = &[
+    "motion, an svg",
     "motion translate",
     "motion scale",
     "motion rotate",
@@ -1435,6 +1509,8 @@ const ON_ROWS: &[&str] = &[
     "css keyframes, transform only, no text",
     "css keyframes, opacity, one primitive",
     "motion fade, equal cards",
+    "scroll a list with icons",
+    "motion, an svg",
     "scroll a list",
     "scroll a list, scrollbar always",
     "scroll a list, no scrollbar",

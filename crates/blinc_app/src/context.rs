@@ -568,6 +568,10 @@ struct SvgElement {
     /// opacity is excluded from `motion_opacity` at collect and
     /// applied from the live store at dispatch.
     composite_ancestor: Option<blinc_layout::tree::StableNodeId>,
+    /// The row of the node table that moves this SVG, set when the table has taken it.
+    row: Option<u32>,
+    /// From which row of its chain the SVG's clip moves with the rows.
+    clip_from: Option<u32>,
 }
 
 /// Debug bounds element for layout visualization

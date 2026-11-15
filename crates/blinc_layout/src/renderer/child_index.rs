@@ -266,10 +266,7 @@ impl RenderTree {
             && props.opacity >= 0.999
             && props.layer_effects.is_empty()
             && props.clip_path.is_none()
-            && !matches!(
-                render.element_type,
-                ElementType::Svg(_) | ElementType::Canvas(_)
-            )
+            && !matches!(render.element_type, ElementType::Canvas(_))
     }
 
     /// What keeps the content of the scroll container `container` off rows: for each reason, how
@@ -287,9 +284,7 @@ impl RenderTree {
                 None => None,
                 Some(render) => {
                     let p = &render.props;
-                    if matches!(render.element_type, ElementType::Svg(_)) {
-                        Some("svg")
-                    } else if matches!(render.element_type, ElementType::Canvas(_)) {
+                    if matches!(render.element_type, ElementType::Canvas(_)) {
                         Some("canvas")
                     } else if self.moves_its_content(node) {
                         Some("moves its content")
