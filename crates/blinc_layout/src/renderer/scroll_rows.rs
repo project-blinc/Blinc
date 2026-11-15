@@ -70,7 +70,8 @@ impl RenderTree {
     }
 
     /// Whether a scroll container that is not on rows has an offset other than the one it was
-    /// painted at: the paint is stale and has to be made again.
+    /// painted at: the paint is stale and has to be made again. A container that was not painted
+    /// at all, because it is culled, hidden or in a closed overlay, has no paint to be stale.
     pub fn scroll_off_rows_changed(&self) -> bool {
         let rows = self.scroll_row_nodes.borrow();
         let painted = self.scroll_painted.borrow();
@@ -81,7 +82,7 @@ impl RenderTree {
             let now = self.get_scroll_offset(*node);
             painted
                 .get(node)
-                .is_none_or(|p| (p.0 - now.0).abs() > 0.01 || (p.1 - now.1).abs() > 0.01)
+                .is_some_and(|p| (p.0 - now.0).abs() > 0.01 || (p.1 - now.1).abs() > 0.01)
         })
     }
 
