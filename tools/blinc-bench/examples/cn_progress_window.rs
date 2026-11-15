@@ -9,6 +9,7 @@
 //!
 //! - `NODES`: how many filler cards follow the progress bars, each a handful of nodes (default 600).
 //! - `ANIMATE`: `0` shows a static bar instead of the indeterminate one (default 1).
+//! - `SPINNERS`: shows this many `cn::spinner`s in place of the bar (default 0).
 //! - `EXIT_AFTER`: seconds until the process exits; unset keeps the window open.
 
 use blinc_app::prelude::*;
@@ -68,10 +69,13 @@ fn main() -> Result<()> {
 }
 
 pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
-    let bar = if flag("ANIMATE", true) {
-        cn::progress_indeterminate().w(300.0)
+    let spinners = number("SPINNERS", 0.0) as usize;
+    let bar = if spinners > 0 {
+        (0..spinners).fold(div().flex_row().gap(8.0), |row, _| row.child(cn::spinner()))
+    } else if flag("ANIMATE", true) {
+        div().child(cn::progress_indeterminate().w(300.0))
     } else {
-        cn::progress(35.0).w(300.0)
+        div().child(cn::progress(35.0).w(300.0))
     };
     let mut page = div()
         .w_full()

@@ -499,6 +499,28 @@ fn main() {
         return;
     }
 
+    // `COSTS_BOTTOM=1`: scroll to the end of the page, then time frames at rest there, where the
+    // loading section's spinners and skeletons keep it drawing.
+    if std::env::var("COSTS_BOTTOM").is_ok() {
+        ui.move_to(450.0, 500.0);
+        for _ in 0..80 {
+            ui.scroll(0.0, -400.0);
+            ui.advance(16);
+            let _ = ui.paint_timed(true);
+        }
+        ui.scroll_end();
+        for _ in 0..30 {
+            ui.advance(16);
+            let _ = ui.paint_timed(true);
+        }
+        let mut scene = Scene::new(&mut ui, log.clone());
+        for _ in 0..120 {
+            scene.step();
+        }
+        scene.report("at rest at the bottom");
+        return;
+    }
+
     if std::env::var("COSTS_ROWS_DIAG").is_ok() {
         let bar = ui.find(".cn-menubar").expect("the menubar");
         let page = {
