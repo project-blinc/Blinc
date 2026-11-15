@@ -13,5 +13,8 @@ blinc_app = { path = "../../crates/blinc_app", features = ["windowed"] }
 blinc_core = { path = "../../crates/blinc_core" }
 blinc_layout = { path = "../../crates/blinc_layout" }
 blinc_animation = { path = "../../crates/blinc_animation" }
+blinc_cn = { path = "../../crates/blinc_cn" }
+blinc_recorder = { path = "../../crates/blinc_recorder", features = ["headless"] }
+blinc_theme = { path = "../../crates/blinc_theme" }
 tracing.workspace = true
 tracing-subscriber.workspace = true
