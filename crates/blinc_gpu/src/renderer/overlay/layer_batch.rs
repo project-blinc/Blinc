@@ -405,14 +405,6 @@ fn plan(
     {
         return Some(None);
     }
-    // A group cut by the viewport would spill into the next cell.
-    if b.min[0] < viewport.min[0]
-        || b.min[1] < viewport.min[1]
-        || b.max[0] > viewport.max[0]
-        || b.max[1] > viewport.max[1]
-    {
-        return None;
-    }
     let min = b.min.map(f32::floor);
     let max = b.max.map(f32::ceil);
     let size = (
@@ -531,7 +523,8 @@ mod tests {
                 rect(80.0, 20.0, 30.0, 30.0, [1.0, 1.0, 0.0]),
             ],
         );
-        // Cut by the viewport, so it is drawn alone and the run ends.
+        // Cut by the viewport: its cell is as large as the group, and the composite keeps to the
+        // viewport.
         group(0.6, vec![rect(140.0, 60.0, 40.0, 30.0, [0.0, 1.0, 1.0])]);
         // A clipped one, then two more that share an atlas.
         group(
@@ -549,6 +542,15 @@ mod tests {
             ],
         );
         group(0.7, vec![rect(100.0, 100.0, 20.0, 20.0, [0.5, 0.0, 1.0])]);
+        // Cut by the left edge and by the top one, so a cell begins before the viewport does.
+        group(
+            0.5,
+            vec![
+                rect(-12.0, 130.0, 30.0, 24.0, [1.0, 0.0, 0.0]),
+                rect(-4.0, 134.0, 20.0, 20.0, [1.0, 1.0, 0.0]).with_corner_radius(6.0),
+            ],
+        );
+        group(0.6, vec![rect(120.0, -8.0, 30.0, 24.0, [0.0, 1.0, 0.0])]);
         batch
     }
 
@@ -634,9 +636,8 @@ mod tests {
             let before = r.opacity_atlas_count();
             r.set_batch_opacity_layers(true);
             let batched = render(&mut r, &batch, samples);
-            // The first two groups share one atlas and the last three another; the group cut by
-            // the viewport is drawn alone between them.
-            assert_eq!(r.opacity_atlas_count() - before, 2);
+            // All eight groups, those cut by the viewport among them, share one atlas.
+            assert_eq!(r.opacity_atlas_count() - before, 1);
             let worst = alone
                 .iter()
                 .zip(&batched)
