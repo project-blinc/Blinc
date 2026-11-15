@@ -176,15 +176,21 @@ let (x, y, scale) = timeline.lock().unwrap().configure(|t| {
 A CSS keyframe animation of `transform` alone (translate, scale, rotate) on
 an element with no `transform` of its own is the cheapest kind: the element
 is painted once and the renderer moves it each frame, its text, images and
-nested animations included, with no texture held for it. So is a keyframe
-animation of `opacity` on an element that paints a single filled rectangle: a
-solid background and no border, outline, shadow, children or effect, such as a
-skeleton placeholder. An element that paints more than that, because a fade
-has to treat its overlapping draws as one picture, and a CSS transition, are
-painted once into a texture and the compositor moves it each frame. That holds only while
-nothing in the subtree is drawn in a pass of its own. A subtree with text, an
-SVG or a canvas in it is painted with the animation applied on every frame,
-so the text moves, scales and fades with its container about its
+nested animations included, with no texture held for it. So is a CSS
+transition of `transform` that scales uniformly, which may start and end on
+poses with a `transform` of their own (a card lifted on hover), and a
+keyframe animation or a transition of `opacity` on an element that paints a
+single filled rectangle: a solid background and no border, outline, shadow,
+children or effect, such as a skeleton placeholder. A transition that
+changes a colour, a shadow or anything else along with the transform is not
+moved that way, and neither is an element that paints more than a filled
+rectangle, because a fade has to treat its overlapping draws as one picture.
+Those are painted once into a texture and the compositor moves it each frame,
+or, where the subtree cannot be a texture, painted again every frame. A
+texture holds only while nothing in the subtree is drawn in a pass of its
+own. A subtree with text, an SVG or a canvas in it is painted with the
+animation applied on every frame, so the text moves, scales and fades with
+its container about its
 `transform-origin`. Fading siblings of that kind, a grid of cards with labels,
 share one offscreen atlas and are composited in one pass, so the cost of the
 grid does not grow by a few render passes per card.

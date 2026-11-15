@@ -912,13 +912,30 @@ const TRANSITION_CSS: &str = "
 
 /// Cards under a CSS transition of transform and opacity.
 fn transition_scene(name: &'static str, label: bool) -> Scene {
+    transition_css_scene(name, TRANSITION_CSS, label)
+}
+
+/// A transition of transform alone, which a binding carries so that rows move it.
+const TRANSITION_TRANSFORM_CSS: &str = "
+.card { transition: transform 300ms ease-out; }
+.card.lift { transform: translateY(-14px) scale(1.15) rotate(8deg); }
+";
+
+/// A transition between two poses, neither of them the identity.
+const TRANSITION_FROM_A_POSE_CSS: &str = "
+.card { transform: translateX(6px) scale(0.9); transition: transform 300ms ease-out; }
+.card.lift { transform: translateY(-14px) translateX(-4px) scale(1.15) rotate(8deg); }
+";
+
+/// Cards under the CSS in `css`, which lifts them by the class `lift` at the first step.
+fn transition_css_scene(name: &'static str, css: &'static str, label: bool) -> Scene {
     Scene {
         name,
         steps: 20,
         step_ms: 16,
         build: Box::new(move |ui| {
             let lift = signal(false);
-            ui.css(TRANSITION_CSS);
+            ui.css(css);
             ui.mount(move |_| {
                 (0..2).fold(stage().gap(6.0), |row, _| {
                     row.child(card(label).class("card").class_when("lift", lift))
@@ -927,6 +944,42 @@ fn transition_scene(name: &'static str, label: bool) -> Scene {
             Box::new(move |_, step| {
                 if step == 0 {
                     lift.set(true);
+                }
+            })
+        }),
+    }
+}
+
+const TRANSITION_FADE_CSS: &str = "
+.block { transition: opacity 300ms ease-in-out; }
+.block.dim { opacity: 0.25; }
+";
+
+/// Blocks of one primitive that a transition of opacity fades without a group.
+fn transition_fade_scene(name: &'static str) -> Scene {
+    Scene {
+        name,
+        steps: 20,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let dim = signal(false);
+            ui.css(TRANSITION_FADE_CSS);
+            ui.mount(move |_| {
+                (0..3).fold(stage().gap(10.0), |row, _| {
+                    row.child(
+                        div()
+                            .w(70.0)
+                            .h(40.0)
+                            .rounded(8.0)
+                            .bg(Color::rgb(0.2, 0.45, 0.9))
+                            .class("block")
+                            .class_when("dim", dim),
+                    )
+                })
+            });
+            Box::new(move |_, step| {
+                if step == 0 {
+                    dim.set(true);
                 }
             })
         }),
@@ -1150,6 +1203,17 @@ fn scenes() -> Vec<Scene> {
         fade_beside_a_mover_scene(),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
+        transition_css_scene(
+            "css transition, transform only, no text",
+            TRANSITION_TRANSFORM_CSS,
+            false,
+        ),
+        transition_css_scene(
+            "css transition, from a pose, no text",
+            TRANSITION_FROM_A_POSE_CSS,
+            false,
+        ),
+        transition_fade_scene("css transition, opacity, one primitive"),
         keyframe_scene("css keyframes", true),
         keyframe_scene("css keyframes, no text", false),
         keyframe_transform_scene("css keyframes, transform only, no text", false),
@@ -2715,6 +2779,90 @@ fn a_css_animated_label_follows_its_card_on_rows() {
     }
 }
 
+/// A CSS transition that a binding carries is moved by rows between its first frame, which paints
+/// it, and its last, which writes its final values: the frames in the middle only write rows.
+#[test]
+fn a_css_transition_of_transform_or_opacity_rides_rows() {
+    for scene in [
+        transition_css_scene(
+            "css transition, transform only, no text",
+            TRANSITION_TRANSFORM_CSS,
+            false,
+        ),
+        transition_css_scene(
+            "css transition, from a pose, no text",
+            TRANSITION_FROM_A_POSE_CSS,
+            false,
+        ),
+        transition_fade_scene("css transition, opacity, one primitive"),
+    ] {
+        let Some((_, paths)) = run_logged(&scene, Path::Rows) else {
+            return;
+        };
+        let by_rows = paths.iter().filter(|p| p.ends_with("rows:applied")).count();
+        assert!(
+            by_rows >= scene.steps - 4,
+            "{}: {by_rows} of {} frames moved by rows: {paths:?}",
+            scene.name,
+            scene.steps
+        );
+    }
+}
+
+/// The label of a card that a transition moves follows it on rows, as the label of a keyframe
+/// animation does: the picture is the full paint's in all but the glyph edges.
+#[test]
+fn a_css_transitioned_label_follows_its_card_on_rows() {
+    let with = transition_css_scene(
+        "css transition, transform only",
+        TRANSITION_FROM_A_POSE_CSS,
+        true,
+    );
+    let without = transition_css_scene(
+        "css transition, from a pose, no text",
+        TRANSITION_FROM_A_POSE_CSS,
+        false,
+    );
+    let (Some((rows, paths)), Some(bare), Some(reference)) = (
+        run_logged(&with, Path::Rows),
+        run(&without, Path::Rows),
+        run(&with, Path::Vector),
+    ) else {
+        return;
+    };
+    let by_rows = paths.iter().filter(|p| p.ends_with("rows:applied")).count();
+    assert!(
+        by_rows >= with.steps - 4,
+        "{by_rows} of {} frames moved by rows: {paths:?}",
+        with.steps
+    );
+    for step in 0..with.steps {
+        let card = card_blob(&bare[step]);
+        let label = label_blob(&rows[step], &bare[step]);
+        assert!(label.pixels > 30, "step {step}: the label left no pixels");
+        let off = ((label.centre.0 - card.centre.0).powi(2)
+            + (label.centre.1 - card.centre.1).powi(2))
+        .sqrt();
+        let d = difference(&rows[step], &reference[step], 8);
+        let ours = ink(&rows[step], &bare[step]);
+        let theirs = ink(&reference[step], &bare[step]);
+        assert!(
+            off <= 3.0,
+            "step {step}: the label is {off} px off its card"
+        );
+        assert!(
+            d.differing < 1200,
+            "step {step}: {} px differ from the full paint",
+            d.differing
+        );
+        assert!(
+            ours >= theirs * 0.9,
+            "step {step}: the label has {:.0}% of the ink of the full paint",
+            100.0 * ours / theirs
+        );
+    }
+}
+
 /// A CSS animation of opacity on a block of one primitive is moved by rows and shows: the block's
 /// centre is the stage's at the faint end and the block's at the opaque end.
 #[test]
@@ -3145,6 +3293,98 @@ fn css_grid(count: usize, label: bool, bordered: bool, css: &'static str) -> Sce
             });
             Box::new(|_, _| {})
         }),
+    }
+}
+
+const CSS_GRID_TRANSITION: &str = "
+.pulse { transition: transform 600ms ease-in-out; }
+.pulse.lift { transform: translateY(-3px) scale(1.12); }
+";
+
+/// A grid of `count` cards that a transition of transform lifts at the first step.
+fn css_transition_grid(count: usize, label: bool) -> Scene {
+    Scene {
+        name: "css transition grid",
+        steps: 40,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let lift = signal(false);
+            ui.css(CSS_GRID_TRANSITION);
+            ui.mount(move |_| {
+                let mut grid = div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .flex_row()
+                    .flex_wrap();
+                for i in 0..count {
+                    let mut card = div()
+                        .class("pulse")
+                        .class_when("lift", lift)
+                        .w(26.0)
+                        .h(14.0)
+                        .rounded(3.0)
+                        .bg(Color::rgb(0.2, 0.45, 0.9))
+                        .border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.9))
+                        .flex_row()
+                        .items_center()
+                        .justify_center();
+                    if label {
+                        card =
+                            card.child(text(format!("{}", i % 10)).size(8.0).color(Color::WHITE));
+                    }
+                    grid = grid.child(div().w(30.0).h(16.0).child(card));
+                }
+                grid
+            });
+            Box::new(move |_, step| {
+                if step == 0 {
+                    lift.set(true);
+                }
+            })
+        }),
+    }
+}
+
+/// Not a check: what a frame costs with many cards under a CSS transition of transform. Run with
+/// `--run-ignored all --no-capture`.
+#[test]
+#[ignore]
+fn what_a_css_transition_frame_costs() {
+    for label in [true, false] {
+        for count in [20, 60, 140] {
+            let scene = css_transition_grid(count, label);
+            eprintln!(
+                "{count} cards, {}, {} frames each (median / p90 ms, frames in full):",
+                if label { "with text" } else { "no text" },
+                scene.steps
+            );
+            for (name, path) in [
+                ("full paint", Path::Full),
+                ("baked, patched", Path::Patched),
+                ("rows on the CPU", Path::Rows),
+            ] {
+                let Some((_, paths)) = run_logged(&scene, path) else {
+                    return;
+                };
+                let in_full = paths
+                    .iter()
+                    .skip(3)
+                    .filter(|p| p.starts_with("full"))
+                    .count();
+                let Some(mut times) = frame_times(&scene, path) else {
+                    return;
+                };
+                times.drain(..3);
+                times.sort_by(|a, b| a.total_cmp(b));
+                eprintln!(
+                    "  {name:<18} {:>7.2} / {:>7.2}   {in_full:>2} of {} in full",
+                    times[times.len() / 2],
+                    times[times.len() * 9 / 10],
+                    paths.len() - 3
+                );
+            }
+        }
     }
 }
 

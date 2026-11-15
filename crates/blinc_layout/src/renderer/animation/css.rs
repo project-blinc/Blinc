@@ -701,9 +701,16 @@ impl RenderTree {
             };
             still_playing.insert(stable_id);
             // The animation is a binding where the node allows one, which the renderer moves as
-            // a row; otherwise it is baked or written into the node's props.
-            if !transitions && self.css_can_bind(node_id, &props) {
-                self.drive_css_binding(node_id, stable_id, &props);
+            // a row; otherwise it is baked or written into the node's props. A transition is a
+            // binding that carries the change from the pose its node ends on.
+            if transitions {
+                if let Some(delta) = self.css_transition_delta(node_id, stable_id, &props) {
+                    self.drive_css_binding(node_id, stable_id, &delta, true);
+                    carried.insert(stable_id);
+                    continue;
+                }
+            } else if self.css_can_bind(node_id, &props) {
+                self.drive_css_binding(node_id, stable_id, &props, false);
                 carried.insert(stable_id);
                 continue;
             }
@@ -719,9 +726,7 @@ impl RenderTree {
                 Self::apply_keyframe_props_to_render(&mut render_node.props, &props);
             }
         }
-        if !transitions {
-            self.release_css_bindings(&carried);
-        }
+        self.release_css_bindings(&carried, transitions);
         still_playing
     }
 
@@ -759,6 +764,7 @@ impl RenderTree {
             || blinc_animation::try_get_scheduler().is_none()
             || self.inside_overlay_root(node)
             || (self.motion_bindings.contains_key(&node) && !self.css_bound.contains_key(&node))
+            || self.css_trans_bound.contains(&node)
         {
             return false;
         }
@@ -776,6 +782,7 @@ impl RenderTree {
         node: LayoutNodeId,
         stable: crate::tree::StableNodeId,
         props: &blinc_animation::KeyframeProperties,
+        transition: bool,
     ) {
         let Some(handle) = blinc_animation::try_get_scheduler() else {
             return;
@@ -827,6 +834,11 @@ impl RenderTree {
             }
         }
         self.css_bound.insert(node, stable);
+        if transition {
+            self.css_trans_bound.insert(node);
+        } else {
+            self.css_trans_bound.remove(&node);
+        }
         let Some(bindings) = self.motion_bindings.get(&node) else {
             return;
         };
@@ -845,15 +857,21 @@ impl RenderTree {
         drive(&bindings.opacity, props.opacity);
     }
 
-    /// Take away the bindings of CSS animations that are not carried this frame: those that have
-    /// stopped, and those of nodes that were replaced. The node is painted in full without them.
-    fn release_css_bindings(&mut self, carried: &HashSet<crate::tree::StableNodeId>) {
+    /// Take away the bindings of CSS animations, or of transitions, that are not carried this
+    /// frame: those that have stopped, and those of nodes that were replaced. The node is painted
+    /// in full without them.
+    fn release_css_bindings(
+        &mut self,
+        carried: &HashSet<crate::tree::StableNodeId>,
+        transitions: bool,
+    ) {
         if self.css_bound.is_empty() {
             return;
         }
         let gone: Vec<LayoutNodeId> = self
             .css_bound
             .iter()
+            .filter(|(node, _)| self.css_trans_bound.contains(*node) == transitions)
             .filter(|(node, stable)| {
                 !carried.contains(*stable) || self.stable_to_layout.get(*stable) != Some(*node)
             })
@@ -861,8 +879,113 @@ impl RenderTree {
             .collect();
         for node in gone {
             self.css_bound.remove(&node);
+            self.css_trans_bound.remove(&node);
             self.motion_bindings.remove(&node);
         }
+    }
+
+    /// The values of the binding that carries the CSS transition of `node`, or `None` when the
+    /// transition changes what a row cannot move.
+    ///
+    /// The node is painted at the pose its rules end on, which its props hold: a transition
+    /// carried by a binding does not write its own values into them. The binding is applied over
+    /// that pose, so it carries the transform that takes the end pose to the current one. That is
+    /// a translation, a uniform scale and a turn about the node's centre unless the transition
+    /// shears or stretches one axis alone. Opacity is the ratio of the current value to the end
+    /// one, on a node that fades without a group.
+    fn css_transition_delta(
+        &self,
+        node: LayoutNodeId,
+        stable: crate::tree::StableNodeId,
+        props: &blinc_animation::KeyframeProperties,
+    ) -> Option<blinc_animation::KeyframeProperties> {
+        use blinc_animation::KeyframeProperties;
+        use blinc_core::{Affine2D, Transform};
+
+        let target = {
+            let store = self.css_anim_store.lock().unwrap();
+            // An animation on the node has its own claim on a binding.
+            if store.animations.get(&stable).is_some_and(|a| a.is_playing) {
+                return None;
+            }
+            store.transitions.get(&stable)?.target()
+        };
+        let unsheared = |p: &KeyframeProperties| {
+            p.skew_x.is_none_or(|v| v.abs() < 1e-3) && p.skew_y.is_none_or(|v| v.abs() < 1e-3)
+        };
+        // Only transform and opacity may be changing.
+        let mut rest = props.clone();
+        rest.translate_x = None;
+        rest.translate_y = None;
+        rest.scale_x = None;
+        rest.scale_y = None;
+        rest.rotate = None;
+        rest.skew_x = None;
+        rest.skew_y = None;
+        rest.opacity = None;
+        let moves = props.translate_x.is_some()
+            || props.translate_y.is_some()
+            || props.scale_x.is_some()
+            || props.scale_y.is_some()
+            || props.rotate.is_some();
+        let fades = props.opacity.is_some();
+        if rest != KeyframeProperties::default()
+            || !(moves || fades)
+            || !unsheared(props)
+            || !unsheared(&target)
+            || self.motion_promotion.get()
+            || blinc_animation::try_get_scheduler().is_none()
+            || self.inside_overlay_root(node)
+            || (self.motion_bindings.contains_key(&node) && !self.css_trans_bound.contains(&node))
+        {
+            return None;
+        }
+        let render = self.render_nodes.get(&node)?;
+        if render.props.transform_origin.is_some() {
+            return None;
+        }
+        let mut delta = KeyframeProperties::default();
+        if moves {
+            let now = transition_affine(props);
+            let end = transition_affine(&target);
+            let painted = match &render.props.transform {
+                Some(Transform::Affine2D(a)) => *a,
+                None => Affine2D::IDENTITY,
+                Some(_) => return None,
+            };
+            if painted
+                .elements
+                .iter()
+                .zip(end.elements)
+                .any(|(a, b)| (a - b).abs() > 1e-3)
+            {
+                return None;
+            }
+            let [a, b, c, d, tx, ty] = now.then(&affine_inverse(&end)?).elements;
+            let scale = a.hypot(b);
+            if scale < 1e-4
+                || (a - d).abs() > 1e-3 * scale.max(1.0)
+                || (b + c).abs() > 1e-3 * scale.max(1.0)
+            {
+                return None;
+            }
+            delta.translate_x = Some(tx);
+            delta.translate_y = Some(ty);
+            delta.scale_x = Some(scale);
+            delta.scale_y = Some(scale);
+            delta.rotate = Some(b.atan2(a).to_degrees());
+        }
+        if fades {
+            let end = target.opacity?;
+            if end < 0.05
+                || (render.props.opacity - end).abs() > 1e-3
+                || !self.fades_without_group(node)
+            {
+                return None;
+            }
+            delta.opacity = Some(props.opacity? / end);
+        }
+        Some(delta)
     }
 
     /// Apply animated layout properties from CSS animations/transitions to taffy styles
@@ -2102,4 +2225,35 @@ impl TransitionGroup {
         });
         &mut groups[at]
     }
+}
+
+/// The transform a node gets from the transform components of `props`, composed as
+/// [`RenderTree::apply_keyframe_props_to_render`] writes it: translate, turn, then scale.
+fn transition_affine(props: &blinc_animation::KeyframeProperties) -> blinc_core::Affine2D {
+    use blinc_core::Affine2D;
+    Affine2D::IDENTITY
+        .then(&Affine2D::translation(
+            props.translate_x.unwrap_or(0.0),
+            props.translate_y.unwrap_or(0.0),
+        ))
+        .then(&Affine2D::rotation(
+            props.rotate.unwrap_or(0.0).to_radians(),
+        ))
+        .then(&Affine2D::scale(
+            props.scale_x.unwrap_or(1.0),
+            props.scale_y.unwrap_or(1.0),
+        ))
+}
+
+/// The inverse of an affine transform, or `None` when it has no inverse.
+fn affine_inverse(m: &blinc_core::Affine2D) -> Option<blinc_core::Affine2D> {
+    let [a, b, c, d, tx, ty] = m.elements;
+    let det = a * d - b * c;
+    if det.abs() < 1e-6 {
+        return None;
+    }
+    let (ia, ib, ic, id) = (d / det, -b / det, -c / det, a / det);
+    Some(blinc_core::Affine2D {
+        elements: [ia, ib, ic, id, -(ia * tx + ic * ty), -(ib * tx + id * ty)],
+    })
 }

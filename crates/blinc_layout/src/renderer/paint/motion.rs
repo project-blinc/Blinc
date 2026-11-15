@@ -880,6 +880,11 @@ impl RenderTree {
             ctx.push_transform(Transform::translate(-center_x, -center_y));
         }
 
+        // The stack the binding's scale and turn pivot in: they were pushed above, before the
+        // node's own transform, so the pivot is the centre the binding leaves fixed, not the
+        // centre the node's own transform moves it to.
+        let binding_pivot = ctx.current_transform();
+
         // Apply element-specific transform if present
         let has_element_transform = render_node.props.transform.is_some();
         if let Some(ref transform) = render_node.props.transform {
@@ -2286,7 +2291,7 @@ impl RenderTree {
                     let local_cx = bounds.width / 2.0;
                     let local_cy = bounds.height / 2.0;
                     let scale_factor = self.scale_factor.max(f32::EPSILON);
-                    match ctx.current_transform() {
+                    match &binding_pivot {
                         Transform::Affine2D(a) => {
                             let p = a.transform_point(Point::new(local_cx, local_cy));
                             (p.x / scale_factor, p.y / scale_factor)

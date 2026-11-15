@@ -34,7 +34,7 @@ fn session(on: bool) -> Option<Headless> {
 /// The thumb's `(translate x, scale)` as painted.
 fn thumb(ui: &Headless) -> (f32, f32) {
     let node = ui.find(".cn-switch-thumb").expect("the thumb");
-    match &ui.tree().get_render_node(node).unwrap().props.transform {
+    match &ui.tree().painted_transform(node) {
         Some(Transform::Affine2D(a)) => (a.elements[4], a.elements[0]),
         _ => (0.0, 1.0),
     }

@@ -1150,6 +1150,8 @@ pub struct RenderTree {
     /// the animation's node: the node is painted at its base and the binding carries the
     /// animation, so a frame of it changes a value and not what is painted.
     css_bound: HashMap<LayoutNodeId, crate::tree::StableNodeId>,
+    /// The nodes of `css_bound` whose binding carries a CSS transition rather than an animation.
+    css_trans_bound: HashSet<LayoutNodeId>,
 
     /// Cached "does the pointer pipeline need to run on a bare mouse-move?"
     /// predicate. Equivalent to:
@@ -1315,6 +1317,7 @@ impl RenderTree {
             flip_animations: HashMap::new(),
             flip_bound: HashMap::new(),
             css_bound: HashMap::new(),
+            css_trans_bound: HashSet::new(),
             mouse_move_pipeline_cache: std::sync::atomic::AtomicI8::new(0),
             // Phase 1 stable-id foundation — see `project_stable_node_id_design`.
             stable_to_layout: HashMap::new(),
@@ -3239,6 +3242,41 @@ impl RenderTree {
     /// Check if a node has motion bindings
     pub fn has_motion_bindings(&self, node_id: LayoutNodeId) -> bool {
         self.motion_bindings.contains_key(&node_id)
+    }
+
+    /// The transform `node` is painted with: its own transform with its motion binding applied
+    /// over it, about the node's centre, as the painter composes them. A node that a binding
+    /// carries (a CSS transition or animation that rows move) holds its end pose in its props
+    /// while it plays, so the props alone are not what is on screen.
+    pub fn painted_transform(&self, node_id: LayoutNodeId) -> Option<blinc_core::Transform> {
+        use blinc_core::{Affine2D, Transform};
+        let own = self
+            .render_nodes
+            .get(&node_id)
+            .and_then(|n| n.props.transform.clone());
+        let Some(bindings) = self.motion_bindings.get(&node_id) else {
+            return own;
+        };
+        let mut composed = Affine2D::IDENTITY;
+        let mut moved = false;
+        if let Some(Transform::Affine2D(a)) = bindings.get_transform() {
+            composed = composed.then(&a);
+            moved = true;
+        }
+        if let Some((sx, sy)) = bindings.get_scale() {
+            composed = composed.then(&Affine2D::scale(sx, sy));
+            moved = true;
+        }
+        if let Some(degrees) = bindings.get_rotation() {
+            composed = composed.then(&Affine2D::rotation(degrees.to_radians()));
+            moved = true;
+        }
+        match own {
+            Some(Transform::Affine2D(a)) => Some(Transform::Affine2D(composed.then(&a))),
+            Some(other) => Some(other),
+            None if moved => Some(Transform::Affine2D(composed)),
+            None => None,
+        }
     }
 
     /// Borrow the full motion-bindings map. Used by the

@@ -283,11 +283,7 @@ fn chevron_degrees(ui: &Headless, parent: &str) -> f32 {
                     .is_some_and(|set| set.contains(c))
         })
         .expect("a caret");
-    match ui
-        .tree()
-        .get_render_node(chevron)
-        .and_then(|n| n.props.transform.clone())
-    {
+    match ui.tree().painted_transform(chevron) {
         Some(blinc_core::Transform::Affine2D(a)) => {
             a.elements[1].atan2(a.elements[0]).to_degrees().abs()
         }
