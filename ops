@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794728452,"nonce":"n+b/TMhO8ynudHUsQimFDtQ1RJo=","message":"Landed in 5bbfd6d6263de2f1419467fbda4c74e8c4660601. The atlas key that makes a bitmap depend on which size in a half-pixel step was asked for first is 566784b; the phone measurements are still d20f077.","files":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1794728452,"nonce":"wAXVPKo4f4P1Yl1qfbLWSKIytig=","status":2}]}
