@@ -13,6 +13,9 @@
 //! - `BLOCKS`: `1` makes each card a plain filled rectangle (no border, no label) that fades and
 //!   does not move, which rides rows.
 //! - `TEXT`: `0` leaves the label off the cards (default 1).
+//! - `ANIMATE`: `0` leaves the animation off the cards, for an idle baseline (default 1).
+//! - `STATIC`: how many labelled cards that never animate to add after the animated ones, as a
+//!   static interface behind a few animated nodes (default 0).
 //! - `FPS_CAP`: frames a second the animation is held to (default: the display's).
 //! - `EXIT_AFTER`: seconds until the process exits; unset keeps the window open.
 //!
@@ -108,7 +111,6 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
         .p(8.0);
     for i in 0..number("CARDS", 140.0) as usize {
         let mut card = div()
-            .class("pulse")
             .w(48.0)
             .h(28.0)
             .rounded(6.0)
@@ -116,12 +118,28 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
             .flex_row()
             .items_center()
             .justify_center();
+        if flag("ANIMATE", true) {
+            card = card.class("pulse");
+        }
         if !blocks {
             card = card.border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.9));
         }
         if label {
             card = card.child(text(format!("{i}")).size(12.0).color(Color::WHITE));
         }
+        grid = grid.child(div().w(52.0).h(32.0).child(card));
+    }
+    for i in 0..number("STATIC", 0.0) as usize {
+        let card = div()
+            .w(48.0)
+            .h(28.0)
+            .rounded(6.0)
+            .bg(Color::rgb(0.3, 0.3, 0.35))
+            .border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.5))
+            .flex_row()
+            .items_center()
+            .justify_center()
+            .child(text(format!("s{i}")).size(12.0).color(Color::WHITE));
         grid = grid.child(div().w(52.0).h(32.0).child(card));
     }
     grid
