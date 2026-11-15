@@ -887,6 +887,63 @@ fn scroll_translucent_scene(name: &'static str) -> Scene {
     }
 }
 
+/// A scrolled list whose rows each draw a small chart on a canvas, which moves with the rows.
+fn scroll_canvas_scene(name: &'static str) -> Scene {
+    let steps = 20;
+    Scene {
+        name,
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let reference = blinc_layout::selector::ScrollRef::new();
+            let bound = reference.clone();
+            ui.mount(move |_| {
+                let mut list = div().flex_col().gap(2.0).w(W as f32 - 20.0).p(2.0);
+                for i in 0..60 {
+                    let height = 6.0 + (i % 5) as f32 * 3.0;
+                    list = list.child(
+                        div()
+                            .w(W as f32 - 28.0)
+                            .h(28.0)
+                            .rounded(6.0)
+                            .bg(Color::rgb(0.2, 0.45, 0.7))
+                            .flex_row()
+                            .items_center()
+                            .gap(2.0)
+                            .child(
+                                blinc_layout::canvas::canvas(move |ctx, bounds| {
+                                    use blinc_core::DrawContext;
+                                    ctx.fill_rect(
+                                        blinc_core::Rect::new(
+                                            0.0,
+                                            bounds.height - height,
+                                            bounds.width * 0.5,
+                                            height,
+                                        ),
+                                        2.0.into(),
+                                        Color::rgb(0.95, 0.75, 0.2).into(),
+                                    );
+                                })
+                                .w(40.0)
+                                .h(22.0),
+                            )
+                            .child(text(format!("Row {i}")).size(13.0).color(Color::WHITE)),
+                    );
+                }
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .child(scroll().bind(&bound).w(W as f32).h(H as f32).child(list))
+            });
+            Box::new(move |ui, step| {
+                reference.set_scroll_offset(0.0, 12.0 * (step + 1) as f32);
+                ui.settle_scroll();
+            })
+        }),
+    }
+}
+
 /// A card that a binding moves and scales, with an SVG icon in it that moves and grows with it.
 fn motion_svg_scene(name: &'static str) -> Scene {
     let steps = 20;
@@ -1316,6 +1373,7 @@ fn scenes() -> Vec<Scene> {
         fade_grid_scene_of(6),
         scroll_icons_scene("scroll a list with icons"),
         scroll_translucent_scene("scroll a translucent list"),
+        scroll_canvas_scene("scroll a list of canvases"),
         motion_svg_scene("motion, an svg"),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
@@ -1553,6 +1611,7 @@ const ON_ROWS: &[&str] = &[
     "motion fade, equal cards",
     "scroll a list with icons",
     "scroll a translucent list",
+    "scroll a list of canvases",
     "motion, an svg",
     "scroll a list",
     "scroll a list, scrollbar always",

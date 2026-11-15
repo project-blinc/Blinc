@@ -5,7 +5,7 @@
 //! the render nodes or the motion bindings change. Making it costs less than the scans of the
 //! children that it stands in for in the frame it is made.
 
-use super::{AnimationStatus, ElementType, RenderTree};
+use super::{AnimatedKind, AnimationStatus, ElementType, RenderTree};
 use crate::tree::LayoutNodeId;
 use std::collections::HashMap;
 
@@ -264,7 +264,6 @@ impl RenderTree {
             && !props.is_overlay_root
             && !props.is_glass()
             && props.clip_path.is_none()
-            && !matches!(render.element_type, ElementType::Canvas(_))
     }
 
     /// What keeps the content of the scroll container `container` off rows: for each reason, how
@@ -282,9 +281,7 @@ impl RenderTree {
                 None => None,
                 Some(render) => {
                     let p = &render.props;
-                    if matches!(render.element_type, ElementType::Canvas(_)) {
-                        Some("canvas")
-                    } else if self.moves_its_content(node) {
+                    if self.moves_its_content(node) {
                         Some("moves its content")
                     } else if p.is_overlay_root {
                         Some("overlay root")
@@ -292,7 +289,10 @@ impl RenderTree {
                         Some("glass")
                     } else if p.clip_path.is_some() {
                         Some("clip path")
-                    } else if matches!(status.get(&node), Some(AnimationStatus::Animating(_))) {
+                    } else if matches!(
+                        status.get(&node),
+                        Some(AnimationStatus::Animating(kind)) if *kind != AnimatedKind::Canvas
+                    ) {
                         Some("animating")
                     } else {
                         None
@@ -310,7 +310,7 @@ impl RenderTree {
     pub(super) fn animating_under(&self, container: LayoutNodeId) -> bool {
         let status = self.current_animation_status.borrow();
         status.iter().any(|(node, status)| {
-            matches!(status, AnimationStatus::Animating(_))
+            matches!(status, AnimationStatus::Animating(kind) if *kind != AnimatedKind::Canvas)
                 && (*node == container || self.layout_tree.ancestors(*node).contains(&container))
         })
     }

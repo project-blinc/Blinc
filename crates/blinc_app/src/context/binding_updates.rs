@@ -29,6 +29,9 @@ impl RenderContext {
                 tree.note_scroll_rows_applied();
                 self.refine_motion_text(tree, scale);
                 self.refine_captured_text(tree, scale);
+                if !self.replay_rows_canvases(tree) {
+                    return false;
+                }
                 return !(active && self.motion_overlay_unmovable(tree));
             }
             Some(Outcome::Declined) => {

@@ -899,6 +899,11 @@ pub struct RenderTree {
     /// painted above the popover bg/border the overlay's dyn-batch
     /// SDF pass paints.
     overlay_canvas_paint_records: RefCell<HashMap<LayoutNodeId, CanvasPaintRecord>>,
+    /// Canvases painted inside a scroll container on rows, with ranges into the dynamic batch:
+    /// replayed there at their painted pose, so the rows move what they draw.
+    rows_canvas_paint_records: RefCell<HashMap<LayoutNodeId, CanvasPaintRecord>>,
+    /// How many scroll containers on rows the walk in progress is inside.
+    scroll_rows_depth: Cell<u32>,
     // --- Compositor v2 storage (Phase 1; populated by Phase 2) ---
     /// Unified per-region map: every node classified as
     /// `AnimationStatus::Animating` produces one entry here. The
@@ -1263,6 +1268,8 @@ impl RenderTree {
             css_anim_paint_records: RefCell::new(HashMap::new()),
             canvas_paint_records: RefCell::new(HashMap::new()),
             overlay_canvas_paint_records: RefCell::new(HashMap::new()),
+            rows_canvas_paint_records: RefCell::new(HashMap::new()),
+            scroll_rows_depth: Cell::new(0),
             dynamic_regions: RefCell::new(HashMap::new()),
             suppress_region_capture: std::cell::Cell::new(false),
             previous_animation_status: RefCell::new(HashMap::new()),
@@ -1757,6 +1764,14 @@ impl RenderTree {
         self.had_canvas_painted.get()
     }
 
+    /// The canvases painted inside a scroll container on rows on the last full paint, with
+    /// ranges into the dynamic batch.
+    pub fn rows_canvas_paint_records(
+        &self,
+    ) -> std::cell::Ref<'_, HashMap<LayoutNodeId, CanvasPaintRecord>> {
+        self.rows_canvas_paint_records.borrow()
+    }
+
     /// Whether the last full paint retained a dynamic canvas in its owning batch.
     /// Such callbacks must repaint with their owning commands each frame.
     pub fn had_retained_canvas_painted(&self) -> bool {
@@ -1769,6 +1784,7 @@ impl RenderTree {
         self.canvas_paint_records
             .borrow()
             .values()
+            .chain(self.rows_canvas_paint_records.borrow().values())
             .any(CanvasPaintRecord::wants_frames)
             || self
                 .retained_canvas_redraws

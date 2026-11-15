@@ -269,11 +269,13 @@ no pointer events. Animations on off-screen children still tick but don't
 request the next frame. A descendant that overflows its row into view keeps
 the row drawn.
 
-A scroll container whose content is boxes, text, images, SVG icons and
-translucent or faded elements is painted once and moved by the renderer as it
-scrolls, so a scroll frame costs what a frame that only moves something does.
-One that holds a canvas or content that moves on its own is painted again on
-each frame it scrolls.
+A scroll container whose content is boxes, text, images, SVG icons,
+translucent or faded elements and canvases is painted once and moved by the
+renderer as it scrolls, so a scroll frame costs what a frame that only moves
+something does. A canvas in it is drawn again each frame where it was painted
+and moved with the rest; one whose drawing changes its number of shapes, or
+uses meshes or GPU passes, makes that frame a full paint. A container holding
+content that moves on its own is painted again on each frame it scrolls.
 
 Culling stops below anything that places its content apart from layout (a
 CSS or bound transform, a motion, a layout animation) and at fixed and sticky

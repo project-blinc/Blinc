@@ -112,6 +112,8 @@ impl RenderTree {
         // subtrees — dispatched AFTER the popover's dyn-batch SDF
         // pass so caret canvases survive above their overlay's bg.
         self.overlay_canvas_paint_records.borrow_mut().clear();
+        self.rows_canvas_paint_records.borrow_mut().clear();
+        self.scroll_rows_depth.set(0);
         // Compositor v2 dynamic-region map — populated by the walker
         // (Phase 2: in parallel with the legacy records above; Phase 3:
         // becomes the sole source). Cleared at the top of every full
@@ -1680,7 +1682,15 @@ impl RenderTree {
                 // Independent callbacks defer to overlay replay when requested.
                 // A canvas something later in the tree is drawn over also paints with its
                 // batch, in order: the independent replay comes after everything cached.
+                // Inside a scroll container on rows the canvas paints into the dynamic batch, and
+                // each frame replays it there at the pose it was painted at, which the rows move.
+                let rows_canvas = !canvas_data.is_static
+                    && self.scroll_rows_depth.get() > 0
+                    && ctx.bg_batch_is_dynamic()
+                    && !ctx.bg_batch_is_composite()
+                    && !self.later_content_overlaps(node);
                 let retained_canvas = !canvas_data.is_static
+                    && !rows_canvas
                     && (!ctx.can_promote_composite_layer()
                         || ctx.bg_batch_is_dynamic()
                         || ctx.bg_batch_is_composite()
@@ -1691,7 +1701,8 @@ impl RenderTree {
                         .borrow_mut()
                         .push(canvas_data.redraw_while.clone());
                 }
-                let skip_drawing = skip_drawing_flag && !canvas_data.is_static && !retained_canvas;
+                let skip_drawing =
+                    skip_drawing_flag && !canvas_data.is_static && !retained_canvas && !rows_canvas;
                 if !skip_drawing {
                     render_fn(ctx, canvas_bounds);
                 }
@@ -1706,7 +1717,24 @@ impl RenderTree {
                 // including image-only and empty draws that can change later.
                 let layer_matches = effective_layer == target_layer;
                 let is_static_canvas = canvas_data.is_static;
-                if layer_matches && !is_static_canvas && !retained_canvas {
+                if layer_matches && rows_canvas {
+                    self.rows_canvas_paint_records.borrow_mut().insert(
+                        node,
+                        super::super::CanvasPaintRecord {
+                            visit_seq: 0,
+                            primitive_range: canvas_start..canvas_end,
+                            affine: saved_affine,
+                            bounds_wh: (bounds.width, bounds.height),
+                            render_fn: render_fn.clone(),
+                            clips_content: should_clip,
+                            ancestor_clip_aabb: saved_ancestor_clip,
+                            z_layer: saved_z_layer,
+                            opacity: saved_opacity,
+                            in_overlay_subtree: false,
+                            redraw_while: canvas_data.redraw_while.clone(),
+                        },
+                    );
+                } else if layer_matches && !is_static_canvas && !retained_canvas {
                     // Overlay callbacks follow their host's dynamic content.
                     let nested_overlay = ctx.in_overlay_subtree();
                     let visit_seq = self.canvas_paint_records.borrow().len()
@@ -1925,6 +1953,7 @@ impl RenderTree {
             let start = ctx.bg_primitive_count();
             let ambient_clip = ctx.current_clip_aabb();
             let previous_overscan = self.set_cull_overscan(overscan);
+            self.scroll_rows_depth.set(self.scroll_rows_depth.get() + 1);
             (
                 start,
                 previous_ordinal,
@@ -2108,6 +2137,8 @@ impl RenderTree {
             ctx.pop_motion_subtree();
             ctx.set_motion_node_ordinal(previous_ordinal);
             self.set_cull_overscan(previous_overscan);
+            self.scroll_rows_depth
+                .set(self.scroll_rows_depth.get().saturating_sub(1));
         }
 
         // Render scrollbar overlay if this is a scroll container
