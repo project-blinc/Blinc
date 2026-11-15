@@ -1060,6 +1060,86 @@ fn scroll_spinners_scene(name: &'static str) -> Scene {
     }
 }
 
+/// A scrolled page holding clips of its own: a nested scroll area with lines in it, an image in a
+/// rounded clip with an absolute dot over it in a stack, and the same image without the stack.
+fn scroll_inner_clips_scene(name: &'static str) -> Scene {
+    Scene {
+        name,
+        steps: 16,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let reference = blinc_layout::selector::ScrollRef::new();
+            let bound_ref = reference.clone();
+            ui.mount(move |_| {
+                let picture = || {
+                    div().w(36.0).h(36.0).rounded(18.0).overflow_clip().child(
+                        blinc_layout::image(PIXEL)
+                            .size(36.0, 36.0)
+                            .fade_in(std::time::Duration::ZERO),
+                    )
+                };
+                let mut list = div().flex_col().gap(4.0).w(W as f32 - 20.0).p(4.0);
+                for i in 0..24 {
+                    let mut row = div()
+                        .w(W as f32 - 40.0)
+                        .flex_row()
+                        .gap(4.0)
+                        .items_center()
+                        .child(picture())
+                        .child(
+                            blinc_layout::stack::stack()
+                                .w(36.0)
+                                .h(36.0)
+                                .overflow_visible()
+                                .child(picture())
+                                .child(
+                                    div()
+                                        .w(10.0)
+                                        .h(10.0)
+                                        .rounded(5.0)
+                                        .bg(Color::rgb(0.2, 0.8, 0.3))
+                                        .absolute()
+                                        .right(0.0)
+                                        .bottom(0.0),
+                                ),
+                        );
+                    if i % 3 == 0 {
+                        let mut lines = div().flex_col().gap(2.0);
+                        for j in 0..8 {
+                            lines = lines
+                                .child(text(format!("Line {j}")).size(12.0).color(Color::WHITE));
+                        }
+                        row = row.child(
+                            scroll()
+                                .w(120.0)
+                                .h(44.0)
+                                .bg(Color::rgb(0.2, 0.25, 0.35))
+                                .rounded(6.0)
+                                .child(lines),
+                        );
+                    }
+                    list = list.child(row);
+                }
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .child(
+                        scroll()
+                            .bind(&bound_ref)
+                            .w(W as f32)
+                            .h(H as f32)
+                            .child(list),
+                    )
+            });
+            Box::new(move |ui, step| {
+                reference.set_scroll_offset(0.0, 6.0 * (step + 1) as f32);
+                ui.settle_scroll();
+            })
+        }),
+    }
+}
+
 /// A card that a binding moves and scales, with an SVG icon in it that moves and grows with it.
 fn motion_svg_scene(name: &'static str) -> Scene {
     let steps = 20;
@@ -1515,6 +1595,7 @@ fn scenes() -> Vec<Scene> {
         motion_svg_scene("motion, an svg"),
         spinner_scene("css keyframes, spinners"),
         scroll_spinners_scene("scroll a list of spinners"),
+        scroll_inner_clips_scene("scroll a page with clips of its own"),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
         transition_css_scene(

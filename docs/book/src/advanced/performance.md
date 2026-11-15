@@ -279,9 +279,9 @@ and moved with the rest; one whose drawing changes its number of shapes, or
 uses meshes or GPU passes, makes that frame a full paint. Elements with a
 transform of their own, and elements a motion binding moves, are moved with
 the container too, the binding's change on top of the scroll, and so are
-elements with a `clip-path`. A container holding something fixed or sticky, or
-a CSS animation that is not moved by rows, is painted again on each frame it
-scrolls.
+elements with a `clip-path`. A container holding something fixed or sticky, a
+`stack()`, another scroll container, or a CSS animation that is not moved by
+rows, is painted again on each frame it scrolls.
 
 Culling stops below anything that places its content apart from layout (a
 CSS or bound transform, a motion, a layout animation) and at fixed and sticky
