@@ -798,6 +798,8 @@ pub struct RenderTree {
     scroll_painted_epoch: Cell<Option<u64>>,
     /// The time the scroll physics last ticked, in milliseconds; `None` before it ticks.
     scroll_clock_ms: Cell<Option<u64>>,
+    /// The nodes with a motion config, as of a `render_nodes` revision.
+    motion_nodes: RefCell<(Option<u64>, Vec<LayoutNodeId>)>,
     /// Each scroll container's offset as last seen, and the clock time it last changed.
     scroll_seen: RefCell<HashMap<LayoutNodeId, ((f32, f32), u64)>>,
     /// Whether, at the last tick, a scroll container that is not on rows was moving.
@@ -1260,6 +1262,7 @@ impl RenderTree {
             scroll_applied: RefCell::new(HashMap::new()),
             scroll_painted_epoch: Cell::new(None),
             scroll_clock_ms: Cell::new(None),
+            motion_nodes: RefCell::new((None, Vec::new())),
             scroll_seen: RefCell::new(HashMap::new()),
             scroll_off_rows_animating: Cell::new(false),
             cull_overscan: Cell::new(cull::CULL_OVERSCAN),
@@ -3181,7 +3184,23 @@ impl RenderTree {
         &self,
         render_state: &mut crate::render_state::RenderState,
     ) {
-        for (&node_id, render_node) in &self.render_nodes {
+        // Called every frame; the nodes with a motion config change only with the tree.
+        let revision = self.render_nodes.revision();
+        let mut cached = self.motion_nodes.borrow_mut();
+        if cached.0 != Some(revision) {
+            cached.1.clear();
+            cached.1.extend(
+                self.render_nodes
+                    .iter()
+                    .filter(|(_, node)| node.props.motion.is_some())
+                    .map(|(&id, _)| id),
+            );
+            cached.0 = Some(revision);
+        }
+        for &node_id in &cached.1 {
+            let Some(render_node) = self.render_nodes.get(&node_id) else {
+                continue;
+            };
             if let Some(ref motion_config) = render_node.props.motion {
                 // Use stable key if available (for overlays), otherwise use node_id
                 if let Some(ref stable_key) = render_node.props.motion_stable_id {

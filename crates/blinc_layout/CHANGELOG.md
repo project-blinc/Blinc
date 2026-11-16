@@ -8,6 +8,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 
 ### Changed
+- `RenderTree::initialize_motion_animations`, which a window calls every frame, visits only the nodes with a motion config; the list is derived again when the render nodes change.
 - A scroll container's content is moved by rows only while it scrolls: half a second after it last moved, a frame drawn anyway paints it into the static layer again, so a window at rest with a spinner draws the spinner, not the whole page, each frame. Scrolling again puts it back on rows from its first frame. `RenderTree::scroll_moved_recently`, `SCROLL_IDLE_MS`.
 - Inside a scroll container moved by rows, the painter keeps the clips its content pushes apart from its viewport, so they move with the content while the viewport stays: content that scrolls into view is no longer cut where it was painted, nor drawn past the viewport as it leaves. A container holding a `stack()` or a nested scroll container is moved by rows again.
 - An element with a `clip-path` polygon or path is moved by rows: a CSS animation of `transform` on it, such as `cn::spinner`'s turn, no longer makes each frame a full paint, and a `clip-path` no longer keeps a scroll container off rows. `CompositeBindingMeta::ambient_path` records the path clip in force when a bound node began painting.
