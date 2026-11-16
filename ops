@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1794819920,"nonce":"0ILfqsWywDnGcCIZTx6QDXRhp6E=","message":"Done in f4f8970c8d255a985fd0143ca821b17f75413cb0: 'scroll grouped images, then stop' is in ON_ROWS and matches the full paint on the table and the CPU rows.","files":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1794819920,"nonce":"4uggKThS9WA2vleqZKpwBFrbcB0=","status":2}]}
