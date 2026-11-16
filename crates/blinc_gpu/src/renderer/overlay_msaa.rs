@@ -39,6 +39,13 @@ impl GpuRenderer {
         if batch.paths.vertices.is_empty() && batch.primitives.is_empty() {
             return;
         }
+        // One sample and no paths: drawing onto the target in order is the same composite as
+        // drawing into a cleared texture and blending that over it, in one pass.
+        if sample_count <= 1 && batch.paths.vertices.is_empty() {
+            self.update_aux_data_buffer(batch);
+            self.render_primitives_overlay(target, &batch.primitives);
+            return;
+        }
 
         self.ensure_overlay_alpha();
 
