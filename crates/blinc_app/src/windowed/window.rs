@@ -123,6 +123,8 @@ pub(crate) struct WindowState {
     /// When the last frame ended with no further frame asked for. Once the window has stayed
     /// parked for [`IDLE_RELEASE`], the app frees its between-frame GPU memory.
     pub parked_at: Option<std::time::Instant>,
+    /// The grid point the next capped frame is scheduled for. See [`super::fps::next_grid_delay`].
+    pub frame_grid: Option<std::time::Instant>,
 }
 
 /// How long a window stays parked before its app frees the GPU memory kept between frames.
@@ -168,6 +170,7 @@ impl WindowState {
             wayland_keep_alive: false,
             prev_css_active: false,
             parked_at: None,
+            frame_grid: None,
         }
     }
 }

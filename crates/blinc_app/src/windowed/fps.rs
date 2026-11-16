@@ -189,3 +189,55 @@ pub(super) fn window_median(window: &mut [u64]) -> u64 {
     window.sort_unstable();
     window[window.len() / 2]
 }
+
+/// Delay to the next point of a grid of `1 / fps` steps, so capped frames keep one rate
+/// whatever each frame takes. A wake already pending for a grid point stays; a frame later
+/// than a point skips to the following one; a grid left idle restarts from now.
+pub(crate) fn next_grid_delay(
+    grid: &mut Option<std::time::Instant>,
+    fps: u32,
+) -> std::time::Duration {
+    let now = std::time::Instant::now();
+    let step = std::time::Duration::from_secs_f64(1.0 / fps.max(1) as f64);
+    let next = match *grid {
+        Some(point) if point > now => point,
+        Some(point) if now - point < step * 4 => {
+            let behind = ((now - point).as_secs_f64() / step.as_secs_f64()).floor() as u32;
+            point + step * (behind + 1)
+        }
+        _ => now + step,
+    };
+    *grid = Some(next);
+    next - now
+}
+
+#[cfg(test)]
+mod grid_tests {
+    use super::next_grid_delay;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn a_pending_point_is_kept() {
+        let point = Instant::now() + Duration::from_millis(5);
+        let mut grid = Some(point);
+        next_grid_delay(&mut grid, 120);
+        assert_eq!(grid, Some(point));
+    }
+
+    #[test]
+    fn a_late_frame_lands_on_the_next_point_after_now() {
+        let step = Duration::from_secs_f64(1.0 / 120.0);
+        let start = Instant::now() - step * 2 - step / 2;
+        let mut grid = Some(start);
+        let delay = next_grid_delay(&mut grid, 120);
+        assert_eq!(grid, Some(start + step * 3));
+        assert!(delay <= step);
+    }
+
+    #[test]
+    fn an_idle_grid_restarts_from_now() {
+        let mut grid = Some(Instant::now() - Duration::from_secs(1));
+        let delay = next_grid_delay(&mut grid, 60);
+        assert!(delay > Duration::from_millis(15) && delay <= Duration::from_secs_f64(1.0 / 60.0));
+    }
+}

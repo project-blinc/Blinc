@@ -793,7 +793,8 @@ pub(super) fn render_and_schedule(
                 // platform shim's timer thread so the next
                 // Frame arrives at the exact moment Phase 4
                 // is allowed to render.
-                let delay = std::time::Duration::from_millis(1000 / live_cap_chain as u64);
+                let delay =
+                    crate::windowed::fps::next_grid_delay(&mut ws.frame_grid, live_cap_chain);
                 crate::motion_trace::note("wake_in_ms", delay.as_millis() as u64);
                 frame_dirty.store(true, Ordering::Release);
                 wake_proxy_for_pacing.wake_at(delay);
