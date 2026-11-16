@@ -84,11 +84,15 @@ impl RenderContext {
         }
 
         // Direct frames have no CSS cache patch pass; active CSS needs a full walk.
-        let canvas_output =
-            (try_fast_paint && !self.captured_images_need_repaint && !tree.css_active_off_rows())
-                .then(|| self.redraw_canvas_output(tree, width, height))
-                .flatten()
-                .filter(|_| self.apply_binding_deltas(tree, scale_factor));
+        // A frame that reuses the cached batches also reuses the collected content, so it needs
+        // that content to be the last full paint's, not cleared since.
+        let canvas_output = (try_fast_paint
+            && self.collected_valid
+            && !self.captured_images_need_repaint
+            && !tree.css_active_off_rows())
+        .then(|| self.redraw_canvas_output(tree, width, height))
+        .flatten()
+        .filter(|_| self.apply_binding_deltas(tree, scale_factor));
         let used_fast_paint = canvas_output.is_some();
 
         // Create a single paint context for all layers with text rendering support
@@ -422,6 +426,7 @@ impl RenderContext {
         if !used_fast_paint {
             self.cached_motion_subtree_images =
                 (!motion_subtree_images.is_empty()).then_some(motion_subtree_images);
+            self.collected_valid = true;
         }
 
         if !used_fast_paint {

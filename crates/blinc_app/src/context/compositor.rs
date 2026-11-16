@@ -169,6 +169,7 @@ impl RenderContext {
             self.motion_subtree_text_patch.clear();
             self.cached_motion_subtree_svgs = None;
             self.cached_motion_subtree_images = None;
+            self.collected_valid = false;
             self.cached_css_transformed_text_prims = None;
         }
 
@@ -467,6 +468,7 @@ impl RenderContext {
                 self.motion_subtree_text_patch.clear();
                 self.cached_motion_subtree_svgs = None;
                 self.cached_motion_subtree_images = None;
+                self.collected_valid = false;
                 self.cached_css_transformed_text_prims = None;
                 damage_rect_failed = true;
             }
@@ -499,6 +501,7 @@ impl RenderContext {
                         self.motion_subtree_text_patch.clear();
                         self.cached_motion_subtree_svgs = None;
                         self.cached_motion_subtree_images = None;
+                        self.collected_valid = false;
                         self.cached_css_transformed_text_prims = None;
                     } else {
                         // Restore collected content inside the cleared damage region

@@ -26,6 +26,7 @@ struct FrameCache {
     cached_svgs: Option<Vec<SvgElement>>,
     cached_images: Option<Vec<ImageElement>>,
     captured_images_need_repaint: bool,
+    collected_valid: bool,
     has_active_flows: bool,
 }
 
@@ -88,6 +89,7 @@ impl FrameCache {
             &mut self.captured_images_need_repaint,
             &mut context.captured_images_need_repaint,
         );
+        std::mem::swap(&mut self.collected_valid, &mut context.collected_valid);
         std::mem::swap(&mut self.has_active_flows, &mut context.has_active_flows);
     }
 }
