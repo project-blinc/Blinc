@@ -3,11 +3,14 @@ use super::{DrawContext, GpuPaintContext, PrimitiveBatch, Rect, RenderContext, S
 use blinc_core::{Affine2D, ClipShape, Transform};
 
 impl RenderContext {
+    /// `ordinal` is that of the motion-bound node the SVG is painted under, which rows read
+    /// to move it.
     pub(super) fn prepare_captured_svg(
         &mut self,
         svg: &SvgElement,
         viewport: (u32, u32),
         dpi: f32,
+        ordinal: u32,
     ) -> PrimitiveBatch {
         let Some((key, tintable)) = self.prepare_svg_raster(svg) else {
             return PrimitiveBatch::new();
@@ -23,15 +26,24 @@ impl RenderContext {
                 }
             }
         }
+        let mut row_clips = false;
         let mut paint = if let Some(path) = &svg.path_clip {
             path.clip_context(svg.clip_bounds, viewport)
         } else {
             let mut paint = GpuPaintContext::new(viewport.0 as f32, viewport.1 as f32);
-            if let Some([x, y, w, h]) = svg.clip_bounds {
+            // The scroll clip stays with the viewport; the clip inside it is an inner clip,
+            // which moves with the content when rows move it.
+            if let Some((inner, [x, y, w, h])) = svg.split_clip {
+                paint.push_clip(ClipShape::rect(Rect::new(x, y, w, h)));
+                row_clips = paint.begin_row_clips();
+                let [x, y, w, h] = inner;
+                paint.push_clip(ClipShape::rect(Rect::new(x, y, w, h)));
+            } else if let Some([x, y, w, h]) = svg.clip_bounds {
                 paint.push_clip(ClipShape::rect(Rect::new(x, y, w, h)));
             }
             paint
         };
+        paint.set_motion_node_ordinal(ordinal);
         let (x, y) = if let Some([a, b, c, d, tx, ty]) = svg.css_affine {
             paint.push_transform(Transform::Affine2D(Affine2D {
                 elements: [a, b, c, d, tx * dpi, ty * dpi],
@@ -46,6 +58,7 @@ impl RenderContext {
             height,
             Rect::new(x, y, svg.width, svg.height),
         );
+        paint.end_row_clips(row_clips);
         paint.take_batch()
     }
 }

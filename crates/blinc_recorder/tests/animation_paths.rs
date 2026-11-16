@@ -1219,6 +1219,62 @@ fn scroll_grouped_images_scene(name: &'static str) -> Scene {
     }
 }
 
+/// A scrolled list of rounded rows, each with an icon inside a translucent box, as a
+/// disabled pagination button is: the group captures the icon as an ordered image.
+fn scroll_grouped_icons_scene(name: &'static str) -> Scene {
+    Scene {
+        name,
+        steps: 16,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let reference = blinc_layout::selector::ScrollRef::new();
+            let bound_ref = reference.clone();
+            ui.mount(move |_| {
+                let mut list = div().flex_col().gap(4.0).w(W as f32 - 20.0).p(4.0);
+                for i in 0..24 {
+                    list = list.child(
+                        div()
+                            .flex_row()
+                            .gap(4.0)
+                            .items_center()
+                            .rounded(10.0)
+                            .overflow_clip()
+                            .bg(Color::rgb(0.15, 0.17, 0.22))
+                            .p(2.0)
+                            .child(
+                                div()
+                                    .opacity(0.5)
+                                    .w(28.0)
+                                    .h(28.0)
+                                    .items_center()
+                                    .justify_center()
+                                    .border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.4))
+                                    .rounded(6.0)
+                                    .child(blinc_layout::svg::svg(ICON).square(16.0)),
+                            )
+                            .child(text(format!("Row {i}")).size(13.0).color(Color::WHITE)),
+                    );
+                }
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .child(
+                        scroll()
+                            .bind(&bound_ref)
+                            .w(W as f32)
+                            .h(H as f32)
+                            .child(list),
+                    )
+            });
+            Box::new(move |ui, step| {
+                reference.set_scroll_offset(0.0, 6.0 * (step + 1).min(10) as f32);
+                ui.settle_scroll();
+            })
+        }),
+    }
+}
+
 /// A scrolled list of canvases that fill a path beside a rect, as a chart's pie does.
 fn scroll_canvas_paths_scene(name: &'static str) -> Scene {
     Scene {
@@ -1734,6 +1790,7 @@ fn scenes() -> Vec<Scene> {
         scroll_spinners_scene("scroll a list of spinners"),
         scroll_inner_clips_scene("scroll a page with clips of its own"),
         scroll_grouped_images_scene("scroll grouped images, then stop"),
+        scroll_grouped_icons_scene("scroll grouped icons"),
         scroll_canvas_paths_scene("scroll canvases that fill paths"),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
@@ -1981,6 +2038,7 @@ const ON_ROWS: &[&str] = &[
     "css keyframes, spinners",
     "scroll a list of spinners",
     "scroll grouped images, then stop",
+    "scroll grouped icons",
     "scroll a page with clips of its own",
     "scroll a list",
     "scroll a list, scrollbar always",

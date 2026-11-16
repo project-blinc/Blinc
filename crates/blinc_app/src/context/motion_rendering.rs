@@ -351,7 +351,12 @@ impl RenderContext {
                 if !used_fast_paint {
                     captured.insert(
                         key,
-                        self.prepare_captured_svg(&svg, (width, height), scale_factor),
+                        self.prepare_captured_svg(
+                            &svg,
+                            (width, height),
+                            scale_factor,
+                            super::node_rows::ordinal_of(tree, svg.node),
+                        ),
                     );
                 }
                 continue;

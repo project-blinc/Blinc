@@ -442,6 +442,11 @@ impl RenderContext {
                         svg_path_data: render_node.props.svg_path_data.clone(),
                         clip_bounds: svg_clip.0,
                         scroll_clip: svg_clip.1,
+                        split_clip: current_clip
+                            .zip(current_scroll_clip)
+                            .map(|(inner, scroll)| {
+                                (inner.map(|v| v * scale), scroll.map(|v| v * scale))
+                            }),
                         // Same base-alpha contract as TextElement:
                         // composite factor applied live at dispatch.
                         motion_opacity: effective_motion_opacity

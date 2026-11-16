@@ -571,6 +571,10 @@ struct SvgElement {
     /// For an SVG in a motion subtree inside a scroll container, the scroll clip, which stays
     /// with the viewport while `clip_bounds`, the clip inside it, moves with the content.
     scroll_clip: Option<[f32; 4]>,
+    /// Inside a scroll container, the clip inside it and the scroll clip apart, which
+    /// `clip_bounds` merges outside a motion subtree. A group capturing the SVG draws with
+    /// them, so rows can move the inner clip and keep the scroll clip.
+    split_clip: Option<([f32; 4], [f32; 4])>,
     /// Motion opacity inherited from parent motion container
     motion_opacity: f32,
     /// Inherited CSS transform from ancestor elements (full 6-element affine in layout coords)
