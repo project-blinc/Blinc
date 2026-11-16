@@ -121,9 +121,19 @@ impl<'a> Scene<'a> {
             Some(rows) => format!("{painted} {rows}"),
             None => painted,
         };
+        let gate = seen.iter().rev().find(|e| e.starts_with("gate:")).cloned();
+        // `COSTS_SEQ=1`: print each frame's path and gate in order.
+        if std::env::var("COSTS_SEQ").is_ok() {
+            println!(
+                "    frame {:>3} {:>6.2} ms  {tag}  {}",
+                self.session.len(),
+                session + render,
+                gate.as_deref().unwrap_or("")
+            );
+        }
         *self.paths.entry(tag).or_default() += 1;
-        if let Some(gate) = seen.iter().rev().find(|e| e.starts_with("gate:")) {
-            *self.gates.entry(gate.clone()).or_default() += 1;
+        if let Some(gate) = gate {
+            *self.gates.entry(gate).or_default() += 1;
         }
     }
 
