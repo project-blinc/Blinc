@@ -38,11 +38,7 @@ impl GpuRenderer {
             let output = self
                 .layer_texture_cache
                 .acquire_exact(&self.device, input.size, false);
-            let mut encoder = self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Blur Copy Encoder"),
-                });
+            let mut encoder = self.uploads.lend(&self.device);
             encoder.copy_texture_to_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture: &input.texture,
@@ -62,7 +58,7 @@ impl GpuRenderer {
                     depth_or_array_layers: 1,
                 },
             );
-            self.queue.submit(std::iter::once(encoder.finish()));
+            self.uploads.give_back(&self.queue, encoder);
             return output;
         }
 
@@ -72,7 +68,9 @@ impl GpuRenderer {
         // Write per-pass uniforms to pre-allocated buffer pool (no allocation)
         let blur_pool = self.buffers.blur_uniforms_pool.as_ref().unwrap();
         for i in 0..passes {
-            self.queue.write_buffer(
+            self.uploads.write(
+                &self.device,
+                &self.queue,
                 &blur_pool[i as usize],
                 0,
                 bytemuck::bytes_of(&BlurUniforms {
@@ -128,11 +126,7 @@ impl GpuRenderer {
             .collect();
 
         // Single command encoder for all passes
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Blur Multi-Pass Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         for i in 0..passes {
             let output_view = if i % 2 == 0 {
@@ -163,7 +157,7 @@ impl GpuRenderer {
         }
 
         // Single GPU submission for all blur passes
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
 
         // Determine which texture has the final blurred result
         let (result, unused) = if passes % 2 == 1 {
@@ -211,8 +205,13 @@ impl GpuRenderer {
 
         // Use cached buffer instead of creating per-pass
         let cm_buf = self.buffers.color_matrix_uniforms.as_ref().unwrap();
-        self.queue
-            .write_buffer(cm_buf, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            cm_buf,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Color Matrix Effect Bind Group"),
@@ -233,11 +232,7 @@ impl GpuRenderer {
             ],
         });
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Color Matrix Pass Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -261,7 +256,7 @@ impl GpuRenderer {
             render_pass.draw(0..6, 0..1);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     /// Apply drop shadow effect
@@ -294,8 +289,13 @@ impl GpuRenderer {
 
         // Use cached buffer instead of creating per-pass
         let ds_buf = self.buffers.drop_shadow_uniforms.as_ref().unwrap();
-        self.queue
-            .write_buffer(ds_buf, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            ds_buf,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Drop Shadow Effect Bind Group"),
@@ -320,11 +320,7 @@ impl GpuRenderer {
             ],
         });
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Drop Shadow Pass Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -348,7 +344,7 @@ impl GpuRenderer {
             render_pass.draw(0..6, 0..1);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     /// Apply glow effect to a texture
@@ -380,8 +376,13 @@ impl GpuRenderer {
 
         // Use cached buffer instead of creating per-pass
         let glow_buf = self.buffers.glow_uniforms.as_ref().unwrap();
-        self.queue
-            .write_buffer(glow_buf, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            glow_buf,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Glow Effect Bind Group"),
@@ -402,11 +403,7 @@ impl GpuRenderer {
             ],
         });
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Glow Pass Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -430,7 +427,7 @@ impl GpuRenderer {
             render_pass.draw(0..6, 0..1);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     /// Helper to create common color matrices
@@ -684,11 +681,7 @@ impl GpuRenderer {
             ],
         });
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Mask Image Pass Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -712,7 +705,7 @@ impl GpuRenderer {
             render_pass.draw(0..6, 0..1);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     /// Apply layer effects to a texture
@@ -731,11 +724,7 @@ impl GpuRenderer {
             let output = self
                 .layer_texture_cache
                 .acquire_exact(&self.device, input.size, false);
-            let mut encoder = self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Layer Effect Copy Encoder"),
-                });
+            let mut encoder = self.uploads.lend(&self.device);
             encoder.copy_texture_to_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture: &input.texture,
@@ -755,7 +744,7 @@ impl GpuRenderer {
                     depth_or_array_layers: 1,
                 },
             );
-            self.queue.submit(std::iter::once(encoder.finish()));
+            self.uploads.give_back(&self.queue, encoder);
             return output;
         }
 
@@ -877,11 +866,7 @@ impl GpuRenderer {
             let output = self
                 .layer_texture_cache
                 .acquire_exact(&self.device, input.size, false);
-            let mut encoder = self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Layer Effect Fallback Copy"),
-                });
+            let mut encoder = self.uploads.lend(&self.device);
             encoder.copy_texture_to_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture: &input.texture,
@@ -901,7 +886,7 @@ impl GpuRenderer {
                     depth_or_array_layers: 1,
                 },
             );
-            self.queue.submit(std::iter::once(encoder.finish()));
+            self.uploads.give_back(&self.queue, encoder);
             output
         })
     }

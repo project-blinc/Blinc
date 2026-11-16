@@ -166,12 +166,19 @@ impl GpuRenderer {
         }
         self.ensure_image_pipeline();
         let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
         for part in draws.chunks(CHUNK) {
             let image_pipeline = self.image_pipeline.as_ref().unwrap();
             let instances: Vec<GpuImageInstance> = part.iter().map(|(_, i)| *i).collect();
-            self.queue.write_buffer(
+            self.uploads.write(
+                &self.device,
+                &self.queue,
                 &image_pipeline.instance_buffer,
                 0,
                 bytemuck::cast_slice(&instances),
@@ -213,11 +220,7 @@ impl GpuRenderer {
                     })
                 })
                 .collect();
-            let mut encoder = self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Image Set Encoder"),
-                });
+            let mut encoder = self.uploads.lend(&self.device);
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Image Set Pass"),
@@ -244,7 +247,7 @@ impl GpuRenderer {
                     pass.draw(0..6, i as u32..i as u32 + 1);
                 }
             }
-            self.queue.submit(std::iter::once(encoder.finish()));
+            self.uploads.give_back(&self.queue, encoder);
         }
     }
 
@@ -280,11 +283,18 @@ impl GpuRenderer {
 
         // Update uniforms
         let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         // Update instance buffer
-        self.queue.write_buffer(
+        self.uploads.write(
+            &self.device,
+            &self.queue,
             &image_pipeline.instance_buffer,
             0,
             bytemuck::cast_slice(instances),
@@ -324,11 +334,7 @@ impl GpuRenderer {
         });
 
         // Create command encoder
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Image Render Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -360,7 +366,7 @@ impl GpuRenderer {
             render_pass.draw(0..6, 0..instances.len() as u32);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

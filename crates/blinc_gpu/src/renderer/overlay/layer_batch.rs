@@ -185,7 +185,7 @@ impl GpuRenderer {
         self.ensure_overlay_alpha();
         self.overlay_alpha.as_ref().unwrap().straighten(
             &self.device,
-            &self.queue,
+            &|commands| self.uploads.submit(&self.queue, [commands]),
             &self.bind_group_layouts.composite,
             &self.path_image_sampler,
             &texture,
@@ -324,11 +324,7 @@ impl GpuRenderer {
                 })
             })
             .collect();
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Opacity Layer Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Opacity Layer Pass"),
@@ -352,7 +348,7 @@ impl GpuRenderer {
                 pass.draw(0..6, 0..1);
             }
         }
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 }
 

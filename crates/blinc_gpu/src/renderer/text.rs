@@ -62,13 +62,23 @@ impl GpuRenderer {
 
         // Update uniforms
         let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         // Update glyphs: storage buffer or data texture
         if self.has_storage_buffers {
-            self.queue
-                .write_buffer(&self.buffers.glyphs, 0, bytemuck::cast_slice(glyphs));
+            self.uploads.write(
+                &self.device,
+                &self.queue,
+                &self.buffers.glyphs,
+                0,
+                bytemuck::cast_slice(glyphs),
+            );
         } else if let Some(ref tex) = self.buffers.glyph_data_texture
             && !glyphs.is_empty()
         {
@@ -138,11 +148,7 @@ impl GpuRenderer {
             ],
         });
         // Create command encoder
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Blinc Text Render Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         // Begin render pass (load existing content)
         {
@@ -178,6 +184,6 @@ impl GpuRenderer {
         }
 
         // Submit commands
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 }

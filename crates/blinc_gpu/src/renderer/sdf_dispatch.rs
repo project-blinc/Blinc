@@ -48,8 +48,13 @@ impl GpuRenderer {
             let slice = &primitives[range.start..end];
             let bytes = bytemuck::cast_slice::<GpuPrimitive, u8>(slice);
             let offset_bytes = (range.start as u64) * stride;
-            self.queue
-                .write_buffer(&self.buffers.primitives, offset_bytes, bytes);
+            self.uploads.write(
+                &self.device,
+                &self.queue,
+                &self.buffers.primitives,
+                offset_bytes,
+                bytes,
+            );
         }
     }
 
@@ -97,7 +102,9 @@ impl GpuRenderer {
             }
         } else {
             // Tier 1/2: write to storage buffer as before
-            self.queue.write_buffer(
+            self.uploads.write(
+                &self.device,
+                &self.queue,
                 &self.buffers.primitives,
                 0,
                 bytemuck::cast_slice(primitives_to_write),
@@ -220,7 +227,7 @@ impl GpuRenderer {
                     }));
             }
             if let Some(buf) = &self.buffers.sdf_vertex_instances {
-                self.queue.write_buffer(buf, 0, bytes);
+                self.uploads.write(&self.device, &self.queue, buf, 0, bytes);
             }
         }
 

@@ -123,7 +123,8 @@ impl GpuRenderer {
         }
 
         // Submit commands
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads
+            .submit(&self.queue, std::iter::once(encoder.finish()));
     }
 
     /// Render primitives to a backdrop texture for glass blur sampling
@@ -157,7 +158,9 @@ impl GpuRenderer {
         // appear at correct relative positions for glass sampling.
         let main_uniforms =
             Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue.write_buffer(
+        self.uploads.write(
+            &self.device,
+            &self.queue,
             &self.buffers.uniforms,
             0,
             bytemuck::bytes_of(&main_uniforms),
@@ -207,7 +210,8 @@ impl GpuRenderer {
         }
 
         // Submit commands
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads
+            .submit(&self.queue, std::iter::once(encoder.finish()));
         // Note: No need to restore uniforms since we're already using main_uniforms
     }
 
@@ -281,7 +285,9 @@ impl GpuRenderer {
         // NDC space to the texture size. This ensures primitives appear at correct
         // relative positions for glass sampling.
         {
-            self.queue.write_buffer(
+            self.uploads.write(
+                &self.device,
+                &self.queue,
                 &self.buffers.uniforms,
                 0,
                 bytemuck::bytes_of(&main_uniforms),
@@ -322,7 +328,9 @@ impl GpuRenderer {
 
         // Pass 2: Render background primitives to target (at full resolution)
         {
-            self.queue.write_buffer(
+            self.uploads.write(
+                &self.device,
+                &self.queue,
                 &self.buffers.uniforms,
                 0,
                 bytemuck::bytes_of(&main_uniforms),
@@ -406,7 +414,8 @@ impl GpuRenderer {
         }
 
         // Submit background and glass passes first
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads
+            .submit(&self.queue, std::iter::once(encoder.finish()));
 
         // Pass 3b: Render nested glass primitives (glass inside glass)
         // These are glass elements that are children of other glass elements.
@@ -477,7 +486,8 @@ impl GpuRenderer {
             }
 
             drop(render_pass);
-            self.queue.submit(std::iter::once(encoder.finish()));
+            self.uploads
+                .submit(&self.queue, std::iter::once(encoder.finish()));
         }
 
         // Foreground groups compose in their own stream after glass.
@@ -523,7 +533,8 @@ impl GpuRenderer {
                 render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
 
                 drop(render_pass);
-                self.queue.submit(std::iter::once(encoder.finish()));
+                self.uploads
+                    .submit(&self.queue, std::iter::once(encoder.finish()));
             }
         }
     }

@@ -98,19 +98,19 @@ impl AlphaPass {
     pub(crate) fn straighten(
         &self,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        submit: &dyn Fn(wgpu::CommandBuffer),
         layout: &wgpu::BindGroupLayout,
         sampler: &wgpu::Sampler,
         input: &LayerTexture,
         output: &LayerTexture,
     ) {
-        self.straighten_view(device, queue, layout, sampler, &input.view, output);
+        self.straighten_view(device, submit, layout, sampler, &input.view, output);
     }
 
     pub(crate) fn straighten_view(
         &self,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        submit: &dyn Fn(wgpu::CommandBuffer),
         layout: &wgpu::BindGroupLayout,
         sampler: &wgpu::Sampler,
         input: &wgpu::TextureView,
@@ -118,7 +118,7 @@ impl AlphaPass {
     ) {
         self.draw(
             device,
-            queue,
+            submit,
             layout,
             sampler,
             input,
@@ -133,7 +133,7 @@ impl AlphaPass {
     pub(crate) fn capture(
         &self,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        submit: &dyn Fn(wgpu::CommandBuffer),
         layout: &wgpu::BindGroupLayout,
         sampler: &wgpu::Sampler,
         input: &wgpu::TextureView,
@@ -147,7 +147,7 @@ impl AlphaPass {
         });
         self.draw(
             device,
-            queue,
+            submit,
             layout,
             sampler,
             input,
@@ -161,7 +161,7 @@ impl AlphaPass {
     fn draw(
         &self,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        submit: &dyn Fn(wgpu::CommandBuffer),
         layout: &wgpu::BindGroupLayout,
         sampler: &wgpu::Sampler,
         input: &wgpu::TextureView,
@@ -210,6 +210,6 @@ impl AlphaPass {
             pass.set_bind_group(0, &bindings, &[]);
             pass.draw(0..3, 0..1);
         }
-        queue.submit(Some(encoder.finish()));
+        submit(encoder.finish());
     }
 }

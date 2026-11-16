@@ -294,11 +294,7 @@ impl GpuRenderer {
             ],
         });
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Composite Pass Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -322,7 +318,7 @@ impl GpuRenderer {
             render_pass.draw(0..6, 0..1);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     /// Render a range of primitives to a target
@@ -348,18 +344,19 @@ impl GpuRenderer {
 
         // Update uniforms
         let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         // Sort and upload primitive range
         let sdf_ranges = self.upload_sorted_primitives(primitives);
 
         // Create command encoder
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Primitive Range Render Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         // Begin render pass
         {
@@ -394,7 +391,7 @@ impl GpuRenderer {
             );
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     /// Render a range of primitives to a tight-fit texture with offset
@@ -603,8 +600,13 @@ impl GpuRenderer {
 
         // Update uniforms with content size (the viewport for this tight render)
         let uniforms = Uniforms::new([content_size.0 as f32, content_size.1 as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         // Sort and upload offset primitives
         let sdf_ranges = self.upload_sorted_primitives(&offset_primitives);
@@ -669,18 +671,16 @@ impl GpuRenderer {
             viewport_size: [content_size.0 as f32, content_size.1 as f32],
             ..crate::primitives::PathUniforms::default()
         };
-        self.queue.write_buffer(
+        self.uploads.write(
+            &self.device,
+            &self.queue,
             &self.buffers.path_uniforms,
             0,
             bytemuck::bytes_of(&path_uniforms),
         );
 
         // Create command encoder
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Tight Render Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         // Begin render pass
         {
@@ -720,12 +720,14 @@ impl GpuRenderer {
             }
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
 
         // Restore viewport uniforms for subsequent operations
         let restore_uniforms =
             Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue.write_buffer(
+        self.uploads.write(
+            &self.device,
+            &self.queue,
             &self.buffers.uniforms,
             0,
             bytemuck::bytes_of(&restore_uniforms),

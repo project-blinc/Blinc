@@ -388,6 +388,7 @@ impl GpuRenderer {
             adapter,
             device,
             queue,
+            uploads: super::uploads::Uploads::new(),
             pipelines,
             effect_pipelines: EffectPipelines {
                 blur: None,

@@ -60,6 +60,7 @@ mod pipelines;
 mod sdf_dispatch;
 mod static_layer;
 mod text;
+mod uploads;
 mod viewports;
 pub use config::{GpuMemoryBudget, RendererConfig, RendererError};
 use config::{apply_renderer_config_overrides, env_u64, env_usize, log_renderer_config};
@@ -280,18 +281,16 @@ struct CachedGlassResources {
     data: Option<glass::GlassDataTexture>,
 }
 
-/// Active glyph atlas pointers for SDF bind group (set per-frame).
+/// Glyph atlas views bound into the SDF bind group.
 ///
 /// When CSS-transformed text is present, the real glyph atlas textures are bound
-/// into `self.bind_groups.sdf` instead of the placeholder textures. These pointers
-/// track the currently-bound atlas views so that `rebind_sdf_bind_group()` (called
-/// during aux buffer resize) can recreate the bind group with the real atlas.
-///
-/// SAFETY: Pointers are valid for the duration of a frame — they point to TextureViews
-/// owned by the text context, which outlives all render calls within a frame.
+/// into `self.bind_groups.sdf` instead of the placeholder textures. These views are
+/// what `rebind_sdf_bind_group()` binds when a buffer resize recreates the group, and
+/// what `set_glyph_atlas` compares against to skip an unchanged rebind.
+#[derive(PartialEq)]
 struct ActiveGlyphAtlas {
-    atlas_view_ptr: *const wgpu::TextureView,
-    color_atlas_view_ptr: *const wgpu::TextureView,
+    atlas_view: wgpu::TextureView,
+    color_atlas_view: wgpu::TextureView,
 }
 
 /// Cached resources for SDF 3D raymarching viewports
@@ -343,6 +342,8 @@ pub struct GpuRenderer {
     pub(crate) device: Arc<wgpu::Device>,
     /// Command queue
     pub(crate) queue: Arc<wgpu::Queue>,
+    /// Buffer writes, staged until the next submit
+    pub(crate) uploads: uploads::Uploads,
     /// Render pipelines
     pipelines: Pipelines,
     /// Effect pipelines (lazily created on first use)

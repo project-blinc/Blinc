@@ -331,11 +331,7 @@ impl GpuRenderer {
 
     /// Clear a texture view to a solid color
     pub fn clear_target(&mut self, target: &wgpu::TextureView, color: wgpu::Color) {
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Clear Target Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
         {
             let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Clear Target Pass"),
@@ -353,6 +349,6 @@ impl GpuRenderer {
                 occlusion_query_set: None,
             });
         }
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 }

@@ -9,6 +9,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - The registered iOS Rust builder uses the complete UI build path, including queued core styles, overlays and build-scope cleanup.
 
 ### Changed
+- `RenderContext::render_tree_with_motion_opt` renders the frame as one GPU submission with one command encoder.
 - An SVG that a translucent group draws as part of the group (a disabled pagination button's chevron) moves with the rows of its scroll container. It stayed where the last full paint left it until the scroll stopped.
 - The collected clip of text, SVGs and images follows the painter's rule: only the outermost scroll container's viewport, and that of a container whose content rows move, is the scroll clip; a nested scroll container's viewport joins the primary clip, which moves with the content. Intersecting rounded clips keeps a corner's radius only where the corner is the clip's own. A clip rect that is the one in force when a node further up the chain began stays with that node.
 - Images drawn in a batch's ordered stream (inside a group) are moved by rows instead of making the rows decline the batch: each takes the row of its node, and its clip inside the scroll container follows the rows while the scroll clip stays. Such an image is now clipped by its scroll container's viewport as well.

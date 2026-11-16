@@ -381,8 +381,13 @@ impl GpuRenderer {
             self.rebind_path_bind_group();
         }
 
-        self.queue
-            .write_buffer(&self.buffers.aux_data, 0, bytemuck::cast_slice(aux_data));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.aux_data,
+            0,
+            bytemuck::cast_slice(aux_data),
+        );
     }
 
     /// Upload auxiliary data to the DT fallback texture (Tier 3 / WebGL2).
@@ -511,11 +516,9 @@ impl GpuRenderer {
     /// Uses the real glyph atlas if `active_glyph_atlas` is set, otherwise
     /// falls back to placeholder textures.
     pub(super) fn rebind_sdf_bind_group(&mut self) {
-        // SAFETY: When active_glyph_atlas is Some, the pointers are valid for the
-        // duration of the frame (they point to TextureViews owned by the text context).
         let (atlas_view, color_atlas_view): (&wgpu::TextureView, &wgpu::TextureView) =
             if let Some(active) = &self.active_glyph_atlas {
-                unsafe { (&*active.atlas_view_ptr, &*active.color_atlas_view_ptr) }
+                (&active.atlas_view, &active.color_atlas_view)
             } else {
                 (
                     &self.placeholder_glyph_atlas_view,
@@ -602,6 +605,9 @@ impl GpuRenderer {
         if batch.paths.use_gradient_texture
             && let Some(ref stops) = batch.paths.gradient_stops
         {
+            // One texture holds the current gradient, so draws queued before the new
+            // stops are submitted first.
+            self.uploads.flush(&self.queue);
             self.gradient_texture_cache.upload_stops(
                 &self.queue,
                 stops,
@@ -627,7 +633,9 @@ impl GpuRenderer {
             glass_tint: batch.paths.glass_tint,
             ..PathUniforms::default()
         };
-        self.queue.write_buffer(
+        self.uploads.write(
+            &self.device,
+            &self.queue,
             &self.buffers.path_uniforms,
             0,
             bytemuck::bytes_of(&path_uniforms),
@@ -650,8 +658,13 @@ impl GpuRenderer {
         }
 
         if let Some(vb) = &self.buffers.path_vertices {
-            self.queue
-                .write_buffer(vb, 0, bytemuck::cast_slice(&batch.paths.vertices));
+            self.uploads.write(
+                &self.device,
+                &self.queue,
+                vb,
+                0,
+                bytemuck::cast_slice(&batch.paths.vertices),
+            );
         }
 
         // Create or recreate index buffer if needed
@@ -671,8 +684,13 @@ impl GpuRenderer {
         }
 
         if let Some(ib) = &self.buffers.path_indices {
-            self.queue
-                .write_buffer(ib, 0, bytemuck::cast_slice(&batch.paths.indices));
+            self.uploads.write(
+                &self.device,
+                &self.queue,
+                ib,
+                0,
+                bytemuck::cast_slice(&batch.paths.indices),
+            );
         }
     }
 }

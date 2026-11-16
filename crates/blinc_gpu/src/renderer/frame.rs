@@ -164,8 +164,13 @@ impl GpuRenderer {
     ) {
         // Update uniforms
         let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         // Cull off-screen primitives before GPU upload
         let mut visible_primitives = self.cull_primitives(&batch.primitives);
@@ -198,11 +203,7 @@ impl GpuRenderer {
         }
 
         // Create command encoder
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Blinc Render Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         // Begin render pass
         {
@@ -265,7 +266,7 @@ impl GpuRenderer {
         }
 
         // Submit commands
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
 
         // Render SDF 3D viewports (after main content, so they render on top)
         if !batch.viewports_3d.is_empty() {
@@ -593,11 +594,7 @@ impl GpuRenderer {
 
         if included_primitives.is_empty() && batch.paths.vertices.is_empty() {
             // Just clear the target
-            let mut encoder = self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Clear Encoder"),
-                });
+            let mut encoder = self.uploads.lend(&self.device);
             {
                 let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Clear Pass"),
@@ -620,14 +617,19 @@ impl GpuRenderer {
                     occlusion_query_set: None,
                 });
             }
-            self.queue.submit(std::iter::once(encoder.finish()));
+            self.uploads.give_back(&self.queue, encoder);
             return;
         }
 
         // Update uniforms
         let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         // Update auxiliary data buffer
         self.update_aux_data_buffer(batch);
@@ -642,11 +644,7 @@ impl GpuRenderer {
         }
 
         // Create command encoder
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Filtered Render Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         // Begin render pass
         {
@@ -710,7 +708,7 @@ impl GpuRenderer {
         }
 
         // Submit commands
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     /// Render primitives with MSAA (multi-sample anti-aliasing)
@@ -738,8 +736,13 @@ impl GpuRenderer {
         }
         // Update uniforms
         let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         // Polygon clips and 3D groups read their vertices from here
         self.update_aux_data_buffer(batch);
@@ -754,11 +757,7 @@ impl GpuRenderer {
         }
 
         // Create command encoder
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Blinc MSAA Render Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         // Begin render pass with MSAA resolve
         {
@@ -809,6 +808,6 @@ impl GpuRenderer {
         }
 
         // Submit commands
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 }

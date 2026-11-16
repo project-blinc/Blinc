@@ -607,7 +607,7 @@ impl GpuRenderer {
         self.ensure_overlay_alpha();
         self.overlay_alpha.as_ref().unwrap().straighten(
             &self.device,
-            &self.queue,
+            &|commands| self.uploads.submit(&self.queue, [commands]),
             &self.bind_group_layouts.composite,
             &self.path_image_sampler,
             &target,
@@ -616,7 +616,9 @@ impl GpuRenderer {
         self.layer_texture_cache.release(target);
         self.viewport_size = viewport;
         self.update_aux_data_buffer(batch);
-        self.queue.write_buffer(
+        self.uploads.write(
+            &self.device,
+            &self.queue,
             &self.buffers.uniforms,
             0,
             bytemuck::bytes_of(&crate::primitives::Uniforms::new([
@@ -688,7 +690,9 @@ impl GpuRenderer {
             self.layer_texture_cache.release(output.texture);
         }
         self.update_aux_data_buffer(batch);
-        self.queue.write_buffer(
+        self.uploads.write(
+            &self.device,
+            &self.queue,
             &self.buffers.uniforms,
             0,
             bytemuck::bytes_of(&crate::primitives::Uniforms::new([
@@ -872,7 +876,7 @@ impl GpuRenderer {
                     self.ensure_overlay_alpha();
                     self.overlay_alpha.as_ref().unwrap().straighten(
                         &self.device,
-                        &self.queue,
+                        &|commands| self.uploads.submit(&self.queue, [commands]),
                         &self.bind_group_layouts.composite,
                         &self.path_image_sampler,
                         &texture,

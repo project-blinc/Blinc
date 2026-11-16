@@ -26,8 +26,13 @@ impl GpuRenderer {
             return false;
         }
         if !rows.is_empty() {
-            self.queue
-                .write_buffer(buffer, 0, bytemuck::cast_slice(rows));
+            self.uploads.write(
+                &self.device,
+                &self.queue,
+                buffer,
+                0,
+                bytemuck::cast_slice(rows),
+            );
         }
         let mut mirror = self.node_rows_cpu.lock().unwrap();
         mirror.clear();
@@ -184,13 +189,30 @@ impl GpuRenderer {
         self.device.clone()
     }
 
-    /// Get the wgpu queue
+    /// Queue the renderer's submits until [`Self::end_frame_submission`], which submits the
+    /// frame at once. Data-texture mode rewrites one texture per pass, so it keeps
+    /// submitting each pass.
+    pub fn begin_frame_submission(&self) {
+        if self.has_storage_buffers {
+            self.uploads.begin_frame();
+        }
+    }
+
+    /// Submit what the frame queued and stop queueing.
+    pub fn end_frame_submission(&self) {
+        self.uploads.end_frame(&self.queue);
+    }
+
+    /// Get the wgpu queue. Submits the renderer's pending buffer writes first, so writes
+    /// made through the queue land after them.
     pub fn queue(&self) -> &wgpu::Queue {
+        self.uploads.flush(&self.queue);
         &self.queue
     }
 
-    /// Get the wgpu queue as Arc
+    /// Get the wgpu queue as Arc. Submits pending buffer writes first, as [`Self::queue`].
     pub fn queue_arc(&self) -> Arc<wgpu::Queue> {
+        self.uploads.flush(&self.queue);
         self.queue.clone()
     }
 
@@ -248,44 +270,22 @@ impl GpuRenderer {
     /// `self.bind_groups.sdf`, so ALL render paths automatically get the atlas
     /// without needing to thread it through every method.
     ///
-    /// Always rebuilds the bind group. The previous pointer-equality
-    /// optimisation was a false-negative trap: `text_ctx` replaces
-    /// the `atlas_view` field *in place* (same `Option<TextureView>`
-    /// memory address, different inner `Arc`) when the atlas grows.
-    /// The borrowed reference `atlas_view as *const TextureView`
-    /// returned the same pointer before and after growth, so the
-    /// check thought "no change" while the underlying view was a
-    /// different texture — the bind group kept the OLD view's Arc
-    /// and subsequent glyph samples landed in the old atlas.
-    ///
-    /// Symptom: canvas_demo `ctx.draw_text` rendered blank because
-    /// `collect_canvas_overlay` grew the atlas after the slow
-    /// path's `set_glyph_atlas` call, the bind group stayed on the
-    /// pre-growth view, and the new glyph UVs (referring to the
-    /// post-growth atlas) sampled from the wrong texture.
-    ///
-    /// Cost of always rebuilding: one `create_bind_group` call
-    /// (~50 µs) per `set_glyph_atlas` invocation. Per frame on the
-    /// slow path that's negligible; the overlay-rebind helper
-    /// `BlincApp::rebind_glyph_atlas_for_overlay` calls this once
-    /// per `composite_frame` site, so total cost is one extra
-    /// rebuild per frame at most.
-    ///
-    /// SAFETY: The raw pointers stored in `active_glyph_atlas` must
-    /// remain valid for the duration of the frame — guaranteed
-    /// because they point to TextureViews owned by the text
-    /// context, which outlives all render calls.
+    /// Rebuilds the bind group only when the views differ from the bound ones. Views
+    /// compare by the resource they name, not by address: the text context replaces its
+    /// atlas view in place when the atlas grows, so the address alone stays the same.
     pub fn set_glyph_atlas(
         &mut self,
         atlas_view: &wgpu::TextureView,
         color_atlas_view: &wgpu::TextureView,
     ) {
-        let atlas_ptr = atlas_view as *const wgpu::TextureView;
-        let color_ptr = color_atlas_view as *const wgpu::TextureView;
-        self.active_glyph_atlas = Some(ActiveGlyphAtlas {
-            atlas_view_ptr: atlas_ptr,
-            color_atlas_view_ptr: color_ptr,
-        });
+        let active = ActiveGlyphAtlas {
+            atlas_view: atlas_view.clone(),
+            color_atlas_view: color_atlas_view.clone(),
+        };
+        if self.active_glyph_atlas.as_ref() == Some(&active) {
+            return;
+        }
+        self.active_glyph_atlas = Some(active);
         self.rebind_sdf_bind_group();
     }
 

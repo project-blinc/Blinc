@@ -50,7 +50,9 @@ impl GpuRenderer {
             sample_size,
             origin,
         };
-        self.queue.write_buffer(
+        self.uploads.write(
+            &self.device,
+            &self.queue,
             &self.buffers.glass_uniforms,
             0,
             bytemuck::bytes_of(&uniforms),
@@ -59,7 +61,9 @@ impl GpuRenderer {
         if self.has_storage_buffers {
             if !primitives.is_empty() {
                 let kept = &primitives[..primitives.len().min(self.config.max_glass_primitives)];
-                self.queue.write_buffer(
+                self.uploads.write(
+                    &self.device,
+                    &self.queue,
                     &self.buffers.glass_primitives,
                     0,
                     bytemuck::cast_slice(kept),

@@ -32,6 +32,8 @@ impl GpuRenderer {
         if !self.custom_passes.has_passes(stage) {
             return;
         }
+        // Custom passes submit on the raw queue, after the renderer's queued work.
+        self.uploads.flush(&self.queue);
         let ctx = crate::custom_pass::RenderPassContext {
             device: &self.device,
             queue: &self.queue,
@@ -62,6 +64,8 @@ impl GpuRenderer {
         if !self.custom_passes.has_passes(stage) {
             return;
         }
+        // Custom passes submit on the raw queue, after the renderer's queued work.
+        self.uploads.flush(&self.queue);
         let ctx = crate::custom_pass::RenderPassContext {
             device: &self.device,
             queue: &self.queue,
@@ -272,15 +276,16 @@ impl GpuRenderer {
 
             // Update uniforms with adjusted UV
             let resources = self.sdf_3d_resources.as_ref().unwrap();
-            self.queue
-                .write_buffer(&resources.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
+            self.uploads.write(
+                &self.device,
+                &self.queue,
+                &resources.uniform_buffer,
+                0,
+                bytemuck::bytes_of(&uniforms),
+            );
 
             // Create command encoder
-            let mut encoder = self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("SDF 3D Render Encoder"),
-                });
+            let mut encoder = self.uploads.lend(&self.device);
 
             // Render pass
             {
@@ -313,7 +318,7 @@ impl GpuRenderer {
             }
 
             // Submit
-            self.queue.submit(std::iter::once(encoder.finish()));
+            self.uploads.give_back(&self.queue, encoder);
         }
     }
 
@@ -378,17 +383,13 @@ impl GpuRenderer {
             };
 
             // Create command encoder
-            let mut encoder = self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Particle Encoder"),
-                });
+            let mut encoder = self.uploads.lend(&self.device);
 
             // Run compute pass to update particles
             system.update(&self.queue, &mut encoder, &particle_viewport);
 
             // Submit compute work first
-            self.queue.submit(std::iter::once(encoder.finish()));
+            self.uploads.give_back(&self.queue, encoder);
 
             // Create render encoder
             let mut render_encoder =
@@ -431,7 +432,8 @@ impl GpuRenderer {
             }
 
             // Submit render work
-            self.queue.submit(std::iter::once(render_encoder.finish()));
+            self.uploads
+                .submit(&self.queue, std::iter::once(render_encoder.finish()));
         }
     }
 }

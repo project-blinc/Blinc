@@ -24,7 +24,8 @@ impl RenderContext {
     ) -> Result<()> {
         // Once per frame, fast paint or full: frees offscreen targets no recent frame drew.
         self.renderer.next_frame();
-        self.render_tree_frame(
+        self.renderer.begin_frame_submission();
+        let result = self.render_tree_frame(
             tree,
             Some(render_state),
             width,
@@ -32,7 +33,9 @@ impl RenderContext {
             target,
             target_texture,
             try_fast_paint,
-        )
+        );
+        self.renderer.end_frame_submission();
+        result
     }
 
     #[allow(clippy::too_many_arguments)]
