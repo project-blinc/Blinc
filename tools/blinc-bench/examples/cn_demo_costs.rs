@@ -572,6 +572,24 @@ fn main() {
             ui.advance(16);
             let _ = ui.paint_timed(true);
         }
+        // `COSTS_SNAP_SCROLL=<file.png>`: keep scrolling 36 px a frame and save a frame taken
+        // mid-scroll, with a full paint of the same offset beside it.
+        if let Ok(file) = std::env::var("COSTS_SNAP_SCROLL") {
+            for _ in 0..6 {
+                ui.scroll(0.0, -36.0);
+                ui.advance(16);
+                let _ = ui.paint_timed(true);
+            }
+            ui.scroll(0.0, -36.0);
+            ui.advance(16);
+            let frame = ui.snapshot_fast().expect("a frame");
+            blinc_recorder::ScreenshotExporter::save_png(&frame, &file).expect("saved");
+            let full = ui.snapshot().expect("a full paint");
+            blinc_recorder::ScreenshotExporter::save_png(&full, format!("{file}.full.png"))
+                .expect("saved");
+            println!("    saved {file}");
+            return;
+        }
         // `COSTS_CLICK=<label>`: click the text with that label first, as a user opening it.
         if let Ok(label) = std::env::var("COSTS_CLICK") {
             let target = {
