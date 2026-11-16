@@ -353,6 +353,7 @@ impl RenderTree {
                         placeholder_color: info.placeholder_color,
                         placeholder_image: info.placeholder_image,
                         fade_duration_ms: info.fade_duration_ms,
+                        retry: info.retry,
                     })
                 } else {
                     ElementType::Div
@@ -673,6 +674,7 @@ impl RenderTree {
                         placeholder_color: info.placeholder_color,
                         placeholder_image: info.placeholder_image,
                         fade_duration_ms: info.fade_duration_ms,
+                        retry: info.retry,
                     })
                 } else {
                     ElementType::Div

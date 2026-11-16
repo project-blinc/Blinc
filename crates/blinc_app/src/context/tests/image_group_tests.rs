@@ -41,7 +41,10 @@ fn scene_with_bindings(
                 .background(blinc_core::ImageBrush::new(source)),
         )
     } else {
-        owner.child(image(source).size(100.0, 100.0))
+        // A source written after a failed load is tried again on the next frame.
+        let now =
+            blinc_layout::ImageRetry::backoff(std::time::Duration::ZERO, std::time::Duration::ZERO);
+        owner.child(image(source).size(100.0, 100.0).retry(now))
     };
     let owner = owner.child(div().absolute().left(25.0).top(25.0).child(text("M").size(24.0).color(Color::WHITE)))
         .child(div().absolute().left(75.0).top(65.0).child(svg(r##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#ffff00"/></svg>"##).size(10.0,10.0)));

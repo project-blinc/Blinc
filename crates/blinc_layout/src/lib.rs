@@ -175,7 +175,7 @@ pub use stack::{Stack, stack};
 // Reference binding
 pub use div::{DivRef, ElementRef};
 pub use image::{
-    Image, ImageFilter, LoadingStrategy, ObjectFit, ObjectPosition, Placeholder, emoji,
+    Image, ImageFilter, ImageRetry, LoadingStrategy, ObjectFit, ObjectPosition, Placeholder, emoji,
     emoji_sized, image, img,
 };
 pub use rich_text::{RichText, rich_text, rich_text_styled};
@@ -268,8 +268,8 @@ pub mod prelude {
     pub use crate::event_router::{EventRouter, HitTestResult, MouseButton};
     // Image element
     pub use crate::image::{
-        Image, ImageFilter, LoadingStrategy, ObjectFit, ObjectPosition, Placeholder, emoji,
-        emoji_sized, image, img,
+        Image, ImageFilter, ImageRetry, LoadingStrategy, ObjectFit, ObjectPosition, Placeholder,
+        emoji, emoji_sized, image, img,
     };
     // Interactive state management
     pub use crate::interaction::Interaction;

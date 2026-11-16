@@ -234,6 +234,8 @@ pub struct ImageData {
     pub placeholder_image: Option<String>,
     /// Fade-in duration in milliseconds (0 = no fade)
     pub fade_duration_ms: u32,
+    /// How a failed load is tried again
+    pub retry: crate::image::ImageRetry,
 }
 
 /// Node data for rendering

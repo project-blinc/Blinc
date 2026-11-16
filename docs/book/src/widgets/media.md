@@ -172,6 +172,27 @@ img("photo.jpg")
 | `Image(url)` | Another image (low-res thumbnail, blur hash). Preloaded on tree build |
 | `Skeleton` | Shimmer band animation, no asset required |
 
+#### Failed loads
+
+An image that fails to load (a missing file, a request that errors) shows its placeholder and is
+tried again: after half a second, then after twice the last wait each time, never waiting longer
+than half a minute. `.retry(..)` sets that per image, and `.no_retry()` turns it off. A change to
+the file behind an image, seen by hot reload, tries it again at once.
+
+```rust
+use blinc::layout::prelude::*;
+use std::time::Duration;
+
+// Try again after 1 s, 2 s, 4 s, then every 5 s, five times at most
+img("https://example.com/photo.jpg")
+    .retry(ImageRetry::backoff(Duration::from_secs(1), Duration::from_secs(5)).attempts(5))
+
+// A failed load stays failed
+img("optional-badge.png").no_retry()
+```
+
+A retry that comes due while the window is idle runs on the next frame it draws.
+
 #### CSS overrides
 
 Lazy-loading behavior can be overridden from a stylesheet without touching the builder. This is useful for theming galleries or applying defaults to all images that match a class.

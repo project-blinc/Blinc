@@ -5104,6 +5104,8 @@ pub struct ImageRenderInfo {
     pub placeholder_image: Option<String>,
     /// Fade-in duration in milliseconds
     pub fade_duration_ms: u32,
+    /// How a failed load is tried again
+    pub retry: crate::image::ImageRetry,
 }
 
 impl Default for ImageRenderInfo {
@@ -5121,6 +5123,7 @@ impl Default for ImageRenderInfo {
             placeholder_color: [0.15, 0.15, 0.15, 0.5],       // Default gray
             placeholder_image: None,
             fade_duration_ms: 200,
+            retry: crate::image::ImageRetry::default(),
         }
     }
 }

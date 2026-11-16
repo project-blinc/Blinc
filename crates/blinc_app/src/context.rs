@@ -41,6 +41,7 @@ mod debug_rendering;
 #[cfg(not(target_arch = "wasm32"))]
 mod image_decode;
 mod image_rendering;
+mod image_retry;
 mod mesh_rendering;
 mod node_rows;
 mod overlay_frame;
@@ -339,6 +340,8 @@ pub struct RenderContext {
     /// Decodes images on a worker thread when set; images load inline when not.
     #[cfg(not(target_arch = "wasm32"))]
     image_decode: Option<image_decode::ImageDecoder>,
+    /// Sources that failed to load, and when each is tried again.
+    image_failures: image_retry::ImageFailures,
     cached_tree_scope: Option<(u64, bool)>,
     // Frame counter for periodic cache stats logging
     frame_count: u64,
@@ -496,6 +499,8 @@ struct ImageElement {
     placeholder_image: Option<String>,
     /// Fade-in duration in milliseconds (0 = no fade)
     fade_duration_ms: u32,
+    /// How a failed load is tried again
+    retry: blinc_layout::ImageRetry,
     /// Z-layer index for interleaved rendering with primitives
     z_index: u32,
     /// Border width (0 = no border)
@@ -662,6 +667,7 @@ impl RenderContext {
             captured_images_need_repaint: false,
             #[cfg(not(target_arch = "wasm32"))]
             image_decode: None,
+            image_failures: image_retry::ImageFailures::default(),
             cached_tree_scope: None,
             frame_count: 0,
             clear_alpha: 1.0,

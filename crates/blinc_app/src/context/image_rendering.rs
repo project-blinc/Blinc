@@ -22,10 +22,8 @@ impl RenderContext {
                 }
             })
             .collect();
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(decoder) = self.image_decode.as_mut() {
-            decoder.forget_failures(|k| !k.is_empty() && abs_str.ends_with(k));
-        }
+        self.image_failures
+            .forget(|k| !k.is_empty() && abs_str.ends_with(k));
         for k in &dropped {
             self.image_cache.pop(k);
             self.image_load_times.remove(k);
@@ -64,18 +62,32 @@ impl RenderContext {
         self.render_images_ref(&target, images);
     }
 
-    /// Load image sources and populate the bounded GPU cache before dispatch.
     /// Put the images the worker has finished into the cache, and ask for a full paint when one
-    /// arrived, so it is drawn.
+    /// arrived, so it is drawn. Start again the failed loads whose wait is over.
     pub(super) fn take_decoded_images(&mut self) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let Some(decoder) = self.image_decode.as_mut() else {
                 return;
             };
-            decoder.retry_due();
+            let bc = self.renderer.has_texture_compression_bc();
+            for due in self.image_failures.due() {
+                if !decoder.request(&due.source, due.fade_duration_ms, due.retry, bc) {
+                    self.image_failures
+                        .failed(&due.source, due.fade_duration_ms, due.retry);
+                }
+            }
             for decoded in decoder.take() {
-                let Some(image) = decoded.image else { continue };
+                let Some(image) = decoded.image else {
+                    tracing::trace!("Failed to load image '{}'", decoded.source);
+                    self.image_failures.failed(
+                        &decoded.source,
+                        decoded.fade_duration_ms,
+                        decoded.retry,
+                    );
+                    continue;
+                };
+                self.image_failures.loaded(&decoded.source);
                 self.image_cache.put(decoded.source.clone(), image);
                 let now = web_time::Instant::now();
                 self.image_load_times.insert(decoded.source.clone(), now);
@@ -91,6 +103,7 @@ impl RenderContext {
         }
     }
 
+    /// Load image sources and populate the bounded GPU cache before dispatch.
     pub(super) fn preload_images(
         &mut self,
         images: &[ImageElement],
@@ -174,10 +187,18 @@ impl RenderContext {
                 }
             }
 
+            // A failed load waits as the image's retry says.
+            if !self.image_failures.may_try(&image.source) {
+                continue;
+            }
+
             #[cfg(not(target_arch = "wasm32"))]
             if let Some(decoder) = self.image_decode.as_mut() {
                 let bc = self.renderer.has_texture_compression_bc();
-                decoder.request(&image.source, image.fade_duration_ms, bc);
+                if !decoder.request(&image.source, image.fade_duration_ms, image.retry, bc) {
+                    self.image_failures
+                        .failed(&image.source, image.fade_duration_ms, image.retry);
+                }
                 continue;
             }
 
@@ -187,9 +208,12 @@ impl RenderContext {
                 Ok(data) => data,
                 Err(e) => {
                     tracing::trace!("Failed to load image '{}': {:?}", image.source, e);
-                    continue; // Skip images that fail to load
+                    self.image_failures
+                        .failed(&image.source, image.fade_duration_ms, image.retry);
+                    continue;
                 }
             };
+            self.image_failures.loaded(&image.source);
 
             // Compress eligible large images when supported; keep small icons and emoji
             // lossless.
