@@ -290,7 +290,9 @@ scroll area's viewport) moves with the content while the container's own
 viewport stays. A container holding something fixed or sticky, or a CSS
 animation that is not moved by rows, is painted again on each frame it
 scrolls, and so is a frame where it holds a filled path (a chart's pie or
-donut).
+donut). Half a second after a container stops scrolling, its content is painted
+back into the cached static layer, so a frame at rest draws only what still
+moves, such as a spinner.
 
 Culling stops below anything that places its content apart from layout (a
 CSS or bound transform, a motion, a layout animation) and at fixed and sticky

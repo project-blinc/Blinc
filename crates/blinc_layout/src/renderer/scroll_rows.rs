@@ -16,6 +16,9 @@ use blinc_core::{DrawContext, Transform};
 /// that is not kept for shadows and edges.
 const SPARE: f32 = 80.0;
 
+/// How long a scroll container stays on rows after it last moved, in milliseconds.
+pub const SCROLL_IDLE_MS: u64 = 500;
+
 impl RenderTree {
     /// Allow or forbid painting scroll containers as nodes moved by rows. Set before painting.
     pub fn set_scroll_rows(&self, on: bool) {
@@ -113,7 +116,42 @@ impl RenderTree {
     /// on rows has an offset other than the one it was painted at, and one that is has had its
     /// content change.
     pub fn scroll_paint_stale(&self) -> bool {
-        self.scroll_off_rows_changed() || self.scroll_rows_tree_changed()
+        self.scroll_off_rows_changed() || self.scroll_rows_tree_changed() || self.scroll_rows_idle()
+    }
+
+    /// Whether the scroll container `node` has moved within the last [`SCROLL_IDLE_MS`]. Content
+    /// is moved by rows only while its container scrolls; at rest it is painted into the static
+    /// layer, and a frame draws only what moves on its own. Without a scroll clock (headless, no
+    /// physics tick yet) every container counts as moving.
+    pub fn scroll_moved_recently(&self, node: LayoutNodeId) -> bool {
+        let Some(now) = self.scroll_clock_ms.get() else {
+            return true;
+        };
+        let offset = self.get_scroll_offset(node);
+        let mut seen = self.scroll_seen.borrow_mut();
+        match seen.get_mut(&node) {
+            // First seen at rest: nothing has scrolled it yet.
+            None => {
+                seen.insert(node, (offset, 0));
+                false
+            }
+            Some((last, at)) => {
+                if (last.0 - offset.0).abs() > 0.01 || (last.1 - offset.1).abs() > 0.01 {
+                    *last = offset;
+                    *at = now;
+                    return true;
+                }
+                *at > 0 && now.saturating_sub(*at) < SCROLL_IDLE_MS
+            }
+        }
+    }
+
+    /// Whether a container on rows has come to rest: its content is painted again, into the
+    /// static layer.
+    fn scroll_rows_idle(&self) -> bool {
+        let rows: Vec<LayoutNodeId> = self.scroll_row_nodes.borrow().keys().copied().collect();
+        rows.into_iter()
+            .any(|node| !self.scroll_moved_recently(node))
     }
 
     /// Whether, at the last tick of the scroll physics, a scroll container that is not on rows was
@@ -221,5 +259,42 @@ impl RenderTree {
             self.render_scrollbar(ctx, bounds.width, bounds.height, &info);
             ctx.pop_transform();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::div::div;
+    use crate::widgets::scroll::scroll;
+
+    fn scrolled() -> (RenderTree, LayoutNodeId) {
+        let mut tree = RenderTree::from_element(
+            &div()
+                .w(200.0)
+                .h(200.0)
+                .child(scroll().w(200.0).h(200.0).child(div().w(200.0).h(2000.0))),
+        );
+        tree.compute_layout(200.0, 200.0);
+        let root = tree.root().unwrap();
+        let node = tree.layout_tree.children(root)[0];
+        assert!(tree.is_scroll_container(node));
+        (tree, node)
+    }
+
+    #[test]
+    fn a_container_is_moving_only_until_it_has_rested_a_while() {
+        let (mut tree, node) = scrolled();
+        // No scroll clock yet: every container counts as moving, as headless rendering has it.
+        assert!(tree.scroll_moved_recently(node));
+        tree.tick_scroll_physics(1_000);
+        assert!(!tree.scroll_moved_recently(node), "first seen at rest");
+        tree.scroll_physics[&node].lock().unwrap().offset_y = -50.0;
+        tree.tick_scroll_physics(1_100);
+        assert!(tree.scroll_moved_recently(node), "it just scrolled");
+        tree.tick_scroll_physics(1_100 + SCROLL_IDLE_MS - 10);
+        assert!(tree.scroll_moved_recently(node));
+        tree.tick_scroll_physics(1_100 + SCROLL_IDLE_MS + 10);
+        assert!(!tree.scroll_moved_recently(node), "at rest again");
     }
 }

@@ -1219,6 +1219,7 @@ impl RenderTree {
     }
 
     pub fn tick_scroll_physics(&mut self, current_time_ms: u64) -> bool {
+        self.scroll_clock_ms.set(Some(current_time_ms));
         // Delta time from a MICROSECOND clock, not the millisecond
         // `current_time_ms` arg: integer-ms `dt` quantises a 16.67ms
         // vsync into alternating 16/17ms steps (~6% jitter), which the

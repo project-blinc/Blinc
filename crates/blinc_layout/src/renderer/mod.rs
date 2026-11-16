@@ -796,6 +796,10 @@ pub struct RenderTree {
     /// The layout epoch when the containers on rows were last painted: the content they hold is
     /// whatever was mounted then.
     scroll_painted_epoch: Cell<Option<u64>>,
+    /// The time the scroll physics last ticked, in milliseconds; `None` before it ticks.
+    scroll_clock_ms: Cell<Option<u64>>,
+    /// Each scroll container's offset as last seen, and the clock time it last changed.
+    scroll_seen: RefCell<HashMap<LayoutNodeId, ((f32, f32), u64)>>,
     /// Whether, at the last tick, a scroll container that is not on rows was moving.
     scroll_off_rows_animating: Cell<bool>,
     /// How far past a cull rect content is drawn, for the walk in progress.
@@ -1255,6 +1259,8 @@ impl RenderTree {
             scroll_painted: RefCell::new(HashMap::new()),
             scroll_applied: RefCell::new(HashMap::new()),
             scroll_painted_epoch: Cell::new(None),
+            scroll_clock_ms: Cell::new(None),
+            scroll_seen: RefCell::new(HashMap::new()),
             scroll_off_rows_animating: Cell::new(false),
             cull_overscan: Cell::new(cull::CULL_OVERSCAN),
             visible_anim_active: Cell::new(false),

@@ -1939,7 +1939,8 @@ impl RenderTree {
             && motion_bindings_ref.is_none()
             && !ctx.bg_batch_is_dynamic()
             && !ctx.bg_batch_is_composite()
-            && self.scroll_content_qualifies(node))
+            && self.scroll_content_qualifies(node)
+            && self.scroll_moved_recently(node))
         .then(|| {
             // The window of content painted reaches as far past the viewport as the viewport is
             // long; a container that does not cull paints all of it.
