@@ -546,7 +546,8 @@ fn main() {
             .ok()
             .and_then(|v| v.parse::<f32>().ok())
     }) {
-        ui.move_to(450.0, 500.0);
+        // The pointer sits in the page's gutter, where no control inside it takes the wheel.
+        ui.move_to(20.0, 500.0);
         // Scroll until the page's offset is there: a wheel step moves less than its delta.
         let page_offset = |ui: &Headless| -> f32 {
             let bar = ui.find(".cn-menubar").expect("the menubar");
@@ -617,8 +618,11 @@ fn main() {
             worst.push((scene.session[i], i));
         }
         scene.report(&format!("at rest {at} px down"));
-        // `COSTS_SNAP=<file.png>`: the last frame at rest.
+        // `COSTS_SNAP=<file.png>`: the last frame at rest, and a full paint of it beside it.
         if let Ok(file) = std::env::var("COSTS_SNAP") {
+            let full = scene.ui.snapshot().expect("a full paint");
+            blinc_recorder::ScreenshotExporter::save_png(&full, format!("{file}.full.png"))
+                .expect("saved");
             let frame = scene.ui.snapshot_fast().expect("a frame");
             blinc_recorder::ScreenshotExporter::save_png(&frame, &file).expect("saved");
             println!("    saved {file}");

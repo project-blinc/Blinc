@@ -1164,6 +1164,61 @@ fn scroll_inner_clips_scene(name: &'static str) -> Scene {
     }
 }
 
+/// A scrolled page of rounded rows holding an image in a faded group, so the image is drawn in
+/// the batch's ordered stream, loaded on the worker as in a window; it scrolls, then stops. Rows
+/// decline such a batch today (git-bug 2abee0a).
+fn scroll_grouped_images_scene(name: &'static str) -> Scene {
+    Scene {
+        name,
+        steps: 16,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            // Images load on the worker, as in a window.
+            ui.set_async_image_decode(true);
+            let reference = blinc_layout::selector::ScrollRef::new();
+            let bound_ref = reference.clone();
+            ui.mount(move |_| {
+                let mut list = div().flex_col().gap(4.0).w(W as f32 - 20.0).p(4.0);
+                for i in 0..24 {
+                    list = list.child(
+                        div()
+                            .flex_row()
+                            .gap(4.0)
+                            .items_center()
+                            .rounded(10.0)
+                            .overflow_clip()
+                            .bg(Color::rgb(0.15, 0.17, 0.22))
+                            .p(2.0)
+                            .child(
+                                div().opacity(0.9).child(
+                                    blinc_layout::image(PIXEL)
+                                        .size(36.0, 36.0)
+                                        .fade_in(std::time::Duration::ZERO),
+                                ),
+                            )
+                            .child(text(format!("Row {i}")).size(13.0).color(Color::WHITE)),
+                    );
+                }
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .child(
+                        scroll()
+                            .bind(&bound_ref)
+                            .w(W as f32)
+                            .h(H as f32)
+                            .child(list),
+                    )
+            });
+            Box::new(move |ui, step| {
+                reference.set_scroll_offset(0.0, 6.0 * (step + 1).min(10) as f32);
+                ui.settle_scroll();
+            })
+        }),
+    }
+}
+
 /// A card that a binding moves and scales, with an SVG icon in it that moves and grows with it.
 fn motion_svg_scene(name: &'static str) -> Scene {
     let steps = 20;
@@ -1620,6 +1675,7 @@ fn scenes() -> Vec<Scene> {
         spinner_scene("css keyframes, spinners"),
         scroll_spinners_scene("scroll a list of spinners"),
         scroll_inner_clips_scene("scroll a page with clips of its own"),
+        scroll_grouped_images_scene("scroll grouped images, then stop"),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
         transition_css_scene(
