@@ -267,6 +267,10 @@ impl RenderTree {
             && !self.is_layout_animating(node)
             && !props.is_overlay_root
             && !props.is_glass()
+            // Rows lose images drawn in order inside a stack's layers and replay canvases under
+            // a nested scroll container out of place (git-bug 8bcd6ab).
+            && !props.is_stack_layer
+            && !self.is_scroll_container(node)
     }
 
     /// What keeps the content of the scroll container `container` off rows: for each reason, how
@@ -294,6 +298,10 @@ impl RenderTree {
                         Some("overlay root")
                     } else if p.is_glass() {
                         Some("glass")
+                    } else if p.is_stack_layer {
+                        Some("stack layer")
+                    } else if self.is_scroll_container(node) {
+                        Some("nested scroll")
                     } else if matches!(
                         status.get(&node),
                         Some(AnimationStatus::Animating(AnimatedKind::Css))

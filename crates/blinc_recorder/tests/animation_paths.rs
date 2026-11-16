@@ -1156,7 +1156,8 @@ fn scroll_inner_clips_scene(name: &'static str) -> Scene {
                     .child(div().w(W as f32).h(40.0).bg(Color::rgb(0.5, 0.2, 0.2)))
             });
             Box::new(move |ui, step| {
-                reference.set_scroll_offset(0.0, 6.0 * (step + 1) as f32);
+                // Scrolls for ten steps, then holds still, as scrolling that stops.
+                reference.set_scroll_offset(0.0, 6.0 * (step + 1).min(10) as f32);
                 ui.settle_scroll();
             })
         }),
@@ -1864,7 +1865,6 @@ const ON_ROWS: &[&str] = &[
     "motion, an svg",
     "css keyframes, spinners",
     "scroll a list of spinners",
-    "scroll a page with clips of its own",
     "scroll a list",
     "scroll a list, scrollbar always",
     "scroll a list, no scrollbar",

@@ -499,20 +499,72 @@ fn main() {
         return;
     }
 
-    // `COSTS_AT=<px>`: scroll the page that far down, then time frames at rest there and name
-    // what the slowest ones did.
-    if let Some(at) = std::env::var("COSTS_AT")
-        .ok()
-        .and_then(|v| v.parse::<f32>().ok())
-    {
+    // `COSTS_ASYNC=1`: load images on a worker thread, as a window does.
+    if std::env::var("COSTS_ASYNC").is_ok() {
+        ui.set_async_image_decode(true);
+    }
+
+    // `COSTS_SWEEP=1`: scroll the whole page 200 px a frame and name the slowest frames.
+    if std::env::var("COSTS_SWEEP").is_ok() {
         ui.move_to(450.0, 500.0);
-        let mut left = at;
-        while left > 0.0 {
-            let d = left.min(400.0);
-            ui.scroll(0.0, -d);
+        let mut worst: Vec<(f64, usize)> = Vec::new();
+        for i in 0..130 {
+            ui.scroll(0.0, -200.0);
+            ui.advance(16);
+            let (session, render) = ui.paint_timed(true).expect("a frame");
+            worst.push((session + render, i));
+        }
+        worst.sort_by(|a, b| b.0.total_cmp(&a.0));
+        println!(
+            "slowest frames (ms, frame at 200 px each): {:?}",
+            &worst[..6]
+        );
+        return;
+    }
+
+    // `COSTS_AT=<px>`: scroll the page that far down, then time frames at rest there and name
+    // what the slowest ones did. `COSTS_AT=<label>` scrolls to the text with that label.
+    let label_y = std::env::var("COSTS_AT")
+        .ok()
+        .filter(|v| v.parse::<f32>().is_err())
+        .and_then(|label| {
+            let t = ui.tree();
+            let mut stack: Vec<_> = t.root().into_iter().collect();
+            while let Some(node) = stack.pop() {
+                stack.extend(t.layout_tree.children(node));
+                if let Some(render) = t.get_render_node(node)
+                    && let blinc_layout::renderer::ElementType::Text(ref d) = render.element_type
+                    && d.content == label
+                {
+                    return t.get_absolute_bounds(node).map(|b| b.y - 100.0);
+                }
+            }
+            None
+        });
+    if let Some(at) = label_y.or_else(|| {
+        std::env::var("COSTS_AT")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+    }) {
+        ui.move_to(450.0, 500.0);
+        // Scroll until the page's offset is there: a wheel step moves less than its delta.
+        let page_offset = |ui: &Headless| -> f32 {
+            let bar = ui.find(".cn-menubar").expect("the menubar");
+            let t = ui.tree();
+            t.layout_tree
+                .ancestors(bar)
+                .into_iter()
+                .map(|n| t.get_scroll_offset(n).1)
+                .fold(0.0f32, |a, b| if b.abs() > a.abs() { b } else { a })
+        };
+        for _ in 0..400 {
+            let left = at + page_offset(&ui);
+            if left <= 1.0 {
+                break;
+            }
+            ui.scroll(0.0, -left.min(400.0));
             ui.advance(16);
             let _ = ui.paint_timed(true);
-            left -= d;
         }
         ui.scroll_end();
         for _ in 0..30 {
@@ -565,6 +617,12 @@ fn main() {
             worst.push((scene.session[i], i));
         }
         scene.report(&format!("at rest {at} px down"));
+        // `COSTS_SNAP=<file.png>`: the last frame at rest.
+        if let Ok(file) = std::env::var("COSTS_SNAP") {
+            let frame = scene.ui.snapshot_fast().expect("a frame");
+            blinc_recorder::ScreenshotExporter::save_png(&frame, &file).expect("saved");
+            println!("    saved {file}");
+        }
         {
             let t = scene.ui.tree();
             let mut seen: Vec<(i32, String)> = Vec::new();

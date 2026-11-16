@@ -354,6 +354,11 @@ impl Headless {
         faces
     }
 
+    /// Load images on a worker thread, as a window does, instead of in the frame that needs them.
+    pub fn set_async_image_decode(&mut self, on: bool) {
+        self.app.context().set_async_image_decode(on);
+    }
+
     /// The window context the UI is built with.
     pub fn context(&mut self) -> &mut WindowedContext {
         &mut self.ctx

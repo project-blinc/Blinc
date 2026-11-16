@@ -181,8 +181,15 @@ impl RenderContext {
             }
             for (i, mut p) in new_batch.primitives.into_iter().enumerate() {
                 let old = &batch.primitives[range.start + i];
-                // The ordinal, the row and the clip origin the table gave the painted primitive.
+                // The ordinal, the row and the clip origin the table gave the painted primitive,
+                // and its clip: drawn at the painted pose, the clip is the one painted, split into
+                // the part that stays and the shape that follows the rows.
                 p.node_slot = old.node_slot;
+                p.clip_bounds = old.clip_bounds;
+                p.clip_radius = old.clip_radius;
+                p.clip_corner_shape = old.clip_corner_shape;
+                p.clip_shape = old.clip_shape;
+                p.type_info[2] = old.type_info[2];
                 batch.primitives[range.start + i] = p;
             }
         }
