@@ -5,6 +5,7 @@ All notable changes to `blinc_core` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `DrawContext::begin_row_clips`, `end_row_clips` and `current_row_clip_aabb`: mark the clips pushed inside content that rows move, and read the clip around that content.
 - `DrawContext::current_path_clip`: the path clip pointer a primitive emitted now would carry, zero by default.
 - `FrameClock`: one monotonic time per frame. A runner sets it with `begin_frame` (or `begin_frame_at` when it keeps its own time) before it ticks anything, and consumers read `now`, `now_secs`, `delta` and `frame` instead of taking a time of their own. The SDF uniforms carry it to the shaders; the animation integrators still use their own time.
 - `system_fonts::LINUX_SANS`: the Linux desktop UI sans families, best first, shared by the text registry and the Linux theme.

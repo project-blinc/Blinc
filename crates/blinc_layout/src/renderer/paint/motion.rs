@@ -652,7 +652,7 @@ impl RenderTree {
         // The actual `DynamicRegion` insert happens at the bottom of
         // this fn alongside the legacy `composite_bindings` insert,
         // gated on the node's `AnimationStatus` being `Animating`.
-        let ambient_clip = ctx.current_clip_aabb();
+        let ambient_clip = ctx.current_row_clip_aabb();
         let ambient_path = if motion_bindings_ref.is_some() {
             ctx.current_path_clip()
         } else {
@@ -1956,14 +1956,16 @@ impl RenderTree {
             };
             let previous_ordinal = ctx.set_motion_node_ordinal(ordinal);
             let start = ctx.bg_primitive_count();
-            let ambient_clip = ctx.current_clip_aabb();
+            let ambient_clip = ctx.current_row_clip_aabb();
             let ambient_path = ctx.current_path_clip();
+            // Clips the content pushes move with it while the viewport stays.
+            let row_clips = ctx.begin_row_clips();
             let previous_overscan = self.set_cull_overscan(overscan);
             self.scroll_rows_depth.set(self.scroll_rows_depth.get() + 1);
             (
                 start,
                 previous_ordinal,
-                (ambient_clip, ambient_path),
+                (ambient_clip, ambient_path, row_clips),
                 previous_overscan,
                 overscan,
             )
@@ -2119,11 +2121,12 @@ impl RenderTree {
         if let Some((
             start,
             previous_ordinal,
-            (ambient_clip, ambient_path),
+            (ambient_clip, ambient_path, row_clips),
             previous_overscan,
             overscan,
         )) = scroll_rows
         {
+            ctx.end_row_clips(row_clips);
             let end = ctx.bg_primitive_count();
             if effective_layer == target_layer {
                 let margin = self.record_scroll_row_node(node, scroll_offset, overscan);

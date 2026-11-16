@@ -186,6 +186,16 @@ fn same_clip(clip: [f32; 4], ambient: Option<[f32; 4]>) -> bool {
     }
 }
 
+/// How a primitive's clip follows the rows.
+enum Follow {
+    /// It is wholly an ancestor's and stays.
+    Stays,
+    /// Introduced at this depth of the chain, with nothing around it that stays: it moves whole.
+    Moves(u32),
+    /// Introduced at this depth and cut by a clip around it that stays.
+    Cut(u32),
+}
+
 fn next_epoch() -> u64 {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     NEXT.fetch_add(1, Ordering::Relaxed)
@@ -406,32 +416,53 @@ impl NodeRows {
 
     /// Where in the chain of rows from `slot` the clip of `prim` begins to follow them: the first
     /// node whose own painting introduced a clip it does not share with the clip in force when it
-    /// began. `Ok(None)` for no clip, or one that is wholly an ancestor's and stays. `Err` for a
-    /// clip that must move and is not a rectangle, which a row cannot move.
-    fn clip_from(&mut self, slot: u32, prim: &GpuPrimitive) -> Result<Option<u32>, ()> {
+    /// began. `Err` for a clip that must move and is not a rectangle, which a row cannot move.
+    fn clip_from(&self, slot: u32, prim: &GpuPrimitive) -> Result<Follow, ()> {
         if prim.type_info[2] == 0 {
-            return Ok(None);
+            return Ok(Follow::Stays);
         }
         let mut depth = 0u32;
         let mut up = Some(slot);
         while let Some(s) = up {
             let node = &self.slots[s as usize];
             if !same_clip(prim.clip_bounds, node.ambient_clip) {
-                // Introduced inside this node's subtree: this row and every one above it move it.
                 if prim.type_info[2] != 1 {
                     return Err(());
                 }
-                let mut moving = Some(s);
-                while let Some(m) = moving {
-                    self.slots[m as usize].clip_moves = true;
-                    moving = self.slots[m as usize].parent;
-                }
-                return Ok(Some(depth));
+                return Ok(match node.ambient_clip {
+                    Some(_) => Follow::Cut(depth),
+                    None => Follow::Moves(depth),
+                });
             }
             depth += 1;
             up = node.parent;
         }
-        Ok(None)
+        Ok(Follow::Stays)
+    }
+
+    /// Mark the row at `depth` in the chain from `slot`, and every row above it, as moving a clip
+    /// rect, which a turn cannot move.
+    fn clip_rect_moves(&mut self, slot: u32, depth: u32) {
+        let mut moving = Some(slot);
+        for _ in 0..depth {
+            moving = moving.and_then(|m| self.slots[m as usize].parent);
+        }
+        while let Some(m) = moving {
+            self.slots[m as usize].clip_moves = true;
+            moving = self.slots[m as usize].parent;
+        }
+    }
+
+    /// [`clip_from`](Self::clip_from) for a clip that is moved whole, as an image's primary clip
+    /// is: `None` when it stays, the depth it moves from otherwise.
+    fn clip_moves_from(&mut self, slot: u32, prim: &GpuPrimitive) -> Result<Option<u32>, ()> {
+        match self.clip_from(slot, prim)? {
+            Follow::Stays => Ok(None),
+            Follow::Moves(depth) | Follow::Cut(depth) => {
+                self.clip_rect_moves(slot, depth);
+                Ok(Some(depth))
+            }
+        }
     }
 
     /// Where in the chain of rows from `slot` the path clip of `prim` begins to follow them, found
@@ -460,9 +491,15 @@ impl NodeRows {
     fn follow_clips(&mut self, prims: &mut [GpuPrimitive], paths: bool) -> bool {
         for p in prims {
             let Some(row) = p.node_slot() else { continue };
+            // A rect cut by a clip that stays cannot be moved whole; the painter makes the part
+            // that moves a shape clip, so a cut rect here is one it could not.
             match self.clip_from(row / 2, p) {
-                Ok(from) => p.set_node_clip_from(from),
-                Err(()) => return false,
+                Ok(Follow::Stays) => p.set_node_clip_from(None),
+                Ok(Follow::Moves(depth)) => {
+                    self.clip_rect_moves(row / 2, depth);
+                    p.set_node_clip_from(Some(depth));
+                }
+                Ok(Follow::Cut(_)) | Err(()) => return false,
             }
             let path = self.path_from(row / 2, p);
             if path.is_some() && !paths {
@@ -635,9 +672,22 @@ impl NodeRows {
             let Some(slot) = self.owner(image.node, ancestors) else {
                 return false;
             };
-            let Ok(from) = self.clip_from(slot, &Self::clip_proxy(image)) else {
+            let Ok(from) = self.clip_moves_from(slot, &Self::clip_proxy(image)) else {
                 return false;
             };
+            // The scroll clip stays where it was painted; one introduced in the moved content (a
+            // nested scroll container) would have to move in part.
+            if let Some([x, y, w, h]) = image.scroll_clip
+                && !matches!(
+                    self.clip_from(
+                        slot,
+                        &GpuPrimitive::rect(x, y, w, h).with_clip_rect(x, y, w, h)
+                    ),
+                    Ok(Follow::Stays)
+                )
+            {
+                return false;
+            }
             given.push((slot * 2 + 1, from));
         }
         for (image, (row, from)) in images.iter_mut().zip(given) {
@@ -672,9 +722,31 @@ impl NodeRows {
             let Some(slot) = self.owner(svg.node, ancestors) else {
                 return false;
             };
-            let Ok(from) = self.clip_from(slot, &Self::svg_clip_proxy(svg)) else {
-                return false;
+            // An SVG with a scroll clip of its own moves its clip whole, as an image does, and its
+            // scroll clip must stay; one with a single clip cannot move it in part.
+            let from = match self.clip_from(slot, &Self::svg_clip_proxy(svg)) {
+                Ok(Follow::Stays) => None,
+                Ok(Follow::Moves(depth)) => {
+                    self.clip_rect_moves(slot, depth);
+                    Some(depth)
+                }
+                Ok(Follow::Cut(depth)) if svg.scroll_clip.is_some() => {
+                    self.clip_rect_moves(slot, depth);
+                    Some(depth)
+                }
+                Ok(Follow::Cut(_)) | Err(()) => return false,
             };
+            if let Some([x, y, w, h]) = svg.scroll_clip
+                && !matches!(
+                    self.clip_from(
+                        slot,
+                        &GpuPrimitive::rect(x, y, w, h).with_clip_rect(x, y, w, h)
+                    ),
+                    Ok(Follow::Stays)
+                )
+            {
+                return false;
+            }
             given.push((slot * 2 + 1, from));
         }
         for (svg, (row, from)) in svgs.iter_mut().zip(given) {
@@ -937,8 +1009,7 @@ impl NodeRows {
                 }
                 text.node_slots_epoch = epoch;
                 let mut primitives = std::mem::take(&mut text.primitives);
-                // Without the table, glyph primitives are moved with no aux rows to copy into.
-                let followed = self.follow_clips(&mut primitives, renderer.node_table_enabled());
+                let followed = self.follow_clips(&mut primitives, true);
                 text.primitives = primitives;
                 if !followed {
                     return self.decline(true, batch, Some(text), bindings);

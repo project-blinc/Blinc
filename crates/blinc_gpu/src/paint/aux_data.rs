@@ -6,15 +6,24 @@ use smallvec::SmallVec;
 pub(super) enum ClipData {
     Polygon(PolygonClipData),
     Path(PathClipData),
+    /// A rect or rounded rect pushed inside content that rows move: drawn as a shape clip, apart
+    /// from the clips around the content, so it can move with the content while they stay.
+    Inner(InnerClipData),
 }
 
 impl ClipData {
     pub fn polygon(&self) -> Option<&PolygonClipData> {
         match self {
             Self::Polygon(polygon) => Some(polygon),
-            Self::Path(_) => None,
+            Self::Path(_) | Self::Inner(_) => None,
         }
     }
+}
+
+/// Where the shape rows of an inner clip, with the inner clips under it, went in each batch.
+#[derive(Default)]
+pub(super) struct InnerClipData {
+    pub offsets: SmallVec<[(AuxBatch, u32); 2]>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -94,6 +103,9 @@ impl GpuPaintContext<'_> {
                     metadata.offsets.retain(|(key, _)| *key != batch)
                 }
                 Some(ClipData::Path(metadata)) => metadata.offsets.retain(|(key, _)| *key != batch),
+                Some(ClipData::Inner(metadata)) => {
+                    metadata.offsets.retain(|(key, _)| *key != batch)
+                }
                 None => {}
             }
         }
@@ -104,6 +116,7 @@ impl GpuPaintContext<'_> {
             let offsets = match metadata {
                 Some(ClipData::Polygon(metadata)) => &mut metadata.offsets,
                 Some(ClipData::Path(metadata)) => &mut metadata.offsets,
+                Some(ClipData::Inner(metadata)) => &mut metadata.offsets,
                 None => continue,
             };
             offsets.retain(|(key, _)| !matches!(key, AuxBatch::Composite(_)));

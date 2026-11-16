@@ -315,9 +315,12 @@ pub fn follow_path_clip(rows: &[NodeRow], p: &mut GpuPrimitive, aux: &mut Vec<[f
     else {
         return;
     };
-    let contour = info[2] > 2.5;
+    // Shape 4 is a rounded rect with its corner radii and shapes in two more rows; 3 is a contour.
+    let contour = info[2] > 2.5 && info[2] < 3.5;
     let len = if contour {
         shape[0] as usize + (shape[1] as usize).div_ceil(2)
+    } else if info[2] > 3.5 {
+        5
     } else {
         3
     };

@@ -231,12 +231,14 @@ impl GpuPaintContext<'_> {
     /// child with overflow_clip() doesn't inherit rounded corners
     /// from a parent.
     pub(super) fn get_clip_data(&mut self) -> ([f32; 4], [f32; 4], [f32; 4], ClipType) {
-        self.get_clip_data_with_path_scissor(false)
+        self.get_clip_data_with_path_scissor(false, false)
     }
 
+    /// `skip_inner` leaves out the inner clips, which the primitive then has as a shape clip.
     pub(super) fn get_clip_data_with_path_scissor(
         &mut self,
         keep_path_scissor: bool,
+        skip_inner: bool,
     ) -> ([f32; 4], [f32; 4], [f32; 4], ClipType) {
         // P4.3 Option B clip-aware bake: while inside the OUTERMOST
         // composite layer, ancestor clips below the snapshot base
@@ -313,7 +315,10 @@ impl GpuPaintContext<'_> {
         // dominant radius for the corner.
         let mut corner_n_sources = [1.0_f32; 4];
 
-        for (clip, _poly_meta, _fade) in active_clips {
+        for (clip, meta, _fade) in active_clips {
+            if skip_inner && matches!(meta, Some(ClipData::Inner(_))) {
+                continue;
+            }
             match clip {
                 ClipShape::Rect(rect) => {
                     // Intersect with this rect
@@ -627,6 +632,8 @@ impl GpuPaintContext<'_> {
                 self.current_affine(),
                 rule,
             )))
+        } else if self.row_clip_base.is_some() && self.can_be_inner(&transformed_shape) {
+            Some(ClipData::Inner(super::aux_data::InnerClipData::default()))
         } else {
             None
         };
@@ -634,7 +641,25 @@ impl GpuPaintContext<'_> {
         self.clip_stack.push((transformed_shape, clip_data, fade));
     }
 
-    pub(super) fn current_clip_aabb_impl(&self) -> Option<[f32; 4]> {
+    /// Whether `shape`, pushed inside content that rows move, can be one of its inner clips: a
+    /// rect or a rounded rect, with no other kind of shape clip in force, which would take the one
+    /// shape a primitive has.
+    fn can_be_inner(&self, shape: &ClipShape) -> bool {
+        matches!(shape, ClipShape::Rect(_) | ClipShape::RoundedRect { .. })
+            && !self.clip_stack.iter().any(|(s, _, _)| {
+                matches!(
+                    s,
+                    ClipShape::Circle { .. }
+                        | ClipShape::Ellipse { .. }
+                        | ClipShape::Polygon(_)
+                        | ClipShape::Path(_)
+                )
+            })
+    }
+
+    /// The intersection of the clips in force, `skip_inner` leaving out the inner clips of
+    /// content that rows move.
+    pub(super) fn clip_aabb(&self, skip_inner: bool) -> Option<[f32; 4]> {
         if self.clip_stack.is_empty() {
             return None;
         }
@@ -650,7 +675,10 @@ impl GpuPaintContext<'_> {
         let mut min_y = f32::NEG_INFINITY;
         let mut max_x = f32::INFINITY;
         let mut max_y = f32::INFINITY;
-        for (shape, _, _) in &self.clip_stack {
+        for (shape, meta, _) in &self.clip_stack {
+            if skip_inner && matches!(meta, Some(ClipData::Inner(_))) {
+                continue;
+            }
             let (sx, sy, sw, sh) = match shape {
                 ClipShape::Rect(r) => (r.x(), r.y(), r.width(), r.height()),
                 ClipShape::RoundedRect { rect, .. } => {

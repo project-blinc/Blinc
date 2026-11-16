@@ -272,6 +272,12 @@ russl::russl! {
         let p = Vec2::new(frame.x * pixel.x + frame.z * pixel.y, frame.y * pixel.x + frame.w * pixel.y) + info.xy;
         // Analytic halfPixel in the clip's frame, valid inside nonuniform control flow.
         let aa = max(0.25 * (length(frame.xy) + length(frame.zw)), 1e-6);
+        // A rounded rect with a radius for each corner (tl, tr, br, bl) in the row after the shape
+        // and a corner shape for each in the row after that.
+        if info.z > 3.5 {
+            let distance = sd_shaped_rect(p, shape.xy, shape.zw, abi_clip_data(base + 3u32), abi_clip_data(base + 4u32));
+            return 1.0 - smoothstep(-aa, aa, distance);
+        }
         if info.z > 2.5 {
             return abi_clip_polygon(p, base + ((shape.x) as u32), ((shape.y) as u32), shape.z > 0.5, aa, ex, ey);
         }

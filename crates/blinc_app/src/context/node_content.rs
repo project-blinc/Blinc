@@ -40,6 +40,28 @@ pub(super) struct NodeContent<'a> {
 /// A box of `base` (x, y, width, height, device pixels) under a motion container's scale about
 /// its centre, and the translate its render state adds, as text and SVGs place theirs. The
 /// box's own place when no scale centre is set.
+/// The two parts of a motion-subtree text clip inside a scroll container, in device pixels: the
+/// scroll clip, which stays, and the clip inside it with its corner radii, which moves. `None`
+/// for text with one of them missing, whose single clip moves or stays whole.
+fn split_text_clip(
+    inside_motion_subtree: bool,
+    inner: Option<[f32; 4]>,
+    radius: Option<[f32; 4]>,
+    scroll: Option<[f32; 4]>,
+    scale: f32,
+) -> Option<([f32; 4], [f32; 4], [f32; 4])> {
+    let (Some(inner), Some(scroll)) = (inner, scroll) else {
+        return None;
+    };
+    inside_motion_subtree.then(|| {
+        (
+            scroll.map(|v| v * scale),
+            inner.map(|v| v * scale),
+            radius.unwrap_or([0.0; 4]).map(|r| r * scale),
+        )
+    })
+}
+
 fn motion_placed(
     base: (f32, f32, f32, f32),
     translate: (f32, f32),
@@ -301,6 +323,13 @@ impl RenderContext {
                         v_align: text_data.v_align,
                         clip_bounds: scaled_clip,
                         clip_fade: text_fade.map(|distance| distance * scale),
+                        split_clip: split_text_clip(
+                            inside_motion_subtree,
+                            current_clip,
+                            current_clip_radius,
+                            current_scroll_clip,
+                            scale,
+                        ),
                         // Apply promoted opacity at dispatch; keep cached glyphs at base alpha.
                         motion_opacity: effective_motion_opacity
                             * render_node.props.opacity
@@ -370,6 +399,16 @@ impl RenderContext {
                     let effective_clip = effective_single_clip(current_clip, current_scroll_clip);
                     let scaled_clip = effective_clip
                         .map(|[cx, cy, cw, ch]| [cx * scale, cy * scale, cw * scale, ch * scale]);
+                    // In moved content inside a scroll container the two stay apart: the clip
+                    // inside moves with the content and the scroll clip stays.
+                    let svg_clip = match (inside_motion_subtree, current_clip, current_scroll_clip)
+                    {
+                        (true, Some(inner), Some(scroll)) => (
+                            Some(inner.map(|v| v * scale)),
+                            Some(scroll.map(|v| v * scale)),
+                        ),
+                        _ => (scaled_clip, None),
+                    };
 
                     // Tint resolves `currentColor` references in SVG source.
                     // CSS fill/stroke are explicit overrides injected as SVG attributes.
@@ -401,7 +440,8 @@ impl RenderContext {
                         stroke_dasharray: render_node.props.stroke_dasharray.clone(),
                         stroke_dashoffset: render_node.props.stroke_dashoffset,
                         svg_path_data: render_node.props.svg_path_data.clone(),
-                        clip_bounds: scaled_clip,
+                        clip_bounds: svg_clip.0,
+                        scroll_clip: svg_clip.1,
                         // Same base-alpha contract as TextElement:
                         // composite factor applied live at dispatch.
                         motion_opacity: effective_motion_opacity
@@ -924,6 +964,13 @@ impl RenderContext {
                                 v_align: styled_data.v_align,
                                 clip_bounds: scaled_clip,
                                 clip_fade: text_fade.map(|distance| distance * scale),
+                                split_clip: split_text_clip(
+                                    inside_motion_subtree,
+                                    current_clip,
+                                    current_clip_radius,
+                                    current_scroll_clip,
+                                    scale,
+                                ),
                                 // Base-alpha contract: composite factor
                                 // applied live at dispatch.
                                 motion_opacity: effective_motion_opacity

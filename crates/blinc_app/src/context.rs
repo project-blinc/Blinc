@@ -418,6 +418,10 @@ struct TextElement {
     /// Clip bounds from parent scroll container (x, y, width, height)
     clip_bounds: Option<[f32; 4]>,
     clip_fade: [f32; 4],
+    /// For text in a motion subtree inside a scroll container, its clip in two parts: the scroll
+    /// clip, which stays with the viewport, and the clip inside it (rect and corner radii), which
+    /// moves with the content. Glyphs draw the first as their clip rect and the second as a shape.
+    split_clip: Option<([f32; 4], [f32; 4], [f32; 4])>,
     /// Clip geometry and its owner's physical frame, shared across collected spans.
     path_clip: Option<Arc<text_clip::CollectedTextPath>>,
     /// Motion opacity inherited from parent motion container
@@ -560,6 +564,9 @@ struct SvgElement {
     svg_path_data: Option<String>,
     /// Clip bounds from parent scroll container (x, y, width, height)
     clip_bounds: Option<[f32; 4]>,
+    /// For an SVG in a motion subtree inside a scroll container, the scroll clip, which stays
+    /// with the viewport while `clip_bounds`, the clip inside it, moves with the content.
+    scroll_clip: Option<[f32; 4]>,
     /// Motion opacity inherited from parent motion container
     motion_opacity: f32,
     /// Inherited CSS transform from ancestor elements (full 6-element affine in layout coords)

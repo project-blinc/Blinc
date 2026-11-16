@@ -252,6 +252,8 @@ pub struct GpuPaintContext<'a> {
     blend_mode_stack: Vec<BlendMode>,
     /// Clip stack (for tracking, actual clipping done in shader)
     clip_stack: Vec<ClipStackEntry>,
+    /// The clip stack depth where the content that rows move began, if painting is inside it.
+    row_clip_base: Option<usize>,
     /// Viewport size
     viewport: Size,
     /// Whether we're in a 3D context
@@ -480,11 +482,29 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
     }
 
     fn current_clip_aabb(&self) -> Option<[f32; 4]> {
-        self.current_clip_aabb_impl()
+        self.clip_aabb(false)
     }
 
     fn current_path_clip(&mut self) -> f32 {
-        self.native_path_clip().unwrap_or(0.0)
+        self.native_path_clip().map_or(0.0, |(pointer, _)| pointer)
+    }
+
+    fn begin_row_clips(&mut self) -> bool {
+        if self.row_clip_base.is_some() {
+            return false;
+        }
+        self.row_clip_base = Some(self.clip_stack.len());
+        true
+    }
+
+    fn end_row_clips(&mut self, began: bool) {
+        if began {
+            self.row_clip_base = None;
+        }
+    }
+
+    fn current_row_clip_aabb(&self) -> Option<[f32; 4]> {
+        self.clip_aabb(true)
     }
 
     fn current_clip_rounded(&self) -> Option<([f32; 4], [f32; 4])> {

@@ -1060,7 +1060,7 @@ fn scroll_spinners_scene(name: &'static str) -> Scene {
     }
 }
 
-/// A scrolled page holding clips of its own: a nested scroll area with lines in it, an image in a
+/// A scrolled page holding clips of its own: a nested scroll area with icons and lines in it, an image in a
 /// rounded clip with an absolute dot over it in a stack, and the same image without the stack.
 fn scroll_inner_clips_scene(name: &'static str) -> Scene {
     Scene {
@@ -1117,8 +1117,15 @@ fn scroll_inner_clips_scene(name: &'static str) -> Scene {
                     if i % 3 == 0 {
                         let mut lines = div().flex_col().gap(2.0);
                         for j in 0..8 {
-                            lines = lines
-                                .child(text(format!("Line {j}")).size(12.0).color(Color::WHITE));
+                            lines = lines.child(
+                                div()
+                                    .flex_row()
+                                    .gap(1.0)
+                                    .child(blinc_layout::svg(ICON).size(10.0, 10.0))
+                                    .child(
+                                        text(format!("Line {j}")).size(12.0).color(Color::WHITE),
+                                    ),
+                            );
                         }
                         row = row.child(
                             scroll()
@@ -1857,6 +1864,7 @@ const ON_ROWS: &[&str] = &[
     "motion, an svg",
     "css keyframes, spinners",
     "scroll a list of spinners",
+    "scroll a page with clips of its own",
     "scroll a list",
     "scroll a list, scrollbar always",
     "scroll a list, no scrollbar",

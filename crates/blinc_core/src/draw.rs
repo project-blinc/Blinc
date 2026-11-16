@@ -1925,6 +1925,22 @@ pub trait DrawContext {
         0.0
     }
 
+    /// Mark the clips pushed from here on as inside content that rows move, so a rect or rounded
+    /// rect among them is drawn as a shape clip apart from the clips already in force. `false`
+    /// when painting is already inside such content; pass the result to `end_row_clips`.
+    fn begin_row_clips(&mut self) -> bool {
+        false
+    }
+
+    /// End what `begin_row_clips` began, when it returned `true`.
+    fn end_row_clips(&mut self, _began: bool) {}
+
+    /// [`current_clip_aabb`](Self::current_clip_aabb) without the clips pushed inside content
+    /// that rows move: the clip that stays while that content moves.
+    fn current_row_clip_aabb(&self) -> Option<[f32; 4]> {
+        self.current_clip_aabb()
+    }
+
     /// Snapshot the current ancestor clip as
     /// `(aabb_xywh, corner_radius_tl_tr_br_bl)`. Used by P4.3's
     /// motion-subtree bake to capture the parent's rounded-rect clip

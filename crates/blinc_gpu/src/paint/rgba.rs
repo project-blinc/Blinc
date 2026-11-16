@@ -105,7 +105,7 @@ impl GpuPaintContext<'_> {
         }
         let opacity = self.combined_opacity();
         let (clip_bounds, mut clip_radius, corner_shape, clip_type) =
-            self.get_clip_data_with_path_scissor(true);
+            self.get_clip_data_with_path_scissor(true, false);
         let mut clip_aux = self.rgba_clip_aux(clip_type, clip_radius, transformed, transform);
         self.rgba_clip_properties(
             &mut clip_aux,

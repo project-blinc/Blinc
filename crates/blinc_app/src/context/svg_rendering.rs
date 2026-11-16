@@ -268,6 +268,9 @@ impl RenderContext {
             if let Some([clip_x, clip_y, clip_w, clip_h]) = svg.clip_bounds {
                 instance = instance.with_clip_rect(clip_x, clip_y, clip_w, clip_h);
             }
+            if let Some([x, y, w, h]) = svg.scroll_clip {
+                instance = instance.with_clip2_rect(x, y, w, h);
+            }
 
             instances.push(instance);
         }

@@ -219,6 +219,11 @@ impl RenderContext {
             }
             // Without a table to read them, the rows move the glyphs here.
             if self.node_rows.cpu_backend() && text.node_slots_epoch == self.node_rows.epoch() {
+                let mut aux = std::mem::take(std::sync::Arc::make_mut(&mut text.aux_data));
+                for p in &mut text.primitives {
+                    blinc_gpu::node_table::follow_path_clip(self.node_rows.rows(), p, &mut aux);
+                }
+                *std::sync::Arc::make_mut(&mut text.aux_data) = aux;
                 text.primitives = self.node_rows.resolve_primitives(&text.primitives);
             }
             self.render_text(target_view, &text);
