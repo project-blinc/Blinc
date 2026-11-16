@@ -1219,6 +1219,64 @@ fn scroll_grouped_images_scene(name: &'static str) -> Scene {
     }
 }
 
+/// A scrolled list of canvases that fill a path beside a rect, as a chart's pie does.
+fn scroll_canvas_paths_scene(name: &'static str) -> Scene {
+    Scene {
+        name,
+        steps: 16,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let reference = blinc_layout::selector::ScrollRef::new();
+            let bound = reference.clone();
+            ui.mount(move |_| {
+                let mut list = div().flex_col().gap(2.0).w(W as f32 - 20.0).p(2.0);
+                for i in 0..40 {
+                    list = list.child(
+                        div()
+                            .w(W as f32 - 28.0)
+                            .h(28.0)
+                            .rounded(6.0)
+                            .bg(Color::rgb(0.2, 0.45, 0.7))
+                            .flex_row()
+                            .items_center()
+                            .gap(2.0)
+                            .child(
+                                blinc_layout::canvas::canvas(move |ctx, bounds| {
+                                    use blinc_core::DrawContext;
+                                    ctx.fill_rect(
+                                        blinc_core::Rect::new(0.0, 0.0, 8.0, bounds.height),
+                                        2.0.into(),
+                                        Color::rgb(0.95, 0.75, 0.2).into(),
+                                    );
+                                    let path = blinc_core::Path::new()
+                                        .move_to(14.0, bounds.height)
+                                        .line_to(26.0, 2.0)
+                                        .line_to(38.0, bounds.height)
+                                        .close();
+                                    ctx.fill_path(&path, Color::rgb(0.9, 0.3, 0.5).into());
+                                })
+                                // Drawn once, as a chart that is not animating is.
+                                .redraw_while(|| false)
+                                .w(40.0)
+                                .h(22.0),
+                            )
+                            .child(text(format!("Row {i}")).size(13.0).color(Color::WHITE)),
+                    );
+                }
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .child(scroll().bind(&bound).w(W as f32).h(H as f32).child(list))
+            });
+            Box::new(move |ui, step| {
+                reference.set_scroll_offset(0.0, 8.0 * (step + 1).min(10) as f32);
+                ui.settle_scroll();
+            })
+        }),
+    }
+}
+
 /// A card that a binding moves and scales, with an SVG icon in it that moves and grows with it.
 fn motion_svg_scene(name: &'static str) -> Scene {
     let steps = 20;
@@ -1676,6 +1734,7 @@ fn scenes() -> Vec<Scene> {
         scroll_spinners_scene("scroll a list of spinners"),
         scroll_inner_clips_scene("scroll a page with clips of its own"),
         scroll_grouped_images_scene("scroll grouped images, then stop"),
+        scroll_canvas_paths_scene("scroll canvases that fill paths"),
         transition_scene("css transition", true),
         transition_scene("css transition, no text", false),
         transition_css_scene(

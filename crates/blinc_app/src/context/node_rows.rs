@@ -527,6 +527,11 @@ impl NodeRows {
     fn follow_clips(&mut self, prims: &mut [GpuPrimitive], paths: bool) -> bool {
         for p in prims {
             let Some(row) = p.node_slot() else { continue };
+            // A mesh triangle's corners are positions in the aux rows, which a row does not move
+            // (a chart's pie, drawn once, would stay where it was painted).
+            if p.type_info[0] == 9 {
+                return false;
+            }
             // A rect cut by a clip that stays cannot be moved whole; the painter makes the part
             // that moves a shape clip, so a cut rect here is one it could not.
             match self.clip_from(row / 2, p) {
