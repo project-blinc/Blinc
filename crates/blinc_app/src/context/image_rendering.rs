@@ -22,6 +22,10 @@ impl RenderContext {
                 }
             })
             .collect();
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(decoder) = self.image_decode.as_mut() {
+            decoder.forget_failures(|k| !k.is_empty() && abs_str.ends_with(k));
+        }
         for k in &dropped {
             self.image_cache.pop(k);
             self.image_load_times.remove(k);
@@ -69,6 +73,7 @@ impl RenderContext {
             let Some(decoder) = self.image_decode.as_mut() else {
                 return;
             };
+            decoder.retry_due();
             for decoded in decoder.take() {
                 let Some(image) = decoded.image else { continue };
                 self.image_cache.put(decoded.source.clone(), image);
