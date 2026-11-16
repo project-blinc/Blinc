@@ -74,16 +74,30 @@ impl GpuPaintContext<'_> {
         Some((offset as f32 + 1.0, false))
     }
 
-    /// The pointer to one rounded-rect shape (type 4: a radius and a corner shape for each
-    /// corner) for the inner clips in force up to `index`, their rects intersected and the
-    /// largest radius at each corner with its shape, written to `owner`'s aux rows once and kept
-    /// on the entry at `index`.
-    fn inner_clip_rows(&mut self, start: usize, index: usize, owner: super::AuxBatch) -> f32 {
-        if let Some(ClipData::Inner(inner)) = &self.clip_stack[index].1
-            && let Some((_, offset)) = inner.offsets.iter().find(|(key, _)| *key == owner)
-        {
-            return *offset as f32 + 1.0;
-        }
+    /// Where the topmost shape clip in force is, if it is an inner clip of content that rows
+    /// move: the clip stack base and its index.
+    pub(super) fn topmost_inner_clip(&self) -> Option<(usize, usize)> {
+        let start = self.composite_layer_clip_base.first().copied().unwrap_or(0);
+        let index = self.clip_stack[start..]
+            .iter()
+            .rposition(|(shape, meta, _)| {
+                matches!(meta, Some(ClipData::Inner(_)))
+                    || matches!(
+                        shape,
+                        ClipShape::Circle { .. }
+                            | ClipShape::Ellipse { .. }
+                            | ClipShape::Polygon(_)
+                            | ClipShape::Path(_)
+                    )
+            })?
+            + start;
+        matches!(self.clip_stack[index].1, Some(ClipData::Inner(_))).then_some((start, index))
+    }
+
+    /// The type-4 shape rows (frame, info, rect, corner radii, corner shapes) for the inner clips
+    /// in force from `start` up to `index`: their rects intersected, and at each corner the
+    /// largest radius with its shape.
+    pub(super) fn inner_shape_rows(&self, start: usize, index: usize) -> [[f32; 4]; 5] {
         let (mut x0, mut y0, mut x1, mut y1) = (f32::MIN, f32::MIN, f32::MAX, f32::MAX);
         let mut radii = [0.0f32; 4];
         let mut shapes = [1.0f32; 4];
@@ -115,13 +129,24 @@ impl GpuPaintContext<'_> {
                 }
             }
         }
-        let rows = [
+        [
             [1.0, 0.0, 0.0, 1.0],
             [0.0, 0.0, 4.0, 0.0],
             [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)],
             radii,
             shapes,
-        ];
+        ]
+    }
+
+    /// The pointer to the inner clips' shape rows for `owner`, written to its aux rows once and
+    /// kept on the entry at `index`.
+    fn inner_clip_rows(&mut self, start: usize, index: usize, owner: super::AuxBatch) -> f32 {
+        if let Some(ClipData::Inner(inner)) = &self.clip_stack[index].1
+            && let Some((_, offset)) = inner.offsets.iter().find(|(key, _)| *key == owner)
+        {
+            return *offset as f32 + 1.0;
+        }
+        let rows = self.inner_shape_rows(start, index);
         let batch = match owner {
             super::AuxBatch::Static => &mut self.batch,
             super::AuxBatch::Dynamic => &mut self.dynamic_batch,

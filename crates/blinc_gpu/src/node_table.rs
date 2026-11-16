@@ -369,6 +369,62 @@ pub fn follow_path_clip(rows: &[NodeRow], p: &mut GpuPrimitive, aux: &mut Vec<[f
     p.set_node_path_from(None);
 }
 
+/// `image` as the rows draw it: its quad moved, scaled and turned by the chain from its row, its
+/// opacity multiplied, and its shape clip taken back through the rows it follows. Its clip rect
+/// stays. The image as it is when it names no row.
+pub fn place_dynamic_image(
+    rows: &[NodeRow],
+    image: &crate::primitives::DynamicImage,
+) -> crate::primitives::DynamicImage {
+    let mut out = image.clone();
+    let Some(slot) = image.node_slot else {
+        return out;
+    };
+    out.node_slot = None;
+    out.shape_from = None;
+    let moved = chain(rows, slot);
+    let [a, b, c, d, tx, ty] = moved.affine;
+    let (cx, cy) = (
+        image.dest.x() + image.dest.width() * 0.5,
+        image.dest.y() + image.dest.height() * 0.5,
+    );
+    let (ncx, ncy) = (a * cx + c * cy + tx, b * cx + d * cy + ty);
+    out.dest = blinc_core::Rect::new(
+        ncx - image.dest.width() * 0.5,
+        ncy - image.dest.height() * 0.5,
+        image.dest.width(),
+        image.dest.height(),
+    );
+    let [ta, tb, tc, td] = image.transform;
+    out.transform = [
+        a * ta + c * tb,
+        b * ta + d * tb,
+        a * tc + c * td,
+        b * tc + d * td,
+    ];
+    out.opacity *= moved.opacity;
+    // The shape is tested at `frame * pixel + info.xy`; the pixel is taken back first.
+    if let Some(from) = image.shape_from
+        && let Some([ia, ib, ic, id, ux, uy]) = chain_from(rows, slot, from).and_then(invert)
+        && let Some(&[_, _, _, pointer]) = out.clip_aux.get(4)
+    {
+        let frame_at = pointer as usize - 1;
+        if let (Some(&[fx, fy, fz, fw]), Some(&info)) =
+            (out.clip_aux.get(frame_at), out.clip_aux.get(frame_at + 1))
+        {
+            out.clip_aux[frame_at] = [
+                fx * ia + fz * ib,
+                fy * ia + fw * ib,
+                fx * ic + fz * id,
+                fy * ic + fw * id,
+            ];
+            out.clip_aux[frame_at + 1][0] = fx * ux + fz * uy + info[0];
+            out.clip_aux[frame_at + 1][1] = fy * ux + fw * uy + info[1];
+        }
+    }
+    out
+}
+
 impl Default for NodeRow {
     fn default() -> Self {
         Self::REST

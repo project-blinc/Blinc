@@ -397,7 +397,12 @@ impl RenderContext {
                 if !used_fast_paint {
                     captured.insert(
                         key,
-                        self.prepare_captured_image(&image, (width, height), scale_factor),
+                        self.prepare_captured_image(
+                            &image,
+                            (width, height),
+                            scale_factor,
+                            super::node_rows::ordinal_of(tree, image.node),
+                        ),
                     );
                 }
                 continue;

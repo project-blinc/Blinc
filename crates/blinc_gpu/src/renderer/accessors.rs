@@ -55,7 +55,9 @@ impl GpuRenderer {
         &self,
         batch: &'a crate::primitives::PrimitiveBatch,
     ) -> std::borrow::Cow<'a, crate::primitives::PrimitiveBatch> {
-        if !batch.primitives.iter().any(|p| p.node_slot().is_some()) {
+        if !batch.primitives.iter().any(|p| p.node_slot().is_some())
+            && !batch.dynamic_images.iter().any(|i| i.node_slot.is_some())
+        {
             return std::borrow::Cow::Borrowed(batch);
         }
         let mut resolved = batch.clone();
@@ -68,6 +70,9 @@ impl GpuRenderer {
             }
         }
         resolved.aux_data = aux;
+        for image in &mut resolved.dynamic_images {
+            *image = crate::node_table::place_dynamic_image(&rows, image);
+        }
         resolved.node_slots_epoch = 0;
         std::borrow::Cow::Owned(resolved)
     }

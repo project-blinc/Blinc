@@ -75,6 +75,9 @@ impl Sample {
                 clip_bounds: [-10000.0, -10000.0, 100000.0, 100000.0],
                 clip_radius: [0.0; 4],
                 clip_aux: Vec::new(),
+                node_ordinal: 0,
+                node_slot: None,
+                shape_from: None,
             }),
         }
     }

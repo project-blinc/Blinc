@@ -186,6 +186,22 @@ fn same_clip(clip: [f32; 4], ambient: Option<[f32; 4]>) -> bool {
     }
 }
 
+/// What [`NodeRows::resolve_batch`] took out of a batch, to put back after it is drawn.
+pub(super) struct ResolvedBatch {
+    primitives: Vec<GpuPrimitive>,
+    dynamic_images: Vec<blinc_gpu::primitives::DynamicImage>,
+    aux_len: usize,
+}
+
+impl ResolvedBatch {
+    /// Put back what was taken out of `batch`.
+    pub(super) fn restore(self, batch: &mut PrimitiveBatch) {
+        batch.primitives = self.primitives;
+        batch.dynamic_images = self.dynamic_images;
+        batch.aux_data.truncate(self.aux_len);
+    }
+}
+
 /// How a primitive's clip follows the rows.
 enum Follow {
     /// It is wholly an ancestor's and stays.
@@ -265,7 +281,7 @@ impl NodeRows {
         if !batch.cross_stream_groups.captures.is_empty()
             || batch.has_foreground_content()
             || batch.has_foreground_layers()
-            || batch.has_ordered_content()
+            || batch.has_ordered_content_besides_images()
         {
             return None;
         }
@@ -382,6 +398,10 @@ impl NodeRows {
         if self.epoch != 0 && self.epoch == batch.node_slots_epoch {
             for p in &mut batch.primitives {
                 p.set_node_slot(None);
+            }
+            for image in &mut batch.dynamic_images {
+                image.node_slot = None;
+                image.shape_from = None;
             }
             for slot in &self.slots {
                 if let Some(meta) = bindings.get_mut(&slot.node) {
@@ -553,14 +573,23 @@ impl NodeRows {
     /// `batch`'s primitives as [`resolve_primitives`](Self::resolve_primitives) gives them, with
     /// each path clip that follows the rows given its own shape rows, appended to the batch's aux
     /// data. Returns the primitives that were there and the aux length to cut back to.
-    pub(super) fn resolve_batch(&self, batch: &mut PrimitiveBatch) -> (Vec<GpuPrimitive>, usize) {
+    pub(super) fn resolve_batch(&self, batch: &mut PrimitiveBatch) -> ResolvedBatch {
         let aux_len = batch.aux_data.len();
         let mut prims = batch.primitives.clone();
         for p in &mut prims {
             blinc_gpu::node_table::follow_path_clip(&self.rows, p, &mut batch.aux_data);
         }
         let resolved = self.resolve_primitives(&prims);
-        (std::mem::replace(&mut batch.primitives, resolved), aux_len)
+        let placed: Vec<_> = batch
+            .dynamic_images
+            .iter()
+            .map(|image| blinc_gpu::node_table::place_dynamic_image(&self.rows, image))
+            .collect();
+        ResolvedBatch {
+            primitives: std::mem::replace(&mut batch.primitives, resolved),
+            dynamic_images: std::mem::replace(&mut batch.dynamic_images, placed),
+            aux_len,
+        }
     }
 
     /// Whether the chain of rows from `row` changes nothing.
@@ -638,6 +667,64 @@ impl NodeRows {
         }
         for (p, row) in text.primitives.iter_mut().zip(owned) {
             p.set_node_slot(row);
+        }
+        true
+    }
+
+    /// Give each ordered image of `batch` the row of the node it was painted under. Its clip rect
+    /// must stay; a shape clip in its rows that is the inner clips of the scroll container it is
+    /// in follows from that container's row. `false` when one cannot be moved.
+    fn give_dynamic_image_slots(
+        &mut self,
+        batch: &mut PrimitiveBatch,
+        by_ordinal: &HashMap<u32, u32>,
+    ) -> bool {
+        let mut given = Vec::new();
+        for (index, image) in batch.dynamic_images.iter().enumerate() {
+            if image.paint_order.is_none() {
+                continue;
+            }
+            let Some(&slot) = by_ordinal.get(&image.node_ordinal) else {
+                continue;
+            };
+            let [x, y, w, h] = image.clip_bounds;
+            let proxy = GpuPrimitive::rect(image.dest.x(), image.dest.y(), 1.0, 1.0)
+                .with_clip_rect(x, y, w, h);
+            if x > -9999.0 && !matches!(self.clip_from(slot, &proxy), Ok(Follow::Stays)) {
+                return false;
+            }
+            // The shape, when there is one: its info row's type is at its pointer.
+            let shape = image
+                .clip_aux
+                .get(4)
+                .map(|row| row[3] as usize)
+                .filter(|&pointer| pointer >= 1)
+                .and_then(|pointer| image.clip_aux.get(pointer))
+                .map(|info| info[2]);
+            let from = match shape {
+                None => None,
+                Some(kind) if (kind - 4.0).abs() < 0.5 => {
+                    let mut depth = 0u32;
+                    let mut up = Some(slot);
+                    let mut found = None;
+                    while let Some(s) = up {
+                        if self.slots[s as usize].limit.is_some() {
+                            found = Some(depth);
+                            break;
+                        }
+                        depth += 1;
+                        up = self.slots[s as usize].parent;
+                    }
+                    let Some(depth) = found else { return false };
+                    Some(depth)
+                }
+                Some(_) => return false,
+            };
+            given.push((index, slot * 2, from));
+        }
+        for (index, row, from) in given {
+            batch.dynamic_images[index].node_slot = Some(row);
+            batch.dynamic_images[index].shape_from = from;
         }
         true
     }
@@ -1000,7 +1087,7 @@ impl NodeRows {
             let mut primitives = std::mem::take(&mut batch.primitives);
             let followed = self.follow_clips(&mut primitives, true);
             batch.primitives = primitives;
-            if !followed {
+            if !followed || !self.give_dynamic_image_slots(batch, &by_ordinal) {
                 return self.decline(true, batch, text, bindings);
             }
             if has_text && let Some(text) = text.as_deref_mut() {

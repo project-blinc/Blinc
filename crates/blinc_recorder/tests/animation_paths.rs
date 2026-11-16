@@ -1921,6 +1921,7 @@ const ON_ROWS: &[&str] = &[
     "motion, an svg",
     "css keyframes, spinners",
     "scroll a list of spinners",
+    "scroll grouped images, then stop",
     "scroll a list",
     "scroll a list, scrollbar always",
     "scroll a list, no scrollbar",
