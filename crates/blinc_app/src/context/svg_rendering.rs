@@ -183,17 +183,14 @@ impl RenderContext {
                 continue;
             }
 
-            // Skip SVGs completely outside their clip bounds
+            // Skip SVGs completely outside their clip bounds. The test is on where the SVG is
+            // drawn: rows that move it fold the move into its transform, not its rect.
             if let Some([clip_x, clip_y, clip_w, clip_h]) = svg.clip_bounds {
-                let svg_right = svg.x + svg.width;
-                let svg_bottom = svg.y + svg.height;
-                let clip_right = clip_x + clip_w;
-                let clip_bottom = clip_y + clip_h;
-
-                if svg.x >= clip_right
-                    || svg_right <= clip_x
-                    || svg.y >= clip_bottom
-                    || svg_bottom <= clip_y
+                let [left, top, right, bottom] = drawn_bounds(svg, scale_factor);
+                if left >= clip_x + clip_w
+                    || right <= clip_x
+                    || top >= clip_y + clip_h
+                    || bottom <= clip_y
                 {
                     continue;
                 }
@@ -286,6 +283,20 @@ impl RenderContext {
             }
         }
     }
+}
+
+/// The bounds `svg` covers once drawn, as left, top, right, bottom: its rect, or with a CSS
+/// transform the box around the transformed rect, placed as the instance below places it.
+fn drawn_bounds(svg: &SvgElement, scale_factor: f32) -> [f32; 4] {
+    let Some([a, b, c, d, tx, ty]) = svg.css_affine else {
+        return [svg.x, svg.y, svg.x + svg.width, svg.y + svg.height];
+    };
+    let (cx, cy) = (svg.x + svg.width * 0.5, svg.y + svg.height * 0.5);
+    let x = a * cx + c * cy + tx * scale_factor;
+    let y = b * cx + d * cy + ty * scale_factor;
+    let half_w = (a.abs() * svg.width + c.abs() * svg.height) * 0.5;
+    let half_h = (b.abs() * svg.width + d.abs() * svg.height) * 0.5;
+    [x - half_w, y - half_h, x + half_w, y + half_h]
 }
 
 /// Scale and translate a path for SVG rendering with tint

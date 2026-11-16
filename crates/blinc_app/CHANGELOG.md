@@ -9,6 +9,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - The registered iOS Rust builder uses the complete UI build path, including queued core styles, overlays and build-scope cleanup.
 
 ### Changed
+- An SVG with a CSS transform (an open tree item's chevron) is no longer dropped while rows scroll it: it is culled by where it is drawn, not by the rect it was painted at, which rows leave in place when they fold the move into its transform.
 - `RenderContext::render_tree_with_motion_opt` renders the frame as one GPU submission with one command encoder.
 - A window paces capped frames on a fixed grid of `1 / cap` steps instead of waiting the cap's interval after each frame ends, so an animation holds the cap's rate (120 fps at a cap of 120) rather than drifting below it with the frame's own time; a frame later than a step takes the next one.
 - An SVG that a translucent group draws as part of the group (a disabled pagination button's chevron) moves with the rows of its scroll container. It stayed where the last full paint left it until the scroll stopped.
