@@ -1981,6 +1981,7 @@ const ON_ROWS: &[&str] = &[
     "css keyframes, spinners",
     "scroll a list of spinners",
     "scroll grouped images, then stop",
+    "scroll a page with clips of its own",
     "scroll a list",
     "scroll a list, scrollbar always",
     "scroll a list, no scrollbar",
