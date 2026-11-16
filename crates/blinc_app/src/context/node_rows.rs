@@ -446,6 +446,22 @@ impl NodeRows {
         while let Some(s) = up {
             let node = &self.slots[s as usize];
             if !same_clip(prim.clip_bounds, node.ambient_clip) {
+                // A clip rect that is the one in force when a node further up began was not
+                // introduced below it: the clips in between are in the primitive's shape.
+                let mut above = node.parent;
+                let mut skipped = 1u32;
+                while let Some(a) = above {
+                    if same_clip(prim.clip_bounds, self.slots[a as usize].ambient_clip) {
+                        break;
+                    }
+                    above = self.slots[a as usize].parent;
+                    skipped += 1;
+                }
+                if above.is_some() {
+                    depth += skipped;
+                    up = above;
+                    continue;
+                }
                 if prim.type_info[2] != 1 {
                     return Err(());
                 }

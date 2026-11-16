@@ -7,6 +7,39 @@ use super::{
 };
 use blinc_core::Affine2D;
 
+/// The intersection of two rounded clips (x, y, width, height and corner radii tl, tr, br, bl):
+/// a corner of the result keeps a radius only from a clip whose corner it is, so a sharp clip
+/// cut inside a rounded one stays sharp.
+fn intersect_rounded(a: [f32; 4], ra: [f32; 4], b: [f32; 4], rb: [f32; 4]) -> ([f32; 4], [f32; 4]) {
+    let (x0, y0) = (a[0].max(b[0]), a[1].max(b[1]));
+    let (x1, y1) = (
+        (a[0] + a[2]).min(b[0] + b[2]),
+        (a[1] + a[3]).min(b[1] + b[3]),
+    );
+    let near = |p: f32, q: f32| (p - q).abs() < 0.5;
+    let corner = |c: [f32; 4], r: [f32; 4], i: usize| {
+        let (cx, cy) = match i {
+            0 => (c[0], c[1]),
+            1 => (c[0] + c[2], c[1]),
+            2 => (c[0] + c[2], c[1] + c[3]),
+            _ => (c[0], c[1] + c[3]),
+        };
+        let (px, py) = match i {
+            0 => (x0, y0),
+            1 => (x1, y0),
+            2 => (x1, y1),
+            _ => (x0, y1),
+        };
+        if near(cx, px) && near(cy, py) {
+            r[i]
+        } else {
+            0.0
+        }
+    };
+    let radius = std::array::from_fn(|i| corner(a, ra, i).max(corner(b, rb, i)));
+    ([x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)], radius)
+}
+
 impl RenderContext {
     /// Collect text, SVG, and image elements from the render tree
     pub(super) fn collect_render_elements(
@@ -431,29 +464,26 @@ impl RenderContext {
 
             // A sharp scroll container's clip is the scroll clip, kept apart from the primary
             // clip so a rounded card it cuts keeps its corners, and so content moved inside the
-            // viewport is cut where the viewport stays. Any other clip, sharp or rounded, goes
-            // into the primary clip, which moves with the content it belongs to.
-            if !this_has_radius && tree.is_scroll_container(node) {
+            // viewport is cut where the viewport stays: the outermost scroll container's, and that
+            // of one whose content rows move. Any other clip, a nested scroll container's
+            // included, goes into the primary clip, which moves with the content around it.
+            if !this_has_radius
+                && tree.is_scroll_container(node)
+                && (current_scroll_clip.is_none() || tree.is_scroll_row_node(node))
+            {
                 (
                     current_clip,
                     current_clip_radius,
                     merge_scroll_clip(this_clip, current_scroll_clip),
                 )
             } else if let Some(parent_clip) = current_clip {
-                let x1 = parent_clip[0].max(this_clip[0]);
-                let y1 = parent_clip[1].max(this_clip[1]);
-                let x2 = (parent_clip[0] + parent_clip[2]).min(this_clip[0] + this_clip[2]);
-                let y2 = (parent_clip[1] + parent_clip[3]).min(this_clip[1] + this_clip[3]);
-                let clip = Some([x1, y1, (x2 - x1).max(0.0), (y2 - y1).max(0.0)]);
-                let child_r = this_clip_radius.unwrap_or([0.0; 4]);
-                let parent_r = current_clip_radius.unwrap_or([0.0; 4]);
-                let radius = Some([
-                    child_r[0].max(parent_r[0]),
-                    child_r[1].max(parent_r[1]),
-                    child_r[2].max(parent_r[2]),
-                    child_r[3].max(parent_r[3]),
-                ]);
-                (clip, radius, current_scroll_clip)
+                let (clip, radius) = intersect_rounded(
+                    parent_clip,
+                    current_clip_radius.unwrap_or([0.0; 4]),
+                    this_clip,
+                    this_clip_radius.unwrap_or([0.0; 4]),
+                );
+                (Some(clip), Some(radius), current_scroll_clip)
             } else {
                 (Some(this_clip), this_clip_radius, current_scroll_clip)
             }
