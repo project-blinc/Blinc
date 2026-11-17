@@ -476,6 +476,7 @@ pub fn convert_key(key_event: &KeyEvent) -> InputEvent {
         key: fuchsia_key_to_blinc(key_event.key),
         state: platform_state,
         modifiers: convert_modifiers(&key_event.modifiers),
+        text: None,
     })
 }
 
