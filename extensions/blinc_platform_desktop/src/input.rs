@@ -159,11 +159,13 @@ pub fn convert_keyboard_event(
     key: &WinitKey,
     state: ElementState,
     modifiers: ModifiersState,
+    text: Option<&str>,
 ) -> InputEvent {
     InputEvent::Keyboard(KeyboardEvent {
         key: convert_key(key),
         state: convert_key_state(state),
         modifiers: convert_modifiers(modifiers),
+        text: text.map(str::to_owned),
     })
 }
 
