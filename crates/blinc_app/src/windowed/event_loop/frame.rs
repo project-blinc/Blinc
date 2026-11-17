@@ -318,10 +318,19 @@ where
                         window,
                         dirty: frame_dirty,
                     };
-                    let frame = match acquire::acquire_for_draw(token, &mut swapchain, &mut signals)
-                    {
+                    let frame = match acquire::acquire_for_draw(
+                        token,
+                        &mut swapchain,
+                        &mut signals,
+                        &mut ws.acquire_other_retried,
+                    ) {
                         acquire::Acquired::Image(f) => f,
-                        acquire::Acquired::Retry => return ControlFlow::Continue,
+                        acquire::Acquired::Retry => {
+                            // This frame's rebuild is lost: the next frame must not reuse the
+                            // cache from before it.
+                            ws.needs_rebuild = true;
+                            return ControlFlow::Continue;
+                        }
                         acquire::Acquired::Exit => {
                             tracing::error!("Out of GPU memory");
                             return ControlFlow::Exit;

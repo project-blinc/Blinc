@@ -43,12 +43,13 @@ pub(super) enum AcquireError {
     Outdated,
     Timeout,
     OutOfMemory,
-    Other,
+    Other(String),
 }
 
 pub(super) enum Acquired<I> {
     Image(I),
-    /// No image this frame; a new frame has been asked for.
+    /// No image this frame. A new frame has been asked for, except after a repeated `Other`
+    /// error. The caller must mark the UI for rebuild: this frame's rebuild is lost.
     Retry,
     Exit,
 }
@@ -57,14 +58,34 @@ pub(super) fn acquire_for_draw<S: Swapchain, G: FrameSignals>(
     _decided: DrawToken,
     sc: &mut S,
     signals: &mut G,
+    other_retried: &mut bool,
 ) -> Acquired<S::Image> {
     match sc.acquire() {
-        Ok(image) => Acquired::Image(image),
+        Ok(image) => {
+            *other_retried = false;
+            Acquired::Image(image)
+        }
         Err(AcquireError::OutOfMemory) => Acquired::Exit,
-        Err(e) => {
-            if !matches!(e, AcquireError::Other) {
-                sc.reconfigure();
+        Err(AcquireError::Other(msg)) => {
+            tracing::warn!("Surface error: {}", msg);
+            // An error that is not a known swapchain state gets one retry, not a redraw loop.
+            if *other_retried {
+                return Acquired::Retry;
             }
+            *other_retried = true;
+            signals.mark_dirty();
+            signals.request_redraw();
+            Acquired::Retry
+        }
+        Err(e) => {
+            // The compositor stopped releasing swapchain buffers or the surface is stale;
+            // reconfigure, as a window resize does.
+            if matches!(e, AcquireError::Timeout) {
+                tracing::debug!("Surface acquire timeout, reconfiguring to un-stick");
+            } else {
+                tracing::debug!("Surface lost or outdated, reconfiguring");
+            }
+            sc.reconfigure();
             // The dirty flags of this frame are already consumed.
             signals.mark_dirty();
             signals.request_redraw();
@@ -89,7 +110,7 @@ impl Swapchain for SurfaceSwapchain<'_> {
             wgpu::SurfaceError::Outdated => AcquireError::Outdated,
             wgpu::SurfaceError::Timeout => AcquireError::Timeout,
             wgpu::SurfaceError::OutOfMemory => AcquireError::OutOfMemory,
-            _ => AcquireError::Other,
+            e => AcquireError::Other(format!("{e:?}")),
         })
     }
 
@@ -160,7 +181,7 @@ mod tests {
         let Decision::Draw(token) = Decision::after_phases(skip) else {
             return;
         };
-        if let Acquired::Image(_) = acquire_for_draw(token, sc, sig) {
+        if let Acquired::Image(_) = acquire_for_draw(token, sc, sig, &mut false) {
             *presented += 1;
         }
     }
@@ -211,7 +232,7 @@ mod tests {
             (AcquireError::Timeout, 1),
             (AcquireError::Lost, 1),
             (AcquireError::Outdated, 1),
-            (AcquireError::Other, 0),
+            (AcquireError::Other(String::new()), 0),
         ] {
             let mut sc = Fake {
                 next: vec![Err(err)],
@@ -222,12 +243,34 @@ mod tests {
                 unreachable!()
             };
             assert!(matches!(
-                acquire_for_draw(token, &mut sc, &mut sig),
+                acquire_for_draw(token, &mut sc, &mut sig, &mut false),
                 Acquired::Retry
             ));
             assert_eq!(sc.reconfigured, reconfigures);
             assert_eq!((sig.dirty, sig.redraws), (1, 1));
         }
+    }
+
+    #[test]
+    fn an_unknown_error_asks_for_one_retry() {
+        let mut sc = Fake {
+            next: (0..3)
+                .map(|_| Err(AcquireError::Other("x".into())))
+                .collect(),
+            ..Default::default()
+        };
+        let mut sig = Signals::default();
+        let mut retried = false;
+        for _ in 0..3 {
+            let Decision::Draw(token) = Decision::after_phases(None) else {
+                unreachable!()
+            };
+            assert!(matches!(
+                acquire_for_draw(token, &mut sc, &mut sig, &mut retried),
+                Acquired::Retry
+            ));
+        }
+        assert_eq!((sig.dirty, sig.redraws), (1, 1));
     }
 
     #[test]
@@ -241,7 +284,7 @@ mod tests {
             unreachable!()
         };
         assert!(matches!(
-            acquire_for_draw(token, &mut sc, &mut sig),
+            acquire_for_draw(token, &mut sc, &mut sig, &mut false),
             Acquired::Exit
         ));
         assert_eq!(sig.redraws, 0);

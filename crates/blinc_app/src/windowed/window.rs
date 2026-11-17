@@ -31,6 +31,8 @@ pub(crate) struct WindowState {
         Arc<std::sync::RwLock<std::collections::HashMap<String, blinc_core::MotionAnimationState>>>,
     /// Whether the UI tree needs rebuilding
     pub needs_rebuild: bool,
+    /// The last swapchain acquire failed with an unknown error and a retry was asked for.
+    pub acquire_other_retried: bool,
     /// The scope each build runs in; a fresh tree disposes the builds before it.
     pub build_scope: blinc_core::owner::BuildScope,
     /// Whether layout needs recomputing
@@ -140,6 +142,7 @@ impl WindowState {
             css_anim_store,
             shared_motion_states,
             needs_rebuild: true,
+            acquire_other_retried: false,
             build_scope: blinc_core::owner::BuildScope::new(),
             needs_relayout: false,
             hot_reload_restyle: false,

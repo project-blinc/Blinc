@@ -40,6 +40,8 @@ pub(super) fn render_and_schedule(
         &mut ws.ctx,
         &mut ws.render_state,
     ) else {
+        // Not reachable: the caller has already returned for a window without app, surface
+        // config, context or render state, so no acquired image is dropped here.
         return None;
     };
     let FrameVars {
