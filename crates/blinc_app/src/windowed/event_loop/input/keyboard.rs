@@ -79,7 +79,7 @@ pub(super) fn collect_keyboard(
             ws.cached_modifiers = next;
 
             // Extract character from key if applicable
-            let key_char = match &kb_event.key {
+            let key_char = kb_event.typed_char().or(match &kb_event.key {
                 Key::Char(c) => Some(*c),
                 Key::Space => Some(' '),
                 Key::A => Some(if mods.shift { 'A' } else { 'a' }),
@@ -130,7 +130,7 @@ pub(super) fn collect_keyboard(
                 Key::Slash => Some(if mods.shift { '?' } else { '/' }),
                 Key::Grave => Some(if mods.shift { '~' } else { '`' }),
                 _ => None,
-            };
+            });
 
             // Key code for special key handling (backspace, arrows, etc)
             // Letter keys use ASCII uppercase (65=A, 90=Z) for Cmd+key shortcuts

@@ -4,6 +4,9 @@ All notable changes to `blinc_platform` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `KeyboardEvent::text`, the text the platform produced for a key press under the active layout and modifiers, and `KeyboardEvent::typed_char`. Desktop and web fill it; other platforms leave it `None`.
+
 ## [0.6.0] - 2026-11-04
 
 ### Added
