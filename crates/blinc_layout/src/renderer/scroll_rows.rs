@@ -89,10 +89,11 @@ impl RenderTree {
         })
     }
 
-    /// A number that changes when the offset of any scroll container does. With the layout epoch
-    /// it says whether what is under a still pointer may have moved.
+    /// Changes with scroll offsets or gesture ownership, so a still pointer refreshes its hover.
     pub fn scroll_signature(&self) -> u64 {
-        let mut signature = 0u64;
+        let mut signature = self
+            .latched_scroll_target()
+            .map_or(0, |node| node.to_raw().wrapping_mul(0x94D0_49BB_1331_11EB));
         for (node, physics) in &self.scroll_physics {
             if let Ok(p) = physics.try_lock() {
                 let mixed = node.to_raw().wrapping_mul(0x9E37_79B9_7F4A_7C15)

@@ -19,12 +19,17 @@ mod cn_demo;
 #[path = "cn_demo_costs/calendar.rs"]
 mod calendar;
 
+#[path = "cn_demo_costs/tree_counts.rs"]
+mod tree_counts;
+
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use blinc_recorder::{Headless, MotionPaint};
 
 const W: u32 = 900;
+static ROOT_BUILDS: AtomicU64 = AtomicU64::new(0);
 fn height() -> u32 {
     std::env::var("COSTS_H")
         .ok()
@@ -54,6 +59,7 @@ impl tracing::Subscriber for PathLog {
             path: String,
             outcome: String,
             all: String,
+            cached: bool,
         }
         impl tracing::field::Visit for Fields {
             fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
@@ -62,6 +68,7 @@ impl tracing::Subscriber for PathLog {
                     "message" => self.message = text.clone(),
                     "path" => self.path = text.clone(),
                     "outcome" => self.outcome = text.clone(),
+                    "used_fast_paint" => self.cached = text == "true",
                     _ => {}
                 }
                 if field.name() != "message" {
@@ -75,7 +82,15 @@ impl tracing::Subscriber for PathLog {
         match fields.message.as_str() {
             "fast_path" => seen.push(fields.path),
             "node_rows" => seen.push(format!("rows:{}", fields.outcome)),
-            "p4_breakdown" => seen.push("full".into()),
+            "rows_unavailable" => seen.push(format!("rows:unavailable{}", fields.all)),
+            "p4_breakdown" => seen.push(
+                if fields.cached {
+                    "cache_repaint"
+                } else {
+                    "full"
+                }
+                .into(),
+            ),
             "css_patch_gate_failed" => seen.push(format!("gate:{}", fields.all)),
             _ => {}
         }
@@ -107,7 +122,11 @@ impl<'a> Scene<'a> {
 
     /// One frame: time passes, the session runs, the engine renders as a window does.
     fn step(&mut self) {
-        self.ui.advance(16);
+        self.step_at(16);
+    }
+
+    fn step_at(&mut self, dt_ms: u32) {
+        self.ui.advance(dt_ms);
         self.log.0.lock().unwrap().clear();
         let (session, render) = self.ui.paint_timed(true).expect("a frame");
         self.session.push(session);
@@ -125,6 +144,23 @@ impl<'a> Scene<'a> {
             None => painted,
         };
         let gate = seen.iter().rev().find(|e| e.starts_with("gate:")).cloned();
+        if tag.contains("moving_static_binding") && !self.paths.contains_key(&tag) {
+            let tree = self.ui.tree();
+            for (node, meta) in tree
+                .composite_bindings()
+                .iter()
+                .filter(|(_, m)| !m.dynamic_batch)
+            {
+                println!(
+                    "    static binding {node:?} {:?}, range {:?}, translate {:?}, opacity {}, property {:?}",
+                    tree.element_registry().get_classes(*node),
+                    meta.primitive_range,
+                    meta.last_translate,
+                    meta.last_opacity,
+                    tree.property_row_translation(*node),
+                );
+            }
+        }
         // `COSTS_SEQ=1`: print each frame's path and gate in order.
         if std::env::var("COSTS_SEQ").is_ok() {
             println!(
@@ -165,8 +201,17 @@ fn session() -> Option<(Headless, PathLog)> {
         return None;
     }
     let mut ui = Headless::with_motion_paint(W, height(), MotionPaint::Vector).ok()?;
+    ui.gate_state_styles().gate_animation_apply();
     ui.theme(cn_demo::theme_bundle(), blinc_theme::ColorScheme::Dark);
-    ui.mount(|ctx| cn_demo::build_ui(ctx));
+    if std::env::var("COSTS_CALENDAR_HOVER").as_deref() == Ok("0") {
+        ui.context().add_css(
+            ".cn-calendar-day { transition: none; } .cn-calendar-day:hover { background: transparent; }",
+        );
+    }
+    ui.mount(|ctx| {
+        ROOT_BUILDS.fetch_add(1, Ordering::Relaxed);
+        cn_demo::build_ui(ctx)
+    });
     ui.settle();
     Some((ui, PathLog::default()))
 }

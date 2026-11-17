@@ -680,20 +680,26 @@ impl Headless {
             );
         }
         for _ in 0..3 {
+            if blinc_layout::peek_needs_full_paint() {
+                self.app
+                    .invalidate_render_cache_tagged("headless_explicit_redraw");
+            }
+            blinc_layout::take_needs_redraw();
             let updates = tree.take_pending_property_updates();
-            if !updates.is_empty() {
+            let paint_revision = tree.property_paint_revision();
+            let mut needs_layout = tree.apply_partial_property_updates(updates).needs_layout;
+            if tree.property_paint_revision() != paint_revision {
                 self.app
                     .invalidate_render_cache_tagged("headless_prop_update");
             }
-            let mut needs_layout = tree.apply_partial_property_updates(updates).needs_layout;
             let rebuilt = tree.process_pending_subtree_rebuilds();
             needs_layout |= rebuilt;
             if rebuilt {
                 self.app
                     .invalidate_render_cache_tagged("headless_subtree_rebuild");
-                tree.apply_stylesheet_layout_overrides();
             }
             if needs_layout {
+                tree.apply_stylesheet_layout_overrides();
                 tree.compute_layout(w, h);
                 tree.apply_flip_transitions();
                 tree.update_flip_bounds();

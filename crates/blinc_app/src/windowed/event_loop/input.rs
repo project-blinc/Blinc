@@ -490,11 +490,11 @@ where
                     if state_changed {
                         frame_dirty.store(true, Ordering::Release);
                         window.request_redraw();
-                        // Dispatch produced a real state change —
-                        // drop the compositor cache so the next
-                        // paint repopulates it with the new
-                        // hover / focus / scroll / state.
-                        if let Some(ref mut app) = ws.app {
+                        // Property writes are classified when drained. Explicit repaint requests
+                        // still discard the cache immediately.
+                        if blinc_layout::peek_needs_full_paint()
+                            && let Some(ref mut app) = ws.app
+                        {
                             app.invalidate_render_cache_tagged("state_changed");
                         }
                     }

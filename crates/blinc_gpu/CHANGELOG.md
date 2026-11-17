@@ -24,6 +24,8 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - `GpuRenderer::update_time` does nothing: the renderer reads `blinc_core::FrameClock`, which the runners set each frame.
 
 ### Changed
+- Solid fill ownership survives native group rebasing in existing primitive metadata. Retained colour updates use the opacity baked into the fill, keeping group opacity separate without enlarging GPU buffers.
+- A retained node row can request glyph placement on the pixel grid after its full translation chain, on both CPU and GPU paths. The row uses a reserved value and keeps its existing size.
 - A run of primitives in a layered overlay drawn with one sample and no paths is drawn onto its target in one pass, where it was drawn into a cleared window-sized texture and blended over the target in a second pass. The result is the same composite.
 - The renderer's buffer writes go through a reused staging belt instead of `Queue::write_buffer`, which allocated and freed a staging buffer per call, and a write of the bytes a range already holds from the renderer's last write is skipped. A frame at rest allocates nothing. `BLINC_DIRECT_UPLOADS=1` writes through the queue and `BLINC_SUBMIT_EACH=1` submits each pass on its own, for comparison; `BLINC_STRICT_UPLOADS=1` panics where a pass writes a buffer, or borrows the shared encoder, while another pass has it.
 - `GpuRenderer::set_glyph_atlas` keeps the views it binds and rebuilds the SDF bind group only when they change; a view replaced in place by a grown atlas counts as a change.

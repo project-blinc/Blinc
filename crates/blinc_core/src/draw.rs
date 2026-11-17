@@ -1845,6 +1845,12 @@ pub trait DrawContext {
         0
     }
 
+    /// Tag an owning solid fill so its colour can change without repainting its children.
+    /// Returns the opacity baked into the fill, excluding opacity owned by its groups.
+    fn tag_background_color(&mut self, _start: usize, _end: usize, _owner: u32) -> Option<f32> {
+        None
+    }
+
     /// Whether the shared groups of a motion subtree are painted into the dynamic batch, as a
     /// caller that moves that batch without painting it again asks for, rather than kept where
     /// they sit in the static paint order. Returns the previous setting to restore. Default

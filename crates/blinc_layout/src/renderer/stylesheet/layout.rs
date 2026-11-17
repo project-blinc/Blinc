@@ -85,21 +85,35 @@ impl RenderTree {
         // Collect (node_id, style) pairs that have layout overrides.
         // Apply complex rules (class/type selectors) FIRST — lower specificity.
         // Then apply simple ID rules LAST — higher specificity overrides.
-        let mut overrides: Vec<(LayoutNodeId, crate::element_style::ElementStyle)> = Vec::new();
+        let mut overrides: Vec<(LayoutNodeId, &crate::element_style::ElementStyle)> = Vec::new();
 
         // Complex rules: class, type, and combinator selectors. A node takes the rules that match
         // it, in ascending specificity.
         let complex_rules = stylesheet.complex_rules();
-        if !complex_rules.is_empty() {
+        let layout_rules: Vec<bool> = complex_rules
+            .iter()
+            .map(|(selector, style)| style.has_layout_props() && !selector.has_state())
+            .collect();
+        if layout_rules.contains(&true) {
+            let no_state = std::collections::HashSet::new();
             let nodes: Vec<LayoutNodeId> = match subtree_filter {
                 Some(set) => set.iter().copied().collect(),
                 None => self.render_nodes.keys().copied().collect(),
             };
             for node_id in nodes {
                 let mut matched: Vec<usize> = self
-                    .matching_base_rules(node_id, &stylesheet)
+                    .candidate_rules_for(&stylesheet, node_id)
                     .into_iter()
-                    .filter(|i| complex_rules[*i].1.has_layout_props())
+                    .filter(|i| layout_rules[*i])
+                    .filter(|i| {
+                        self.complex_selector_matches(
+                            &complex_rules[*i].0,
+                            node_id,
+                            &no_state,
+                            &no_state,
+                            None,
+                        )
+                    })
                     .collect();
                 matched.sort_by_key(|&i| {
                     (
@@ -108,7 +122,7 @@ impl RenderTree {
                     )
                 });
                 for i in matched {
-                    overrides.push((node_id, complex_rules[i].1.clone()));
+                    overrides.push((node_id, &complex_rules[i].1));
                 }
             }
         }
@@ -121,7 +135,7 @@ impl RenderTree {
                 && style.has_layout_props()
                 && subtree_filter.is_none_or(|s| s.contains(&node_id))
             {
-                overrides.push((node_id, style.clone()));
+                overrides.push((node_id, style));
             }
         }
         self.restore_classes(withheld);
@@ -265,7 +279,7 @@ impl RenderTree {
                     height: LengthPercentage::length(gap),
                 };
             }
-            crate::renderer::stylesheet::apply_extra_layout(&es, &mut style);
+            crate::renderer::stylesheet::apply_extra_layout(es, &mut style);
 
             // Overflow (shorthand sets both axes)
             if let Some(overflow) = es.overflow {

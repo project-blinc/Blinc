@@ -379,7 +379,7 @@ impl RenderTree {
 
     /// Whether `node` is in an overlay root's subtree, which paints in a pass
     /// of its own that baked layers are not composited into.
-    fn inside_overlay_root(&self, node: LayoutNodeId) -> bool {
+    pub(in crate::renderer) fn inside_overlay_root(&self, node: LayoutNodeId) -> bool {
         std::iter::once(node)
             .chain(self.layout_tree.ancestors(node))
             .any(|n| {
@@ -458,19 +458,20 @@ impl RenderTree {
         {
             return true;
         }
-        let off_rows = |stable: &crate::tree::StableNodeId| {
-            self.stable_to_layout
-                .get(stable)
-                .is_none_or(|node| !self.css_bound.contains_key(node))
+        let off_rows = |stable: &crate::tree::StableNodeId,
+                        props: &blinc_animation::KeyframeProperties| {
+            self.stable_to_layout.get(stable).is_none_or(|node| {
+                !self.css_bound.contains_key(node) && !self.retains_css_background(*node, props)
+            })
         };
         store
             .animations
             .iter()
-            .any(|(stable, a)| a.is_playing && off_rows(stable))
+            .any(|(stable, a)| a.is_playing && off_rows(stable, &a.current_properties))
             || store
                 .transitions
                 .iter()
-                .any(|(stable, t)| t.is_playing && off_rows(stable))
+                .any(|(stable, t)| t.is_playing && off_rows(stable, &t.current_properties))
     }
 
     /// Whether every currently-playing CSS animation / transition on
@@ -521,7 +522,10 @@ impl RenderTree {
             let Some(layout) = self.stable_to_layout.get(stable).copied() else {
                 continue;
             };
-            if !painted.contains(&layout) || self.css_bound.contains_key(&layout) {
+            if !painted.contains(&layout)
+                || self.css_bound.contains_key(&layout)
+                || self.retains_css_background(layout, &anim.current_properties)
+            {
                 continue;
             }
             // Layout-affecting animations on a *visible* node force
@@ -548,6 +552,9 @@ impl RenderTree {
                 continue;
             };
             if !painted.contains(&layout) {
+                continue;
+            }
+            if self.retains_css_background(layout, &trans.current_properties) {
                 continue;
             }
             if Self::keyframe_props_affect_layout(&trans.current_properties) {
@@ -784,9 +791,8 @@ impl RenderTree {
     /// bound nodes by rows (not baked into textures), the animation only moves, scales or turns
     /// the node about its centre, and nothing else owns a binding on it. The animation replaces
     /// the node's transform, and a binding is applied over it, so a node that has its own is left
-    /// to the props. An animation of opacity is carried only on a node that fades without a group
-    /// ([`Self::fades_without_group`]): a bound opacity otherwise is a group drawn in an offscreen
-    /// layer, which costs more than the layer the animation is baked into.
+    /// to the props. Opacity keeps the native group when one is needed; rows update its layer
+    /// command and move the captured content together. Unsupported output still repaints.
     fn css_can_bind(
         &self,
         node: LayoutNodeId,
@@ -805,10 +811,9 @@ impl RenderTree {
             translate_x: props.translate_x.or(Some(0.0)),
             ..props.clone()
         };
-        // An opacity rides along only where it fades one primitive, which needs no group.
+        // A group keeps its opacity command; a single primitive takes its alpha.
         let fades = props.opacity.is_some();
         if !(moves || fades)
-            || (fades && !self.fades_without_group(node))
             || !without_turn.is_composite_promotable()
             || self.motion_promotion.get()
             || blinc_animation::try_get_scheduler().is_none()
@@ -819,7 +824,14 @@ impl RenderTree {
             return false;
         }
         self.render_nodes.get(&node).is_some_and(|render| {
-            !moves || (render.props.transform.is_none() && render.props.transform_origin.is_none())
+            // A completed keyframe can leave an explicit identity pose.
+            let identity = render.props.transform.as_ref().is_none_or(|transform| {
+                matches!(transform, blinc_core::Transform::Affine2D(matrix)
+                    if matrix.elements == blinc_core::Affine2D::IDENTITY.elements)
+            });
+            // CSS opacity replaces the base value; a binding multiplies it.
+            (!fades || render.props.opacity == 1.0)
+                && (!moves || (identity && render.props.transform_origin.is_none()))
         })
     }
 

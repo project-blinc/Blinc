@@ -36,3 +36,4 @@ pub mod helpers;
 pub mod layered;
 pub mod layout_renderer;
 pub mod motion;
+mod motion_scope;

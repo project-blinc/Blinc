@@ -96,6 +96,15 @@ impl RenderTree {
         //   evicts entries whose stable id didn't survive. This
         //   replaces the destructive wipe that used to churn
         //   closures on every rebuild.
+        for node in self.property_translation_nodes.drain() {
+            if self
+                .motion_bindings
+                .get(&node)
+                .is_some_and(|b| b.is_empty())
+            {
+                self.motion_bindings.remove(&node);
+            }
+        }
         self.render_nodes.clear();
         self.ime_bindings.clear();
         self.accessibility_bindings.clear();

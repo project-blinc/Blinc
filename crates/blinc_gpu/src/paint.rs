@@ -436,6 +436,25 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         std::mem::replace(&mut self.motion_node_ordinal, ordinal)
     }
 
+    fn tag_background_color(&mut self, start: usize, end: usize, owner: u32) -> Option<f32> {
+        use crate::primitives::{FillType, PrimitiveType};
+        let opacity = self.combined_opacity();
+        let primitives = self.active_batch_mut().primitives.get_mut(start..end)?;
+        if primitives.len() != 1
+            || primitives.iter().any(|p| {
+                p.type_info[0] != PrimitiveType::Rect as u32
+                    || p.type_info[1] != FillType::Solid as u32
+            })
+        {
+            return None;
+        }
+        for p in primitives {
+            // Positive tags identify captured text runs. Negative tags identify fills.
+            p.node_slot[3] = -(owner as f32);
+        }
+        Some(opacity)
+    }
+
     fn set_moving_groups_dynamic(&mut self, on: bool) -> bool {
         GpuPaintContext::set_moving_groups_dynamic(self, on)
     }

@@ -187,63 +187,8 @@ pub(super) fn render_and_schedule(
         // the same BlincApp.
         blinc_app.set_clear_alpha(if ws.transparent { 0.0 } else { 1.0 });
 
-        // Compositor fast-path eligibility.
-        //
-        // Cache invalidation is now wired through
-        // `Event::Input` (any input event clears
-        // the cache), so scroll / hover / focus /
-        // IME changes can't smuggle stale state
-        // into the fast path — the very next
-        // paint after any input takes the full
-        // walker route and repopulates the cache.
-        // The fast path engages between input
-        // events, which is exactly when idle
-        // animations (spinner / skeleton /
-        // progress fill) need it.
-        //
-        // Per-frame gate stays conservative — any
-        // frame-loop signal that the fast path's
-        // delta-apply can't reproduce trips the
-        // full path:
-        //  - structural change (`did_rebuild`,
-        //    `ws.needs_relayout`)
-        //  - CSS animation / transition tick
-        //    (`css_active`)
-        //  - scroll physics decay
-        //    (`scroll_animating`)
-        //  - cold start (no cache yet,
-        //    `last_paint_time_ms == 0`)
-        // Per-frame gate. The walker now records
-        // `composite_bindings` for every painted
-        // motion-bound node (animating or not),
-        // so a newly-active spring on a visible
-        // node finds its target entry already in
-        // the map on the very next fast-path
-        // frame. Off-screen nodes are still
-        // culled and unrecorded — when they
-        // scroll into view, the input event
-        // invalidates the cache and the next
-        // full paint records them.
-        // Canvas presence no longer bails the fast
-        // path — `BlincApp::redraw_canvases`
-        // re-invokes each recorded canvas's
-        // `render_fn` into a scratch context and
-        // splices the fresh primitives into the
-        // cached batch, so the surrounding tree
-        // stays cached and the walker doesn't run.
-        // See the split-paint flow in
-        // `render_tree_with_motion_opt`.
-        // CSS-only animation frames take the fast path
-        // when every playing animation / transition is
-        // composite-promotable (opacity / 2D translate /
-        // 2D scale): the walker doesn't need to run
-        // because the layer textures were rasterized on
-        // the last full paint and `composite_frame`
-        // already calls `composite_css_layers_overlay`
-        // to blit them with the current animated
-        // dest_pos / dest_size / opacity. Non-promotable
-        // CSS work (colour / layout / 3D / rotate-z)
-        // still trips the slow path through `css_active`.
+        // Property writes are classified when drained. Rows carry eligible scroll and
+        // transform changes; structural, layout and unsupported animation work repaints.
         let css_blocks_fast = css_active && !css_only_composite_promotable;
         // Visual / FLIP / layout animations resize / reposition
         // bounds each frame — the cached primitive batch

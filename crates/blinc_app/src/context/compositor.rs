@@ -65,6 +65,7 @@ impl RenderContext {
         }
         tree.commit_animation_status(&v2_statuses);
         self.refresh_css_cache_ownership(tree);
+        self.apply_retained_background_colors(tree);
 
         // Ignore subpixel spring tails when deciding whether binding changes are visible.
         // Timeline rotations remain active while playing.
@@ -74,6 +75,10 @@ impl RenderContext {
         let direct_write_drift = {
             let bindings_table = tree.motion_bindings_map();
             tree.composite_bindings().iter().any(|(node, meta)| {
+                if let Some((x, y)) = tree.property_row_translation(*node) {
+                    return (x - meta.last_translate.0).abs() > f32::EPSILON
+                        || (y - meta.last_translate.1).abs() > f32::EPSILON;
+                }
                 let Some(b) = bindings_table.get(node) else {
                     return false;
                 };

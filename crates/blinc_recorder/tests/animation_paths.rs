@@ -16,6 +16,11 @@
 //! `BLINC_ANIM_PATHS_OUT=<dir>` writes a contact sheet for each scene: the frames that matter,
 //! each as reference, painted path and difference (red where they differ).
 
+#[path = "animation_paths/css_backgrounds.rs"]
+mod css_backgrounds;
+#[path = "animation_paths/css_groups.rs"]
+mod css_groups;
+
 use blinc_animation::AnimatedValue;
 use blinc_core::reactive::signal;
 use blinc_core::{Affine2D, Color, Transform};
@@ -114,6 +119,7 @@ impl tracing::Subscriber for PathLog {
             message: String,
             path: String,
             outcome: String,
+            cached: bool,
         }
         impl tracing::field::Visit for Fields {
             fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
@@ -122,6 +128,7 @@ impl tracing::Subscriber for PathLog {
                     "message" => self.message = text,
                     "path" => self.path = text,
                     "outcome" => self.outcome = text,
+                    "used_fast_paint" => self.cached = text == "true",
                     _ => {}
                 }
             }
@@ -135,7 +142,14 @@ impl tracing::Subscriber for PathLog {
                 .lock()
                 .unwrap()
                 .push(format!("rows:{}", fields.outcome)),
-            "p4_breakdown" => self.0.lock().unwrap().push("full".into()),
+            "p4_breakdown" => self.0.lock().unwrap().push(
+                if fields.cached {
+                    "cache_repaint"
+                } else {
+                    "full"
+                }
+                .into(),
+            ),
             _ => {}
         }
     }
@@ -3997,7 +4011,7 @@ const CSS_GRID_TRANSFORM: &str = "
 .pulse { animation: pulse 400ms ease-in-out infinite alternate; }
 ";
 
-/// One of transform and opacity, which is baked, or painted in full with text in it.
+/// A group animated by transform and opacity.
 const CSS_GRID_FADE: &str = "
 @keyframes pulse {
   from { transform: translateY(0px) scale(1); opacity: 1; }
@@ -4006,7 +4020,7 @@ const CSS_GRID_FADE: &str = "
 .pulse { animation: pulse 400ms ease-in-out infinite alternate; }
 ";
 
-/// A fade of opacity alone, which fades a block of one primitive on rows and bakes a bordered card.
+/// Opacity alone, applied to a primitive or to a bordered card as a group.
 const CSS_GRID_OPACITY: &str = "
 @keyframes pulse {
   from { opacity: 1; }

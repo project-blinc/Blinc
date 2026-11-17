@@ -20,7 +20,7 @@ russl::russl! {
         pub motion: Vec4,
         // pivot x, pivot y (device px), rotation (radians), opacity
         pub pivot: Vec4,
-        // parent slot + 1, zero for none; the rest reserved
+        // parent slot + 1, snap text to pixels, two reserved values
         pub link: Vec4,
     }
 

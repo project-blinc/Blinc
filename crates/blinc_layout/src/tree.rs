@@ -541,18 +541,20 @@ impl LayoutTree {
 
     /// Get children of a layout node
     pub fn children(&self, parent: LayoutNodeId) -> Vec<LayoutNodeId> {
-        let Some(&taffy_node) = self.node_map.get(parent) else {
-            return Vec::new();
-        };
+        self.children_iter(parent).collect()
+    }
 
-        let Ok(children) = self.taffy.children(taffy_node) else {
-            return Vec::new();
-        };
-
-        children
-            .iter()
-            .filter_map(|&child_taffy| self.reverse_map.get(&child_taffy).copied())
-            .collect()
+    /// Borrow the child list for walks that do not modify the tree.
+    pub(crate) fn children_iter(
+        &self,
+        parent: LayoutNodeId,
+    ) -> impl Iterator<Item = LayoutNodeId> + '_ {
+        use taffy::TraversePartialTree;
+        self.node_map
+            .get(parent)
+            .into_iter()
+            .flat_map(move |&node| self.taffy.child_ids(node))
+            .filter_map(move |child| self.reverse_map.get(&child).copied())
     }
 
     /// How many children `parent` has, without listing them.

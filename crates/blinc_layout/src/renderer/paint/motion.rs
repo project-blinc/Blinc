@@ -95,6 +95,7 @@ impl RenderTree {
         // reads this between full paints to patch the cached
         // primitive buffer in place.
         self.composite_bindings.borrow_mut().clear();
+        self.binding_clip_bounds.borrow_mut().clear();
         self.binding_ordinals.borrow_mut().clear();
         self.clear_scroll_rows_record();
         self.bound_svg.set(false);
@@ -104,6 +105,7 @@ impl RenderTree {
         // paint, repopulated below for every node whose
         // `current_animation_status` is `Animating(Css)`.
         self.css_anim_paint_records.borrow_mut().clear();
+        self.css_backgrounds.borrow_mut().clear();
         // Canvas paint records have the same lifecycle: the walker
         // rebuilds them on every full paint, the fast path consumes
         // them between full paints.
@@ -146,8 +148,7 @@ impl RenderTree {
                 ctx.push_transform(Transform::scale(self.scale_factor, self.scale_factor));
             }
 
-            // Skip Glass / Foreground passes when no node in the tree is on those layers: each
-            // walker pass costs a full tree traversal even when it emits nothing.
+            // Extra passes follow only branches containing their layer's content.
             let (has_glass, has_foreground) =
                 self.with_node_scan(|scan| (scan.has_glass, scan.has_foreground));
 
@@ -355,8 +356,18 @@ impl RenderTree {
         inherited_opacity: f32,
         cumulative_scroll: (f32, f32),
     ) {
-        // Debug: uncomment to trace all nodes
-        // eprintln!("render_layer_with_motion: visiting node {:?}, target_layer={:?}", node, target_layer);
+        // Keep ancestor state on the path to each layer; descendants inherit their owner's layer.
+        if target_layer != RenderLayer::Background
+            && glass_depth == 0
+            && !inside_foreground
+            && !self.with_node_scan(|scan| match target_layer {
+                RenderLayer::Glass => scan.glass_branches.contains(&node),
+                RenderLayer::Foreground => scan.foreground_branches.contains(&node),
+                RenderLayer::Background => true,
+            })
+        {
+            return;
+        }
 
         // Use animated bounds if a layout animation is active, otherwise use layout bounds
         let Some(bounds) = self.get_render_bounds(node, parent_offset) else {
@@ -489,9 +500,12 @@ impl RenderTree {
 
         // Motion and portal scopes use dynamic paint unless an ordinary native
         // group retains them. CSS-only scopes keep their collected content anchor.
+        let shared_motion_scope = self.shared_motion_scope(node);
+        let inherited_dynamic = ctx.bg_batch_is_dynamic();
         let in_motion_subtree = motion_bindings_ref.is_some()
             || render_node.props.motion.is_some()
-            || render_node.props.is_overlay_root;
+            || render_node.props.is_overlay_root
+            || shared_motion_scope;
         if in_motion_subtree {
             ctx.push_motion_subtree();
         }
@@ -504,10 +518,8 @@ impl RenderTree {
             drop(ordinals);
             ctx.set_motion_node_ordinal(ordinal)
         });
-        // The groups of a bound node move with the dynamic batch, unless content painted after the
-        // node lies over its box, which they would then be drawn above, or an image or SVG is
-        // inside them. Any other motion scope, and what is inside it, keeps its groups in their
-        // place in the static paint order.
+        // Nested dynamic groups keep their shared paint order. A new scope retains its static
+        // anchor when later content overlaps it or media needs a separate dispatch.
         let bound_media = motion_bindings_ref.is_some() && self.subtree_has_media(node);
         if motion_bindings_ref.is_some() && self.subtree_has_svg(node) {
             self.bound_svg.set(true);
@@ -515,9 +527,9 @@ impl RenderTree {
         let previous_groups = in_motion_subtree.then(|| {
             let was = ctx.set_moving_groups_dynamic(false);
             if was
-                && motion_bindings_ref.is_some()
+                && (motion_bindings_ref.is_some() || shared_motion_scope)
                 && !bound_media
-                && !self.later_content_overlaps_any(node)
+                && (inherited_dynamic || !self.later_content_overlaps_any(node))
             {
                 ctx.set_moving_groups_dynamic(true);
             }
@@ -528,7 +540,6 @@ impl RenderTree {
         if in_overlay_subtree_node {
             ctx.push_overlay_subtree();
         }
-        let composite_bg_start = in_motion_subtree.then(|| ctx.bg_primitive_count());
         // Phase 4b: bracket CSS-animated subtrees the same way
         // `composite_bg_start` brackets motion-bound subtrees, so
         // the post-walk recording at the bottom of this fn can
@@ -630,7 +641,6 @@ impl RenderTree {
             false
         };
         let pushed_composite_layer = pushed_for_css || pushed_for_motion_subtree;
-        let css_anim_bg_start = in_css_subtree.then(|| ctx.bg_primitive_count());
         // P4.3 sibling of `css_anim_bg_start`. We snapshot the scratch
         // batch index AFTER `push_composite_layer` so the AABB at the
         // insert site below covers exactly the primitives this subtree
@@ -653,6 +663,11 @@ impl RenderTree {
         // this fn alongside the legacy `composite_bindings` insert,
         // gated on the node's `AnimationStatus` being `Animating`.
         let ambient_clip = ctx.current_row_clip_aabb();
+        if motion_bindings_ref.is_some()
+            && let Some(clip) = ctx.current_clip_aabb()
+        {
+            self.binding_clip_bounds.borrow_mut().insert(node, clip);
+        }
         let ambient_path = if motion_bindings_ref.is_some() {
             ctx.current_path_clip()
         } else {
@@ -1102,6 +1117,9 @@ impl RenderTree {
         } else {
             None
         };
+        // Native groups may change the owning batch. Both ends of each range use that owner.
+        let composite_bg_start = in_motion_subtree.then(|| ctx.bg_primitive_count());
+        let css_anim_bg_start = in_css_subtree.then(|| ctx.bg_primitive_count());
 
         // Corner shape setup (superellipse per-corner) — MUST be set before draw_shadow
         // so shadows use the same corner_shape as the fill+border SDF.
@@ -1435,6 +1453,7 @@ impl RenderTree {
                     false
                 };
                 if let Some(ref bg) = render_node.props.background {
+                    let background_start = ctx.bg_primitive_count();
                     // When using opacity layer, draw at full opacity (layer handles it)
                     // Otherwise, apply motion opacity to brush for fallback
                     let brush = if captured_background {
@@ -1467,6 +1486,14 @@ impl RenderTree {
                         );
                     } else {
                         ctx.fill_rect(rect, radius, brush);
+                    }
+                    if effective_layer == RenderLayer::Background {
+                        let alpha = if !has_opacity_layer && motion_opacity < 1.0 {
+                            motion_opacity
+                        } else {
+                            1.0
+                        };
+                        self.record_css_background(ctx, node, background_start, alpha);
                     }
                 } else if is_3d_group {
                     // 3D group elements need a primitive even without a background —
@@ -2252,7 +2279,11 @@ impl RenderTree {
                 let (state_tx, state_ty) = motion_values
                     .map(|m| m.resolved_translate())
                     .unwrap_or((0.0, 0.0));
-                let last_translate = (state_tx + binding_tx, state_ty + binding_ty);
+                let property_translate = self.property_row_translation(node).unwrap_or((0.0, 0.0));
+                let last_translate = (
+                    state_tx + binding_tx + property_translate.0,
+                    state_ty + binding_ty + property_translate.1,
+                );
                 let (state_sx, state_sy) = motion_values
                     .map(|m| m.resolved_scale())
                     .unwrap_or((1.0, 1.0));

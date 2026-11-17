@@ -384,10 +384,11 @@ impl EventRouter {
     /// `is_hovered` for callers that only have a `LayoutNodeId` and
     /// the tree — resolves the stable id internally.
     pub fn is_hovered_layout(&self, tree: &RenderTree, node_id: LayoutNodeId) -> bool {
-        match tree.stable_id(node_id) {
-            Some(s) => self.hovered.contains(&s),
-            None => false,
-        }
+        tree.stable_id(node_id)
+            .is_some_and(|s| self.hovered.contains(&s))
+            && tree
+                .latched_scroll_target()
+                .is_none_or(|owner| !tree.layout_tree.ancestors(node_id).contains(&owner))
     }
 
     /// Check if a specific node is currently pressed, by its
@@ -781,35 +782,41 @@ impl EventRouter {
         // only needs the topmost hit chain (root -> leaf) for hover enter/leave
         // and event bubbling, so avoid `hit_test_all`'s sibling walk on every
         // mouse move in large scroll views.
-        let (hits, current_hovered): (Vec<HitTestResult>, HashSet<LayoutNodeId>) = if overlay_bounds
-            .is_empty()
-        {
-            if let Some(hit) = self.hit_test(tree, x, y) {
-                let hovered = hit
-                    .ancestors
-                    .iter()
-                    .copied()
-                    .filter(|node| {
-                        let in_bounds = hit.ancestor_bounds.get(&node.to_raw()).is_some_and(
-                            |&(bx, by, bw, bh)| x >= bx && x < bx + bw && y >= by && y < by + bh,
-                        );
-                        let pointer_events_none = tree
-                            .get_render_node(*node)
-                            .map(|n| n.props.pointer_events_none)
-                            .unwrap_or(false);
-                        in_bounds && !pointer_events_none
-                    })
-                    .collect();
-                (vec![hit], hovered)
+        let (hits, mut current_hovered): (Vec<HitTestResult>, HashSet<LayoutNodeId>) =
+            if overlay_bounds.is_empty() {
+                if let Some(hit) = self.hit_test(tree, x, y) {
+                    let hovered = hit
+                        .ancestors
+                        .iter()
+                        .copied()
+                        .filter(|node| {
+                            let in_bounds = hit.ancestor_bounds.get(&node.to_raw()).is_some_and(
+                                |&(bx, by, bw, bh)| {
+                                    x >= bx && x < bx + bw && y >= by && y < by + bh
+                                },
+                            );
+                            let pointer_events_none = tree
+                                .get_render_node(*node)
+                                .map(|n| n.props.pointer_events_none)
+                                .unwrap_or(false);
+                            in_bounds && !pointer_events_none
+                        })
+                        .collect();
+                    (vec![hit], hovered)
+                } else {
+                    (Vec::new(), HashSet::new())
+                }
             } else {
-                (Vec::new(), HashSet::new())
-            }
-        } else {
-            let hits =
-                self.hit_test_all_with_occlusion(tree, x, y, overlay_bounds, overlay_layer_id);
-            let hovered = hits.iter().map(|h| h.node).collect();
-            (hits, hovered)
-        };
+                let hits =
+                    self.hit_test_all_with_occlusion(tree, x, y, overlay_bounds, overlay_layer_id);
+                let hovered = hits.iter().map(|h| h.node).collect();
+                (hits, hovered)
+            };
+        // A claimed gesture owns its content until it ends. Keep the owner's hover so
+        // leaving still cancels the gesture, without hovering items moving underneath it.
+        if let Some(owner) = tree.latched_scroll_target() {
+            current_hovered.retain(|node| !tree.layout_tree.ancestors(*node).contains(&owner));
+        }
 
         // Store bounds for all hit nodes (for event handlers to access via get_node_bounds)
         // Clear previous bounds and populate with current hit test results

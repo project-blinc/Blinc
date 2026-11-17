@@ -46,6 +46,14 @@ struct Pose {
 }
 
 impl Pose {
+    fn translated(translate: (f32, f32), opacity: f32) -> Pose {
+        Pose {
+            translate,
+            scale: (1.0, 1.0),
+            rotation: 0.0,
+            opacity,
+        }
+    }
     /// The values the CPU patcher reads from a binding. An opacity the binding does not drive
     /// stays at `opacity`.
     fn of(bindings: &MotionBindings, opacity: f32) -> Pose {
@@ -424,9 +432,13 @@ impl NodeRows {
         &self,
         meta: &CompositeBindingMeta,
         binding: Option<&MotionBindings>,
+        translation: Option<(f32, f32)>,
     ) -> bool {
         if owned(meta) {
             return false;
+        }
+        if let Some(translate) = translation {
+            return Pose::translated(translate, meta.last_opacity).differs(&Pose::of_meta(meta));
         }
         match binding {
             Some(b) => Pose::of(b, meta.last_opacity).differs(&Pose::of_meta(meta)),
@@ -520,6 +532,31 @@ impl NodeRows {
             up = node.parent;
         }
         None
+    }
+
+    /// A collected text batch has its own clip pointers. Match its inner viewport by geometry,
+    /// so a clip introduced above the translating node stays with that ancestor.
+    pub(super) fn follow_collected_text_path(
+        &self,
+        prim: &mut GpuPrimitive,
+        clip: [f32; 4],
+        ambient: &dyn Fn(LayoutNodeId) -> Option<[f32; 4]>,
+    ) {
+        let Some(row) = prim.node_slot().filter(|_| prim.clip_shape[0] >= 0.5) else {
+            return;
+        };
+        let mut depth = 0;
+        let mut up = Some(row / 2);
+        while let Some(slot) = up {
+            let node = &self.slots[slot as usize];
+            if !same_clip(clip, ambient(node.node).or(node.ambient_clip)) {
+                prim.set_node_path_from(Some(depth));
+                return;
+            }
+            depth += 1;
+            up = node.parent;
+        }
+        prim.set_node_path_from(None);
     }
 
     /// Say, on each primitive that has a clip, which rows move it. `false` when one cannot, or
@@ -1062,6 +1099,7 @@ impl NodeRows {
         ancestors: &dyn Fn(LayoutNodeId) -> Vec<LayoutNodeId>,
         loaded: &dyn Fn(&str) -> bool,
         scroll: &dyn Fn(LayoutNodeId) -> Option<(f32, f32)>,
+        property: &dyn Fn(LayoutNodeId) -> Option<(f32, f32)>,
         dpi: f32,
         adopt: bool,
     ) -> Outcome {
@@ -1136,26 +1174,47 @@ impl NodeRows {
         }
 
         let mut rows = Vec::with_capacity(self.slots.len() * 2);
-        for slot in &self.slots {
+        for (index, slot) in self.slots.iter().enumerate() {
             // A node's pose is its bound values, or for a scroll container its offset.
-            let now = match motion.get(&slot.node) {
-                Some(b) => Pose::of(b, slot.baseline.opacity),
-                None => match scroll(slot.node) {
-                    Some(offset) => Pose {
-                        translate: offset,
-                        scale: (1.0, 1.0),
-                        rotation: 0.0,
-                        opacity: slot.baseline.opacity,
+            let now = if let Some(translate) = property(slot.node) {
+                Pose::translated(translate, slot.baseline.opacity)
+            } else {
+                match motion.get(&slot.node) {
+                    Some(b) => Pose::of(b, slot.baseline.opacity),
+                    None => match scroll(slot.node) {
+                        Some(offset) => Pose {
+                            translate: offset,
+                            scale: (1.0, 1.0),
+                            rotation: 0.0,
+                            opacity: slot.baseline.opacity,
+                        },
+                        None => return self.decline(true, batch, text, bindings),
                     },
-                    None => return self.decline(true, batch, text, bindings),
-                },
+                }
             };
-            let (Some(batch_row), Some(text_row)) = (
+            let (Some(mut batch_row), Some(mut text_row)) = (
                 Self::row(slot, &now, dpi, false),
                 Self::row(slot, &now, dpi, true),
             ) else {
                 return self.decline(true, batch, text, bindings);
             };
+            // Keep raw glyph positions in the cache and snap after the complete translation.
+            // A playing animation keeps its existing smooth-placement rule.
+            let mut translated = false;
+            let mut animating = false;
+            let mut up = Some(index as u32);
+            while let Some(i) = up {
+                let ancestor = &self.slots[i as usize];
+                translated |= property(ancestor.node).is_some();
+                animating |= motion
+                    .get(&ancestor.node)
+                    .is_some_and(|b| b.is_any_animating());
+                up = ancestor.parent;
+            }
+            if translated && !animating {
+                batch_row.link[1] = 1.0;
+                text_row.link[1] = 1.0;
+            }
             rows.push(batch_row);
             rows.push(text_row);
         }
@@ -1188,7 +1247,9 @@ impl NodeRows {
         for (node, meta) in bindings.iter_mut().filter(|(_, m)| owned(m)) {
             let Some(b) = motion.get(node) else { continue };
             active |= b.is_any_animating();
-            let now = Pose::of(b, meta.last_opacity);
+            let now = property(*node)
+                .map(|t| Pose::translated(t, meta.last_opacity))
+                .unwrap_or_else(|| Pose::of(b, meta.last_opacity));
             if now.differs(&Pose::of_meta(meta)) {
                 active = true;
                 meta.last_translate = now.translate;
@@ -1482,8 +1543,8 @@ mod tests {
         assert_eq!(slots[0].node, id(1));
         let rows = NodeRows::default();
         // Settled where it was painted it is left be; a change asks for a repaint.
-        assert!(!rows.moved(&in_static, Some(&MotionBindings::default())));
-        assert!(rows.moved(&in_static, None));
+        assert!(!rows.moved(&in_static, Some(&MotionBindings::default()), None));
+        assert!(rows.moved(&in_static, None, None));
     }
 
     #[test]

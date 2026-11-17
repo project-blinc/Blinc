@@ -4,6 +4,9 @@
 //! `turn` includes month creation and its slide, and `rest` measures the same viewport idle.
 //! Omit the phase for all three. `COSTS_NO_TRACE=1` removes path tracing while profiling.
 //! `COSTS_CALENDAR_SNAP=<prefix>` saves cached and full-paint references separately from timings.
+//! `COSTS_CALENDAR_INDEX=1` selects the right calendar. `COSTS_CALENDAR_FRAMES=12` and
+//! `COSTS_CALENDAR_DT=8` turn months continuously without waiting for their slides to settle.
+//! `COSTS_CALENDAR_TREE=1` counts root builds, structural updates and month-page lifetimes.
 
 use super::{Headless, PathLog, Scene, bring_into_view, rest};
 use std::time::Instant;
@@ -12,6 +15,8 @@ struct Samples<'a> {
     scene: Scene<'a>,
     input: Vec<f64>,
     total: Vec<f64>,
+    step_ms: u32,
+    tree_counts: Option<super::tree_counts::TreeCounts>,
 }
 
 impl<'a> Samples<'a> {
@@ -20,15 +25,29 @@ impl<'a> Samples<'a> {
             scene: Scene::new(ui, log),
             input: Vec::new(),
             total: Vec::new(),
+            tree_counts: std::env::var_os("COSTS_CALENDAR_TREE")
+                .map(|_| super::tree_counts::TreeCounts::default()),
+            step_ms: std::env::var("COSTS_CALENDAR_DT")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(16)
+                .max(1),
         }
     }
 
     fn frame(&mut self, input: impl FnOnce(&mut Headless)) {
+        let tree_before = self
+            .tree_counts
+            .as_ref()
+            .map(|_| super::tree_counts::Snapshot::read(self.scene.ui));
         let start = Instant::now();
         input(self.scene.ui);
         self.input.push(start.elapsed().as_secs_f64() * 1000.0);
-        self.scene.step();
+        self.scene.step_at(self.step_ms);
         self.total.push(start.elapsed().as_secs_f64() * 1000.0);
+        if let Some(counts) = self.tree_counts.as_mut() {
+            counts.record(tree_before.unwrap(), self.scene.ui);
+        }
     }
 
     fn report(&self, name: &str) {
@@ -44,12 +63,59 @@ impl<'a> Samples<'a> {
             "    {} frames, input {i50:.2} / {i90:.2} ms, complete headless step {t50:.2} / {t90:.2} ms",
             self.total.len()
         );
+        let tail = |samples: &[f64]| {
+            let mut samples = samples.to_vec();
+            samples.sort_by(f64::total_cmp);
+            [0.95, 0.99, 1.0].map(|p| samples[((samples.len() - 1) as f64 * p) as usize])
+        };
+        let [i95, i99, imax] = tail(&self.input);
+        let [t95, t99, tmax] = tail(&self.total);
+        println!(
+            "    tail ms: input p95={i95:.2} p99={i99:.2} max={imax:.2}; complete step p95={t95:.2} p99={t99:.2} max={tmax:.2}"
+        );
+        let mut worst: Vec<_> = self.total.iter().copied().enumerate().collect();
+        worst.sort_by(|a, b| b.1.total_cmp(&a.1));
+        for (frame, total) in worst.into_iter().take(3) {
+            println!(
+                "    slow step {}: input {:.2}ms total {total:.2}ms",
+                frame + 1,
+                self.input[frame],
+            );
+        }
+        if let Some(counts) = &self.tree_counts {
+            counts.report();
+        }
     }
+}
+
+fn calendar_node(ui: &Headless, class: &str) -> Option<blinc_layout::LayoutNodeId> {
+    let index = std::env::var("COSTS_CALENDAR_INDEX")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(0);
+    let tree = ui.tree();
+    let mut nodes: Vec<_> = tree
+        .element_registry()
+        .class_to_nodes_index()
+        .get(class)?
+        .iter()
+        .copied()
+        .collect();
+    nodes.sort_by(|a, b| {
+        let x = |node| {
+            tree.get_absolute_bounds(node)
+                .map_or(f32::INFINITY, |b| b.x)
+        };
+        x(*a).total_cmp(&x(*b))
+    });
+    nodes.get(index).copied()
 }
 
 fn caption(ui: &Headless) -> Vec<String> {
     let tree = ui.tree();
-    let mut pending: Vec<_> = ui.find(".cn-calendar-caption").into_iter().collect();
+    let mut pending: Vec<_> = calendar_node(ui, "cn-calendar-caption")
+        .into_iter()
+        .collect();
     let mut text = Vec::new();
     while let Some(node) = pending.pop() {
         pending.extend(tree.layout_tree.children(node).into_iter().rev());
@@ -80,7 +146,7 @@ pub(super) fn run(ui: &mut Headless, log: PathLog, cycles: usize) {
     assert!(bring_into_view(ui, ".cn-calendar"), "calendar in view");
     ui.scroll_end().scroll_momentum_end();
     rest(ui);
-    let node = ui.find(".cn-calendar-months").expect("month viewport");
+    let node = calendar_node(ui, "cn-calendar-months").expect("month viewport");
     let bounds = ui.tree().get_absolute_bounds(node).expect("month bounds");
     ui.move_to(
         bounds.x + bounds.width / 2.0,
@@ -123,10 +189,15 @@ pub(super) fn run(ui: &mut Headless, log: PathLog, cycles: usize) {
     }
 
     if matches!(phase.as_str(), "all" | "turn") {
+        let frames = std::env::var("COSTS_CALENDAR_FRAMES")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(36)
+            .max(7);
         let mut samples = Samples::new(ui, log);
         for cycle in 0..cycles {
             let before = caption(samples.scene.ui);
-            for frame in 0..36 {
+            for frame in 0..frames {
                 samples.frame(|ui| {
                     if frame == 0 {
                         ui.scroll_start();
@@ -151,6 +222,8 @@ pub(super) fn run(ui: &mut Headless, log: PathLog, cycles: usize) {
         }
         samples.report("calendar continuous month turns");
     }
+    ui.scroll_end().scroll_momentum_end().settle();
+    rest(ui);
     capture(ui, "settled");
     println!("calendar ends at {:?}", caption(ui));
 }

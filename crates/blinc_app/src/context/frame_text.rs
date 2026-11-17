@@ -77,29 +77,31 @@ pub(super) fn affine_scale(affine: Option<[f32; 6]>) -> f32 {
     affine.map_or(1.0, |[a, b, c, d, ..]| a.hypot(b).max(c.hypot(d)))
 }
 
-/// Whether `node` is inside a scroll container whose content is moved by rows. Its glyphs move
-/// by whole device pixels with the rows and are never baked: a settle bake would leave them
-/// behind the next time it scrolls.
+/// Whether rows translate `node` or an ancestor directly. Its glyphs keep their rows
+/// between writes instead of baking a settled pose that could be left behind.
 pub(super) fn in_scroll_rows(tree: &blinc_layout::RenderTree, node: super::LayoutNodeId) -> bool {
     std::iter::once(node)
         .chain(tree.layout_tree.ancestors(node))
-        .any(|n| tree.is_scroll_row_node(n))
+        .any(|n| tree.is_scroll_row_node(n) || tree.property_row_translation(n).is_some())
 }
 
-/// Whether a bound node at or above `node` is moving.
+/// Whether text needs reusable, unrounded glyph positions for an animation or live translation.
 pub(super) fn chain_moving(tree: &blinc_layout::RenderTree, node: super::LayoutNodeId) -> bool {
     let bindings = tree.motion_bindings_map();
     std::iter::once(node)
         .chain(tree.layout_tree.ancestors(node))
-        .any(|n| bindings.get(&n).is_some_and(|b| b.is_any_animating()))
+        .any(|n| {
+            tree.property_row_translation(n).is_some()
+                || bindings.get(&n).is_some_and(|b| b.is_any_animating())
+        })
 }
 
-/// Whether `node` is inside a scroll container that the rows move.
+/// Whether an ancestor translates its content directly through rows.
 pub(super) fn under_scroll_row(tree: &blinc_layout::RenderTree, node: super::LayoutNodeId) -> bool {
     tree.layout_tree
         .ancestors(node)
         .into_iter()
-        .any(|a| tree.is_scroll_row_node(a))
+        .any(|a| tree.is_scroll_row_node(a) || tree.property_row_translation(a).is_some())
 }
 
 /// Whether a CSS animation that moves, scales or turns plays on `node` or an ancestor. One of

@@ -48,12 +48,14 @@ mod ime;
 pub use animation::css::css_animation_playing;
 mod build;
 mod child_index;
+mod css_backgrounds;
 mod cull;
 mod cursor;
 mod events;
 mod keyboard_nav;
 mod owners;
 mod paint;
+mod property_rows;
 mod queries;
 mod registries;
 mod scroll;
@@ -687,11 +689,14 @@ impl TextLook {
     }
 }
 
-/// What one pass over the render nodes found, valid at one revision of them.
+/// Layer branches and content kinds at a render revision and layout epoch.
 struct NodeScan {
     revision: u64,
+    layout_epoch: u64,
     has_glass: bool,
     has_foreground: bool,
+    glass_branches: rustc_hash::FxHashSet<LayoutNodeId>,
+    foreground_branches: rustc_hash::FxHashSet<LayoutNodeId>,
     canvases: Vec<LayoutNodeId>,
     /// The nodes the selector registry types as `svg`.
     svgs: Vec<LayoutNodeId>,
@@ -745,6 +750,7 @@ pub struct RenderTree {
     /// have written: a batch applied from inside another (a region's reconcile applying what a
     /// leaving row's start queued) holds newer values than the rest of the outer batch.
     property_write_logs: Vec<PropertyWriteLog>,
+    property_paint_revision: u64,
     /// Dirty tracker for incremental rebuilds
     dirty_tracker: crate::interactive::DirtyTracker,
     /// Per-node state storage (survives across rebuilds if tree is reused)
@@ -862,6 +868,9 @@ pub struct RenderTree {
     painted_node_ids: RefCell<HashSet<LayoutNodeId>>,
     /// Motion bindings for continuous animations (keyed by node_id)
     motion_bindings: tracked::Tracked<HashMap<LayoutNodeId, crate::motion::MotionBindings>>,
+    /// Reactive translations routed through the binding painter without animation handles.
+    property_translation_nodes: HashSet<LayoutNodeId>,
+    binding_clip_bounds: RefCell<HashMap<LayoutNodeId, [f32; 4]>>,
     /// Compositor-path metadata captured during paint for nodes whose
     /// transform / opacity is driven by motion bindings. Records the
     /// range of primitives the paint walker emitted for the binding's
@@ -891,6 +900,7 @@ pub struct RenderTree {
     /// `apply_css_deltas` to patch primitives + layer configs from
     /// current `css_anim_store` values without re-walking.
     css_anim_paint_records: RefCell<HashMap<LayoutNodeId, CssAnimPaintMeta>>,
+    css_backgrounds: RefCell<HashMap<LayoutNodeId, css_backgrounds::Painted>>,
     /// Per-canvas paint state captured during full paint so the
     /// fast path can re-invoke each canvas's `render_fn` next frame
     /// without re-walking the rest of the tree. Same lifecycle as
@@ -1245,6 +1255,7 @@ impl RenderTree {
             root: None,
             handler_registry: crate::event_handler::HandlerRegistry::new(),
             property_write_logs: Vec::new(),
+            property_paint_revision: 0,
             dirty_tracker: crate::interactive::DirtyTracker::new(),
             node_states: HashMap::new(),
             scroll_offsets: HashMap::new(),
@@ -1275,9 +1286,12 @@ impl RenderTree {
             skip_canvas_drawing: Cell::new(false),
             painted_node_ids: RefCell::new(HashSet::new()),
             motion_bindings: tracked::Tracked::default(),
+            property_translation_nodes: HashSet::new(),
+            binding_clip_bounds: RefCell::new(HashMap::new()),
             composite_bindings: RefCell::new(HashMap::new()),
             painted_unpromoted_binding: Cell::new(false),
             css_anim_paint_records: RefCell::new(HashMap::new()),
+            css_backgrounds: RefCell::new(HashMap::new()),
             canvas_paint_records: RefCell::new(HashMap::new()),
             overlay_canvas_paint_records: RefCell::new(HashMap::new()),
             rows_canvas_paint_records: RefCell::new(HashMap::new()),
@@ -1539,22 +1553,41 @@ impl RenderTree {
         }
     }
 
-    /// Run `read` on what a pass over the render nodes found, passing again only when they have
-    /// been borrowed mutably since the last.
+    /// Rebuild the scan when node structure or layout ancestry changes.
     fn with_node_scan<R>(&self, read: impl FnOnce(&NodeScan) -> R) -> R {
         let revision = self.render_nodes.revision();
+        let layout_epoch = self.layout_tree.epoch();
         let mut scan = self.node_scan.borrow_mut();
-        if scan.as_ref().is_none_or(|s| s.revision != revision) {
+        if scan
+            .as_ref()
+            .is_none_or(|s| s.revision != revision || s.layout_epoch != layout_epoch)
+        {
             let mut found = NodeScan {
                 revision,
+                layout_epoch,
                 has_glass: false,
                 has_foreground: false,
+                glass_branches: rustc_hash::FxHashSet::default(),
+                foreground_branches: rustc_hash::FxHashSet::default(),
                 canvases: Vec::new(),
                 svgs: Vec::new(),
             };
             for (id, node) in self.render_nodes.iter() {
-                found.has_glass |= node.props.is_glass();
-                found.has_foreground |= matches!(node.props.layer, RenderLayer::Foreground);
+                let glass = node.props.is_glass();
+                let foreground = node.props.layer == RenderLayer::Foreground;
+                found.has_glass |= glass;
+                found.has_foreground |= foreground;
+                let glass_branch = glass || node.props.layer == RenderLayer::Glass;
+                if glass_branch || foreground {
+                    let ancestors = self.layout_tree.ancestors(*id);
+                    if glass_branch {
+                        found.glass_branches.insert(*id);
+                        found.glass_branches.extend(ancestors.iter().copied());
+                    }
+                    // Ordinary children of glass paint in the foreground pass.
+                    found.foreground_branches.insert(*id);
+                    found.foreground_branches.extend(ancestors);
+                }
                 if matches!(node.element_type, ElementType::Canvas(_)) {
                     found.canvases.push(*id);
                 }
@@ -3469,11 +3502,31 @@ impl RenderTree {
                 }
                 continue;
             }
-            effects = effects.or(update.effects);
+            let region_only = update.property == crate::property::PropertyId::Region
+                && update.region_update.is_some()
+                && update.render_write.is_none()
+                && update.beneath_write.is_none()
+                && update.layout_write.is_none()
+                && update.text_content.is_none()
+                && update.class_toggle.is_none();
+            if !region_only {
+                effects = effects.or(update.effects);
+            }
             // A batch applied from inside this one has already written this property, and
             // its value is the newer.
             let key = (update.node_id, update.property);
             let overtaken = self.property_write_logs[level].deeper.contains(&key);
+            let translation_write = update.property == crate::property::PropertyId::Transform
+                && update.effects == crate::property::SideEffects::VISUAL
+                && update.render_write.is_some()
+                && update.layout_write.is_none()
+                && update.class_toggle.is_none()
+                && update.text_content.is_none()
+                && update.region_update.is_none();
+
+            if !translation_write && !region_only {
+                self.property_paint_revision = self.property_paint_revision.wrapping_add(1);
+            }
             if !overtaken {
                 if let Some(write) = update.render_write {
                     self.update_render_props(update.node_id, |p| write(p));
@@ -3483,6 +3536,9 @@ impl RenderTree {
                 }
                 if let Some(beneath) = update.beneath_write {
                     self.write_beneath_state_layers(update.node_id, beneath);
+                }
+                if translation_write && !self.retain_property_translation(update.node_id) {
+                    self.property_paint_revision = self.property_paint_revision.wrapping_add(1);
                 }
                 self.property_write_logs[level].own.insert(key);
             }
@@ -3495,7 +3551,7 @@ impl RenderTree {
             if let Some(region) = update.region_update
                 && regions_seen.insert((update.node_id, region))
             {
-                self.reconcile_region(update.node_id, region);
+                effects = effects.or(self.reconcile_region(update.node_id, region));
             }
         }
         crate::stateful::requeue_partial_updates(foreign);

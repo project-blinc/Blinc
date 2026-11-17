@@ -28,7 +28,7 @@ impl RenderTree {
     /// Whether `node` has an image or an SVG somewhere below it, content that is drawn apart
     /// from the primitive batch and takes a group's opacity in a pass of its own.
     pub(crate) fn subtree_has_media(&self, node: LayoutNodeId) -> bool {
-        self.layout_tree.children(node).into_iter().any(|child| {
+        self.layout_tree.children_iter(node).any(|child| {
             self.render_nodes.get(&child).is_some_and(|render| {
                 matches!(
                     render.element_type,
@@ -40,7 +40,7 @@ impl RenderTree {
 
     /// Whether `node` has an SVG somewhere below it.
     pub(crate) fn subtree_has_svg(&self, node: LayoutNodeId) -> bool {
-        self.layout_tree.children(node).into_iter().any(|child| {
+        self.layout_tree.children_iter(node).any(|child| {
             self.render_nodes
                 .get(&child)
                 .is_some_and(|render| matches!(render.element_type, ElementType::Svg(_)))
@@ -55,14 +55,11 @@ impl RenderTree {
         let rect = [own.x, own.y, own.width, own.height];
         let mut current = node;
         while let Some(parent) = self.element_registry.get_parent(current) {
-            let siblings = self.layout_tree.children(parent);
-            let Some(at) = siblings.iter().position(|s| *s == current) else {
+            let mut siblings = self.layout_tree.children_iter(parent);
+            if !siblings.any(|s| s == current) {
                 return false;
-            };
-            if siblings[at + 1..]
-                .iter()
-                .any(|sibling| self.subtree_paints_over(*sibling, rect, any))
-            {
+            }
+            if siblings.any(|sibling| self.subtree_paints_over(sibling, rect, any)) {
                 return true;
             }
             current = parent;
@@ -116,7 +113,7 @@ impl RenderTree {
         if props.clips_content && !overlaps {
             return false;
         }
-        self.layout_tree.children(node).into_iter().any(|child| {
+        self.layout_tree.children_iter(node).any(|child| {
             self.subtree_paints_over_at(
                 child,
                 rect,

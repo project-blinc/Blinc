@@ -21,7 +21,7 @@ pub struct NodeRow {
     pub motion: [f32; 4],
     /// Pivot x and y (device px), rotation (radians), opacity.
     pub pivot: [f32; 4],
-    /// Parent slot + 1, zero for none; the rest is reserved.
+    /// Parent slot + 1, snap text to pixels, then two reserved values.
     pub link: [f32; 4],
 }
 
@@ -219,17 +219,19 @@ impl NodeRow {
 pub fn resolve_primitive(rows: &[NodeRow], p: &GpuPrimitive) -> GpuPrimitive {
     let mut out = *p;
     let mut next = p.node_slot();
-    let mut scaled = false;
+    let mut snap = next
+        .and_then(|s| rows.get(s as usize))
+        .is_some_and(|r| r.link[1] > 0.5);
     for depth in 0..NODE_CHAIN_DEPTH as u32 {
         let Some(row) = next.and_then(|s| rows.get(s as usize)) else {
             break;
         };
-        scaled |= row.scales();
+        snap |= row.scales();
         out = row.apply_to_primitive(out, depth);
         next = row.parent();
     }
     out.set_node_slot(None);
-    if scaled {
+    if snap {
         snap_glyph(&mut out);
     }
     out

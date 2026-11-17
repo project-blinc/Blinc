@@ -44,6 +44,82 @@ fn kids(tree: &RenderTree, parent: LayoutNodeId) -> Vec<LayoutNodeId> {
     tree.layout_tree.children(parent)
 }
 
+#[test]
+fn registry_releases_rows_that_leave_a_region() {
+    let _g = serial();
+    let items = signal(vec![1u32, 2]);
+    let ui = div().for_each(
+        &items,
+        |n| *n,
+        |n| {
+            div()
+                .id(format!("item-{n}"))
+                .class("tracked-row")
+                .attr("data-item", n.to_string())
+                .h(20.0)
+                .child(div().class("tracked-child").h(10.0))
+        },
+    );
+    let (mut tree, root) = mount(&ui);
+    let gone = tree.query_by_id("item-1").unwrap();
+    let child = kids(&tree, gone)[0];
+    let kept = tree.query_by_id("item-2").unwrap();
+    items.set(vec![2]);
+    frame(&mut tree);
+    let registry = tree.element_registry();
+    for node in [gone, child] {
+        assert!(tree.get_render_node(node).is_none());
+        assert!(
+            registry.get_classes(node).is_none(),
+            "retired classes remain"
+        );
+        assert!(registry.get_element_type(node).is_none());
+        assert!(registry.get_parent(node).is_none());
+        assert!(registry.get_child_index(node).is_none());
+        assert!(registry.get_sibling_count(node).is_none());
+        assert!(registry.get_children(node).is_empty());
+    }
+    assert_eq!(registry.get_children(root), vec![kept]);
+    assert_eq!(registry.get_child_index(kept), Some(0));
+    assert_eq!(registry.get_sibling_count(kept), Some(1));
+    assert!(registry.get_previous_sibling(kept).is_none());
+    assert_eq!(registry.class_to_nodes_index()["tracked-row"], vec![kept]);
+}
+
+#[test]
+fn registry_child_order_matches_reconciled_rows() {
+    let _g = serial();
+    let items = signal(vec![1u32, 2]);
+    let ui = div().for_each(&items, |n| *n, |n| row(&n));
+    let (mut tree, root) = mount(&ui);
+    for order in [vec![2, 1, 3], vec![3, 1], vec![1, 3]] {
+        items.set(order);
+        frame(&mut tree);
+        assert_eq!(
+            tree.element_registry().get_children(root),
+            kids(&tree, root)
+        );
+    }
+}
+
+#[test]
+fn registry_removal_keeps_a_replacement_with_the_same_id() {
+    let _g = serial();
+    let (tree, root) = mount(&div().child(div()).child(div()));
+    let nodes = kids(&tree, root);
+    let (old, replacement) = (nodes[0], nodes[1]);
+    let registry = tree.element_registry();
+    registry.register("shared", old);
+    registry.register("shared", replacement);
+    registry.update_bounds("shared", blinc_core::Bounds::new(9.0, 2.0, 30.0, 40.0));
+    registry.unregister(old);
+    assert_eq!(registry.get("shared"), Some(replacement));
+    assert_eq!(registry.get_bounds("shared").unwrap().x, 9.0);
+    registry.unregister(replacement);
+    assert!(registry.get("shared").is_none());
+    assert!(registry.get_bounds("shared").is_none());
+}
+
 fn y(tree: &RenderTree, node: LayoutNodeId) -> f32 {
     tree.get_absolute_bounds(node).unwrap().y
 }
@@ -492,4 +568,76 @@ fn a_computed_built_beside_a_departing_start_keeps_following_its_sources() {
         0.9,
         "the computed stopped following its sources"
     );
+}
+
+#[test]
+fn leaving_polls_keep_layout_and_paint_when_the_children_stay() {
+    use blinc_layout::region::Row;
+    use std::sync::atomic::AtomicBool;
+    let _g = serial();
+    let items = signal(vec![1_u32]);
+    let done = Arc::new(AtomicBool::new(false));
+    let finished = Arc::clone(&done);
+    let ui = div().w(200.0).for_each(
+        items,
+        |item| *item,
+        move |item| {
+            let finished = Arc::clone(&finished);
+            Row::new(row(&item)).on_leave(|| {}, move || finished.load(Ordering::SeqCst))
+        },
+    );
+    let (mut tree, root) = mount(&ui);
+    let before = kids(&tree, root);
+    let stable = tree.stable_id(before[0]);
+    let epoch = tree.layout_tree.epoch();
+    let paint = tree.property_paint_revision();
+    items.set(Vec::new());
+    for _ in 0..4 {
+        let updates = tree.take_pending_property_updates();
+        assert!(!updates.is_empty(), "the leaving row must still be polled");
+        let effects = tree.apply_partial_property_updates(updates);
+        assert!(
+            !effects.needs_layout,
+            "an unchanged row poll requested layout"
+        );
+        assert_eq!(tree.layout_tree.epoch(), epoch);
+        assert_eq!(tree.property_paint_revision(), paint);
+        assert_eq!(kids(&tree, root), before);
+        assert_eq!(tree.stable_id(before[0]), stable);
+    }
+    done.store(true, Ordering::SeqCst);
+    let updates = tree.take_pending_property_updates();
+    let effects = tree.apply_partial_property_updates(updates);
+    assert!(
+        effects.needs_layout,
+        "removing the finished row needs layout"
+    );
+    assert_ne!(tree.layout_tree.epoch(), epoch);
+    assert_ne!(tree.property_paint_revision(), paint);
+    assert!(kids(&tree, root).is_empty());
+}
+
+#[test]
+fn leaving_start_layout_writes_survive_an_unchanged_child_list() {
+    use blinc_layout::region::Row;
+    let _g = serial();
+    let items = signal(vec![1_u32]);
+    let width = signal(20.0_f32);
+    let ui = div().w(200.0).for_each(
+        items,
+        |item| *item,
+        move |_| Row::new(div().w(width).h(10.0)).on_leave(move || width.set(80.0), || false),
+    );
+    let (mut tree, root) = mount(&ui);
+    let before = kids(&tree, root);
+    items.set(Vec::new());
+    let updates = tree.take_pending_property_updates();
+    let effects = tree.apply_partial_property_updates(updates);
+    assert!(
+        effects.needs_layout,
+        "the nested width write must reach the runner"
+    );
+    assert_eq!(kids(&tree, root), before);
+    tree.compute_layout(200.0, 400.0);
+    assert_eq!(tree.get_absolute_bounds(before[0]).unwrap().width, 80.0);
 }

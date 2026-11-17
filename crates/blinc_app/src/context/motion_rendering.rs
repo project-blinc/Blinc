@@ -84,6 +84,7 @@ impl RenderContext {
         tree.commit_animation_status(&v2_statuses);
         if !self.in_compositor_inner_call && !self.overlay_frame_active {
             self.refresh_css_cache_ownership(tree);
+            self.apply_retained_background_colors(tree);
         }
 
         // Direct frames have no CSS cache patch pass; active CSS needs a full walk.
@@ -171,6 +172,10 @@ impl RenderContext {
             || {
                 let bindings_table = tree.motion_bindings_map();
                 tree.composite_bindings().iter().any(|(node, meta)| {
+                    if let Some((x, y)) = tree.property_row_translation(*node) {
+                        return (x - meta.last_translate.0).abs() > f32::EPSILON
+                            || (y - meta.last_translate.1).abs() > f32::EPSILON;
+                    }
                     let Some(b) = bindings_table.get(node) else {
                         return false;
                     };
@@ -638,6 +643,7 @@ impl RenderContext {
             paint_walker_us = t_paint_walker.as_micros() as u64,
             collect_elements_us = t_collect_elements.as_micros() as u64,
             gpu_us = t_gpu.as_micros() as u64,
+            used_fast_paint,
             "p4_breakdown"
         );
 

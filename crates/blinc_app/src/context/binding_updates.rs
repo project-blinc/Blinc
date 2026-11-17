@@ -39,9 +39,8 @@ impl RenderContext {
             }
             None => {}
         }
-        // The patcher below knows nothing of a scroll offset: a container on rows that the rows
-        // could not move is painted again.
-        if tree.scroll_rows_moved() {
+        // The legacy patcher cannot carry scroll or reactive translations.
+        if tree.scroll_rows_moved() || tree.has_property_translation_rows() {
             return false;
         }
         // Shared captures rebase native ranges and retain moving output at its paint anchor.
@@ -370,6 +369,21 @@ impl RenderContext {
         adopt: bool,
     ) -> Option<Outcome> {
         if !self.rows_mode() {
+            tracing::trace!(target: "blinc_app::node_rows", reason = "rows_disabled", "rows_unavailable");
+            return None;
+        }
+        // Collected arbitrary paths do not yet identify the ancestor that owns their clip.
+        if tree.has_property_translation_rows()
+            && (self
+                .cached_motion_subtree_text_prims
+                .as_ref()
+                .is_some_and(|t| t.elements.iter().any(|e| e.path_clip.is_some()))
+                || self
+                    .captured_runs
+                    .iter()
+                    .any(|r| r.element.path_clip.is_some()))
+        {
+            tracing::trace!(target: "blinc_app::node_rows", reason = "property_text_path", "rows_unavailable");
             return None;
         }
         let batch = self.cached_dynamic_batch.as_mut()?;
@@ -378,6 +392,7 @@ impl RenderContext {
             .as_ref()
             .is_some_and(|b| !b.cross_stream_groups.captures.is_empty())
         {
+            tracing::trace!(target: "blinc_app::node_rows", reason = "static_cross_stream_capture", "rows_unavailable");
             return None;
         }
         let mut bindings = tree.composite_bindings_mut();
@@ -387,13 +402,14 @@ impl RenderContext {
         // A binding whose primitives are in the static batch cannot be moved without a repaint, so
         // one that has changed asks for it. One that is settled where it was painted is left be.
         let motion = tree.motion_bindings_map();
-        if bindings
-            .iter()
-            .any(|(node, meta)| self.node_rows.moved(meta, motion.get(node)))
-        {
+        if bindings.iter().any(|(node, meta)| {
+            self.node_rows
+                .moved(meta, motion.get(node), tree.property_row_translation(*node))
+        }) {
+            tracing::trace!(target: "blinc_app::node_rows", reason = "moving_static_binding", "rows_unavailable");
             return None;
         }
-        Some(self.node_rows.apply(
+        let outcome = self.node_rows.apply(
             &self.renderer,
             batch,
             self.cached_motion_subtree_text_prims.as_mut(),
@@ -405,9 +421,38 @@ impl RenderContext {
             &|node| tree.layout_tree.ancestors(node),
             &|source| self.image_cache.contains(source),
             &|node| tree.scroll_row_pose(node),
+            &|node| tree.property_row_translation(node),
             dpi,
             adopt,
-        ))
+        );
+        if matches!(outcome, Outcome::Applied { .. }) {
+            if let Some(text) = self.cached_motion_subtree_text_prims.as_mut() {
+                for run in &text.owners {
+                    if let Some((_, clip, _)) = text.elements[run.element].split_clip {
+                        for p in &mut text.primitives[run.range.clone()] {
+                            self.node_rows.follow_collected_text_path(p, clip, &|n| {
+                                tree.binding_clip_bounds(n)
+                            });
+                        }
+                    }
+                }
+            }
+            if !self.captured_runs.is_empty() {
+                for p in &mut batch.primitives {
+                    let id = p.node_slot[3] as u32;
+                    if let Some(run) = id
+                        .checked_sub(1)
+                        .and_then(|i| self.captured_runs.get(i as usize))
+                        && run.id == id
+                        && let Some((_, clip, _)) = run.element.split_clip
+                    {
+                        self.node_rows
+                            .follow_collected_text_path(p, clip, &|n| tree.binding_clip_bounds(n));
+                    }
+                }
+            }
+        }
+        Some(outcome)
     }
 
     /// With the rows applied on the CPU, put the primitives of the dynamic batch where the rows

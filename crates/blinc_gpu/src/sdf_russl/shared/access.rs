@@ -104,7 +104,7 @@ russl::russl! {
             for depth in 0u32..4u32 {
                 if slot != 0u32 {
                     let row = node_row(slot - 1u32);
-                    if scales_node(row) {
+                    if scales_node(row) || (depth == 0u32 && row.link.y > 0.5) {
                         scaled = true;
                     }
                     p = apply_node(p, row, depth);

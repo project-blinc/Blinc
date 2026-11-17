@@ -422,6 +422,7 @@ impl RenderTree {
         let hovered_nodes: HashSet<LayoutNodeId> = router
             .hovered_nodes()
             .filter_map(|s| self.layout_id(s))
+            .filter(|node| router.is_hovered_layout(self, *node))
             .collect();
         let pressed_nodes: HashSet<LayoutNodeId> = router.active_nodes(self);
         // Use the router's focused node directly. Previously we walked
@@ -872,6 +873,7 @@ impl RenderTree {
         let hovered_nodes: HashSet<LayoutNodeId> = router
             .hovered_nodes()
             .filter_map(|s| self.layout_id(s))
+            .filter(|node| router.is_hovered_layout(self, *node))
             .collect();
         let pressed_nodes: HashSet<LayoutNodeId> = router.active_nodes(self);
         let focused_node: Option<LayoutNodeId> = router.focused();
@@ -945,6 +947,7 @@ impl RenderTree {
         let hovered_nodes: HashSet<LayoutNodeId> = router
             .hovered_nodes()
             .filter_map(|s| self.layout_id(s))
+            .filter(|node| router.is_hovered_layout(self, *node))
             .collect();
         let pressed_nodes: HashSet<LayoutNodeId> = router.active_nodes(self);
         let focused_node: Option<LayoutNodeId> = {

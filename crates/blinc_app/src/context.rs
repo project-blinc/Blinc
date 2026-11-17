@@ -35,6 +35,7 @@ mod cache_lifecycle;
 mod canvas_replay;
 mod composite_replay;
 mod compositor;
+mod css_backgrounds;
 mod css_cache_lifecycle;
 mod css_updates;
 mod debug_rendering;

@@ -57,10 +57,24 @@ impl RenderTree {
     /// with anything that moves its content is never outside. A descendant that clips its
     /// content stands for its whole subtree, since nothing beneath it draws past it.
     pub fn draws_outside(&self, node: LayoutNodeId, shift: (f32, f32), view: CullRect) -> bool {
+        self.draws_outside_at(node, shift, view, None)
+    }
+
+    fn draws_outside_at(
+        &self,
+        node: LayoutNodeId,
+        shift: (f32, f32),
+        view: CullRect,
+        parent_offset: Option<(f32, f32)>,
+    ) -> bool {
         if self.moves_its_content(node) {
             return false;
         }
-        let Some(b) = self.layout_tree.get_absolute_bounds(node) else {
+        let bounds = match parent_offset {
+            Some(offset) => self.layout_tree.get_bounds(node, offset),
+            None => self.layout_tree.get_absolute_bounds(node),
+        };
+        let Some(b) = bounds else {
             return false;
         };
         let overscan = self.cull_overscan();
@@ -79,9 +93,8 @@ impl RenderTree {
             return true;
         }
         self.layout_tree
-            .children(node)
-            .into_iter()
-            .all(|child| self.draws_outside(child, shift, view))
+            .children_iter(node)
+            .all(|child| self.draws_outside_at(child, shift, view, Some((b.x, b.y))))
     }
 }
 
