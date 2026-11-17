@@ -16,6 +16,9 @@
 #[allow(dead_code)]
 mod cn_demo;
 
+#[path = "cn_demo_costs/calendar.rs"]
+mod calendar;
+
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
@@ -204,7 +207,7 @@ fn find_node(ui: &Headless, selector: &str) -> Option<blinc_layout::tree::Layout
 
 /// Scroll until the node is inside the window, `false` when it never is.
 fn bring_into_view(ui: &mut Headless, selector: &str) -> bool {
-    ui.move_to(450.0, 400.0);
+    ui.move_to(4.0, 400.0);
     for _ in 0..200 {
         if let Some(node) = find_node(ui, selector)
             && let Some(b) = ui.tree().get_absolute_bounds(node)
@@ -232,9 +235,19 @@ fn main() {
         eprintln!("no GPU adapter");
         return;
     };
-    let _guard = tracing::subscriber::set_default(log.clone());
+    let _guard = std::env::var_os("COSTS_NO_TRACE")
+        .is_none()
+        .then(|| tracing::subscriber::set_default(log.clone()));
     ui.settle();
     rest(&mut ui);
+
+    if let Some(cycles) = std::env::var("COSTS_CALENDAR")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+    {
+        calendar::run(&mut ui, log, cycles.max(1));
+        return;
+    }
 
     // `COSTS_ONLY_PAINT=<frames>`: nothing but full paints of the page, for a sampling profiler.
     if let Some(frames) = std::env::var("COSTS_ONLY_PAINT")

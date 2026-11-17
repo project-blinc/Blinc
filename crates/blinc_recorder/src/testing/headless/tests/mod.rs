@@ -1,3 +1,4 @@
+mod cached_paint;
 mod frame_budget;
 mod frame_clock;
 mod overlay_order;
