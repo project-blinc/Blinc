@@ -388,6 +388,16 @@ impl WindowedApp {
             );
         }
 
+        {
+            let focus_wake = event_loop.wake_proxy();
+            let focus_dirty = Arc::clone(&frame_dirty);
+            BlincContextState::get().set_focus_callback(Arc::new(move |_| {
+                blinc_layout::stateful::request_redraw();
+                focus_dirty.store(true, Ordering::Release);
+                focus_wake.wake();
+            }));
+        }
+
         // Outside the init guard on purpose. Anything that builds a
         // widget before the window opens initialises the context state
         // itself -- `BlincDsl` does, through `ensure_context_state` --

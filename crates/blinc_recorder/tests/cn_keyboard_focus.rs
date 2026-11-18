@@ -483,11 +483,13 @@ fn legacy_modal_restores_keyboard_focus() {
             .child(control("Open").id("legacy-open").on_click(move |_| {
                 manager
                     .modal()
+                    .initial_focus("legacy-inside")
                     .animation(OverlayAnimation::none())
                     .content(|| {
                         div()
                             .w(200.0)
                             .h(100.0)
+                            .child(control("First").id("legacy-first"))
                             .child(control("Inside").id("legacy-inside"))
                     })
                     .show();
@@ -498,4 +500,196 @@ fn legacy_modal_restores_keyboard_focus() {
     assert_eq!(ui.focused(), ui.find("#legacy-inside"));
     ui.key(27).settle();
     assert_eq!(ui.focused(), ui.find("#legacy-open"));
+}
+
+fn save_focus_capture(ui: &mut Headless, name: &str) {
+    if let Some(directory) = std::env::var_os("BLINC_FOCUS_ARTIFACTS") {
+        let directory = std::path::PathBuf::from(directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        let frame = ui.snapshot().expect("focus capture");
+        blinc_recorder::ScreenshotExporter::save_png(&frame, directory.join(format!("{name}.png")))
+            .unwrap();
+    }
+}
+
+#[test]
+fn dialog_initial_focus_chooses_the_safe_footer_button() {
+    let mut ui = session();
+    let deletes = Arc::new(AtomicUsize::new(0));
+    let cancels = Arc::new(AtomicUsize::new(0));
+    let deleted = deletes.clone();
+    let cancelled = cancels.clone();
+    ui.mount(move |_| {
+        let deleted = deleted.clone();
+        let cancelled = cancelled.clone();
+        div().p(4.0).child(
+            button("Review deletion")
+                .on_click(move |_| {
+                    let deleted = deleted.clone();
+                    let cancelled = cancelled.clone();
+                    dialog()
+                        .title("Delete draft?")
+                        .description("Keep the draft or delete it from this workspace.")
+                        .initial_focus("keep")
+                        .footer(move || {
+                            let deleted = deleted.clone();
+                            let cancelled = cancelled.clone();
+                            div()
+                                .flex_row()
+                                .gap_2()
+                                .child(
+                                    button("Delete")
+                                        .variant(ButtonVariant::Destructive)
+                                        .on_click(move |_| {
+                                            deleted.fetch_add(1, Ordering::SeqCst);
+                                        })
+                                        .build_component()
+                                        .id("delete"),
+                                )
+                                .child(
+                                    button("Keep draft")
+                                        .variant(ButtonVariant::Outline)
+                                        .on_click(move |_| {
+                                            cancelled.fetch_add(1, Ordering::SeqCst);
+                                        })
+                                        .build_component()
+                                        .id("keep"),
+                                )
+                        })
+                        .show();
+                })
+                .build_component()
+                .class("open"),
+        )
+    })
+    .settle();
+    ui.key(9).key(13).settle();
+    assert_eq!(ui.focused(), ui.find("#keep"));
+    save_focus_capture(&mut ui, "safe-initial-focus");
+    ui.key(13).settle();
+    assert_eq!(cancels.load(Ordering::SeqCst), 1);
+    assert_eq!(deletes.load(Ordering::SeqCst), 0);
+    ui.key(27).settle();
+    assert_eq!(ui.focused(), ui.find(".open"));
+}
+
+#[test]
+fn stack_initial_focus_accepts_text_in_the_named_field() {
+    use blinc_layout::widgets::overlay_stack::OverlayBuilder;
+    use blinc_layout::widgets::text_input::{text_input, text_input_data};
+    let mut ui = session();
+    let first = text_input_data();
+    let second = text_input_data();
+    let (a, b) = (first.clone(), second.clone());
+    ui.mount(move |_| {
+        let (a, b) = (a.clone(), b.clone());
+        div()
+            .p(4.0)
+            .child(button("Edit profile").on_click(move |_| {
+                let (a, b) = (a.clone(), b.clone());
+                OverlayBuilder::dialog()
+                    .initial_focus("second")
+                    .content(move || {
+                        div()
+                            .class("cn-dialog")
+                            .w(300.0)
+                            .flex_col()
+                            .gap_3()
+                            .child(text_input(&a).id("first").placeholder("First name"))
+                            .child(text_input(&b).id("second").placeholder("Last name"))
+                    })
+                    .show();
+            }))
+    })
+    .settle();
+    ui.key(9).key(13).settle();
+    assert_eq!(ui.focused(), ui.find("#second"));
+    ui.type_text("River").settle();
+    assert_eq!(first.lock().unwrap().value, "");
+    assert_eq!(second.lock().unwrap().value, "River");
+    save_focus_capture(&mut ui, "named-input-focus");
+}
+
+#[test]
+fn programmatic_focus_updates_an_idle_field_without_a_rebuild() {
+    use blinc_layout::widgets::text_input::{text_input, text_input_data};
+    let mut ui = session();
+    let builds = Arc::new(AtomicUsize::new(0));
+    let built = builds.clone();
+    let state = text_input_data();
+    let field = state.clone();
+    ui.mount(move |_| {
+        built.fetch_add(1, Ordering::SeqCst);
+        div().p(4.0).child(
+            text_input(&field)
+                .w(300.0)
+                .id("field")
+                .placeholder("Your name"),
+        )
+    })
+    .settle();
+    let before = builds.load(Ordering::SeqCst);
+    let handle: blinc_layout::selector::ElementHandle =
+        blinc_layout::selector::ElementHandle::new("field", ui.tree().element_registry().clone());
+    handle.focus();
+    assert!(blinc_layout::peek_needs_redraw());
+    ui.settle().type_text("Rowan").settle();
+    assert_eq!(ui.focused(), ui.find("#field"));
+    assert_eq!(state.lock().unwrap().value, "Rowan");
+    assert!(handle.is_focused());
+    assert_eq!(builds.load(Ordering::SeqCst), before);
+    let bounds = ui
+        .tree()
+        .get_absolute_bounds(ui.find("#field").unwrap())
+        .unwrap();
+    assert!(bounds.width > 200.0);
+    let frame = ui.snapshot().expect("typed field");
+    let left = (bounds.x + 12.0) as u32;
+    let top = (bounds.y + 5.0) as u32;
+    let ink = (top..top + 32)
+        .flat_map(|y| (left..left + 100).map(move |x| (x, y)))
+        .filter(|&(x, y)| {
+            frame
+                .get_pixel(x, y)
+                .is_some_and(|p| p[..3].iter().all(|&v| v > 160))
+        })
+        .count();
+    assert!(ink > 20, "typed glyphs were clipped: {ink}");
+    save_focus_capture(&mut ui, "programmatic-focus");
+    handle.blur();
+    ui.settle();
+    assert_eq!(ui.focused(), None);
+    assert!(!blinc_layout::widgets::text_input::has_focused_text_input());
+}
+
+#[test]
+fn a_styled_input_id_focuses_and_blurs_its_editable_field() {
+    use blinc_layout::widgets::text_input::text_input_data;
+    let mut ui = session();
+    let state = text_input_data();
+    let field = state.clone();
+    ui.mount(move |_| {
+        div().p(4.0).child(
+            input(&field)
+                .w(300.0)
+                .placeholder("Your name")
+                .build_component()
+                .id("styled-field"),
+        )
+    })
+    .settle();
+    let handle: blinc_layout::selector::ElementHandle = blinc_layout::selector::ElementHandle::new(
+        "styled-field",
+        ui.tree().element_registry().clone(),
+    );
+    handle.focus();
+    ui.settle().type_text("Rowan").settle();
+    assert_eq!(state.lock().unwrap().value, "Rowan");
+    assert!(handle.is_focused());
+    assert_ne!(ui.focused(), ui.find("#styled-field"));
+    save_focus_capture(&mut ui, "styled-input-focus");
+    handle.blur();
+    ui.settle();
+    assert_eq!(ui.focused(), None);
+    assert!(!blinc_layout::widgets::text_input::has_focused_text_input());
 }

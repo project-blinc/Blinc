@@ -717,6 +717,10 @@ impl IOSRenderContext {
         let Some(ref mut tree) = self.render_tree else {
             return false;
         };
+        let text_focus = blinc_layout::widgets::text_input::focused_text_input_node_id()
+            .or_else(blinc_layout::widgets::text_input::focused_text_area_node_id);
+        self.windowed_ctx.event_router.sync_text_focus(text_focus);
+        tree.sync_keyboard_focus(&mut self.windowed_ctx.event_router);
         let current_time = blinc_layout::prelude::elapsed_ms();
         let dt_ms = if self.last_frame_time_ms > 0 {
             (current_time - self.last_frame_time_ms) as f32

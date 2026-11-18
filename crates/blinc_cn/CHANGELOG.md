@@ -4,6 +4,8 @@ All notable changes to `blinc_cn` will be documented in this file.
 
 ## [Unreleased]
 
+- Dialog builders accept `.initial_focus(id)` to choose the starting control. Unavailable targets use the marked control or the normal fallback.
+
 ### Changed
 - A collapsible, `collapsible_section`, accordion section and tree group builds its content the first time it opens, and keeps it: closing folds it without tearing it down. A section never opened builds nothing. `collapsible_section` takes its content as `Fn` rather than `FnOnce`.
 

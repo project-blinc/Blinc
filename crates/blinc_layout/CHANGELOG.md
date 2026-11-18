@@ -4,6 +4,9 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ## [Unreleased]
 
+- Built-in text inputs and text areas expose their editable focus marker for Tab navigation and named focus requests.
+- Dialogs and modals accept a named initial focus target or an `autofocus` marker. Programmatic focus requests reach the router, preserve overlay boundaries and request a redraw without rebuilding the UI.
+
 ### Accessibility
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 

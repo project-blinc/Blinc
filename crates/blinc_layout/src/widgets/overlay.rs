@@ -2390,6 +2390,7 @@ pub struct ModalBuilder {
     manager: OverlayManager,
     config: OverlayConfig,
     content: Option<Box<dyn Fn() -> Div + Send + Sync>>,
+    initial_focus: Option<String>,
 }
 
 impl ModalBuilder {
@@ -2398,6 +2399,7 @@ impl ModalBuilder {
             manager,
             config: OverlayConfig::modal(),
             content: None,
+            initial_focus: None,
         }
     }
 
@@ -2417,6 +2419,13 @@ impl ModalBuilder {
         F: Fn() -> Div + Send + Sync + 'static,
     {
         self.content = Some(Box::new(f));
+        self
+    }
+
+    /// Choose a focusable element by ID when the overlay opens.
+    /// An unavailable target uses the normal focus fallback.
+    pub fn initial_focus(mut self, id: impl Into<String>) -> Self {
+        self.initial_focus = Some(id.into());
         self
     }
 
@@ -2482,7 +2491,13 @@ impl ModalBuilder {
     /// Show the modal
     pub fn show(self) -> OverlayHandle {
         let content = self.content.unwrap_or_else(|| Box::new(div));
-        self.manager.lock().unwrap().add(self.config, content)
+        let initial_focus = self.initial_focus;
+        self.manager.lock().unwrap().add(
+            self.config,
+            Box::new(move || {
+                super::overlay_focus::initial_target(content(), initial_focus.as_deref())
+            }),
+        )
     }
 }
 
@@ -2491,6 +2506,7 @@ pub struct DialogBuilder {
     manager: OverlayManager,
     config: OverlayConfig,
     content: Option<Box<dyn Fn() -> Div + Send + Sync>>,
+    initial_focus: Option<String>,
 }
 
 impl DialogBuilder {
@@ -2499,6 +2515,7 @@ impl DialogBuilder {
             manager,
             config: OverlayConfig::dialog(),
             content: None,
+            initial_focus: None,
         }
     }
 
@@ -2511,6 +2528,13 @@ impl DialogBuilder {
         self
     }
 
+    /// Choose a focusable element by ID when the overlay opens.
+    /// An unavailable target uses the normal focus fallback.
+    pub fn initial_focus(mut self, id: impl Into<String>) -> Self {
+        self.initial_focus = Some(id.into());
+        self
+    }
+
     /// Set explicit size
     pub fn size(mut self, width: f32, height: f32) -> Self {
         self.config.size = Some((width, height));
@@ -2520,7 +2544,13 @@ impl DialogBuilder {
     /// Show the dialog
     pub fn show(self) -> OverlayHandle {
         let content = self.content.unwrap_or_else(|| Box::new(div));
-        self.manager.lock().unwrap().add(self.config, content)
+        let initial_focus = self.initial_focus;
+        self.manager.lock().unwrap().add(
+            self.config,
+            Box::new(move || {
+                super::overlay_focus::initial_target(content(), initial_focus.as_deref())
+            }),
+        )
     }
 }
 

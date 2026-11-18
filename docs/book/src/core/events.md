@@ -313,6 +313,33 @@ rows. Menu Tab closes the menu and continues from its trigger. A custom
 roving group can use `role=menu` (vertical) or `role=menubar` (horizontal),
 with `tabindex=0` on its container and `tabindex=-1` on its menu items.
 
+### Initial and Programmatic Focus
+
+Use `.initial_focus("control-id")` on a dialog or modal builder to choose
+its starting control. The ID must name an enabled, visible control inside
+that overlay, or a container with exactly one focusable control. This also
+works with a styled input's outer ID. A container with several controls needs
+a more specific target. `Div::autofocus()` marks a preferred control without an ID:
+
+```rust
+div()
+    .attr("tabindex", "-1")
+    .autofocus()
+    .child(text("Review the changes before continuing."))
+```
+
+An available named target takes priority over the marker. Without either,
+the overlay uses its normal first-control or root fallback. The preference
+applies once when the overlay opens. Later frames preserve the current focus.
+
+`ElementHandle::focus()`, `DivRef::focus()` and `BlincContextState::set_focus()`
+queue a focus request. The runtime applies the latest request after layout.
+An explicit request takes priority over the starting preference. Requests
+cannot move focus outside the active overlay or onto a hidden or disabled control.
+
+`blur()` clears focus on the next frame. Focus requests redraw the view
+without rebuilding the UI. Desktop requests also wake an idle window.
+
 ## Capturing State in Closures
 
 Event handlers are `Fn` closures. `State<T>` is cheap to `clone()`

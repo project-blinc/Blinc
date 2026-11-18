@@ -4,6 +4,8 @@ All notable changes to `blinc_app` will be documented in this file.
 
 ## [Unreleased]
 
+- Programmatic focus wakes idle desktop windows. Mobile frames synchronize overlay and requested focus before applying focus styles.
+
 ### Accessibility
 - iOS accessibility snapshot/action FFI connects GPU-rendered controls to native UIKit accessibility elements and text-field editing. The host scales content and input coordinates with Dynamic Type.
 - The registered iOS Rust builder uses the complete UI build path, including queued core styles, overlays and build-scope cleanup.

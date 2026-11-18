@@ -3093,6 +3093,11 @@ impl Div {
         self
     }
 
+    /// Prefer this focusable element when its overlay opens.
+    pub fn autofocus(self) -> Self {
+        self.attr("autofocus", "")
+    }
+
     /// Bind a [`crate::selector::ScrollRef`] for programmatic control.
     ///
     /// The same contract as the `scroll()` widget's `bind`: the renderer

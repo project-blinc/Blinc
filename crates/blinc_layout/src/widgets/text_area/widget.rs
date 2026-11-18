@@ -54,6 +54,7 @@ impl TextArea {
         // into the rounded border.
         let inner = Self::create_inner_with_handlers(Arc::clone(state), Arc::clone(&config))
             .class(crate::widgets::text_input::DEFAULT_CLASS)
+            .class("tabindex=text")
             .w(default_width)
             .h(default_height)
             .min_w(0.0);

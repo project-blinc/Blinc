@@ -1828,7 +1828,14 @@ impl AndroidApp {
                     // Apply CSS state styles (:hover, :active, :focus)
                     // This also detects property changes and starts new transitions
                     let mut state_changed = false;
-                    if let Some(ref windowed_ctx) = ctx {
+                    if let Some(ref mut windowed_ctx) = ctx {
+                        let text_focus =
+                            blinc_layout::widgets::text_input::focused_text_input_node_id()
+                                .or_else(
+                                    blinc_layout::widgets::text_input::focused_text_area_node_id,
+                                );
+                        windowed_ctx.event_router.sync_text_focus(text_focus);
+                        tree.sync_keyboard_focus(&mut windowed_ctx.event_router);
                         if tree.stylesheet().is_some()
                             && state_styles
                                 .should_apply(windowed_ctx.event_router.state_fingerprint())

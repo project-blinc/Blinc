@@ -315,6 +315,8 @@ pub struct BlincContextState {
     viewport_size: RwLock<(f32, f32)>,
     /// Currently focused element ID
     focused_element: RwLock<Option<String>>,
+    pending_focus: Mutex<Option<Option<String>>>,
+    focus_pending: AtomicBool,
     /// Type-erased element registry for query API
     /// Stored as `AnyElementRegistry` to avoid circular dependency with blinc_layout
     element_registry: RwLock<Option<AnyElementRegistry>>,
@@ -386,6 +388,8 @@ impl BlincContextState {
             scroll_callback: RwLock::new(None),
             viewport_size: RwLock::new((0.0, 0.0)),
             focused_element: RwLock::new(None),
+            pending_focus: Mutex::new(None),
+            focus_pending: AtomicBool::new(false),
             element_registry: RwLock::new(None),
             motion_state_callback: RwLock::new(None),
             motion_cancel_exit_callback: RwLock::new(None),
@@ -418,6 +422,8 @@ impl BlincContextState {
             scroll_callback: RwLock::new(None),
             viewport_size: RwLock::new((0.0, 0.0)),
             focused_element: RwLock::new(None),
+            pending_focus: Mutex::new(None),
+            focus_pending: AtomicBool::new(false),
             element_registry: RwLock::new(None),
             motion_state_callback: RwLock::new(None),
             motion_cancel_exit_callback: RwLock::new(None),
@@ -710,24 +716,49 @@ impl BlincContextState {
     // Focus Management
     // =========================================================================
 
-    /// Set the focus callback
-    ///
-    /// Called by `WindowedApp` to wire focus changes to the EventRouter.
+    /// Set a callback that wakes the runtime or observes focus requests.
+    /// The request enters the queue before this callback runs.
     pub fn set_focus_callback(&self, callback: FocusCallback) {
         *self.focus_callback.write().unwrap() = Some(callback);
     }
 
-    /// Set focus to an element by string ID
-    ///
-    /// Pass `None` to clear focus.
+    /// Request focus by element ID. The runtime applies it after layout.
+    /// Pass `None` to clear focus. The latest pending request wins.
     pub fn set_focus(&self, id: Option<&str>) {
         // Update internal state
         *self.focused_element.write().unwrap() = id.map(|s| s.to_string());
 
-        // Call the callback to update EventRouter
-        if let Some(cb) = self.focus_callback.read().unwrap().as_ref() {
+        {
+            let mut pending = self.pending_focus.lock().unwrap();
+            *pending = Some(id.map(str::to_owned));
+            self.focus_pending.store(true, Ordering::Release);
+        }
+        let callback = self.focus_callback.read().unwrap().clone();
+        if let Some(cb) = callback {
             cb(id);
         }
+    }
+
+    #[doc(hidden)]
+    pub fn has_pending_focus(&self) -> bool {
+        self.focus_pending.load(Ordering::Acquire)
+    }
+
+    /// Drain the runtime focus request. `Some(None)` requests a blur.
+    #[doc(hidden)]
+    pub fn take_focus_request(&self) -> Option<Option<String>> {
+        if !self.has_pending_focus() {
+            return None;
+        }
+        let mut pending = self.pending_focus.lock().unwrap();
+        self.focus_pending.store(false, Ordering::Release);
+        pending.take()
+    }
+
+    /// Publish resolved focus without creating another request.
+    #[doc(hidden)]
+    pub fn publish_focus(&self, id: Option<String>) {
+        *self.focused_element.write().unwrap() = id;
     }
 
     /// Get the currently focused element ID

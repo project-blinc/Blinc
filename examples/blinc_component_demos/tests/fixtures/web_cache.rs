@@ -52,6 +52,8 @@ pub struct CacheProbe {
     size: Signal<f32>,
     show_input: Signal<bool>,
     field: SharedTextInputData,
+    focus_fields: Option<[SharedTextInputData; 2]>,
+    focus_overlay: Option<blinc_layout::widgets::overlay_stack::OverlayHandle>,
 }
 
 fn error(value: impl std::fmt::Display) -> JsValue {
@@ -142,7 +144,12 @@ pub async fn create_cache_probe(
                     .top(140.0)
                     .w(260.0)
                     .visible(show_input)
-                    .child(blinc_cn::input(&field).placeholder("Type here")),
+                    .child(
+                        blinc_cn::input(&field)
+                            .placeholder("Type here")
+                            .build_component()
+                            .id("probe-input"),
+                    ),
             );
         for i in 0..cards {
             ui = ui.child(
@@ -166,6 +173,8 @@ pub async fn create_cache_probe(
         size,
         show_input,
         field: field_value,
+        focus_fields: None,
+        focus_overlay: None,
     })
 }
 
@@ -196,6 +205,73 @@ impl CacheProbe {
 
     pub fn input_value(&self) -> String {
         self.field.lock().unwrap().value.clone()
+    }
+
+    pub fn open_focus_dialog(&mut self) {
+        let fields = [text_input_data(), text_input_data()];
+        let [first, second] = fields.clone();
+        self.focus_overlay = Some(
+            blinc_cn::dialog()
+                .title("Edit profile")
+                .initial_focus("focus-second")
+                .content(move || {
+                    div()
+                        .w_full()
+                        .flex_col()
+                        .gap_3()
+                        .child(
+                            blinc_cn::input(&first)
+                                .placeholder("First name")
+                                .build_component()
+                                .id("focus-first"),
+                        )
+                        .child(
+                            blinc_cn::input(&second)
+                                .placeholder("Last name")
+                                .build_component()
+                                .id("focus-second"),
+                        )
+                })
+                .show(),
+        );
+        self.focus_fields = Some(fields);
+    }
+
+    pub fn close_focus_dialog(&mut self) {
+        if let Some(handle) = self.focus_overlay.take() {
+            handle.close();
+        }
+    }
+
+    pub fn request_focus(&self, id: &str) {
+        blinc_core::BlincContextState::get().set_focus((!id.is_empty()).then_some(id));
+    }
+
+    pub fn focus_status(&self) -> String {
+        let values: Vec<_> = self
+            .focus_fields
+            .as_ref()
+            .map(|fields| {
+                fields
+                    .iter()
+                    .map(|field| field.lock().unwrap().value.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let bounds = ["focus-first", "focus-second"].map(|id| {
+            self.app
+                .context()
+                .query(id)
+                .bounds()
+                .map(|bounds| [bounds.x, bounds.y, bounds.width, bounds.height])
+        });
+        serde_json::json!({
+            "focused": blinc_core::BlincContextState::get().focused_element(),
+            "values": values,
+            "builds": self.builds.get(),
+            "bounds": bounds,
+        })
+        .to_string()
     }
 
     pub fn key(&mut self, code: u32, text: &str, ctrl: bool, alt: bool, meta: bool) -> bool {

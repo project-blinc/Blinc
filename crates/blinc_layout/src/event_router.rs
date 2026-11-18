@@ -172,6 +172,7 @@ pub struct EventRouter {
     pub(crate) menu_last: bool,
     pub(crate) pending_tab: Option<bool>,
     pub(crate) focus_stable: Option<crate::tree::StableNodeId>,
+    pub(crate) context_focus: Option<crate::tree::StableNodeId>,
 
     /// Callback for routing events to elements
     event_callback: Option<EventCallback>,
@@ -242,6 +243,7 @@ impl EventRouter {
             text_focus: false,
             focus_scopes: Vec::new(),
             focus_stable: None,
+            context_focus: None,
             menu_last: false,
             pending_tab: None,
             event_callback: None,

@@ -88,6 +88,7 @@ pub struct DialogBuilder {
     classes: Vec<std::sync::Arc<str>>,
     /// User-set element ID
     user_id: Option<String>,
+    initial_focus: Option<String>,
     /// Unique key for motion animation
     key: InstanceKey,
 }
@@ -111,6 +112,7 @@ impl DialogBuilder {
             show_cancel: true,
             classes: Vec::new(),
             user_id: None,
+            initial_focus: None,
             key: InstanceKey::new("dialog"),
         }
     }
@@ -124,6 +126,13 @@ impl DialogBuilder {
     /// Set the dialog description. A signal here replaces the text in place.
     pub fn description(mut self, description: impl IntoReactive<String>) -> Self {
         self.description = Some(description.into_reactive());
+        self
+    }
+
+    /// Choose a focusable element by ID when the overlay opens.
+    /// An unavailable target uses the normal focus fallback.
+    pub fn initial_focus(mut self, id: impl Into<String>) -> Self {
+        self.initial_focus = Some(id.into());
         self
     }
 
@@ -242,6 +251,7 @@ impl DialogBuilder {
         let show_cancel = self.show_cancel;
         let classes = self.classes;
         let user_id = self.user_id;
+        let initial_focus = self.initial_focus;
 
         // Pre-allocate the handle id so the confirm/cancel buttons can capture
         // it before show() is called (same pattern as popover). Buttons close
@@ -288,6 +298,9 @@ impl DialogBuilder {
                 }
                 if let Some(ref id) = user_id {
                     content_div = content_div.id(id);
+                }
+                if let Some(ref id) = initial_focus {
+                    content_div = content_div.attr("data-initial-focus", id);
                 }
                 content_div
             })
@@ -362,6 +375,12 @@ impl AlertDialogBuilder {
         F: Fn() + Send + Sync + 'static,
     {
         self.inner = self.inner.on_confirm(callback);
+        self
+    }
+
+    /// Choose a focusable element by ID when the alert opens.
+    pub fn initial_focus(mut self, id: impl Into<String>) -> Self {
+        self.inner = self.inner.initial_focus(id);
         self
     }
 

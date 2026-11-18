@@ -1,6 +1,13 @@
 use super::overlay::OverlayKind;
 use crate::div::Div;
 
+pub(super) fn initial_target(content: Div, id: Option<&str>) -> Div {
+    match id {
+        Some(id) => content.attr("data-initial-focus", id),
+        None => content,
+    }
+}
+
 pub(super) fn scope(div: Div, key: String, kind: OverlayKind) -> Div {
     if kind == OverlayKind::Toast {
         return div;

@@ -348,13 +348,18 @@ fn request_property_redraw() {
 /// Check and clear the redraw flag
 /// Returns true if a redraw was requested since last check
 pub fn take_needs_redraw() -> bool {
-    NEEDS_REDRAW.swap(0, Ordering::SeqCst) != 0
+    NEEDS_REDRAW.swap(0, Ordering::SeqCst) != 0 || pending_focus_request()
 }
 
 /// Peek at the redraw flag without clearing it
 /// Used by iOS needs_render() to check if stateful updates are pending
 pub fn peek_needs_redraw() -> bool {
-    NEEDS_REDRAW.load(Ordering::SeqCst) != 0
+    NEEDS_REDRAW.load(Ordering::SeqCst) != 0 || pending_focus_request()
+}
+
+fn pending_focus_request() -> bool {
+    blinc_core::context_state::BlincContextState::try_get()
+        .is_some_and(|ctx| ctx.has_pending_focus())
 }
 
 /// Whether an explicit repaint was requested, independently of queued property writes.
