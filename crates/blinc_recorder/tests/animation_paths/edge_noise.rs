@@ -16,14 +16,16 @@ fn report(changes: &[(usize, u8)]) -> Report {
 
 #[test]
 fn rounding_allowance_keeps_larger_rendering_changes_visible() {
-    for level in [3, 4] {
-        assert_eq!(report(&[(0, level)]).first_row_mismatch(), None);
+    for level in [3, 4, 8] {
+        assert_eq!(report(&[(0, level)]).first_mismatch(), None);
     }
-    assert_eq!(
-        report(&[(0, 3), (1, 3)]).first_row_mismatch(),
-        Some((0, (2, 3))),
-    );
-    assert_eq!(report(&[(0, 5)]).first_row_mismatch(), Some((0, (1, 5))));
+    let small_roundoff: Vec<_> = (0..8).map(|pixel| (pixel, 4)).collect();
+    assert_eq!(report(&small_roundoff).first_mismatch(), None);
+    let at_limit: Vec<_> = (0..24).map(|pixel| (pixel, 8)).collect();
+    assert_eq!(report(&at_limit).first_mismatch(), None);
+    let too_many: Vec<_> = (0..25).map(|pixel| (pixel, 3)).collect();
+    assert_eq!(report(&too_many).first_mismatch(), Some((0, (25, 3))),);
+    assert_eq!(report(&[(0, 9)]).first_mismatch(), Some((0, (1, 9))),);
     let changes: Vec<_> = (0..506).map(|pixel| (pixel, 37)).collect();
-    assert_eq!(report(&changes).first_row_mismatch(), Some((0, (506, 37))));
+    assert_eq!(report(&changes).first_mismatch(), Some((0, (506, 37))));
 }

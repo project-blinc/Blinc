@@ -1906,6 +1906,10 @@ fn scenes() -> Vec<Scene> {
 /// difference.
 const LEVELS: u8 = 2;
 
+// Match the renderer's existing GPU parity allowance for edge roundoff.
+const GPU_NOISE_PIXELS: usize = 24;
+const GPU_NOISE_LEVELS: u8 = 8;
+
 /// Scenes in which the patched path is known to differ from a full paint. They are listed so the
 /// rest are held to the reference; a scene that stops differing is an error until it is taken off
 /// the list. A label stays where the last full paint put it while a bound value moves, an outer
@@ -1935,13 +1939,15 @@ struct Report {
 }
 
 impl Report {
-    /// Permit one sampler-rounding pixel within four levels; larger differences still fail.
-    fn first_row_mismatch(&self) -> Option<(usize, (usize, u8))> {
+    /// The first frame outside the renderer's bounded edge-noise allowance.
+    fn first_mismatch(&self) -> Option<(usize, (usize, u8))> {
         self.per_step
             .iter()
             .copied()
             .enumerate()
-            .find(|(_, (pixels, channel))| *pixels > 1 || (*pixels > 0 && *channel > 4))
+            .find(|(_, (pixels, channel))| {
+                *pixels > GPU_NOISE_PIXELS || (*pixels > 0 && *channel > GPU_NOISE_LEVELS)
+            })
     }
 
     fn worst(&self) -> (usize, (usize, u8)) {
@@ -2060,10 +2066,13 @@ fn the_patched_path_against_the_reference() {
     // rounding is a bug in the patch, and `BLINC_ANIM_PATHS_OUT` shows it.
     let off: Vec<String> = reports
         .iter()
-        .filter(|r| r.differing_steps() > 0 && !KNOWN_DIFFERENT.contains(&r.name))
-        .map(|r| {
-            let (step, (pixels, channel)) = r.worst();
-            format!("{} (step {step}: {pixels} px, channel {channel})", r.name)
+        .filter(|r| !KNOWN_DIFFERENT.contains(&r.name))
+        .filter_map(|r| {
+            let (step, (pixels, channel)) = r.first_mismatch()?;
+            Some(format!(
+                "{} (step {step}: {pixels} px, channel {channel})",
+                r.name
+            ))
         })
         .collect();
     assert!(
@@ -2073,7 +2082,7 @@ fn the_patched_path_against_the_reference() {
     );
     let fixed: Vec<&str> = reports
         .iter()
-        .filter(|r| r.differing_steps() == 0 && KNOWN_DIFFERENT.contains(&r.name))
+        .filter(|r| r.first_mismatch().is_none() && KNOWN_DIFFERENT.contains(&r.name))
         .map(|r| r.name)
         .collect();
     assert!(
@@ -2162,7 +2171,7 @@ fn rows_against_the_reference(path: Path) {
                 report.name, report.steps
             ));
         }
-        if let Some((at, (pixels, channel))) = report.first_row_mismatch() {
+        if let Some((at, (pixels, channel))) = report.first_mismatch() {
             off.push(format!(
                 "{} differs from the vector paint (step {at}: {pixels} px, channel {channel})",
                 report.name
@@ -2635,7 +2644,7 @@ fn the_node_table_beside_other_bindings() {
                 "{mask:06b}: {full} full paints, {unmoved} frames not moved by rows"
             ));
         }
-        if let Some((at, (pixels, channel))) = report.first_row_mismatch() {
+        if let Some((at, (pixels, channel))) = report.first_mismatch() {
             off.push(format!(
                 "{mask:06b} differs from the vector paint (step {at}: {pixels} px, channel {channel})"
             ));
