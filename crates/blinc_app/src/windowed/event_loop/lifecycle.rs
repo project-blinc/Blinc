@@ -147,18 +147,8 @@ where
 
                             #[cfg(target_os = "linux")]
                             {
-                                // On Wayland, once the scene goes static the
-                                // event loop parks (epoll) and stops
-                                // presenting; the compositor then stops
-                                // releasing swapchain buffers and the next
-                                // get_current_texture() starves for ~1s
-                                // ("paints once then dead"). Detect a genuine
-                                // Wayland backend (not X11/XWayland) and keep
-                                // the swapchain cycling: the frame loop
-                                // self-drives request_redraw(), which winit
-                                // paces to vsync through pre_present_notify —
-                                // steady ~7% CPU, not a busy spin. Override
-                                // with BLINC_KEEP_ALIVE=1/0.
+                                // Keep presenting at vsync while the scene is static, on a genuine
+                                // Wayland backend (not X11/XWayland). BLINC_KEEP_ALIVE=1/0 overrides.
                                 let on_wayland = {
                                     use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
                                     window
@@ -176,11 +166,7 @@ where
                                         _ => on_wayland,
                                     };
                                 if ws.wayland_keep_alive {
-                                    tracing::info!(
-                                        "wayland keep-alive active: \
-                                                 self-driven vsync-paced presents \
-                                                 keep the swapchain from starving"
-                                    );
+                                    tracing::info!("wayland keep-alive active");
                                 }
                                 ws.surface = Some(surf);
                             }
