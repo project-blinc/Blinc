@@ -651,13 +651,16 @@ impl RenderContext {
         text: &TextElement,
         ancestors: &dyn Fn(super::LayoutNodeId) -> Vec<super::LayoutNodeId>,
     ) -> f32 {
-        self.node_rows
-            .text_row(text.node, ancestors)
-            .and_then(|row| self.node_rows.uniform_scale(row))
-            .map_or_else(
-                || needed_raster(tree, text),
-                |scale| raster_size(affine_scale(text.css_affine) * scale, text.font_size, true),
-            )
+        self.node_rows.text_row(text.node, ancestors).map_or_else(
+            || needed_raster(tree, text),
+            |row| {
+                // Rotation changes glyph orientation, not the raster size they need.
+                let [a, b, c, d, ..] =
+                    blinc_gpu::node_table::chain(self.node_rows.rows(), row).affine;
+                let scale = a.hypot(b).max(c.hypot(d));
+                raster_size(affine_scale(text.css_affine) * scale, text.font_size, true)
+            },
+        )
     }
 
     /// Keep the glyphs of motion text sharp as their nodes move and when they stop, in place:

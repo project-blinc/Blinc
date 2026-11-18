@@ -94,6 +94,8 @@ fn session(path: Path) -> Option<Headless> {
         include_bytes!("../../../examples/blinc_component_demos/assets/NotoSans-Regular.ttf")
             .to_vec(),
     );
+    // Geometry and sharpness measurements use the bundled face on every platform.
+    ui.css("* { font-family: 'Noto Sans'; }");
     Some(ui)
 }
 

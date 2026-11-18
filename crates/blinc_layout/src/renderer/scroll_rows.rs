@@ -120,7 +120,7 @@ impl RenderTree {
         self.scroll_off_rows_changed() || self.scroll_rows_tree_changed() || self.scroll_rows_idle()
     }
 
-    /// Whether the scroll container `node` has moved within the last [`SCROLL_IDLE_MS`]. Content
+    /// Whether the scroll container `node` has moved recently. Content
     /// is moved by rows only while its container scrolls; at rest it is painted into the static
     /// layer, and a frame draws only what moves on its own. Without a scroll clock (headless, no
     /// physics tick yet) every container counts as moving.
