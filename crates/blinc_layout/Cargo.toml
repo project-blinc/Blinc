@@ -63,6 +63,7 @@ tracing.workspace = true
 
 # Regex for syntax highlighting
 regex.workspace = true
+unicode-segmentation = "1"
 
 # Media widgets (audio/video player). Optional — gated by the `media`
 # feature so silent UIs don't drag in the audio decoder stack. Apps

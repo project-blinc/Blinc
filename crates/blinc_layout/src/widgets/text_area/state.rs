@@ -46,15 +46,9 @@ pub struct TextAreaState {
     pub cursor: TextPosition,
     /// Selection start position (if selecting)
     pub selection_start: Option<TextPosition>,
-    /// Anchor position for drag-to-select. Set in on_mouse_down when
-    /// the user clicks (mouse, not touch) and read by the on_drag
-    /// handler to extend `selection_start` as the cursor moves while
-    /// pressed. `None` outside an active drag-select gesture.
-    /// Mirrors `TextInputData.drag_select_anchor` but uses a 2D
-    /// `TextPosition` because text_area positions are
-    /// (line, column) rather than the single `usize` byte offset
-    /// text_input uses.
-    pub(crate) drag_select_anchor: Option<TextPosition>,
+    /// The span and granularity held by an active mouse selection.
+    pub(super) drag_selection: Option<super::selection::DragSelection>,
+    pub(super) clicks: super::selection::ClickSequence,
     /// Visual state for styling
     pub visual: TextFieldState,
     /// Placeholder text
@@ -139,7 +133,8 @@ impl Default for TextAreaState {
             lines: vec![String::new()],
             cursor: TextPosition::default(),
             selection_start: None,
-            drag_select_anchor: None,
+            drag_selection: None,
+            clicks: Default::default(),
             visual: TextFieldState::Idle,
             placeholder: String::new(),
             disabled: false,

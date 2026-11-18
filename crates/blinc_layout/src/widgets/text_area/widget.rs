@@ -45,6 +45,7 @@ impl TextArea {
             d.revision
                 .get_or_insert_with(|| blinc_core::reactive::signal(0u64));
             d.config = Some(Arc::clone(&config));
+            *d.layout_bounds_storage.lock().unwrap() = None;
         }
 
         // HTML-like flex behaviour: `min_w(0)` lets the field shrink below
@@ -57,15 +58,13 @@ impl TextArea {
             .h(default_height)
             .min_w(0.0);
 
-        let textarea = Self {
+        Self {
             inner: std::cell::RefCell::new(inner),
             built: std::cell::OnceCell::new(),
             state: Arc::clone(state),
             config,
             element_ref: None,
-        };
-        textarea.update_scroll_dimensions();
-        textarea
+        }
     }
 
     /// The element, finished on first use: the content and the bound looks
@@ -119,26 +118,6 @@ impl TextArea {
         self
     }
 
-    /// Update cached scroll dimensions from config
-    /// This must be called whenever config values that affect scroll calculation change
-    fn update_scroll_dimensions(&self) {
-        let cfg = self.config.lock().unwrap();
-        let line_height = cfg.font_size * cfg.line_height;
-        let viewport_height = cfg.effective_height() - cfg.padding_y * 2.0 - cfg.border_width * 2.0;
-        let viewport_width = cfg.effective_width() - cfg.padding_x * 2.0 - cfg.border_width * 2.0;
-        drop(cfg);
-
-        if let Ok(mut s) = self.state.lock() {
-            s.line_height = line_height;
-            s.viewport_height = viewport_height;
-            // Update scroll physics viewport dimensions
-            if let Ok(mut physics) = s.scroll_physics.lock() {
-                physics.viewport_height = viewport_height;
-                physics.viewport_width = viewport_width;
-            }
-        }
-    }
-
     /// Set number of visible rows (like HTML textarea rows attribute)
     pub fn rows(mut self, rows: usize) -> Self {
         let height = {
@@ -147,7 +126,6 @@ impl TextArea {
             cfg.effective_height()
         };
         self.inner = std::cell::RefCell::new(self.inner.take().h(height));
-        self.update_scroll_dimensions();
         self
     }
 
@@ -173,14 +151,12 @@ impl TextArea {
             (cfg.effective_width(), cfg.effective_height())
         };
         self.inner = std::cell::RefCell::new(self.inner.take().w(width).h(height));
-        self.update_scroll_dimensions();
         self
     }
 
     /// Set font size
     pub fn font_size(mut self, size: f32) -> Self {
         self.config.lock().unwrap().font_size = size;
-        self.update_scroll_dimensions();
         self
     }
 
@@ -242,7 +218,6 @@ impl TextArea {
             cfg.rows = None;
         }
         self.inner = std::cell::RefCell::new(self.inner.take().h(px));
-        self.update_scroll_dimensions();
         self
     }
 
@@ -256,7 +231,6 @@ impl TextArea {
             cfg.width_is_explicit = true;
         }
         self.inner = std::cell::RefCell::new(self.inner.take().size(w, h));
-        self.update_scroll_dimensions();
         self
     }
 
@@ -684,20 +658,13 @@ impl ElementBuilder for TextArea {
         Some(Arc::new(move |bounds| {
             let mut changed = false;
             if let Ok(mut cfg) = config.lock() {
-                let width_changed = (cfg.width - bounds.width).abs() > 1.0;
-                let height_changed = (cfg.height - bounds.height).abs() > 1.0;
+                let width_changed = (cfg.width - bounds.width).abs() > 0.01;
+                let height_changed = (cfg.height - bounds.height).abs() > 0.01;
                 if width_changed {
                     cfg.width = bounds.width;
                 }
                 if height_changed {
                     cfg.height = bounds.height;
-                    let viewport_height =
-                        bounds.height - cfg.padding_y * 2.0 - cfg.border_width * 2.0;
-                    if let Ok(data) = state.lock()
-                        && let Ok(mut p) = data.scroll_physics.lock()
-                    {
-                        p.viewport_height = viewport_height;
-                    }
                 }
                 changed = width_changed || height_changed;
             }

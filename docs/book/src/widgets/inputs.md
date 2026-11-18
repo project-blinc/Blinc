@@ -327,6 +327,16 @@ input_otp(&code, 6)
 
 ## Text Area
 
+Double-click or double-tap selects a word. Triple-click selects the logical
+line, including its line break, even when it wraps across several displayed
+rows. Shift-click extends the current anchor; mouse dragging extends by
+character, word or line according to the initial click. Touch long-press
+selects a word and opens the native edit menu where supported.
+
+Changing the row count, allocated height or wrapping width reconciles the
+scroll offset with the new viewport. When all lines fit, the view returns to
+the top without another edit.
+
 ### Basic Text Area
 
 ```rust

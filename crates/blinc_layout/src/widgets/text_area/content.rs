@@ -82,8 +82,7 @@ pub(super) fn assemble(mut outer: Div, state: &SharedTextAreaState, base: &TextA
         let mut d = state.lock().unwrap();
         // Laid out for the state the field starts in.
         let cfg = resolved_config(base, &d);
-        take_metrics(&mut d, &cfg);
-        d.compute_visual_lines();
+        layout_lines(&mut d, &cfg);
         *d.revision.get_or_insert_with(|| signal(0u64))
     };
 

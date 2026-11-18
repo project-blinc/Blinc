@@ -244,56 +244,35 @@ pub fn word_boundary_right(text: &str, char_pos: usize) -> usize {
 
 /// Find word boundaries around a position (for double-click word selection).
 /// Returns (start, end) character positions of the word at `char_pos`.
+/// Unicode word boundaries keep combining marks and emoji sequences together.
 pub fn word_at_position(text: &str, char_pos: usize) -> (usize, usize) {
-    let chars: Vec<char> = text.chars().collect();
-    let len = chars.len();
-    if len == 0 || char_pos >= len {
-        return (char_pos, char_pos);
+    use unicode_segmentation::UnicodeSegmentation;
+
+    let mut start = 0;
+    let mut end = 0;
+    let mut previous_kind = None;
+    for segment in text.split_word_bounds() {
+        let kind = if segment.chars().all(char::is_whitespace) {
+            0
+        } else if segment.unicode_words().next().is_some() || segment.contains('_') {
+            1
+        } else {
+            2
+        };
+        // Preserve whitespace and punctuation runs used by the editors.
+        if previous_kind != Some(kind) || kind == 1 {
+            if char_pos < end {
+                return (start, end);
+            }
+            start = end;
+        }
+        end += segment.chars().count();
+        previous_kind = Some(kind);
     }
-
-    let ch = chars[char_pos];
-    let is_word = ch.is_alphanumeric() || ch == '_';
-
-    if ch.is_whitespace() {
-        // Select the whitespace run
-        let mut start = char_pos;
-        let mut end = char_pos;
-        while start > 0 && chars[start - 1].is_whitespace() {
-            start -= 1;
-        }
-        while end < len && chars[end].is_whitespace() {
-            end += 1;
-        }
-        (start, end)
-    } else if is_word {
-        let mut start = char_pos;
-        let mut end = char_pos;
-        while start > 0 && (chars[start - 1].is_alphanumeric() || chars[start - 1] == '_') {
-            start -= 1;
-        }
-        while end < len && (chars[end].is_alphanumeric() || chars[end] == '_') {
-            end += 1;
-        }
+    if char_pos < end {
         (start, end)
     } else {
-        // Punctuation — select the punctuation run
-        let mut start = char_pos;
-        let mut end = char_pos;
-        while start > 0
-            && !chars[start - 1].is_alphanumeric()
-            && chars[start - 1] != '_'
-            && !chars[start - 1].is_whitespace()
-        {
-            start -= 1;
-        }
-        while end < len
-            && !chars[end].is_alphanumeric()
-            && chars[end] != '_'
-            && !chars[end].is_whitespace()
-        {
-            end += 1;
-        }
-        (start, end)
+        (char_pos, char_pos)
     }
 }
 
@@ -499,5 +478,26 @@ mod tests {
         assert_eq!(word_at_position("hello world", 2), (0, 5));
         assert_eq!(word_at_position("hello world", 7), (6, 11));
         assert_eq!(word_at_position("hello world", 5), (5, 6)); // space
+    }
+
+    #[test]
+    fn unicode_word_selection_uses_character_offsets() {
+        for (text, position, expected) in [
+            ("cafe\u{301} noir", 4, (0, 5)),
+            ("can't stop", 3, (0, 5)),
+            ("привет мир", 2, (0, 6)),
+            ("go 👩‍💻 now", 4, (3, 6)),
+            ("hello_world", 6, (0, 11)),
+            ("__::", 1, (0, 2)),
+            ("__::", 2, (2, 4)),
+            ("hello  world", 6, (5, 7)),
+            ("word!", 4, (4, 5)),
+            ("::+-", 1, (0, 4)),
+            ("中文", 1, (1, 2)),
+            ("", 0, (0, 0)),
+            ("end", 3, (3, 3)),
+        ] {
+            assert_eq!(word_at_position(text, position), expected, "{text}");
+        }
     }
 }
