@@ -3,7 +3,7 @@
 #![allow(unused_variables)]
 
 use self::collect::{Collect, PendingEvent};
-use self::keyboard::collect_keyboard;
+use self::keyboard::{collect_keyboard, dispatch_keyboard_events, has_key_broadcast};
 use self::mouse::collect_mouse;
 use self::touch::collect_touch_scroll;
 use super::DesktopLoop;
@@ -355,8 +355,10 @@ where
                     if let Some(ref mut windowed_ctx) = ws.ctx {
                         let router = &windowed_ctx.event_router;
                         for mut event in pending_events {
-                            // Skip scroll events - already handled with nested scroll support
-                            if event.event_type == blinc_core::events::event_types::SCROLL {
+                            // Keep modifier-only router notifications, which have no broadcast.
+                            if event.event_type == blinc_core::events::event_types::SCROLL
+                                || has_key_broadcast(&keyboard_events, event.event_type)
+                            {
                                 continue;
                             }
                             // Gesture events (PINCH/ROTATE) need hit testing since
@@ -429,35 +431,7 @@ where
                     // Note: Overlay events are now dispatched through the main tree
                     // since overlays are composed into the main tree via build_overlay_layer()
 
-                    // Dispatch keyboard events
-                    // Use broadcast instead of bubbling to handle focus correctly after tree rebuilds.
-                    // Text inputs track their own focus state internally via `s.visual.is_focused()`,
-                    // so broadcasting to all handlers is safe - only the focused one will process.
-                    for event in keyboard_events {
-                        if event.event_type == blinc_core::events::event_types::TEXT_INPUT {
-                            if let Some(c) = event.key_char {
-                                // Broadcast to all text input handlers
-                                // Each handler checks its own focus state internally
-                                tree.broadcast_text_input_event(
-                                    c,
-                                    event.shift,
-                                    event.ctrl,
-                                    event.alt,
-                                    event.meta,
-                                );
-                            }
-                        } else {
-                            // Broadcast KEY_DOWN to all key handlers
-                            tree.broadcast_key_event(
-                                event.event_type,
-                                event.key_code,
-                                event.shift,
-                                event.ctrl,
-                                event.alt,
-                                event.meta,
-                            );
-                        }
-                    }
+                    dispatch_keyboard_events(tree, keyboard_events);
 
                     // Fire the rebound on `TouchPhase::Ended`. macOS
                     // trackpads deliver Ended twice per gesture (once

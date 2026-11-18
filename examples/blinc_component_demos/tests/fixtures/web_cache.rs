@@ -10,7 +10,7 @@ use blinc_layout::canvas::CanvasRenderFn;
 use blinc_layout::div::{ElementBuilder, ElementTypeId};
 use blinc_layout::element::RenderProps;
 use blinc_layout::prelude::*;
-use blinc_layout::widgets::text_input::text_input_data;
+use blinc_layout::widgets::text_input::{SharedTextInputData, text_input_data};
 use blinc_layout::{Canvas, LayoutNodeId, LayoutTree};
 use wasm_bindgen::prelude::*;
 
@@ -51,6 +51,7 @@ pub struct CacheProbe {
     color: Signal<Color>,
     size: Signal<f32>,
     show_input: Signal<bool>,
+    field: SharedTextInputData,
 }
 
 fn error(value: impl std::fmt::Display) -> JsValue {
@@ -85,6 +86,7 @@ pub async fn create_cache_probe(
     let size = signal(80.0);
     let show_input = signal(false);
     let field = text_input_data();
+    let field_value = field.clone();
     let (paint_count, build_count) = (paints.clone(), builds.clone());
     app.set_ui_builder(move |_| {
         build_count.set(build_count.get() + 1);
@@ -104,6 +106,11 @@ pub async fn create_cache_probe(
         let mut ui = div()
             .w_full()
             .h_full()
+            .on_key_down(|event| {
+                if event.alt && !event.ctrl && !event.meta && event.key_code == 70 {
+                    event.prevent_default();
+                }
+            })
             .bg(Color::rgb(0.05, 0.07, 0.1))
             .child(
                 div()
@@ -158,6 +165,7 @@ pub async fn create_cache_probe(
         color,
         size,
         show_input,
+        field: field_value,
     })
 }
 
@@ -184,6 +192,25 @@ impl CacheProbe {
             "rebuild" => self.app.request_rebuild(),
             _ => panic!("unknown probe update"),
         }
+    }
+
+    pub fn input_value(&self) -> String {
+        self.field.lock().unwrap().value.clone()
+    }
+
+    pub fn key(&mut self, code: u32, text: &str, ctrl: bool, alt: bool, meta: bool) -> bool {
+        self.app.dispatch_input(
+            WebInput::KeyDown {
+                code,
+                text: (!text.is_empty()).then(|| text.to_owned()),
+            },
+            blinc_platform::Modifiers {
+                ctrl,
+                alt,
+                meta,
+                ..Default::default()
+            },
+        )
     }
 
     pub fn input(&mut self, input: &str) -> Result<(), JsValue> {

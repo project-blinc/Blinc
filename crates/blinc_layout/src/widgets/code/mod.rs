@@ -1859,8 +1859,7 @@ impl CodeEditor {
                 crate::stateful::refresh_stateful(&shared_for_drag);
             })
             .on_event(event_types::TEXT_INPUT, move |ctx| {
-                if ctx.ctrl
-                    || ctx.meta
+                if ctx.command_modifier()
                     || !ctx
                         .key_char
                         .is_some_and(|ch| !ch.is_control() || ch == '\t')
@@ -1879,7 +1878,7 @@ impl CodeEditor {
                         return;
                     }
                     // Skip control characters and modifier combos (Cmd+C/V/Z etc.)
-                    if ctx.meta || ctx.ctrl {
+                    if ctx.command_modifier() {
                         return;
                     }
                     if let Some(c) = ctx.key_char {
@@ -1909,7 +1908,7 @@ impl CodeEditor {
             })
             .on_key_down(move |ctx| {
                 if matches!(ctx.key_code, 8 | 13 | 27 | 35..=40 | 46)
-                    || ((ctx.ctrl || ctx.meta)
+                    || (ctx.command_modifier()
                         && matches!(ctx.key_code, 65 | 67 | 86 | 88 | 89 | 90))
                 {
                     ime::commit(&data_for_key);
@@ -1927,7 +1926,7 @@ impl CodeEditor {
 
                     // When search is active, only allow specific keys through
                     if d.search_active {
-                        let mod_key = ctx.meta || ctx.ctrl;
+                        let mod_key = ctx.command_modifier();
                         if !mod_key {
                             if ctx.key_code == 27 {
                                 close_search_overlay(&mut d);
@@ -1949,7 +1948,7 @@ impl CodeEditor {
                     let mut needs_visual_refresh = false;
 
                     // Platform modifier: Cmd on macOS, Ctrl elsewhere
-                    let mod_key = ctx.meta || ctx.ctrl;
+                    let mod_key = ctx.command_modifier();
 
                     match ctx.key_code {
                         8 => {

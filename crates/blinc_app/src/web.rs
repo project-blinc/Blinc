@@ -1550,9 +1550,9 @@ impl WebApp {
                     if (meta || ctrl) && is_letter {
                         evt.prevent_default();
                     }
-                    let navigated =
+                    let key_prevented =
                         Self::dispatch_key_down(&mut app, key_code, shift, ctrl, alt, meta);
-                    if navigated {
+                    if key_prevented {
                         evt.prevent_default();
                     }
 
@@ -1566,9 +1566,9 @@ impl WebApp {
                     let key_str = evt.key();
                     let mut chars = key_str.chars();
                     if let (Some(ch), None) = (chars.next(), chars.next())
-                        && !navigated
+                        && !key_prevented
                         && !ch.is_control()
-                        && !ctrl
+                        && (!ctrl || alt)
                         && !meta
                     {
                         // Prevent the browser from also acting on
@@ -1910,13 +1910,6 @@ impl WebApp {
         alt: bool,
         meta: bool,
     ) -> bool {
-        // Update the router so it can fire any blur / focus-change
-        // logic that depends on key state. The return value is
-        // (node, event_type) for a hit-tested target — we ignore it
-        // because we broadcast instead, mirroring the desktop
-        // runner. The router still tracks focus internally, which
-        // is what `dispatch_text_input` relies on later for
-        // "focused element" semantics.
         if let Some(tree) = app.current_tree.as_mut()
             && tree.handle_navigation_key(&mut app.ctx.event_router, key_code, shift)
         {
@@ -1924,16 +1917,8 @@ impl WebApp {
         }
         let _ = app.ctx.event_router.on_key_down(key_code);
 
-        // Broadcast KEY_DOWN to every key handler in the tree.
-        // Each widget checks its own focus state to decide whether
-        // to act, mirroring `windowed.rs:3463-3473`. Without this
-        // path the text-input widget never sees Backspace / Enter
-        // / arrow keys etc., because the router-based dispatch
-        // walks an event-bubble chain that doesn't reach handlers
-        // registered at the focused node when the focus changed
-        // mid-rebuild.
         if let Some(tree) = app.current_tree.as_mut() {
-            tree.broadcast_key_event(
+            return tree.broadcast_key_event_cancellable(
                 blinc_core::events::event_types::KEY_DOWN,
                 key_code,
                 shift,
