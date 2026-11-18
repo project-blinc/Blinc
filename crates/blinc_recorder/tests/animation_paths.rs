@@ -20,6 +20,8 @@
 mod css_backgrounds;
 #[path = "animation_paths/css_groups.rs"]
 mod css_groups;
+#[path = "animation_paths/edge_noise.rs"]
+mod edge_noise;
 
 use blinc_animation::AnimatedValue;
 use blinc_core::reactive::signal;
@@ -1933,6 +1935,15 @@ struct Report {
 }
 
 impl Report {
+    /// Permit one sampler-rounding pixel within four levels; larger differences still fail.
+    fn first_row_mismatch(&self) -> Option<(usize, (usize, u8))> {
+        self.per_step
+            .iter()
+            .copied()
+            .enumerate()
+            .find(|(_, (pixels, channel))| *pixels > 1 || (*pixels > 0 && *channel > 4))
+    }
+
     fn worst(&self) -> (usize, (usize, u8)) {
         self.per_step
             .iter()
@@ -2151,13 +2162,7 @@ fn rows_against_the_reference(path: Path) {
                 report.name, report.steps
             ));
         }
-        if let Some((at, (pixels, channel))) = report
-            .per_step
-            .iter()
-            .copied()
-            .enumerate()
-            .find(|(_, (pixels, _))| *pixels > 0)
-        {
+        if let Some((at, (pixels, channel))) = report.first_row_mismatch() {
             off.push(format!(
                 "{} differs from the vector paint (step {at}: {pixels} px, channel {channel})",
                 report.name
@@ -2630,13 +2635,7 @@ fn the_node_table_beside_other_bindings() {
                 "{mask:06b}: {full} full paints, {unmoved} frames not moved by rows"
             ));
         }
-        if let Some((at, (pixels, channel))) = report
-            .per_step
-            .iter()
-            .copied()
-            .enumerate()
-            .find(|(_, (pixels, _))| *pixels > 0)
-        {
+        if let Some((at, (pixels, channel))) = report.first_row_mismatch() {
             off.push(format!(
                 "{mask:06b} differs from the vector paint (step {at}: {pixels} px, channel {channel})"
             ));

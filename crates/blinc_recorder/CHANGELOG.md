@@ -8,6 +8,7 @@
 - Frame-path probes distinguish a cached geometry repaint from a full tree walk.
 
 ### Fixed
+- Animation row-parity checks permit at most one sampler-rounding pixel within four channel levels per frame. Larger or broader differences still fail.
 - Animation geometry and sharpness probes explicitly select their bundled Noto Sans face instead of measuring different system fonts on each platform.
 - Headless reapplies CSS layout after property-driven region changes, matching the native runner. Ancestor `:has()`, sibling and structural layout selectors follow row insertion and removal.
 - Headless consumes native redraw requests and distinguishes explicit repaints from property-only wakeups, so its retained-paint probes exercise the same input invalidation contract as a desktop window.
