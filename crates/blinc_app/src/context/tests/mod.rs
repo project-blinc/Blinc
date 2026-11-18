@@ -7,6 +7,7 @@ mod collected_transform_tests;
 mod composite_layers_tests;
 mod cross_stream_tests;
 mod css_lifecycle_tests;
+mod direct_cache_tests;
 mod effect_group_tests;
 mod foreground_layers_tests;
 mod foreground_rgba_tests;

@@ -92,6 +92,9 @@ impl RenderContext {
         // that content to be the last full paint's, not cleared since.
         let canvas_output = (try_fast_paint
             && self.collected_valid
+            && self.cached_glyphs_by_layer.is_some()
+            && self.cached_fg_glyphs.is_some()
+            && self.cached_css_transformed_text_prims.is_some()
             && !self.captured_images_need_repaint
             && !tree.css_active_off_rows())
         .then(|| self.redraw_canvas_output(tree, width, height))
@@ -454,27 +457,42 @@ impl RenderContext {
         // Collect unique 3D layer IDs for rendering
         let layer_3d_ids: Vec<LayoutNodeId> = layer_3d_texts.keys().cloned().collect();
 
-        // Text that a bound ancestor scales up is rasterized at the size it is shown.
-        let raster_scales: std::collections::HashMap<LayoutNodeId, (f32, bool)> =
-            motion_subtree_texts
-                .iter()
-                .map(|t| (t.node, frame_text::raster_scale(tree, t.node)))
-                .collect();
-
         let PreparedFrameText {
             glyphs_by_layer,
             css_transformed_text_prims,
             fg_glyphs,
             fg_decorations_by_layer,
-        } = self.prepare_frame_text(
-            &texts,
-            &fg_texts,
-            &motion_subtree_texts,
-            &motion_subtree_svgs,
-            &raster_scales,
-            (width, height),
-            scale_factor,
-        );
+        } = if used_fast_paint {
+            // The row update already refined motion glyphs. Preparing them again would
+            // discard their row ownership and make the following frame repaint.
+            PreparedFrameText {
+                glyphs_by_layer: self.cached_glyphs_by_layer.as_ref().unwrap().clone(),
+                css_transformed_text_prims: self
+                    .cached_css_transformed_text_prims
+                    .as_ref()
+                    .unwrap()
+                    .clone(),
+                fg_glyphs: self.cached_fg_glyphs.as_ref().unwrap().clone(),
+                fg_decorations_by_layer: super::generate_text_decoration_primitives_by_layer(
+                    &fg_texts,
+                ),
+            }
+        } else {
+            // Text under a scaling ancestor is rasterized at its displayed size.
+            let raster_scales = motion_subtree_texts
+                .iter()
+                .map(|t| (t.node, frame_text::raster_scale(tree, t.node)))
+                .collect();
+            self.prepare_frame_text(
+                &texts,
+                &fg_texts,
+                &motion_subtree_texts,
+                &motion_subtree_svgs,
+                &raster_scales,
+                (width, height),
+                scale_factor,
+            )
+        };
 
         // The batch and the glyphs of motion subtrees were just painted at one pose: the node
         // table takes both, and later frames only write its rows.

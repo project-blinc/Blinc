@@ -1,6 +1,9 @@
 //! Catalog fixtures shared by native recording and worker rendering.
 pub mod demos;
 pub mod gallery;
+#[cfg(all(target_arch = "wasm32", feature = "browser-tests"))]
+#[path = "../tests/fixtures/web_cache.rs"]
+mod web_cache_probe;
 #[cfg(target_arch = "wasm32")]
 mod worker;
 

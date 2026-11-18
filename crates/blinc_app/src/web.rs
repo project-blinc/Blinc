@@ -32,6 +32,7 @@
 //! see no extra configuration — enabling the `web` feature is all
 //! that's required.
 
+mod paint;
 mod wheel;
 mod worker;
 pub use worker::{WebInput, WorkerRuntime, set_asset_base_url};
@@ -497,6 +498,7 @@ pub struct WebApp {
     /// compute `dt_ms` for CSS animation/transition ticking. `0`
     /// on the first frame (the tick code treats that as 16 ms).
     last_frame_time_ms: u64,
+    state_styles: crate::mobile_paint::StateStyleGate,
     /// Web asset loader. A clone is registered as the global
     /// `AssetLoader` (via `set_global_asset_loader`) so
     /// `ImageData::load` → `global_asset_loader()` finds it. This
@@ -764,6 +766,7 @@ impl WebApp {
             render_state,
             css_anim_store,
             last_frame_time_ms: 0,
+            state_styles: Default::default(),
             asset_loader,
         })
     }
@@ -2586,81 +2589,22 @@ impl WebApp {
         }
         if blinc_layout::widgets::take_needs_relayout() {
             self.needs_full_rebuild = true;
+            self.needs_rebuild = true;
         }
         if blinc_layout::widgets::take_needs_css_reparse() {
             self.ctx.reparse_css();
+            self.needs_rebuild = true;
         }
 
-        // ─── Phase 2: drain stateful prop/subtree updates ────────
-        let has_stateful_updates = blinc_layout::take_needs_redraw();
-        let has_pending_rebuilds = blinc_layout::has_pending_subtree_rebuilds();
-        let has_prop_updates = blinc_layout::has_pending_partial_prop_updates();
-        if has_stateful_updates || has_pending_rebuilds || has_prop_updates {
-            // Drain the unified property channel
-            // ([[project-reactive-architecture-v2]]). Accumulate side
-            // effects so a layout-affecting update forces relayout even
-            // when no subtree rebuild was queued.
-            let prop_updates = self
-                .current_tree
-                .as_ref()
-                .map(|tree| tree.take_pending_property_updates())
-                .unwrap_or_default();
-            let mut prop_effects = blinc_layout::SideEffects::default();
-            if let Some(ref mut tree) = self.current_tree {
-                prop_effects = tree.apply_partial_property_updates(prop_updates);
-            }
-            let mut needs_relayout = prop_effects.needs_layout;
-            if let Some(ref mut tree) = self.current_tree {
-                needs_relayout |= tree.process_pending_subtree_rebuilds();
-            }
-            if needs_relayout {
-                // Mirror windowed.rs:5088 — a structural rebuild
-                // produces fresh element ids / positions; the batch
-                // caches keyed against the old tree must be dropped
-                // so the next paint repopulates from the new state.
-                self.blinc_app
-                    .invalidate_render_cache_tagged("subtree_rebuild_applied");
-                // NOTE: we DO NOT drain `css_composited_textures` /
-                // `motion_subtree_textures` here. A subtree rebuild
-                // fired when a child overlay (submenu, context menu)
-                // mounts — draining at that point wipes the surviving
-                // parent overlay's CSS-promoted texture and the next
-                // bake captures frame-1 of the still-running enter
-                // animation (opacity ≈ 0), then the per-key hash-skip
-                // refuses to re-bake while the closure emits the
-                // same primitives. Result: parent / freshly-mounted
-                // overlay frozen near-invisible until a mouse-move
-                // trips a different invalidation. See
-                // `gotcha-css-anim-eager-drain` for the same shape on
-                // desktop (resolved via `sweep_stale_css_animations`
-                // — which runs as part of the rebuild walker and
-                // handles texture-side invalidation surgically).
-                if let Some(ref mut tree) = self.current_tree {
-                    // Mirror windowed.rs:3660-3676: after subtree
-                    // rebuilds, the new children need CSS layout
-                    // overrides (padding, gap, etc.) applied before
-                    // compute_layout, and all the post-layout wiring
-                    // (FLIP, motions, CSS animations) for the new
-                    // nodes. Without this, new subtree nodes render
-                    // with default layout — the visible symptom is
-                    // CSS styling "disappearing" after the first
-                    // stateful interaction (accordion open, checkbox
-                    // toggle, etc.).
-                    tree.apply_stylesheet_layout_overrides();
-                    tree.compute_layout(self.ctx.width, self.ctx.height);
-                    tree.apply_flip_transitions();
-                    tree.update_flip_bounds();
-                    self.render_state.begin_stable_motion_frame();
-                    tree.initialize_motion_animations(&mut self.render_state);
-                    self.render_state.end_stable_motion_frame();
-                    self.render_state.process_global_motion_replays();
-                    tree.start_all_css_animations();
-                }
-            }
-        }
+        // Classify queued changes before discarding any retained paint.
+        self.invalidate_explicit_paint();
+        let _ = blinc_layout::take_needs_redraw();
+        self.apply_frame_updates("web_property_updates");
 
         // ─── Phase 3: tree rebuild / incremental update ──────────
         if self.needs_rebuild {
+            self.blinc_app.invalidate_render_cache_tagged("web_rebuild");
+            self.state_styles.force();
             let builder = match self.ui_builder.as_mut() {
                 Some(b) => b,
                 None => return Ok(()),
@@ -2783,7 +2727,7 @@ impl WebApp {
         self.last_frame_time_ms = now;
 
         self.render_state.sync_shared_motion_states();
-        let _theme_animating = blinc_theme::ThemeState::get().tick();
+        let theme_animating = blinc_theme::ThemeState::get().tick();
 
         // ─── Phase 4b: animation-driven rebuilds ─────────────────
         // When the scheduler has active animations (springs,
@@ -2807,41 +2751,7 @@ impl WebApp {
             }
         }
 
-        // Drain any prop/subtree updates produced by
-        // `check_stateful_animations` above — they need to land
-        // on the current tree before we render this frame.
-        {
-            // Unified property channel drain — same shape as the
-            // pre-paint pass above. Accumulate side effects so a
-            // layout-affecting animation-driven update forces relayout.
-            let prop_updates = self
-                .current_tree
-                .as_ref()
-                .map(|tree| tree.take_pending_property_updates())
-                .unwrap_or_default();
-            let mut animation_prop_effects = blinc_layout::SideEffects::default();
-            if let Some(ref mut tree) = self.current_tree {
-                animation_prop_effects = tree.apply_partial_property_updates(prop_updates);
-            }
-            if blinc_layout::has_pending_subtree_rebuilds() || animation_prop_effects.needs_layout {
-                let mut needs_relayout = animation_prop_effects.needs_layout;
-                if let Some(ref mut tree) = self.current_tree {
-                    needs_relayout |= tree.process_pending_subtree_rebuilds();
-                }
-                if needs_relayout {
-                    // Animation-driven subtree rebuilds also need the
-                    // batch-cache wipe — same rationale as the
-                    // Phase-2 subtree-rebuild block above. Layer
-                    // textures are intentionally NOT drained here
-                    // for the same enter-animation-restart reason.
-                    self.blinc_app
-                        .invalidate_render_cache_tagged("animation_subtree_rebuild_applied");
-                    if let Some(ref mut tree) = self.current_tree {
-                        tree.compute_layout(self.ctx.width, self.ctx.height);
-                    }
-                }
-            }
-        }
+        self.apply_frame_updates("web_animation_updates");
 
         // ─── Phase 4c: drain deferred focus/blur ─────────────────
         // Mirror windowed.rs Phase-3 post-rebuild drain. Deferred
@@ -2855,6 +2765,7 @@ impl WebApp {
         // slots.
         blinc_layout::widgets::process_pending_input_focus();
         blinc_layout::widgets::process_pending_area_focus();
+        self.apply_frame_updates("web_focus_updates");
 
         // ─── Phase 5: pre-render CSS + pointer-query ─────────────
         // Focus sync so :focus selectors work
@@ -2870,9 +2781,16 @@ impl WebApp {
         // CSS state styles (:hover, :active, :focus)
         if let Some(ref mut tree) = self.current_tree
             && tree.stylesheet().is_some()
+            && self
+                .state_styles
+                .should_apply(self.ctx.event_router.state_fingerprint())
         {
             let epoch = tree.layout_tree.epoch();
             let state_changed = tree.apply_stylesheet_state_styles(&self.ctx.event_router);
+            if state_changed {
+                self.blinc_app
+                    .invalidate_render_cache_tagged("web_state_styles");
+            }
             if state_changed && tree.layout_due_since(epoch) {
                 tree.compute_layout(self.ctx.width, self.ctx.height);
                 tree.update_flip_bounds();
@@ -2924,6 +2842,8 @@ impl WebApp {
         }
 
         // ─── Phase 6: render ─────────────────────────────────────
+        self.invalidate_explicit_paint();
+        let try_fast_paint = self.can_reuse_frame_paint(theme_animating);
         let tree = match self.current_tree.as_ref() {
             Some(t) => t,
             None => return Ok(()),
@@ -2953,12 +2873,14 @@ impl WebApp {
         // windowed.rs:4031.
         self.blinc_app.set_blend_target(&frame.texture);
 
-        self.blinc_app.render_tree_with_motion(
+        self.blinc_app.render_tree_with_motion_opt(
             tree,
             &self.render_state,
             &view,
+            None,
             physical_w,
             physical_h,
+            try_fast_paint,
         )?;
 
         frame.present();

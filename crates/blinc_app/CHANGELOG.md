@@ -9,6 +9,8 @@ All notable changes to `blinc_app` will be documented in this file.
 - The registered iOS Rust builder uses the complete UI build path, including queued core styles, overlays and build-scope cleanup.
 
 ### Changed
+- Browser frames reuse retained paint for eligible motion and scroll rows instead of walking the tree on every frame. Property, subtree, focus, stylesheet and layout changes invalidate the cache; unsupported content keeps the full-paint path. Unchanged pointer and focus state skips the stylesheet state pass. HTML canvas and worker runners share this path without allocating a static-layer texture.
+- Direct retained frames reuse prepared text and preserve motion glyph row ownership across successive updates. Canvas replay distinguishes actual ordered content from a resolver marker, and leaves unchanged groups intact when no canvas needs splicing.
 - Background-only CSS colour transitions update their owning cached fills, including inside moving groups. Text and children retain their paint; unsupported sources repaint. The frame trace distinguishes cached geometry repaint from a full walk.
 - The post-focus drain invalidates subtree paint only when it applies a rebuild. A queued region poll that changes no children no longer discards the cache after property classification.
 - Native input keeps the paint cache while queued properties await classification. Explicit repaint requests still invalidate immediately, so signal-driven translations can reach the retained-row path during input.

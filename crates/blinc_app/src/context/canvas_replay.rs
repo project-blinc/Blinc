@@ -31,16 +31,17 @@ impl RenderContext {
         use blinc_gpu::GpuPaintContext;
 
         let batch = self.cached_bg_batch.as_mut()?;
-
-        if batch.has_ordered_draws()
+        let records_ref = tree.canvas_paint_records();
+        if records_ref.is_empty() {
+            return Some(CanvasOverlay::default());
+        }
+        // Only an actual ordered draw prevents splicing a canvas range. A batch can keep
+        // the resolver's marker after its ordered content has been consumed.
+        if batch.has_ordered_content()
             || batch.has_foreground_content()
             || batch.has_foreground_layers()
         {
             return None;
-        }
-        let records_ref = tree.canvas_paint_records();
-        if records_ref.is_empty() {
-            return Some(CanvasOverlay::default());
         }
         // Release the tree borrow before callbacks can access it again.
         let mut sorted: Vec<blinc_layout::renderer::CanvasPaintRecord> =

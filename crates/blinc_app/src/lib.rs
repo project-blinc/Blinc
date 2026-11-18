@@ -126,7 +126,12 @@ pub fn system_font_paths() -> &'static [&'static str] {
 
 #[cfg(any(target_os = "ios", target_os = "android"))]
 mod ime;
-#[cfg(any(target_os = "ios", target_os = "android", test))]
+#[cfg(any(
+    target_os = "ios",
+    target_os = "android",
+    all(feature = "web", target_arch = "wasm32"),
+    test
+))]
 #[cfg_attr(test, allow(dead_code))]
 mod mobile_paint;
 
