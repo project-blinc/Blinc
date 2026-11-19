@@ -10,6 +10,7 @@
 - Frame-path probes distinguish a cached geometry repaint from a full tree walk.
 
 ### Fixed
+- Focus and accessibility headless tests check for a GPU before creating a session. The textarea selection capture keeps GPU readback outside the double-click pair, so slow runners still exercise word selection.
 - Animation parity checks use the renderer's existing rounding budget: at most 24 pixels above two levels, with no channel difference above eight.
 - Animation geometry and sharpness tests no longer depend on the host's system font; they use the bundled Noto Sans reference face.
 - Headless reapplies CSS layout after property-driven region changes, matching the native runner. Ancestor `:has()`, sibling and structural layout selectors follow row insertion and removal.

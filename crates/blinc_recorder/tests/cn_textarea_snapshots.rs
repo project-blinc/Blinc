@@ -181,9 +181,15 @@ fn double_click_paints_the_selected_word() {
         + cfg.border_width
         + TextFace::default().measure("hello w", cfg.font_size).width;
     let y = bounds.y + cfg.padding_y + cfg.border_width + cfg.font_size * 0.5;
-    ui.move_to(x, y).mouse_down().mouse_up();
-    let before = ui.snapshot().expect("single click");
-    ui.mouse_down().mouse_up();
+    ui.key(9).settle();
+    assert_eq!(ui.focused(), Some(node));
+    let before = ui.snapshot().expect("focused without selection");
+    // Capture outside the click pair so GPU readback cannot expire the double-click window.
+    ui.move_to(x, y)
+        .mouse_down()
+        .mouse_up()
+        .mouse_down()
+        .mouse_up();
     let selected = ui.snapshot().expect("double click");
     assert_eq!(
         state.lock().unwrap().selected_text().as_deref(),

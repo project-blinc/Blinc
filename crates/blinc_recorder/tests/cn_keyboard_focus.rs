@@ -514,6 +514,9 @@ fn save_focus_capture(ui: &mut Headless, name: &str) {
 
 #[test]
 fn dialog_initial_focus_chooses_the_safe_footer_button() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     let deletes = Arc::new(AtomicUsize::new(0));
     let cancels = Arc::new(AtomicUsize::new(0));
@@ -575,6 +578,9 @@ fn dialog_initial_focus_chooses_the_safe_footer_button() {
 
 #[test]
 fn stack_initial_focus_accepts_text_in_the_named_field() {
+    if !Headless::available() {
+        return;
+    }
     use blinc_layout::widgets::overlay_stack::OverlayBuilder;
     use blinc_layout::widgets::text_input::{text_input, text_input_data};
     let mut ui = session();
@@ -612,6 +618,9 @@ fn stack_initial_focus_accepts_text_in_the_named_field() {
 
 #[test]
 fn programmatic_focus_updates_an_idle_field_without_a_rebuild() {
+    if !Headless::available() {
+        return;
+    }
     use blinc_layout::widgets::text_input::{text_input, text_input_data};
     let mut ui = session();
     let builds = Arc::new(AtomicUsize::new(0));
@@ -664,6 +673,9 @@ fn programmatic_focus_updates_an_idle_field_without_a_rebuild() {
 
 #[test]
 fn a_styled_input_id_focuses_and_blurs_its_editable_field() {
+    if !Headless::available() {
+        return;
+    }
     use blinc_layout::widgets::text_input::text_input_data;
     let mut ui = session();
     let state = text_input_data();

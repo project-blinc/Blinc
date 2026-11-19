@@ -48,6 +48,9 @@ fn capture(ui: &mut Headless, name: &str) {
 
 #[test]
 fn dialog_keeps_controls_and_reactive_names_and_routes_native_actions() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     let title = blinc_core::reactive::signal(String::from("Publish changes?"));
     let count = Arc::new(AtomicUsize::new(0));
@@ -95,6 +98,9 @@ fn dialog_keeps_controls_and_reactive_names_and_routes_native_actions() {
 
 #[test]
 fn alert_dialog_registers_its_distinct_role() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     alert_dialog()
         .title("Session expired")
@@ -114,6 +120,9 @@ fn alert_dialog_registers_its_distinct_role() {
 
 #[test]
 fn toast_registers_polite_live_semantics_and_keeps_its_dismiss_action() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     let description = blinc_core::reactive::signal(String::from("Your draft is backed up."));
     toast("File saved")
@@ -154,6 +163,9 @@ fn toast_registers_polite_live_semantics_and_keeps_its_dismiss_action() {
 
 #[test]
 fn error_toast_registers_an_assertive_live_alert() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     toast_error("Upload failed")
         .description("Try again when you are connected.")
@@ -166,6 +178,9 @@ fn error_toast_registers_an_assertive_live_alert() {
 
 #[test]
 fn tooltip_and_popover_register_their_own_semantics() {
+    if !Headless::available() {
+        return;
+    }
     let mut ui = session();
     ui.mount(|_| {
         div().p(24.0).child(
