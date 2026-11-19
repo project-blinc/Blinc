@@ -66,10 +66,7 @@ pub(crate) fn notify_text_area(state: &SharedTextAreaState) {
         Ok(mut d) => {
             if let Some(base) = &base {
                 let cfg = resolved_config(base, &d);
-                take_metrics(&mut d, &cfg);
-            }
-            if d.laid_out != Some(d.layout_key()) {
-                d.compute_visual_lines();
+                layout_lines(&mut d, &cfg);
             }
             d.revision
         }
@@ -89,11 +86,48 @@ pub fn refresh_text_area(state: &SharedTextAreaState) {
 /// Copy the sizes the state lays its lines out with from `cfg`.
 pub(super) fn take_metrics(d: &mut TextAreaState, cfg: &TextAreaConfig) {
     d.line_height = cfg.font_size * cfg.line_height;
-    d.viewport_height = cfg.effective_height() - cfg.padding_y * 2.0 - cfg.border_width * 2.0;
+    let measured = d
+        .layout_bounds_storage
+        .lock()
+        .ok()
+        .and_then(|bounds| *bounds);
+    let requested_height = cfg.effective_height();
+    let height = measured.map_or(requested_height, |b| {
+        // Pixel rounding must not turn a requested row count into overflow.
+        if cfg.rows.is_some() && (b.height - requested_height).abs() <= 0.5 {
+            requested_height
+        } else {
+            b.height
+        }
+    });
+    let width = measured.map_or_else(|| cfg.effective_width(), |b| b.width);
+    d.viewport_height = (height - cfg.padding_y * 2.0 - cfg.border_width * 2.0).max(0.0);
     d.font_size = cfg.font_size;
     d.face = cfg.face.clone();
-    d.available_width = cfg.effective_width() - cfg.padding_x * 2.0 - cfg.border_width * 2.0;
+    d.available_width = (width - cfg.padding_x * 2.0 - cfg.border_width * 2.0).max(0.0);
     d.wrap_enabled = cfg.wrap;
+}
+
+/// Reconcile the viewport and its offset with the lines that will be drawn.
+pub(super) fn layout_lines(d: &mut TextAreaState, cfg: &TextAreaConfig) {
+    let previous_height = d.viewport_height;
+    take_metrics(d, cfg);
+    let reflowed = d.laid_out != Some(d.layout_key());
+    if reflowed {
+        d.compute_visual_lines();
+    }
+    {
+        let mut physics = d.scroll_physics.lock().unwrap();
+        physics.viewport_width = d.available_width;
+        physics.viewport_height = d.viewport_height;
+        physics.content_height = d.content_height_from_visual_lines();
+        let max_scroll = (physics.content_height - physics.viewport_height).max(0.0);
+        physics.offset_y = physics.offset_y.clamp(-max_scroll, 0.0);
+    }
+    // Scrolling alone must not pull the view back to the caret.
+    if d.is_focused() && (reflowed || previous_height != d.viewport_height) {
+        d.ensure_cursor_visible(d.line_height, d.viewport_height);
+    }
 }
 
 /// The config with the stylesheet's rules for the field's state applied.

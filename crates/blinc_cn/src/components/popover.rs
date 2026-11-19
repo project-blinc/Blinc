@@ -38,6 +38,7 @@ use std::sync::Arc;
 use blinc_core::context_state::BlincContextState;
 use blinc_core::{Signal, State};
 use blinc_layout::InstanceKey;
+use blinc_layout::accessibility::{AccessibilityRole, AccessibilitySemantics};
 use blinc_layout::click_outside;
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{ElementBounds, RenderProps};
@@ -387,6 +388,7 @@ fn build_popover_overlay(
     let click_outside_key = format!("popover:{}", next_handle_id);
 
     let popover_id_for_content = popover_id.clone();
+    let label_id = trigger_id.clone();
     let click_outside_key_for_close = click_outside_key.clone();
 
     // Generous-side estimate for the viewport-clamp in
@@ -413,6 +415,10 @@ fn build_popover_overlay(
             // Fill, border, radius and shadow are `.cn-popover-content` rules.
             div()
                 .class("cn-popover-content")
+                .accessibility(
+                    AccessibilitySemantics::new(AccessibilityRole::Dialog).children(true),
+                )
+                .attr("aria-labelledby", &label_id)
                 .id(&popover_id_for_content)
                 .flex_col()
                 .p_px(padding)

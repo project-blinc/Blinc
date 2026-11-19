@@ -2,7 +2,7 @@
 //! and CircleInnerShadow primitives. Each tier's entry points call these with the fields they read.
 
 russl::russl! {
-    use super::access::{UNIFORMS, prim};
+    use super::access::{UNIFORMS, prim, path_clip_alpha};
     use super::clip::{calculate_clip_alpha, calculate_polygon_clip_alpha, abi_shape_clip_alpha};
     use super::common::{sd_circle, sd_shaped_rect, erf, shadow_circle, shadow_spread_radius};
 
@@ -35,25 +35,46 @@ russl::russl! {
     // Vertex Shader
     // ============================================================================
 
-    // The quad of one primitive: the instance's bounds and shadow, which the tier's entry point
-    // reads from wherever it keeps them.
+    // The quad of one primitive: the instance's bounds, shadow and local affine, which the tier's
+    // entry point reads from wherever it keeps them.
     pub fn shadow_vertex(
         vertex_index: u32,
         instance_index: u32,
         instance_bounds: Vec4,
         instance_shadow: Vec4,
+        instance_local_affine: Vec4,
     ) -> VertexOutput {
         let mut out: VertexOutput;
 
         // Expand the quad over the blur, the offset and the spread; the extra
         // pixel is for the antialiased edge of a shadow with no blur.
         let blur_expand = instance_shadow.z * 3.0 + abs(instance_shadow.x) + abs(instance_shadow.y) + max(instance_shadow.w, 0.0) + 1.0;
-        let bounds = Vec4::new(
-            instance_bounds.x - blur_expand,
-            instance_bounds.y - blur_expand,
-            instance_bounds.z + blur_expand * 2.0,
-            instance_bounds.w + blur_expand * 2.0
-        );
+
+        // A turned or skewed element covers the box of its corners under the local affine. The
+        // offset turns with it, and its length is within `abs(x) + abs(y)`.
+        let la = instance_local_affine;
+        let has_local_affine = abs(la.x - 1.0) > 0.0001 || abs(la.y) > 0.0001
+                            || abs(la.z) > 0.0001 || abs(la.w - 1.0) > 0.0001;
+        let mut bounds: Vec4;
+        if has_local_affine {
+            let center = instance_bounds.xy + instance_bounds.zw * 0.5;
+            let hw = instance_bounds.z * 0.5;
+            let hh = instance_bounds.w * 0.5;
+            let c0x = la.x * hw + la.z * hh;
+            let c0y = la.y * hw + la.w * hh;
+            let c1x = -la.x * hw + la.z * hh;
+            let c1y = -la.y * hw + la.w * hh;
+            let aabb_hw = max(abs(c0x), abs(c1x)) + blur_expand;
+            let aabb_hh = max(abs(c0y), abs(c1y)) + blur_expand;
+            bounds = Vec4::new(center.x - aabb_hw, center.y - aabb_hh, aabb_hw * 2.0, aabb_hh * 2.0);
+        } else {
+            bounds = Vec4::new(
+                instance_bounds.x - blur_expand,
+                instance_bounds.y - blur_expand,
+                instance_bounds.z + blur_expand * 2.0,
+                instance_bounds.w + blur_expand * 2.0
+            );
+        }
 
         // Generate quad vertices (two triangles split along / diagonal)
         // 0--1
@@ -110,7 +131,7 @@ russl::russl! {
         // Early clip test - discard if completely outside clip region (screen space).
         // The polygon shape test waits until `sp` is known.
         let mut clip_alpha = calculate_clip_alpha(p, prim.clip_bounds, prim.clip_radius, prim.clip_corner_shape, clip_type, prim.clip_fade, prim.clip_fade_bounds);
-        clip_alpha = clip_alpha * abi_shape_clip_alpha(p, prim.clip_shape.x);
+        clip_alpha = clip_alpha * path_clip_alpha(prim, p);
         if clip_alpha < 0.001 {
             discard!();
         }
@@ -119,8 +140,22 @@ russl::russl! {
         let size = prim.bounds.zw;
         let center = origin + size * 0.5;
 
-        // Shadow primitives use screen-space position directly (no perspective unprojection)
-        let sp = p;
+        // The point in the element's own frame: the screen point taken back through the local
+        // affine about the centre. Shadow primitives take no perspective.
+        let mut sp = p;
+        let la = prim.local_affine;
+        let is_identity = abs(la.x - 1.0) < 0.0001 && abs(la.y) < 0.0001
+                       && abs(la.z) < 0.0001 && abs(la.w - 1.0) < 0.0001;
+        if !is_identity {
+            let rel = p - center;
+            let det = la.x * la.w - la.y * la.z;
+            let inv_det = if det >= 0.0 { 1.0 } else { -1.0 } / max(abs(det), 0.0001);
+            let inv_a = la.w * inv_det;
+            let inv_b = -la.y * inv_det;
+            let inv_c = -la.z * inv_det;
+            let inv_d = la.x * inv_det;
+            sp = Vec2::new(inv_a * rel.x + inv_c * rel.y, inv_b * rel.x + inv_d * rel.y) + center;
+        }
 
         // CLIP_POLYGON shape test in element-local coords (vertices stored in
         // AUX_DATA as user-supplied 0..size).

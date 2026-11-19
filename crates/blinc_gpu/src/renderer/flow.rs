@@ -126,7 +126,8 @@ impl GpuRenderer {
                     depth_or_array_layers: 1,
                 },
             );
-            self.queue.submit(std::iter::once(copy_encoder.finish()));
+            self.uploads
+                .submit(&self.queue, std::iter::once(copy_encoder.finish()));
         }
 
         self.scene_copy_texture.as_ref().map(|(_, v, _, _)| v)
@@ -157,11 +158,7 @@ impl GpuRenderer {
             return false;
         }
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Flow Render Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -217,7 +214,7 @@ impl GpuRenderer {
             }
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
         true
     }
 }

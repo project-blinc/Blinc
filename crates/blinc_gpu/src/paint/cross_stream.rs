@@ -13,6 +13,12 @@ enum DeferredNode {
 }
 
 impl GpuPaintContext<'_> {
+    /// Keep the shared groups of a motion subtree in the dynamic batch, for a caller that moves
+    /// that batch's content without painting it again. Returns the previous setting.
+    pub fn set_moving_groups_dynamic(&mut self, on: bool) -> bool {
+        std::mem::replace(&mut self.moving_groups_dynamic, on)
+    }
+
     /// Enable collected text markers when the caller resolves them before dispatch.
     pub fn enable_deferred_text(&mut self) {
         self.deferred_text = true;
@@ -110,7 +116,8 @@ impl GpuPaintContext<'_> {
         // Moving groups keep their static paint anchor; portals retain their late owner.
         let retain_static = shared.is_some()
             && self.aux_batch() == AuxBatch::Dynamic
-            && self.overlay_subtree_depth == 0;
+            && self.overlay_subtree_depth == 0
+            && !self.moving_groups_dynamic;
         if retain_static {
             self.cross_stream_static_depth += 1;
         }

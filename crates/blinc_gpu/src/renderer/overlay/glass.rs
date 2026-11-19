@@ -50,7 +50,7 @@ impl GpuRenderer {
         self.ensure_overlay_alpha();
         self.overlay_alpha.as_ref().unwrap().straighten(
             &self.device,
-            &self.queue,
+            &|commands| self.uploads.submit(&self.queue, [commands]),
             &self.bind_group_layouts.composite,
             &self.path_image_sampler,
             &texture,

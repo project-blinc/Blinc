@@ -212,6 +212,8 @@ where
     should_exit: bool,
     /// Currently active modal window (blocks input to other windows)
     modal_window: Option<WinitWindowId>,
+    /// Windows the OS reports as fully covered; their `Frame` events are dropped
+    occluded: std::collections::HashSet<WinitWindowId>,
 }
 
 impl<F> DesktopApp<F>
@@ -228,6 +230,7 @@ where
             mouse_position: (0.0, 0.0),
             should_exit: false,
             modal_window: None,
+            occluded: std::collections::HashSet::new(),
         }
     }
 
@@ -358,6 +361,9 @@ where
         winit_id: WinitWindowId,
         event: WinitWindowEvent,
     ) {
+        if let Some(window) = self.windows.get(&winit_id) {
+            window.process_accessibility_event(&event);
+        }
         // Block input to non-modal windows when a modal is active
         if let Some(modal_id) = self.modal_window {
             if winit_id != modal_id {
@@ -381,6 +387,7 @@ where
 
                 // Remove the window
                 self.windows.remove(&winit_id);
+                self.occluded.remove(&winit_id);
 
                 // Clear modal if the closed window was the modal
                 if self.modal_window == Some(winit_id) {
@@ -429,9 +436,44 @@ where
             }
 
             WinitWindowEvent::RedrawRequested => {
-                self.handle_event_for(winit_id, Event::Frame(wid));
-                if self.should_exit {
-                    event_loop.exit();
+                // A covered window is not rendered: acquiring its drawable
+                // can block the main thread on the window server. The app's
+                // dirty flags are left as they are, so the first frame after
+                // `Occluded(false)` paints whatever changed meanwhile.
+                if !self.occluded.contains(&winit_id)
+                    || self
+                        .windows
+                        .get(&winit_id)
+                        .is_some_and(|w| w.accessibility_pending())
+                {
+                    self.handle_event_for(winit_id, Event::Frame(wid));
+                    if self.should_exit {
+                        event_loop.exit();
+                    }
+                }
+            }
+
+            WinitWindowEvent::Occluded(occluded) => {
+                if let Some(window) = self.windows.get(&winit_id) {
+                    window.set_occluded(occluded);
+                }
+                tracing::debug!(
+                    target: "blinc_platform_desktop::occlusion",
+                    occluded,
+                    "window occlusion changed"
+                );
+                // Only macOS is gated: it is the platform where a covered
+                // window keeps getting redraws and blocks in the drawable
+                // acquire. Other backends keep presenting (the Wayland
+                // swapchain starves without it).
+                if cfg!(target_os = "macos") {
+                    if occluded {
+                        self.occluded.insert(winit_id);
+                    } else if self.occluded.remove(&winit_id)
+                        && let Some(window) = self.windows.get(&winit_id)
+                    {
+                        window.request_redraw();
+                    }
                 }
             }
 
@@ -673,6 +715,7 @@ where
                         Event::Window(wid, WindowEvent::CloseRequested),
                     );
                     self.windows.remove(&winit_id);
+                    self.occluded.remove(&winit_id);
 
                     // Clear modal if the closed window was the modal
                     if self.modal_window == Some(winit_id) {

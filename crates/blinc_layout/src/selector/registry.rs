@@ -476,26 +476,67 @@ impl ElementRegistry {
         }
     }
 
-    /// Unregister a specific node (e.g., on unmount)
+    /// Remove a node's selector metadata and cached bounds on unmount.
     pub fn unregister(&self, node_id: LayoutNodeId) {
-        // Get the string ID first
         let id = self.get_id(node_id);
-
-        // Remove from reverse map
         if let Ok(mut reverse) = self.reverse.write() {
             reverse.remove(&node_id);
         }
-
-        // Remove from ID map
         if let Some(id) = id
             && let Ok(mut ids) = self.ids.write()
+            && ids.get(&id) == Some(&node_id)
         {
             ids.remove(&id);
+            if let Ok(mut cache) = self.bounds_cache.write() {
+                cache.remove(&id);
+            }
         }
-
-        // Remove from parents map
+        let parent = self
+            .parents
+            .write()
+            .ok()
+            .and_then(|mut p| p.remove(&node_id));
+        let (mut detached, siblings) = if let Ok(mut children) = self.children.write() {
+            let detached = children.remove(&node_id).unwrap_or_default();
+            let siblings = parent
+                .and_then(|parent| children.get_mut(&parent))
+                .map(|siblings| {
+                    siblings.retain(|child| *child != node_id);
+                    siblings.clone()
+                });
+            (detached, siblings)
+        } else {
+            (Vec::new(), None)
+        };
         if let Ok(mut parents) = self.parents.write() {
-            parents.remove(&node_id);
+            detached.retain(|child| {
+                if parents.get(child) == Some(&node_id) {
+                    parents.remove(child);
+                    true
+                } else {
+                    false
+                }
+            });
+        }
+        if let Ok(mut classes) = self.classes.write() {
+            classes.remove(&node_id);
+        }
+        if let Ok(mut types) = self.element_types.write() {
+            types.remove(&node_id);
+        }
+        if let (Ok(mut indices), Ok(mut counts)) =
+            (self.child_indices.write(), self.sibling_counts.write())
+        {
+            for node in std::iter::once(node_id).chain(detached) {
+                indices.remove(&node);
+                counts.remove(&node);
+            }
+            if let Some(siblings) = siblings {
+                for (index, child) in siblings.iter().enumerate() {
+                    indices.insert(*child, index);
+                    counts.insert(*child, siblings.len());
+                }
+            }
         }
     }
 

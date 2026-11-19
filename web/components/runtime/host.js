@@ -179,8 +179,8 @@ export class LiveDemo {
       this.editor.value = '';
     });
     listen(this.editor, 'keydown', e => {
-      if (e.isComposing) return;
-      const code = e.keyCode || e.which;
+      const code = e.keyCode || e.which || 0;
+      if (e.isComposing || code === 229) return;
       if (e.key === 'Escape') {
         e.preventDefault(); this.input({ kind: 'key-down', code }, e);
         this.container.dispatchEvent(new CustomEvent('demo-exit', { bubbles: true }));
@@ -189,9 +189,12 @@ export class LiveDemo {
       if (['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) e.preventDefault();
       // Clipboard events retain browser user activation and handle these chords.
       if ((e.ctrlKey || e.metaKey) && ['c', 'x', 'v'].includes(e.key.toLowerCase())) return;
-      this.input({ kind: 'key-down', code }, e);
+      // Keep key-generated text with its shortcut so the worker can cancel both.
+      const text = code && e.cancelable !== false && Array.from(e.key).length === 1 && !e.metaKey && (!e.ctrlKey || e.altKey) ? e.key : undefined;
+      if (text) e.preventDefault();
+      this.input({ kind: 'key-down', code, ...(text ? { text } : {}) }, e);
     });
-    listen(this.editor, 'keyup', e => this.input({ kind: 'key-up', code: e.keyCode || e.which }, e));
+    listen(this.editor, 'keyup', e => this.input({ kind: 'key-up', code: e.keyCode || e.which || 0 }, e));
     listen(this.editor, 'paste', e => {
       const text = e.clipboardData?.getData('text/plain');
       if (text) { e.preventDefault(); this.input({ kind: 'text', text }); }

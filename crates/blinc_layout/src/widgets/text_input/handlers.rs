@@ -370,7 +370,7 @@ impl TextInput {
             })
             // Handle text input
             .on_event(event_types::TEXT_INPUT, move |ctx| {
-                if ctx.ctrl || ctx.meta || !ctx.key_char.is_some_and(|ch| !ch.is_control()) {
+                if ctx.command_modifier() || !ctx.key_char.is_some_and(|ch| !ch.is_control()) {
                     return;
                 }
                 super::ime::commit(&data_for_text);
@@ -425,7 +425,7 @@ impl TextInput {
             // Handle key down for navigation and deletion
             .on_key_down(move |ctx| {
                 if matches!(ctx.key_code, 8 | 13 | 27 | 35..=40 | 46)
-                    || ((ctx.ctrl || ctx.meta)
+                    || (ctx.command_modifier()
                         && matches!(ctx.key_code, 65 | 67 | 86 | 88 | 89 | 90))
                 {
                     super::ime::commit(&data_for_key);
@@ -443,7 +443,7 @@ impl TextInput {
                     let mut changed = true;
                     let mut should_blur = false;
                     let mut value_changed = false;
-                    let mod_key = ctx.meta || ctx.ctrl;
+                    let mod_key = ctx.command_modifier();
 
                     match ctx.key_code {
                         8 if mod_key => {

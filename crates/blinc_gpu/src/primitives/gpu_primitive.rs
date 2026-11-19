@@ -77,6 +77,10 @@ impl GpuPrimitive {
     /// a `viewport`-sized target by itself: a page background. Drawing it is the same as clearing
     /// the target to that colour, which costs no shading.
     pub fn opaque_backdrop(&self, viewport: (f32, f32)) -> Option<[f64; 4]> {
+        // A row can move or fade it.
+        if self.node_slot().is_some() {
+            return None;
+        }
         let [x, y, w, h] = self.bounds;
         let identity = self.local_affine == [1.0, 0.0, 0.0, 1.0];
         (self.is_simple_core()
@@ -105,6 +109,9 @@ impl GpuPrimitive {
             0..=2 => {
                 if shape_3d_type > 0 {
                     SdfPipelineCategory::Sdf3D
+                } else if self.node_slot().is_some() {
+                    // Only the full core shader applies a node's delta.
+                    SdfPipelineCategory::Core
                 } else if self.is_plain_core() {
                     SdfPipelineCategory::CorePlain
                 } else if self.is_simple_core() {
@@ -273,6 +280,7 @@ impl Default for GpuPrimitive {
             clip_fade_bounds: [0.0; 4],
             notch_info: [0.0; 4],
             clip_shape: [0.0; 4],
+            node_slot: [0.0; 4],
         }
     }
 }
@@ -492,6 +500,56 @@ impl GpuPrimitive {
         self.type_info[3] = layer;
     }
 
+    /// The animated node this primitive follows, if any.
+    pub fn node_slot(&self) -> Option<u32> {
+        (self.node_slot[0] >= 1.0).then(|| self.node_slot[0] as u32 - 1)
+    }
+
+    /// Follow the animated node in `slot`, or none. With none the clip lane is cleared too.
+    pub fn set_node_slot(&mut self, slot: Option<u32>) {
+        self.node_slot[0] = slot.map_or(0.0, |s| (s + 1) as f32);
+        if slot.is_none() {
+            self.node_slot[1] = 0.0;
+            self.clip_shape[1] = 0.0;
+        }
+    }
+
+    /// The ordinal of the motion-bound node this primitive was painted for, zero for none. It
+    /// survives a batch being reordered or having primitives inserted, which a range of
+    /// primitive indices does not.
+    pub fn node_ordinal(&self) -> u32 {
+        self.node_slot[2] as u32
+    }
+
+    /// Set [`node_ordinal`](Self::node_ordinal).
+    pub fn set_node_ordinal(&mut self, ordinal: u32) {
+        self.node_slot[2] = ordinal as f32;
+    }
+
+    /// Where in the node's chain of rows the clip begins to follow them: the clip moves with the
+    /// row at this depth (zero is the node's own) and every row above it. None leaves the clip
+    /// where it is painted, as the clip of an ancestor that does not move.
+    pub fn node_clip_from(&self) -> Option<u32> {
+        (self.node_slot[1] >= 1.0).then(|| self.node_slot[1] as u32 - 1)
+    }
+
+    /// Set [`node_clip_from`](Self::node_clip_from).
+    pub fn set_node_clip_from(&mut self, depth: Option<u32>) {
+        self.node_slot[1] = depth.map_or(0.0, |d| (d + 1) as f32);
+    }
+
+    /// Where in the node's chain of rows the path clip (`clip_shape[0]`) begins to follow them,
+    /// as [`node_clip_from`](Self::node_clip_from) says for the rectangle. A path follows a turn.
+    pub fn node_path_from(&self) -> Option<u32> {
+        (self.clip_shape[0] > 0.5 && self.clip_shape[1] >= 1.0)
+            .then(|| self.clip_shape[1] as u32 - 1)
+    }
+
+    /// Set [`node_path_from`](Self::node_path_from).
+    pub fn set_node_path_from(&mut self, depth: Option<u32>) {
+        self.clip_shape[1] = depth.map_or(0.0, |d| (d + 1) as f32);
+    }
+
     /// Create a text glyph primitive from a GpuGlyph
     ///
     /// This converts a text glyph into a unified primitive that can be rendered
@@ -551,6 +609,7 @@ impl GpuPrimitive {
             clip_fade_bounds: [0.0; 4],
             notch_info: [0.0; 4],
             clip_shape: [glyph.flags[1], 0.0, 0.0, 0.0],
+            node_slot: [glyph.flags[2], 0.0, 0.0, 0.0],
         }
     }
 
@@ -602,6 +661,7 @@ impl GpuPrimitive {
             clip_fade_bounds: [0.0; 4],
             notch_info: [0.0; 4],
             clip_shape: [0.0; 4],
+            node_slot: [0.0; 4],
         }
     }
 }

@@ -33,6 +33,7 @@ use std::sync::Arc;
 
 use blinc_core::Color;
 use blinc_layout::InstanceKey;
+use blinc_layout::accessibility::{AccessibilityRole, AccessibilitySemantics};
 use blinc_layout::overlay_state::overlay_stack;
 use blinc_layout::prelude::*;
 use blinc_layout::widgets::overlay_stack::{OverlayBuilder, OverlayHandle};
@@ -88,6 +89,8 @@ pub struct DialogBuilder {
     classes: Vec<std::sync::Arc<str>>,
     /// User-set element ID
     user_id: Option<String>,
+    initial_focus: Option<String>,
+    semantic_role: AccessibilityRole,
     /// Unique key for motion animation
     key: InstanceKey,
 }
@@ -111,6 +114,8 @@ impl DialogBuilder {
             show_cancel: true,
             classes: Vec::new(),
             user_id: None,
+            initial_focus: None,
+            semantic_role: AccessibilityRole::Dialog,
             key: InstanceKey::new("dialog"),
         }
     }
@@ -124,6 +129,13 @@ impl DialogBuilder {
     /// Set the dialog description. A signal here replaces the text in place.
     pub fn description(mut self, description: impl IntoReactive<String>) -> Self {
         self.description = Some(description.into_reactive());
+        self
+    }
+
+    /// Choose a focusable element by ID when the overlay opens.
+    /// An unavailable target uses the normal focus fallback.
+    pub fn initial_focus(mut self, id: impl Into<String>) -> Self {
+        self.initial_focus = Some(id.into());
         self
     }
 
@@ -242,6 +254,8 @@ impl DialogBuilder {
         let show_cancel = self.show_cancel;
         let classes = self.classes;
         let user_id = self.user_id;
+        let initial_focus = self.initial_focus;
+        let semantic_role = self.semantic_role;
 
         // Pre-allocate the handle id so the confirm/cancel buttons can capture
         // it before show() is called (same pattern as popover). Buttons close
@@ -282,12 +296,17 @@ impl DialogBuilder {
                     confirm_destructive,
                     show_cancel,
                     dialog_handle,
-                );
+                )
+                .accessibility(AccessibilitySemantics::new(semantic_role).children(true))
+                .attr("aria-modal", "true");
                 for c in &classes {
                     content_div = content_div.class(c);
                 }
                 if let Some(ref id) = user_id {
                     content_div = content_div.id(id);
+                }
+                if let Some(ref id) = initial_focus {
+                    content_div = content_div.attr("data-initial-focus", id);
                 }
                 content_div
             })
@@ -333,9 +352,9 @@ pub struct AlertDialogBuilder {
 impl AlertDialogBuilder {
     /// Create a new alert dialog builder
     pub fn new() -> Self {
-        Self {
-            inner: DialogBuilder::new().hide_cancel(),
-        }
+        let mut inner = DialogBuilder::new().hide_cancel();
+        inner.semantic_role = AccessibilityRole::AlertDialog;
+        Self { inner }
     }
 
     /// Set the dialog title
@@ -362,6 +381,12 @@ impl AlertDialogBuilder {
         F: Fn() + Send + Sync + 'static,
     {
         self.inner = self.inner.on_confirm(callback);
+        self
+    }
+
+    /// Choose a focusable element by ID when the alert opens.
+    pub fn initial_focus(mut self, id: impl Into<String>) -> Self {
+        self.inner = self.inner.initial_focus(id);
         self
     }
 
@@ -431,6 +456,7 @@ fn build_dialog_content(
         if let Some(title_text) = title {
             header = header.child(
                 blinc_layout::typography::heading(3, clone_reactive(title_text))
+                    .id(format!("blinc-dialog-title-{}", handle.raw()))
                     .class("cn-dialog-title"),
             );
         }
@@ -438,6 +464,7 @@ fn build_dialog_content(
         if let Some(desc_text) = description {
             header = header.child(
                 blinc_layout::text::Text::bound(clone_reactive(desc_text))
+                    .id(format!("blinc-dialog-description-{}", handle.raw()))
                     .class("cn-dialog-description")
                     .size(theme.typography().text_sm),
             );
@@ -504,12 +531,25 @@ fn build_dialog_content(
     ); // 16px margin from theme
 
     // The panel: fill, border, radius and shadow are `.cn-dialog` rules.
-    div()
+    let mut panel = div()
         .class("cn-dialog")
         .min_w(300.0)
         .max_w(max_width)
         .flex_col()
-        .child(inner_content)
+        .child(inner_content);
+    if title.is_some() {
+        panel = panel.attr(
+            "aria-labelledby",
+            format!("blinc-dialog-title-{}", handle.raw()),
+        );
+    }
+    if description.is_some() {
+        panel = panel.attr(
+            "aria-describedby",
+            format!("blinc-dialog-description-{}", handle.raw()),
+        );
+    }
+    panel
 }
 
 // Keep the old types for backwards compatibility but mark as deprecated

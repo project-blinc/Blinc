@@ -294,7 +294,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
             let mut data = state_for_text.lock().unwrap();
             if data.ime.original.is_some()
                 && (matches!(ctx.key_code, 8 | 13 | 27 | 35..=40 | 46)
-                    || ((ctx.ctrl || ctx.meta)
+                    || (ctx.command_modifier()
                         && matches!(ctx.key_code, 65 | 67 | 86 | 88 | 89 | 90)))
             {
                 data.finish_ime();
@@ -378,7 +378,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                 }
             }
 
-            let mod_key = ctx.meta || ctx.ctrl;
+            let mod_key = ctx.command_modifier();
             let extend = ctx.shift;
             let mut changed = false;
 

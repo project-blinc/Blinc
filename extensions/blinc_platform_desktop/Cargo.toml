@@ -21,6 +21,8 @@ blinc_platform = { path = "../../crates/blinc_platform", version = "0.6.0" }
 # Windowing
 winit.workspace = true
 raw-window-handle.workspace = true
+accesskit = "0.25.2"
+accesskit_winit = "0.34.2"
 
 # Logging
 tracing.workspace = true

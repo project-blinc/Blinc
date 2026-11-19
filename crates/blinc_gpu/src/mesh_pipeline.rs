@@ -1376,6 +1376,8 @@ impl GpuRenderer {
     /// pipeline's environment cubemap texture. Requires `ensure_mesh_pipeline`
     /// to have been called first (the texture must already exist).
     pub fn upload_environment_cubemap(&mut self, data: &blinc_core::layer::CubemapData) {
+        // Mesh passes submit on the raw queue, after the renderer's queued work.
+        self.uploads.flush(&self.queue);
         // Ensure the mesh pipeline (and its env cubemap texture) exists
         // before writing to it. Without this, the first frame of any
         // scene silently drops the upload — the pipeline is normally
@@ -1481,6 +1483,8 @@ impl GpuRenderer {
         light_view_proj: &[f32; 16],
         shadow_batch_index: usize,
     ) {
+        // Mesh passes submit on the raw queue, after the renderer's queued work.
+        self.uploads.flush(&self.queue);
         if mesh.vertices.is_empty() || mesh.indices.is_empty() {
             return;
         }
@@ -1633,6 +1637,8 @@ impl GpuRenderer {
         light_view_proj: Option<&[f32; 16]>,
         viewport: Option<[f32; 4]>,
     ) {
+        // Mesh passes submit on the raw queue, after the renderer's queued work.
+        self.uploads.flush(&self.queue);
         // Defer to the batch-aware variant; single-mesh calls behave
         // exactly as before (clear + skybox on first, tonemap on last).
         self.render_mesh_data_batched(
@@ -1679,6 +1685,8 @@ impl GpuRenderer {
         batch_index: usize,
         batch_count: usize,
     ) {
+        // Mesh passes submit on the raw queue, after the renderer's queued work.
+        self.uploads.flush(&self.queue);
         if mesh.vertices.is_empty() || mesh.indices.is_empty() {
             tracing::warn!(
                 batch_index,

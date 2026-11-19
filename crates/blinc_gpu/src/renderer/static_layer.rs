@@ -300,8 +300,13 @@ impl GpuRenderer {
         // Update uniforms (viewport is the cache extent, not the
         // window — primitives were emitted into cache pixel space).
         let uniforms = Uniforms::new([layer_width, layer_height]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         let sdf_ranges = if visible.is_empty() {
             SdfPrimitiveRanges::default()
@@ -310,11 +315,7 @@ impl GpuRenderer {
         };
         self.update_aux_data_buffer(batch);
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("blinc-damage-rect-encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         // Single-pass damage-rect re-render. wgpu's `LoadOp::Clear`
         // ignores `set_scissor_rect`, so we can't clear-inside-
@@ -369,7 +370,7 @@ impl GpuRenderer {
             }
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
 
         // Phase 4d Opt 2: composite each effect layer back into the
         // static cache with `pending_damage_scissor` set so the blit
@@ -411,7 +412,7 @@ impl GpuRenderer {
                 let mut max_y = f32::MIN;
                 let mut clip: Option<([f32; 4], [f32; 4])> = None;
                 for p in primitives {
-                    let (px, py, pw, ph) = (p.bounds[0], p.bounds[1], p.bounds[2], p.bounds[3]);
+                    let [px, py, pw, ph] = self.drawn_bounds(p);
                     min_x = min_x.min(px);
                     min_y = min_y.min(py);
                     max_x = max_x.max(px + pw);
@@ -604,8 +605,13 @@ impl GpuRenderer {
         // those reads in the static-layer render pass, so the queue
         // is allowed to overwrite the buffer here.
         let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         // Upload the overlay's aux_data so polygon-clip / 3D-group
         // offsets carried on overlay primitives index into valid GPU
@@ -626,11 +632,7 @@ impl GpuRenderer {
             self.upload_sorted_primitives(&visible_overlay)
         };
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("blinc-compositor-encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         // 1. Blit static cache onto surface (replaces all pixels).
         let source_copy = self.static_layer.as_ref().unwrap().texture.as_image_copy();
@@ -665,7 +667,7 @@ impl GpuRenderer {
             );
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
         true
     }
 }

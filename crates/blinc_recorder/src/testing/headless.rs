@@ -57,6 +57,9 @@ fn shared_scheduler() -> Arc<Mutex<AnimationScheduler>> {
     SCHEDULER
         .get_or_init(|| {
             let scheduler = AnimationScheduler::new();
+            // Frames step by a fixed `dt`; the render state's own tick must not add the time the
+            // test took to run.
+            scheduler.set_manual_stepping(true);
             if !blinc_animation::is_scheduler_initialized() {
                 let handle = scheduler.handle();
                 blinc_animation::set_global_scheduler(handle.clone());
@@ -151,6 +154,16 @@ pub struct Headless {
     pointer: (f32, f32),
     frames: u64,
     recording: Option<Arc<SharedRecordingSession>>,
+    /// Whether the state-style pass runs only when hover, press or focus changed, as a window
+    /// does, rather than on every frame.
+    gate_state_styles: bool,
+    /// Apply CSS and FLIP animation values only on a frame a tick found one active.
+    gate_animation_apply: bool,
+    state_fingerprint: Option<u64>,
+    /// The scroll offsets and layout the pointer was last tested against; see `refresh_hover`.
+    hover_stamp: Option<(u64, u64)>,
+    /// The layout epoch of the last paint.
+    painted_epoch: Option<u64>,
 }
 
 /// Sets the process-wide context state for the first session; a later session leaves it. Sessions
@@ -181,6 +194,18 @@ fn init_overlay_context(ctx: &WindowedContext) {
     });
 }
 
+/// How a window paints the subtrees of motion-bound nodes while they move.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MotionPaint {
+    /// Baked to a texture once and blitted at the current transform.
+    Promoted,
+    /// Painted as vectors into the dynamic batch each time it is repainted, and patched on the
+    /// CPU in between where it can be.
+    Vector,
+    /// Painted as vectors once, and moved by rows of the GPU node table.
+    NodeTable,
+}
+
 impl Headless {
     /// An offscreen surface of `width` x `height` logical pixels. Fails when
     /// there is no GPU adapter.
@@ -190,10 +215,34 @@ impl Headless {
 
     /// Render a logical viewport at a higher pixel density without changing layout.
     pub fn with_scale(logical_width: u32, logical_height: u32, scale: f64) -> Result<Self> {
+        Self::open(logical_width, logical_height, scale, BlincApp::new()?)
+    }
+
+    /// An offscreen surface that paints motion-bound subtrees the way `paint` says, whatever
+    /// `BLINC_NODE_TABLE` says.
+    pub fn with_motion_paint(width: u32, height: u32, paint: MotionPaint) -> Result<Self> {
+        Self::with_motion_paint_at(width, height, 1.0, paint)
+    }
+
+    /// [`with_motion_paint`](Self::with_motion_paint) at a pixel density of `scale`.
+    pub fn with_motion_paint_at(
+        width: u32,
+        height: u32,
+        scale: f64,
+        paint: MotionPaint,
+    ) -> Result<Self> {
+        let app = BlincApp::with_config(blinc_app::BlincConfig {
+            node_table: paint == MotionPaint::NodeTable,
+            motion_promotion: paint == MotionPaint::Promoted,
+            ..Default::default()
+        })?;
+        Self::open(width, height, scale, app)
+    }
+
+    fn open(logical_width: u32, logical_height: u32, scale: f64, app: BlincApp) -> Result<Self> {
         assert!(logical_width > 0 && logical_height > 0 && scale.is_finite() && scale > 0.0);
         let width = (logical_width as f64 * scale).round().max(1.0) as u32;
         let height = (logical_height as f64 * scale).round().max(1.0) as u32;
-        let app = BlincApp::new()?;
         blinc_layout::init_text_measurer();
         // A caret blinks on the wall clock; frames compared across runs need it held.
         blinc_layout::widgets::cursor::hold_blink(true);
@@ -254,7 +303,28 @@ impl Headless {
             pointer: (-1.0, -1.0),
             frames: 0,
             recording: None,
+            gate_state_styles: false,
+            gate_animation_apply: false,
+            state_fingerprint: None,
+            hover_stamp: None,
+            painted_epoch: None,
         })
+    }
+
+    /// Run the state-style pass (`:hover`, `:active`, `:focus`) only when hover, press or focus
+    /// changed, as a window does. By default it runs on every frame, which costs a pass over
+    /// every node and rewrites the styles of those a stylesheet reaches.
+    pub fn gate_state_styles(&mut self) -> &mut Self {
+        self.gate_state_styles = true;
+        self
+    }
+
+    /// Apply CSS and FLIP animation values only on a frame in which an animation, a transition or
+    /// a FLIP slide was running or had just stopped, as a window does. By default they are applied
+    /// on every frame, which hides an animation whose last step is never applied.
+    pub fn gate_animation_apply(&mut self) -> &mut Self {
+        self.gate_animation_apply = true;
+        self
     }
 
     /// Whether this machine can render offscreen. Tests use it to skip.
@@ -284,6 +354,11 @@ impl Headless {
         faces
     }
 
+    /// Load images on a worker thread, as a window does, instead of in the frame that needs them.
+    pub fn set_async_image_decode(&mut self, on: bool) {
+        self.app.context().set_async_image_decode(on);
+    }
+
     /// The window context the UI is built with.
     pub fn context(&mut self) -> &mut WindowedContext {
         &mut self.ctx
@@ -297,6 +372,21 @@ impl Headless {
     /// The tree as last built, for assertions on render props and layout.
     pub fn tree(&self) -> &RenderTree {
         self.tree.as_ref().expect("nothing is mounted")
+    }
+
+    /// Send an assistive action through the shared semantic and focus routing.
+    pub fn accessibility_action(
+        &mut self,
+        id: blinc_layout::tree::StableNodeId,
+        action: blinc_layout::accessibility::AccessibilityAction,
+    ) -> bool {
+        let handled = self.tree.as_mut().is_some_and(|tree| {
+            tree.perform_accessibility_action_with_router(&mut self.ctx.event_router, id, action)
+        });
+        if handled {
+            blinc_layout::request_redraw();
+        }
+        handled
     }
 
     /// Build `ui` and show it. `ui` runs again whenever a state it reads
@@ -334,16 +424,19 @@ impl Headless {
         self.drain_queued_css();
         self.rebuild_if_needed();
         self.apply_queued_updates();
+        self.refresh_hover();
 
         self.render_state.process_global_motion_exit_cancels();
         self.render_state.process_global_motion_exit_starts();
         self.render_state.process_global_motion_starts();
         let _ = self.render_state.tick(self.now_ms);
 
+        let mut animation_active = false;
         if let Some(tree) = self.tree.as_mut() {
             let store = tree.css_anim_store();
-            store.lock().unwrap().tick(dt);
-            tree.tick_flip_animations(dt);
+            let (animations, transitions) = store.lock().unwrap().tick(dt);
+            let flip = tree.tick_flip_animations(dt);
+            animation_active = animations || transitions || flip || tree.css_has_active();
         }
         self.render_state.sync_shared_motion_states();
         let _ = ThemeState::get().tick();
@@ -375,18 +468,31 @@ impl Headless {
         let (w, h) = (self.ctx.width, self.ctx.height);
         if let Some(tree) = self.tree.as_mut() {
             tree.sync_keyboard_focus(&mut self.ctx.event_router);
-            if tree.stylesheet().is_some()
-                && tree.apply_stylesheet_state_styles(&self.ctx.event_router)
-            {
-                tree.compute_layout(w, h);
-                tree.update_flip_bounds();
+            let apply_states = if self.gate_state_styles {
+                let now = self.ctx.event_router.state_fingerprint();
+                let changed = self.state_fingerprint != Some(now);
+                self.state_fingerprint = Some(now);
+                changed
+            } else {
+                true
+            };
+            if apply_states && tree.stylesheet().is_some() {
+                let epoch = tree.layout_tree.epoch();
+                if tree.apply_stylesheet_state_styles(&self.ctx.event_router)
+                    && tree.layout_due_since(epoch)
+                {
+                    tree.compute_layout(w, h);
+                    tree.update_flip_bounds();
+                }
             }
-            tree.apply_all_css_animation_props();
-            tree.apply_all_css_transition_props();
-            tree.apply_flip_animation_props();
-            if tree.apply_animated_layout_props() {
-                tree.compute_layout(w, h);
-                tree.update_flip_bounds();
+            if !self.gate_animation_apply || animation_active || !tree.css_transitions_empty() {
+                tree.apply_all_css_animation_props();
+                tree.apply_all_css_transition_props();
+                tree.apply_flip_animation_props();
+                if tree.apply_animated_layout_props() {
+                    tree.compute_layout(w, h);
+                    tree.update_flip_bounds();
+                }
             }
             tree.remove_completed_transitions();
             blinc_layout::recorder_bridge::record_frame(
@@ -525,6 +631,7 @@ impl Headless {
             self.render_state.process_global_motion_replays();
             tree.start_all_css_animations();
             self.ctx.rebuild_count = self.ctx.rebuild_count.saturating_add(1);
+            self.state_fingerprint = None;
             self.tree = Some(tree);
         }
         if replaces_tree {
@@ -588,16 +695,26 @@ impl Headless {
             );
         }
         for _ in 0..3 {
+            if blinc_layout::peek_needs_full_paint() {
+                self.app
+                    .invalidate_render_cache_tagged("headless_explicit_redraw");
+            }
+            blinc_layout::take_needs_redraw();
             let updates = tree.take_pending_property_updates();
+            let paint_revision = tree.property_paint_revision();
             let mut needs_layout = tree.apply_partial_property_updates(updates).needs_layout;
+            if tree.property_paint_revision() != paint_revision {
+                self.app
+                    .invalidate_render_cache_tagged("headless_prop_update");
+            }
             let rebuilt = tree.process_pending_subtree_rebuilds();
             needs_layout |= rebuilt;
             if rebuilt {
                 self.app
                     .invalidate_render_cache_tagged("headless_subtree_rebuild");
-                tree.apply_stylesheet_layout_overrides();
             }
             if needs_layout {
+                tree.apply_stylesheet_layout_overrides();
                 tree.compute_layout(w, h);
                 tree.apply_flip_transitions();
                 tree.update_flip_bounds();
@@ -615,6 +732,12 @@ impl Headless {
     // ---- input ---------------------------------------------------------
 
     fn deliver(&mut self, events: Vec<(LayoutNodeId, u32)>) {
+        self.dispatch(events);
+        self.frame(0);
+    }
+
+    /// Hand pointer events to the nodes they name.
+    fn dispatch(&mut self, events: Vec<(LayoutNodeId, u32)>) {
         let (x, y) = self.pointer;
         // A drag carries how far it has gone, as the window gives it.
         let (dx, dy) = self.ctx.event_router.drag_delta();
@@ -649,7 +772,27 @@ impl Headless {
                 );
             }
         }
-        self.frame(0);
+    }
+
+    /// When a scroll offset or the layout has moved what is under a still pointer, run the move
+    /// again at the pointer, as a window does at the top of a frame: hover follows the content
+    /// as it moves, not only the mouse.
+    fn refresh_hover(&mut self) {
+        let Some(tree) = self.tree.as_ref() else {
+            return;
+        };
+        let stamp = (tree.scroll_signature(), tree.layout_tree.epoch());
+        if self.hover_stamp == Some(stamp) {
+            return;
+        }
+        self.hover_stamp = Some(stamp);
+        let (x, y) = self.pointer;
+        if x < 0.0 || self.ctx.event_router.is_press_in_flight() {
+            return;
+        }
+        self.ctx.event_router.forget_last_hit();
+        let events = self.ctx.event_router.on_mouse_move(tree, x, y);
+        self.dispatch(events);
     }
 
     /// Move the pointer to `(x, y)`.
@@ -814,7 +957,29 @@ impl Headless {
                 tree.dispatch_scroll_chain(hit.node, &hit.ancestors, x, y, delta_x, delta_y);
             }
         }
+        // The window drops the render cache on a frame a scroll landed that the rows cannot
+        // move, so that frame is a full paint.
+        if self.tree.as_ref().is_some_and(|t| t.scroll_paint_stale()) {
+            self.app.invalidate_render_cache_tagged("had_scroll");
+        }
         self.frame(0);
+        self
+    }
+
+    /// Drop the render cache, as the window does when something it cannot patch changed: the next
+    /// paint is a full paint.
+    pub fn invalidate_render_cache(&mut self, source: &'static str) -> &mut Self {
+        self.app.invalidate_render_cache_tagged(source);
+        self
+    }
+
+    /// Apply the scrolls handlers asked for and drop the render cache if a scroll container that
+    /// is not on rows moved, as the window does.
+    pub fn settle_scroll(&mut self) -> &mut Self {
+        self.frame(0);
+        if self.tree.as_ref().is_some_and(|t| t.scroll_paint_stale()) {
+            self.app.invalidate_render_cache_tagged("had_scroll");
+        }
         self
     }
 
@@ -1007,9 +1172,35 @@ impl Headless {
         self.read_frame()
     }
 
+    /// Paint a frame as [`snapshot_fast`](Self::snapshot_fast) (or, with `try_fast_paint` off,
+    /// [`snapshot`](Self::snapshot)) does and say what it cost, in milliseconds: the session's own
+    /// frame, which a window does not pay, and the engine's render with its submission, which it
+    /// does. The picture is not read back.
+    pub fn paint_timed(&mut self, try_fast_paint: bool) -> Result<(f64, f64)> {
+        let started = std::time::Instant::now();
+        self.frame(0);
+        let session = started.elapsed();
+        let rendered = std::time::Instant::now();
+        self.render(try_fast_paint)?;
+        let render = rendered.elapsed();
+        Ok((
+            session.as_secs_f64() * 1000.0,
+            render.as_secs_f64() * 1000.0,
+        ))
+    }
+
     fn paint(&mut self, try_fast_paint: bool) -> Result<()> {
         self.frame(0);
+        self.render(try_fast_paint)
+    }
+
+    /// Paint the frame, in full when a window would: a scroll container's paint went stale, or
+    /// the layout was run since the last paint.
+    fn render(&mut self, try_fast_paint: bool) -> Result<()> {
         let tree = self.tree.as_ref().expect("nothing is mounted");
+        let epoch = tree.layout_tree.epoch();
+        let try_fast_paint =
+            try_fast_paint && !tree.scroll_paint_stale() && self.painted_epoch == Some(epoch);
         self.app.render_tree_with_motion_opt(
             tree,
             &self.render_state,
@@ -1019,6 +1210,7 @@ impl Headless {
             self.height,
             try_fast_paint,
         )?;
+        self.painted_epoch = Some(epoch);
         Ok(())
     }
 

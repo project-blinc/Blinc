@@ -32,6 +32,8 @@ impl RenderContext {
             self.renderer.invalidate_static_layer();
         }
 
+        // An image that finished loading is drawn by a full paint.
+        self.take_decoded_images();
         // Read fade deadlines before deciding whether the static cache can be reused.
         let now = web_time::Instant::now();
         self.image_fade_deadlines
@@ -44,6 +46,8 @@ impl RenderContext {
         }
 
         // Compute and commit the current animation and promotion status.
+        tree.set_motion_promotion(self.promote_motion && !self.renderer.node_table_enabled());
+        tree.set_scroll_rows(self.rows_mode());
         let v2_statuses = tree.compute_animation_status();
         if tracing::enabled!(target: "blinc_app::v2_status", tracing::Level::TRACE) {
             let anim_count = v2_statuses
@@ -61,23 +65,20 @@ impl RenderContext {
         }
         tree.commit_animation_status(&v2_statuses);
         self.refresh_css_cache_ownership(tree);
+        self.apply_retained_background_colors(tree);
 
         // Ignore subpixel spring tails when deciding whether binding changes are visible.
         // Timeline rotations remain active while playing.
         const VISIBLE_PIXEL_EPS: f32 = 0.5;
-        const VISIBLE_DEG_EPS: f32 = 0.5;
-        let value_far_from_target =
-            |v: &Option<blinc_animation::SharedAnimatedValue>, eps: f32| -> bool {
-                v.as_ref()
-                    .and_then(|s| s.lock().ok())
-                    .map(|g| (g.get() - g.target()).abs() > eps)
-                    .unwrap_or(false)
-            };
         // Detect settled direct writes by comparing current translation with the cached
         // baseline.
         let direct_write_drift = {
             let bindings_table = tree.motion_bindings_map();
             tree.composite_bindings().iter().any(|(node, meta)| {
+                if let Some((x, y)) = tree.property_row_translation(*node) {
+                    return (x - meta.last_translate.0).abs() > f32::EPSILON
+                        || (y - meta.last_translate.1).abs() > f32::EPSILON;
+                }
                 let Some(b) = bindings_table.get(node) else {
                     return false;
                 };
@@ -98,28 +99,13 @@ impl RenderContext {
             })
         };
         let bindings_animating = direct_write_drift
-            || tree.motion_bindings_map().values().any(|b| {
-                value_far_from_target(&b.translate_x, VISIBLE_PIXEL_EPS)
-                    || value_far_from_target(&b.translate_y, VISIBLE_PIXEL_EPS)
-                    || value_far_from_target(&b.scale, 0.01)
-                    || value_far_from_target(&b.scale_x, 0.01)
-                    || value_far_from_target(&b.scale_y, 0.01)
-                    || value_far_from_target(&b.rotation, VISIBLE_DEG_EPS)
-                    || value_far_from_target(&b.opacity, 0.01)
-                    || b.rotation_timeline
-                        .as_ref()
-                        .and_then(|t| t.timeline.lock().ok())
-                        .is_some_and(|g| g.is_playing())
-            });
+            || tree
+                .motion_bindings_map()
+                .values()
+                .any(|b| b.is_visibly_moving());
         // Read CSS activity separately from binding and structural animations.
-        let css_anim_active = {
-            let store = tree.css_anim_store();
-
-            match store.lock() {
-                Ok(g) => g.has_active_animations() || g.has_active_transitions(),
-                Err(_) => false,
-            }
-        };
+        // A CSS animation that a binding carries is moved by rows with the other bindings.
+        let css_anim_active = tree.css_active_off_rows();
         if css_anim_active
             && tree
                 .css_anim_paint_records()
@@ -133,7 +119,7 @@ impl RenderContext {
         let other_animations_active = render_state.has_active_motions()
             || tree.has_active_visual_animations()
             || tree.has_active_layout_animations()
-            || tree.has_active_flip_animations();
+            || tree.has_flip_animations_off_rows();
         // Use CSS-only replay when other animation systems do not require a fresh walk.
         let css_only_active = css_anim_active && !other_animations_active;
         // Diagnostic: name the predicate that's invalidating the
@@ -187,6 +173,8 @@ impl RenderContext {
             self.cached_motion_subtree_text_prims = None;
             self.motion_subtree_text_patch.clear();
             self.cached_motion_subtree_svgs = None;
+            self.cached_motion_subtree_images = None;
+            self.collected_valid = false;
             self.cached_css_transformed_text_prims = None;
         }
 
@@ -376,6 +364,7 @@ impl RenderContext {
                 self.composite_css_layers_overlay(tree, target_view, LayerScope::Main);
                 self.composite_motion_layers_overlay(tree, target_view, LayerScope::Main);
                 self.dispatch_dynamic_batch_overlay(target_view);
+                self.draw_scroll_row_scrollbars(tree, target_view);
                 // Overlay-subtree canvases (e.g. caret blink inside a
                 // focused cn::input) dispatch HERE so they land above
                 // the dyn-batch SDF the popover just painted.
@@ -462,7 +451,7 @@ impl RenderContext {
                         .as_ref()
                         .is_some_and(|b| b.has_cross_stream_groups()));
             // Promoted layers carry all moving output, so the cache presents as is.
-            let patched = if (bindings_animating || binding_repaint)
+            let patched = if (bindings_animating || binding_repaint || tree.scroll_rows_moved())
                 && self.cached_dynamic_batch.is_some()
                 && !tree.motion_output_promoted()
             {
@@ -483,6 +472,8 @@ impl RenderContext {
                 self.cached_motion_subtree_text_prims = None;
                 self.motion_subtree_text_patch.clear();
                 self.cached_motion_subtree_svgs = None;
+                self.cached_motion_subtree_images = None;
+                self.collected_valid = false;
                 self.cached_css_transformed_text_prims = None;
                 damage_rect_failed = true;
             }
@@ -514,6 +505,8 @@ impl RenderContext {
                         self.cached_motion_subtree_text_prims = None;
                         self.motion_subtree_text_patch.clear();
                         self.cached_motion_subtree_svgs = None;
+                        self.cached_motion_subtree_images = None;
+                        self.collected_valid = false;
                         self.cached_css_transformed_text_prims = None;
                     } else {
                         // Restore collected content inside the cleared damage region
@@ -631,6 +624,7 @@ impl RenderContext {
                 self.composite_css_layers_overlay(tree, target_view, LayerScope::Main);
                 self.composite_motion_layers_overlay(tree, target_view, LayerScope::Main);
                 self.dispatch_dynamic_batch_overlay(target_view);
+                self.draw_scroll_row_scrollbars(tree, target_view);
                 self.dispatch_overlay_canvas_overlay(target_view, &overlay_subtree_canvases);
                 // Composite promoted backgrounds before their text and SVG.
                 self.composite_css_layers_overlay(tree, target_view, LayerScope::Overlay);
@@ -717,17 +711,10 @@ impl RenderContext {
         let needs_walker = render_state.has_active_motions()
             || tree.has_active_visual_animations()
             || tree.has_active_layout_animations()
-            || tree.has_active_flip_animations()
+            || tree.has_flip_animations_off_rows()
             // Animated scroll offsets change cached geometry without input events.
             || tree.has_animating_scroll_physics()
-            || {
-                let store = tree.css_anim_store();
-                let guard = store.lock();
-                match guard {
-                    Ok(g) => g.has_active_animations() || g.has_active_transitions(),
-                    Err(_) => false,
-                }
-            };
+            || tree.css_active_off_rows();
         // A caller that asked for a full paint gets one: the inner call may reuse the cache only
         // when this frame was allowed to.
         let inner_try_fast = try_fast_paint && self.cached_bg_batch.is_some() && !needs_walker;
@@ -807,6 +794,7 @@ impl RenderContext {
         self.composite_css_layers_overlay(tree, target_view, LayerScope::Main);
         self.composite_motion_layers_overlay(tree, target_view, LayerScope::Main);
         self.dispatch_dynamic_batch_overlay(target_view);
+        self.draw_scroll_row_scrollbars(tree, target_view);
         self.dispatch_overlay_canvas_overlay(target_view, &overlay_subtree_canvases);
         // Draw motion text and SVG after their dynamic geometry.
         self.dispatch_motion_subtree_overlay_pools(tree, target_view);

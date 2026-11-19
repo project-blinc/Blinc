@@ -614,6 +614,42 @@ fn the_shadow_pipeline_grows_corners_and_edges_the_way_css_does() {
     );
 }
 
+/// A shadow of an element turned a quarter way round, as the draw context records it: the local
+/// affine is the rotation, and the offset is in the element's own frame.
+fn turned_shadow() -> GpuPrimitive {
+    // 80 x 8 about (64, 64), its shadow 12 px down in its own frame.
+    let mut p = outer_shadow([24.0, 60.0, 80.0, 8.0], 0.0, [0.0, 12.0, 0.0, 0.0]);
+    p.local_affine = [0.0, 1.0, -1.0, 0.0];
+    p
+}
+
+#[test]
+fn a_shadow_turns_with_its_element() {
+    let Some((device, queue)) = device() else {
+        eprintln!("no adapter with vertex storage: skipped");
+        return;
+    };
+    let pixels = draw(
+        &device,
+        &queue,
+        crate::sdf_russl::sdf_shadow::WGSL,
+        &[],
+        &[turned_shadow()],
+    );
+    // The element stands 8 wide and 80 tall, and its shadow lies 12 px to the left.
+    assert!(
+        alpha(&pixels, 52, 64) > 250,
+        "no shadow to the left of the element"
+    );
+    // Past the unturned quad, which is only 10 px tall: the quad covers the turned element.
+    assert!(
+        alpha(&pixels, 52, 30) > 250,
+        "the quad does not cover the turned shadow"
+    );
+    assert_eq!(alpha(&pixels, 76, 64), 0, "a shadow to the right");
+    assert_eq!(alpha(&pixels, 64, 64), 0, "a shadow under the element");
+}
+
 #[test]
 fn the_shadow_fallback_tiers_draw_what_the_storage_tier_draws() {
     use crate::primitives::PrimitiveType::*;
@@ -644,6 +680,7 @@ fn the_shadow_fallback_tiers_draw_what_the_storage_tier_draws() {
         ),
         shadow(Shadow, 30.0, 60.0, 50.0, 30.0, [1.0, 2.0, 6.0, 0.0])
             .with_clip_rounded_rect(30.0, 60.0, 30.0, 20.0, 6.0, 6.0, 6.0, 6.0),
+        turned_shadow(),
     ];
     // A shadow clipped to a triangle whose vertices are read from the auxiliary data: the data
     // texture tier reads them from a texture.
@@ -1197,6 +1234,7 @@ fn the_cpu_primitive_lays_out_as_the_shader_reads_it() {
         clip_fade_bounds,
         notch_info,
         clip_shape,
+        node_slot,
     );
 }
 

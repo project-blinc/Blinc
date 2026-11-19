@@ -35,14 +35,7 @@ pub unsafe extern "C" fn blinc_accessibility_snapshot(ctx: *const IOSRenderConte
         .map(|tree| tree.accessibility_nodes())
         .unwrap_or_default();
     let nodes: Vec<_> = nodes.into_iter().map(|n| {
-        let role = match n.role {
-            AccessibilityRole::Text => "text", AccessibilityRole::Heading => "heading",
-            AccessibilityRole::Button => "button", AccessibilityRole::Link => "link",
-            AccessibilityRole::TextField => "textfield", AccessibilityRole::Checkbox => "checkbox",
-            AccessibilityRole::Switch => "switch", AccessibilityRole::Radio => "radio",
-            AccessibilityRole::Slider => "slider", AccessibilityRole::Tab => "tab",
-            AccessibilityRole::MenuItem => "menuitem", AccessibilityRole::Image => "image",
-        };
+        let role = n.role.as_str();
         let paint = if n.role == AccessibilityRole::TextField {
             let tree = ctx.render_tree.as_ref().unwrap();
             let mut pending: Vec<_> = tree.layout_id(n.id).into_iter().collect();

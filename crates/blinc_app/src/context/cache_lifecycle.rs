@@ -50,6 +50,8 @@ impl RenderContext {
         self.cached_motion_subtree_text_prims = None;
         self.motion_subtree_text_patch.clear();
         self.cached_motion_subtree_svgs = None;
+        self.cached_motion_subtree_images = None;
+        self.collected_valid = false;
         self.cached_css_transformed_text_prims = None;
         // Compositor static cache rides on the same lifecycle as the
         // primitive-batch cache — anything that would invalidate the

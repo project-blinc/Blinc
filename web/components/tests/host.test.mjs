@@ -182,3 +182,32 @@ test('A tap raises the keyboard when the demo says it focused something editable
   demo.canvas.emit('pointermove', at(50, 120)); demo.canvas.emit('pointerup', at(50, 120));
   assert.equal(demo.editor.inputMode, 'none');
 });
+
+test('printable key text travels with its shortcut, while composition and paste stay independent', async () => {
+  const { demo, worker, notify } = await host();
+  demo.setVisible(true); notify('ready');
+  const input = () => worker.messages.filter(m => m.type === 'input').map(m => JSON.parse(JSON.stringify(m.payload.event)));
+  let prevented = 0;
+  const press = { key: 'f', keyCode: 70, altKey: true, preventDefault() { prevented++; } };
+  demo.editor.emit('keydown', press);
+  assert.deepEqual(input(), [{ kind: 'key-down', code: 70, text: 'f' }]);
+  assert.equal(prevented, 1, 'the browser must not generate a second input event');
+  demo.editor.emit('keyup', press);
+  demo.editor.emit('keydown', { ...press, key: 'ƒ' });
+  demo.editor.emit('keydown', { ...press, key: '@', keyCode: 81, ctrlKey: true });
+  assert.deepEqual(input().slice(-2), [
+    { kind: 'key-down', code: 70, text: 'ƒ' },
+    { kind: 'key-down', code: 81, text: '@' },
+  ]);
+  demo.editor.emit('keydown', { ...press, key: 'Process', keyCode: 229 });
+  demo.editor.emit('compositionstart');
+  demo.editor.emit('keydown', { ...press, isComposing: true });
+  demo.editor.emit('input', { isComposing: true, data: 'ni' });
+  demo.editor.emit('compositionend', { data: '你' });
+  demo.editor.emit('paste', { clipboardData: { getData: () => 'pasted' } });
+  assert.deepEqual(input().slice(-2), [{ kind: 'text', text: '你' }, { kind: 'text', text: 'pasted' }]);
+  demo.editor.emit('keydown', { ...press, key: 'Unidentified', keyCode: 0 });
+  demo.editor.emit('input', { inputType: 'insertText', data: 'a' });
+  assert.deepEqual(input().slice(-2), [{ kind: 'key-down', code: 0 }, { kind: 'text', text: 'a' }]);
+  demo.stop();
+});

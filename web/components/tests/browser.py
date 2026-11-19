@@ -47,7 +47,7 @@ with sync_playwright() as p:
  page.get_by_role('tab',name='Live',exact=True).click()
  page.wait_for_function("(()=>{const c=document.querySelector('#live-canvas canvas');return c.width===Math.round(c.getBoundingClientRect().width*devicePixelRatio)})()")
  type_and_check('Ada','Ada','input-preview-to-live')
- events=page.evaluate('window.__blincEvents.filter(e=>e.kind===\'text\').map(e=>e.text)')
+ events=page.evaluate('window.__blincEvents.filter(e=>e.kind===\'text\'||(e.kind===\'key-down\'&&e.text)).map(e=>e.text)')
  assert events==['A','d','a'], events
  page.locator('label:has(#demo-dark)').click();page.wait_for_timeout(300)
  type_and_check('More','AdaMore','input-after-scheme')

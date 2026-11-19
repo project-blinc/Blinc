@@ -1838,6 +1838,27 @@ pub trait DrawContext {
     /// Pair with [`Self::push_motion_subtree`]. Default no-op.
     fn pop_motion_subtree(&mut self) {}
 
+    /// Stamp the primitives emitted from now on with `ordinal`, the number the walker gave the
+    /// innermost motion-bound node being painted (zero for none), and return the previous one
+    /// to restore. Default no-op for contexts that do not stamp.
+    fn set_motion_node_ordinal(&mut self, _ordinal: u32) -> u32 {
+        0
+    }
+
+    /// Tag an owning solid fill so its colour can change without repainting its children.
+    /// Returns the opacity baked into the fill, excluding opacity owned by its groups.
+    fn tag_background_color(&mut self, _start: usize, _end: usize, _owner: u32) -> Option<f32> {
+        None
+    }
+
+    /// Whether the shared groups of a motion subtree are painted into the dynamic batch, as a
+    /// caller that moves that batch without painting it again asks for, rather than kept where
+    /// they sit in the static paint order. Returns the previous setting to restore. Default
+    /// no-op for contexts with no such batch.
+    fn set_moving_groups_dynamic(&mut self, _on: bool) -> bool {
+        false
+    }
+
     /// Notify the context that the walker is entering an
     /// `is_overlay_root` subtree (portal / popover / dropdown /
     /// dialog / toast). The renderer uses the depth this tracks to
@@ -1902,6 +1923,28 @@ pub trait DrawContext {
     /// `None` for contexts without a clip stack (mock tests).
     fn current_clip_aabb(&self) -> Option<[f32; 4]> {
         None
+    }
+
+    /// The pointer a primitive emitted now would carry for its path clip (`clip_shape[0]`), zero
+    /// when the clip in force is not a path.
+    fn current_path_clip(&mut self) -> f32 {
+        0.0
+    }
+
+    /// Mark the clips pushed from here on as inside content that rows move, so a rect or rounded
+    /// rect among them is drawn as a shape clip apart from the clips already in force. `false`
+    /// when painting is already inside such content; pass the result to `end_row_clips`.
+    fn begin_row_clips(&mut self) -> bool {
+        false
+    }
+
+    /// End what `begin_row_clips` began, when it returned `true`.
+    fn end_row_clips(&mut self, _began: bool) {}
+
+    /// [`current_clip_aabb`](Self::current_clip_aabb) without the clips pushed inside content
+    /// that rows move: the clip that stays while that content moves.
+    fn current_row_clip_aabb(&self) -> Option<[f32; 4]> {
+        self.current_clip_aabb()
     }
 
     /// Snapshot the current ancestor clip as

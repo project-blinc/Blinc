@@ -1,7 +1,9 @@
 //! Coordinate collection and ordered dispatch with optional entry/exit animation state.
+use super::cached_text;
 use super::composite_replay::LayerScope;
 use super::frame_dispatch::FrameContent;
-use super::frame_text::PreparedFrameText;
+use super::frame_text::{self, PreparedFrameText};
+use super::node_rows;
 use super::{
     DebugMode, DrawContext, GpuPaintContext, ImageElement, LayoutNodeId, PrimitiveBatch,
     RenderContext, RenderTree, Result, SvgElement, TextElement, Transform3DLayerInfo,
@@ -22,7 +24,8 @@ impl RenderContext {
     ) -> Result<()> {
         // Once per frame, fast paint or full: frees offscreen targets no recent frame drew.
         self.renderer.next_frame();
-        self.render_tree_frame(
+        self.renderer.begin_frame_submission();
+        let result = self.render_tree_frame(
             tree,
             Some(render_state),
             width,
@@ -30,7 +33,9 @@ impl RenderContext {
             target,
             target_texture,
             try_fast_paint,
-        )
+        );
+        self.renderer.end_frame_submission();
+        result
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -73,24 +78,36 @@ impl RenderContext {
         let scale_factor = tree.scale_factor();
 
         // Commit animation and promotion status for both direct and compositor rendering.
+        tree.set_motion_promotion(self.promote_motion && !self.renderer.node_table_enabled());
+        tree.set_scroll_rows(self.rows_mode());
         let v2_statuses = tree.compute_animation_status();
         tree.commit_animation_status(&v2_statuses);
         if !self.in_compositor_inner_call && !self.overlay_frame_active {
             self.refresh_css_cache_ownership(tree);
+            self.apply_retained_background_colors(tree);
         }
 
         // Direct frames have no CSS cache patch pass; active CSS needs a full walk.
-        let canvas_output =
-            (try_fast_paint && !self.captured_images_need_repaint && !tree.css_has_active())
-                .then(|| self.redraw_canvas_output(tree, width, height))
-                .flatten()
-                .filter(|_| self.apply_binding_deltas(tree, scale_factor));
+        // A frame that reuses the cached batches also reuses the collected content, so it needs
+        // that content to be the last full paint's, not cleared since.
+        let canvas_output = (try_fast_paint
+            && self.collected_valid
+            && self.cached_glyphs_by_layer.is_some()
+            && self.cached_fg_glyphs.is_some()
+            && self.cached_css_transformed_text_prims.is_some()
+            && !self.captured_images_need_repaint
+            && !tree.css_active_off_rows())
+        .then(|| self.redraw_canvas_output(tree, width, height))
+        .flatten()
+        .filter(|_| self.apply_binding_deltas(tree, scale_factor));
         let used_fast_paint = canvas_output.is_some();
 
         // Create a single paint context for all layers with text rendering support
+        let rows_mode = self.rows_mode();
         let mut ctx =
             GpuPaintContext::with_text_context(width as f32, height as f32, &mut self.text_ctx);
         ctx.enable_deferred_text();
+        ctx.set_moving_groups_dynamic(rows_mode);
         ctx.enable_deferred_svg();
         ctx.enable_deferred_image();
         ctx.enable_glass_layers();
@@ -158,6 +175,10 @@ impl RenderContext {
             || {
                 let bindings_table = tree.motion_bindings_map();
                 tree.composite_bindings().iter().any(|(node, meta)| {
+                    if let Some((x, y)) = tree.property_row_translation(*node) {
+                        return (x - meta.last_translate.0).abs() > f32::EPSILON
+                            || (y - meta.last_translate.1).abs() > f32::EPSILON;
+                    }
                     let Some(b) = bindings_table.get(node) else {
                         return false;
                     };
@@ -219,6 +240,9 @@ impl RenderContext {
             (Transform3DLayerInfo, Vec<TextElement>),
         > = std::collections::HashMap::new();
         let mut captured = std::collections::HashMap::new();
+        if !used_fast_paint {
+            self.captured_runs.clear();
+        }
         let captured_nodes: std::collections::HashSet<_> = batch
             .cross_stream_groups
             .text_nodes
@@ -235,7 +259,53 @@ impl RenderContext {
             let key = text.node.data().as_ffi();
             if captured_nodes.contains(&key) {
                 if !used_fast_paint {
-                    let prepared = self.prepare_captured_text(&text, (width, height), scale_factor);
+                    // Glyphs inside a group carry the ordinal of the node that moves them. With the
+                    // node table they are also sized and placed as motion text is, and kept
+                    // sharp as their node moves and settles.
+                    let ordinal = node_rows::ordinal_of(tree, text.node);
+                    let mut run_id = 0u32;
+                    let table = self.rows_mode();
+                    let mut prepared = if table && ordinal != 0 {
+                        let (scale, moving) = frame_text::raster_scale(tree, text.node);
+                        let shown = scale.max(frame_text::affine_scale(text.css_affine));
+                        let k = frame_text::raster_size(shown, text.font_size, moving);
+                        if table {
+                            run_id = self.captured_runs.len() as u32 + 1;
+                            self.captured_runs.push(cached_text::CapturedRun {
+                                id: run_id,
+                                element: text.clone(),
+                                k,
+                                snapped: !moving,
+                                baked: None,
+                            });
+                        }
+                        self.prepare_captured_text_at(
+                            &text,
+                            (width, height),
+                            scale_factor,
+                            k,
+                            Some(!moving || frame_text::scaled(shown)),
+                        )
+                    } else {
+                        // Not moved by the node table: laid out at the base size and rasterized at
+                        // the size its card shows it, so a scaled card is as sharp faded or not.
+                        let shown = frame_text::affine_scale(text.css_affine);
+                        let moving = frame_text::css_transforming(tree, text.node)
+                            || frame_text::chain_moving(tree, text.node);
+                        let k = frame_text::raster_size(shown, text.font_size, moving);
+                        self.prepare_captured_text_at(
+                            &text,
+                            (width, height),
+                            scale_factor,
+                            k,
+                            text.css_affine
+                                .map(|_| !moving || frame_text::scaled(shown)),
+                        )
+                    };
+                    for p in &mut prepared.primitives {
+                        p.set_node_ordinal(ordinal);
+                        p.node_slot[3] = run_id as f32;
+                    }
                     // A styled node can contribute several span and line runs.
                     match captured.entry(key) {
                         std::collections::hash_map::Entry::Vacant(entry) => {
@@ -292,7 +362,12 @@ impl RenderContext {
                 if !used_fast_paint {
                     captured.insert(
                         key,
-                        self.prepare_captured_svg(&svg, (width, height), scale_factor),
+                        self.prepare_captured_svg(
+                            &svg,
+                            (width, height),
+                            scale_factor,
+                            super::node_rows::ordinal_of(tree, svg.node),
+                        ),
                     );
                 }
                 continue;
@@ -311,6 +386,7 @@ impl RenderContext {
         motion_subtree_svgs.sort_by_key(|s| s.z_layer);
 
         let mut images = Vec::new();
+        let mut motion_subtree_images: Vec<ImageElement> = Vec::new();
         let mut layer_3d_images: std::collections::HashMap<LayoutNodeId, Vec<ImageElement>> =
             std::collections::HashMap::new();
         self.preload_images(&all_images, width as f32, height as f32);
@@ -341,7 +417,12 @@ impl RenderContext {
                 if !used_fast_paint {
                     captured.insert(
                         key,
-                        self.prepare_captured_image(&image, (width, height), scale_factor),
+                        self.prepare_captured_image(
+                            &image,
+                            (width, height),
+                            scale_factor,
+                            super::node_rows::ordinal_of(tree, image.node),
+                        ),
                     );
                 }
                 continue;
@@ -349,9 +430,19 @@ impl RenderContext {
 
             if let Some(ref info) = image.transform_3d_layer {
                 layer_3d_images.entry(info.node_id).or_default().push(image);
+            } else if image.in_motion_subtree {
+                motion_subtree_images.push(image);
             } else {
                 images.push(image);
             }
+        }
+        // Images inside motion containers are drawn after the dynamic batch their card's
+        // background is in, so they sit above it.
+        motion_subtree_images.sort_by_key(|i| i.z_index);
+        if !used_fast_paint {
+            self.cached_motion_subtree_images =
+                (!motion_subtree_images.is_empty()).then_some(motion_subtree_images);
+            self.collected_valid = true;
         }
 
         if !used_fast_paint {
@@ -371,14 +462,43 @@ impl RenderContext {
             css_transformed_text_prims,
             fg_glyphs,
             fg_decorations_by_layer,
-        } = self.prepare_frame_text(
-            &texts,
-            &fg_texts,
-            &motion_subtree_texts,
-            &motion_subtree_svgs,
-            (width, height),
-            scale_factor,
-        );
+        } = if used_fast_paint {
+            // The row update already refined motion glyphs. Preparing them again would
+            // discard their row ownership and make the following frame repaint.
+            PreparedFrameText {
+                glyphs_by_layer: self.cached_glyphs_by_layer.as_ref().unwrap().clone(),
+                css_transformed_text_prims: self
+                    .cached_css_transformed_text_prims
+                    .as_ref()
+                    .unwrap()
+                    .clone(),
+                fg_glyphs: self.cached_fg_glyphs.as_ref().unwrap().clone(),
+                fg_decorations_by_layer: super::generate_text_decoration_primitives_by_layer(
+                    &fg_texts,
+                ),
+            }
+        } else {
+            // Text under a scaling ancestor is rasterized at its displayed size.
+            let raster_scales = motion_subtree_texts
+                .iter()
+                .map(|t| (t.node, frame_text::raster_scale(tree, t.node)))
+                .collect();
+            self.prepare_frame_text(
+                &texts,
+                &fg_texts,
+                &motion_subtree_texts,
+                &motion_subtree_svgs,
+                &raster_scales,
+                (width, height),
+                scale_factor,
+            )
+        };
+
+        // The batch and the glyphs of motion subtrees were just painted at one pose: the node
+        // table takes both, and later frames only write its rows.
+        if !used_fast_paint {
+            let _ = self.try_node_rows(tree, scale_factor, true);
+        }
 
         // SVGs are rendered as rasterized images (not tessellated paths) for better anti-aliasing
         // They will be rendered later via render_rasterized_svgs
@@ -454,6 +574,7 @@ impl RenderContext {
         if !self.in_compositor_inner_call {
             self.composite_css_layers_overlay(tree, target, LayerScope::Main);
             self.composite_motion_layers_overlay(tree, target, LayerScope::Main);
+            let moved = self.resolve_dynamic_batch();
             if let Some(ref dynamic_batch) = self.cached_dynamic_batch {
                 if !dynamic_batch.primitives.is_empty()
                     || dynamic_batch.has_paths()
@@ -471,10 +592,18 @@ impl RenderContext {
                 self.renderer.render_foreground(target, dynamic_batch);
                 self.renderer.update_aux_data_for_batch(&batch);
             }
+            self.restore_dynamic_batch(moved);
+            self.draw_scroll_row_scrollbars(tree, target);
         }
 
-        // Draw motion text and SVG after their dynamic geometry.
-        self.dispatch_motion_subtree_overlay_pools(tree, target);
+        // Draw motion text and SVG after their dynamic geometry. Inside the compositor's cache
+        // paint the target is the static layer, and the compositor draws them again on top of it
+        // each frame. Where motion is not baked to textures (the node table, or vectors) that copy
+        // would stay at the pose of this paint while the other moves.
+        let motion_is_vectors = self.rows_mode();
+        if !(self.in_compositor_inner_call && motion_is_vectors) {
+            self.dispatch_motion_subtree_overlay_pools(tree, target);
+        }
 
         // Draw promoted backgrounds before separately dispatched motion text and SVG.
         if !self.in_compositor_inner_call {
@@ -532,6 +661,7 @@ impl RenderContext {
             paint_walker_us = t_paint_walker.as_micros() as u64,
             collect_elements_us = t_collect_elements.as_micros() as u64,
             gpu_us = t_gpu.as_micros() as u64,
+            used_fast_paint,
             "p4_breakdown"
         );
 

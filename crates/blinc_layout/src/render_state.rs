@@ -350,6 +350,13 @@ impl ActiveCssAnimation {
         props
     }
 
+    /// Whether every lane that is playing repeats with no end, so the animation never settles on
+    /// its own.
+    pub fn is_infinite(&self) -> bool {
+        let mut playing = self.all().filter(|lane| lane.is_playing()).peekable();
+        playing.peek().is_some() && playing.all(|lane| lane.is_infinite())
+    }
+
     /// The values the animation ends on, over every lane.
     pub fn target(&self) -> blinc_animation::KeyframeProperties {
         let mut props = blinc_animation::KeyframeProperties::default();
@@ -454,14 +461,17 @@ impl CssAnimationStore {
         &self,
         painted: &std::collections::HashSet<crate::tree::StableNodeId>,
     ) -> bool {
+        // Only those that are playing: a settled entry stays in the store so the same target does
+        // not restart it, and its last values would otherwise ask for vsync for as long as its
+        // node is on screen.
         self.animations
             .iter()
-            .filter(|(n, _)| painted.contains(*n))
+            .filter(|(n, a)| a.is_playing && painted.contains(*n))
             .any(|(_, a)| a.current_properties.needs_vsync_for_smoothness())
             || self
                 .transitions
                 .iter()
-                .filter(|(n, _)| painted.contains(*n))
+                .filter(|(n, a)| a.is_playing && painted.contains(*n))
                 .any(|(_, a)| a.current_properties.needs_vsync_for_smoothness())
     }
 

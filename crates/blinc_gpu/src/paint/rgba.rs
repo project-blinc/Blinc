@@ -104,9 +104,20 @@ impl GpuPaintContext<'_> {
             return None;
         }
         let opacity = self.combined_opacity();
+        // Under an inner clip of content that rows move, the clip rect is the part that stays and
+        // the inner clips are the image's shape clip.
+        let inner = self.topmost_inner_clip();
         let (clip_bounds, mut clip_radius, corner_shape, clip_type) =
-            self.get_clip_data_with_path_scissor(true);
-        let mut clip_aux = self.rgba_clip_aux(clip_type, clip_radius, transformed, transform);
+            self.get_clip_data_with_path_scissor(true, inner.is_some());
+        let mut clip_aux = match inner {
+            Some((start, index)) => {
+                let mut rows = vec![[0.0; 4]; 5];
+                rows[4] = [1.0, 0.75, 0.0, 6.0];
+                rows.extend_from_slice(&self.inner_shape_rows(start, index));
+                rows
+            }
+            None => self.rgba_clip_aux(clip_type, clip_radius, transformed, transform),
+        };
         self.rgba_clip_properties(
             &mut clip_aux,
             clip_type,
@@ -133,6 +144,9 @@ impl GpuPaintContext<'_> {
             clip_bounds,
             clip_radius,
             clip_aux,
+            node_ordinal: self.motion_node_ordinal,
+            node_slot: None,
+            shape_from: None,
         })
     }
 

@@ -40,6 +40,66 @@ pub enum LoadingStrategy {
 }
 
 // ============================================================================
+// Retry
+// ============================================================================
+
+/// How an image that fails to load is tried again: after `first`, then after twice the last
+/// wait each time, never waiting longer than `max`, for at most `attempts` more tries.
+///
+/// The default tries again after half a second, waiting up to half a minute between tries, with
+/// no limit. A change to the file behind an image on hot reload tries it again at once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ImageRetry {
+    /// The wait after the first failure.
+    pub first: Duration,
+    /// The longest wait between tries.
+    pub max: Duration,
+    /// How many times to try again; `None` for no limit.
+    pub attempts: Option<u32>,
+}
+
+impl ImageRetry {
+    /// Do not try again.
+    pub const NEVER: Self = Self {
+        first: Duration::ZERO,
+        max: Duration::ZERO,
+        attempts: Some(0),
+    };
+
+    /// Try again after `first`, doubling the wait each time up to `max`, with no limit.
+    pub const fn backoff(first: Duration, max: Duration) -> Self {
+        Self {
+            first,
+            max,
+            attempts: None,
+        }
+    }
+
+    /// Try again at most `n` times.
+    pub const fn attempts(self, n: u32) -> Self {
+        Self {
+            attempts: Some(n),
+            ..self
+        }
+    }
+
+    /// The wait after the `failures`th failed load, `None` when there are no tries left.
+    pub fn wait(&self, failures: u32) -> Option<Duration> {
+        if self.attempts.is_some_and(|n| failures > n) {
+            return None;
+        }
+        let doublings = failures.saturating_sub(1).min(20);
+        Some(self.first.saturating_mul(1 << doublings).min(self.max))
+    }
+}
+
+impl Default for ImageRetry {
+    fn default() -> Self {
+        Self::backoff(Duration::from_millis(500), Duration::from_secs(30))
+    }
+}
+
+// ============================================================================
 // Placeholder
 // ============================================================================
 
@@ -225,6 +285,8 @@ pub struct Image {
     placeholder: Placeholder,
     /// Fade-in duration when image loads (for lazy loading)
     fade_duration: Duration,
+    /// How a failed load is tried again
+    retry: ImageRetry,
     /// Border width
     border_width: f32,
     /// Border color
@@ -262,6 +324,7 @@ impl Image {
             loading: LoadingStrategy::default(),
             placeholder: Placeholder::default(),
             fade_duration: Duration::from_millis(200),
+            retry: ImageRetry::default(),
             border_width: 0.0,
             border_color: None,
         }
@@ -732,6 +795,23 @@ impl Image {
         self
     }
 
+    /// Set how a failed load is tried again (see [`ImageRetry`]).
+    ///
+    /// # Example
+    /// ```ignore
+    /// img("https://example.com/photo.jpg")
+    ///     .retry(ImageRetry::backoff(Duration::from_secs(1), Duration::from_secs(10)).attempts(5))
+    /// ```
+    pub fn retry(mut self, retry: ImageRetry) -> Self {
+        self.retry = retry;
+        self
+    }
+
+    /// Do not try a failed load again.
+    pub fn no_retry(self) -> Self {
+        self.retry(ImageRetry::NEVER)
+    }
+
     /// Get the loading strategy
     pub fn get_loading_strategy(&self) -> LoadingStrategy {
         self.loading
@@ -855,6 +935,7 @@ impl ElementBuilder for Image {
             placeholder_color,
             placeholder_image,
             fade_duration_ms: self.fade_duration.as_millis() as u32,
+            retry: self.retry,
         })
     }
 
@@ -1010,5 +1091,31 @@ mod tests {
 
         assert_eq!(i.get_fade_duration(), Duration::ZERO);
         assert_eq!(i.image_render_info().unwrap().fade_duration_ms, 0);
+    }
+
+    #[test]
+    fn retry_reaches_the_render_info() {
+        assert_eq!(
+            img("photo.jpg").image_render_info().unwrap().retry,
+            ImageRetry::default()
+        );
+        assert_eq!(
+            img("photo.jpg")
+                .no_retry()
+                .image_render_info()
+                .unwrap()
+                .retry,
+            ImageRetry::NEVER
+        );
+        let custom =
+            ImageRetry::backoff(Duration::from_secs(1), Duration::from_secs(5)).attempts(3);
+        assert_eq!(
+            img("photo.jpg")
+                .retry(custom)
+                .image_render_info()
+                .unwrap()
+                .retry,
+            custom
+        );
     }
 }

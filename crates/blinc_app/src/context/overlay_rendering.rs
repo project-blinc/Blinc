@@ -73,6 +73,7 @@ impl RenderContext {
     /// Draw the dynamic owner in a separate pass with its own auxiliary rows.
     pub(super) fn dispatch_dynamic_batch_overlay(&mut self, target_view: &wgpu::TextureView) {
         self.rebind_glyph_atlas_for_overlay();
+        let moved = self.resolve_dynamic_batch();
         if let Some(batch) = self.cached_dynamic_batch.as_ref() {
             if !batch.primitives.is_empty() || batch.has_paths() || batch.has_ordered_draws() {
                 if batch.requires_ordered_rendering() {
@@ -84,6 +85,33 @@ impl RenderContext {
                 }
             }
             self.renderer.render_foreground(target_view, batch);
+        }
+        self.restore_dynamic_batch(moved);
+    }
+
+    /// Draw the scrollbars of the scroll containers on rows, which are not in the batch: their
+    /// place and fade come from the physics, and change with every scroll.
+    pub(super) fn draw_scroll_row_scrollbars(
+        &mut self,
+        tree: &blinc_layout::RenderTree,
+        target_view: &wgpu::TextureView,
+    ) {
+        if !tree.scroll_rows_enabled() {
+            return;
+        }
+        let (width, height) = self.renderer.viewport_size();
+        let mut ctx = GpuPaintContext::new(width as f32, height as f32);
+        let scale = tree.scale_factor();
+        {
+            use blinc_core::DrawContext;
+            if scale != 1.0 {
+                ctx.push_transform(blinc_core::Transform::scale(scale, scale));
+            }
+        }
+        tree.draw_scrollbars(&mut ctx);
+        let batch = ctx.take_batch();
+        if !batch.primitives.is_empty() {
+            self.renderer.render_overlay(target_view, &batch);
         }
     }
 

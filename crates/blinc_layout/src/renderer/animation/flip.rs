@@ -31,9 +31,11 @@ impl RenderTree {
     /// keyed by stable string IDs, not volatile LayoutNodeIds.
     pub fn update_flip_bounds(&mut self) {
         self.flip_previous_bounds.clear();
-        for (node_id, _render_node) in &self.render_nodes {
-            if let Some(element_id) = self.element_registry.get_id(*node_id)
-                && let Some(bounds) = self.layout_tree.get_absolute_bounds(*node_id)
+        // The elements with ids: the registered ids, not every node.
+        for element_id in self.element_registry.all_ids() {
+            if let Some(node_id) = self.element_registry.get(&element_id)
+                && self.render_nodes.contains_key(&node_id)
+                && let Some(bounds) = self.layout_tree.get_absolute_bounds(node_id)
             {
                 self.flip_previous_bounds.insert(element_id, bounds);
             }
@@ -199,32 +201,149 @@ impl RenderTree {
         }
     }
 
-    /// Tick all active FLIP animations by `dt_ms` milliseconds.
-    /// Removes completed animations. Returns `true` if any are still playing.
-    pub fn tick_flip_animations(&mut self, dt_ms: f32) -> bool {
-        if self.flip_animations.is_empty() {
+    /// Whether the FLIP animation on `node` can be carried by a motion binding: the renderer moves
+    /// bound nodes by rows (not baked into textures, which leave a label where it was painted),
+    /// and the node has a binding that is the animation's own, or none and a scheduler to hold its
+    /// values. A node the application binds itself keeps the animation in its render props.
+    fn flip_can_bind(&self, node: LayoutNodeId) -> bool {
+        !self.motion_promotion.get()
+            && blinc_animation::try_get_scheduler().is_some()
+            && (self.flip_bound.contains_key(&node) || !self.motion_bindings.contains_key(&node))
+    }
+
+    /// How far a FLIP animation has the node drawn from where layout put it, when it moves the
+    /// node through a binding of its own; `(0, 0)` otherwise. An animation that writes render
+    /// props is in the node's transform.
+    pub fn flip_offset(&self, node: LayoutNodeId) -> (f32, f32) {
+        if !self.flip_bound.contains_key(&node) {
+            return (0.0, 0.0);
+        }
+        let read = |value: &Option<blinc_animation::SharedAnimatedValue>| {
+            value
+                .as_ref()
+                .and_then(|v| v.lock().ok().map(|v| v.get()))
+                .unwrap_or(0.0)
+        };
+        self.motion_bindings
+            .get(&node)
+            .map_or((0.0, 0.0), |b| (read(&b.translate_x), read(&b.translate_y)))
+    }
+
+    /// Whether a FLIP animation is playing that is not carried by a binding: it writes render
+    /// props each frame and the frame has to be painted in full.
+    pub fn has_flip_animations_off_rows(&self) -> bool {
+        self.flip_animations.keys().any(|element_id| {
+            self.element_registry
+                .get(element_id)
+                .is_some_and(|node| !self.flip_can_bind(node))
+        })
+    }
+
+    /// Give the node a motion binding with the offset of its FLIP animation, or update the one
+    /// it has. False when the node cannot be bound: the caller writes props.
+    fn drive_flip_binding(
+        &mut self,
+        node: LayoutNodeId,
+        element_id: &str,
+        properties: &blinc_animation::KeyframeProperties,
+    ) -> bool {
+        if !self.flip_can_bind(node) {
             return false;
         }
-        let dt_ms = dt_ms.min(crate::render_state::MAX_ANIMATION_STEP_MS);
-        let mut any_playing = false;
-        for anim in self.flip_animations.values_mut() {
-            if anim.tick(dt_ms) {
-                any_playing = true;
+        if !self.flip_bound.contains_key(&node) {
+            let Some(handle) = blinc_animation::try_get_scheduler() else {
+                return false;
+            };
+            let value = || {
+                std::sync::Arc::new(std::sync::Mutex::new(
+                    blinc_animation::AnimatedValue::with_default(handle.clone(), 0.0),
+                ))
+            };
+            self.motion_bindings.insert(
+                node,
+                crate::motion::MotionBindings {
+                    translate_x: Some(value()),
+                    translate_y: Some(value()),
+                    ..Default::default()
+                },
+            );
+            self.flip_bound.insert(node, element_id.to_string());
+        }
+        if let Some(bindings) = self.motion_bindings.get(&node) {
+            let offset = [
+                (&bindings.translate_x, properties.translate_x.unwrap_or(0.0)),
+                (&bindings.translate_y, properties.translate_y.unwrap_or(0.0)),
+            ];
+            for (value, current) in offset {
+                // On its way to where layout put the node.
+                if let Some(mut value) = value.as_ref().and_then(|v| v.lock().ok()) {
+                    value.drive(current, 0.0);
+                }
             }
         }
-        // Remove completed animations
-        self.flip_animations.retain(|_, a| a.is_playing);
-        any_playing
+        true
+    }
+
+    /// Take away the bindings of FLIP animations that have ended, and of nodes that were replaced:
+    /// the next frame is painted in full without them.
+    fn release_flip_bindings(&mut self) {
+        if self.flip_bound.is_empty() {
+            return;
+        }
+        let gone: Vec<LayoutNodeId> = self
+            .flip_bound
+            .iter()
+            .filter(|(node, element_id)| {
+                !self.flip_animations.contains_key(*element_id)
+                    || self.element_registry.get(element_id) != Some(**node)
+            })
+            .map(|(node, _)| *node)
+            .collect();
+        for node in gone {
+            self.flip_bound.remove(&node);
+            self.motion_bindings.remove(&node);
+        }
+    }
+
+    /// Tick all active FLIP animations by `dt_ms` milliseconds.
+    /// Removes completed animations. Returns `true` if any are still playing, or a finished one
+    /// still has its binding on a node: the caller applies the animations, which takes the
+    /// binding away so the node is painted where layout put it. That stays true until the apply
+    /// has run, so a frame that is skipped does not lose it.
+    pub fn tick_flip_animations(&mut self, dt_ms: f32) -> bool {
+        let mut any_playing = false;
+        if !self.flip_animations.is_empty() {
+            let dt_ms = dt_ms.min(crate::render_state::MAX_ANIMATION_STEP_MS);
+            for anim in self.flip_animations.values_mut() {
+                if anim.tick(dt_ms) {
+                    any_playing = true;
+                }
+            }
+            // Remove completed animations
+            self.flip_animations.retain(|_, a| a.is_playing);
+        }
+        any_playing || self.flip_release_pending(None)
+    }
+
+    /// Whether a node still carries the binding of a FLIP slide that has ended. With `painted`,
+    /// only a node in it counts.
+    fn flip_release_pending(&self, painted: Option<&HashSet<LayoutNodeId>>) -> bool {
+        self.flip_bound.iter().any(|(node, element_id)| {
+            !self.flip_animations.contains_key(element_id)
+                && painted.is_none_or(|painted| painted.contains(node))
+        })
     }
 
     /// Apply current FLIP animation values to render props.
     /// Resolves string element IDs → LayoutNodeIds via element_registry.
     pub fn apply_flip_animation_props(&mut self) {
+        self.release_flip_bindings();
         if self.flip_animations.is_empty() {
             return;
         }
         // Collect data first to avoid borrow conflict with render_nodes
         let props_data: Vec<(
+            String,
             crate::tree::LayoutNodeId,
             blinc_animation::KeyframeProperties,
         )> = self
@@ -232,12 +351,17 @@ impl RenderTree {
             .iter()
             .filter_map(|(element_id, anim)| {
                 let node_id = self.element_registry.get(element_id)?;
-                Some((node_id, anim.current_properties.clone()))
+                Some((element_id.clone(), node_id, anim.current_properties.clone()))
             })
             .collect();
 
-        for (node_id, anim_props) in props_data {
-            if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+        for (element_id, node_id, anim_props) in props_data {
+            // The offset is a binding where the node allows one, which the renderer moves as a
+            // row; otherwise it is written into the node's props.
+            if self.drive_flip_binding(node_id, &element_id, &anim_props) {
+                continue;
+            }
+            if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
                 Self::apply_keyframe_props_to_render(&mut render_node.props, &anim_props);
             }
         }
@@ -259,7 +383,7 @@ impl RenderTree {
             self.element_registry
                 .get(element_id)
                 .is_some_and(|nid| painted.contains(&nid))
-        })
+        }) || self.flip_release_pending(Some(painted))
     }
 }
 

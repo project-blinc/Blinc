@@ -508,11 +508,7 @@ impl GpuRenderer {
             mapped_at_creation: false,
         });
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Pipeline Pre-Warm Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -573,7 +569,7 @@ impl GpuRenderer {
             }
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
 
         // Block until the GPU has actually finished compiling and
         // running these. Without this the work stays queued and the

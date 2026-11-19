@@ -312,7 +312,12 @@ fn image_opacity_placeholder_and_loaded_source_keep_the_same_node_alpha() {
                     .size(60.0, 60.0)
                     .opacity(0.5)
                     .placeholder_color(Color::CYAN)
-                    .no_fade(),
+                    .no_fade()
+                    // Written after the first, failed load, it is tried again on the next frame.
+                    .retry(blinc_layout::ImageRetry::backoff(
+                        std::time::Duration::ZERO,
+                        std::time::Duration::ZERO,
+                    )),
             ),
         );
         tree.compute_layout(160.0, 120.0);
@@ -462,4 +467,97 @@ fn image_opacity_independent_collection_uses_the_resolved_node_value() {
         pixel(&page, (40, 30), blend(opacity * 0.5));
         context.return_scratch_elements(texts, svgs, images);
     }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn an_image_decoded_on_the_worker_is_drawn_once_it_arrives() {
+    let mut context = super::main_text_clip_tests::context(true, 1);
+    context.set_async_image_decode(true);
+    let tree = scene(1.0);
+    let state = state();
+    // The first frame does not wait for the image: it shows the placeholder, not the green.
+    let first = frame(&mut context, &tree, &state, 0);
+    assert!(
+        first.get_pixel(50, 40).0[1] < 64,
+        "{:?}",
+        first.get_pixel(50, 40)
+    );
+    assert!(
+        context.has_pending_image_fade(),
+        "the window keeps drawing while it loads"
+    );
+    // Frames go on, as a window's do, until one has the image.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut page = frame(&mut context, &tree, &state, 0);
+    while page.get_pixel(50, 40).0[1] < 128 && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        page = frame(&mut context, &tree, &state, 0);
+    }
+    pixel(&page, (50, 40), blend(1.0));
+    assert!(!context.image_decode_busy());
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn an_image_that_failed_to_load_is_tried_again() {
+    let (green, path) = retry_scene(true);
+    let _ = std::fs::remove_file(path);
+    assert!(
+        green,
+        "the file written after the failure is loaded on a later try"
+    );
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn an_image_with_no_retry_is_not_tried_again() {
+    let (green, path) = retry_scene(false);
+    let _ = std::fs::remove_file(path);
+    assert!(!green, "a failed load stays failed");
+}
+
+/// An image whose file is written only after its first load failed, drawn for up to two seconds
+/// after; whether it was drawn green, and the file.
+fn retry_scene(retry: bool) -> (bool, std::path::PathBuf) {
+    let path = std::env::temp_dir().join(format!("blinc-retry-{}-{retry}.png", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let source = path.to_string_lossy().into_owned();
+    let picture = blinc_layout::image(source.as_str())
+        .size(60.0, 60.0)
+        .fade_in(std::time::Duration::ZERO);
+    let picture = if retry { picture } else { picture.no_retry() };
+    let mut tree = RenderTree::from_element(
+        &div().w(160.0).h(120.0).bg(Color::BLUE).child(
+            div()
+                .absolute()
+                .left(20.0)
+                .top(10.0)
+                .w(100.0)
+                .h(100.0)
+                .child(picture),
+        ),
+    );
+    tree.compute_layout(160.0, 120.0);
+    let mut context = super::main_text_clip_tests::context(true, 1);
+    context.set_async_image_decode(true);
+    let state = state();
+    let green = |page: &image::RgbaImage| page.get_pixel(50, 40).0[1] >= 128;
+    // The file is not there: the load fails, and the image is not drawn.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut page = frame(&mut context, &tree, &state, 0);
+    while context.image_decode_busy() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        page = frame(&mut context, &tree, &state, 0);
+    }
+    assert!(!green(&page));
+    image::RgbaImage::from_pixel(4, 4, image::Rgba([0, 255, 0, 255]))
+        .save(&path)
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while !green(&page) && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        page = frame(&mut context, &tree, &state, 0);
+    }
+    (green(&page), path)
 }

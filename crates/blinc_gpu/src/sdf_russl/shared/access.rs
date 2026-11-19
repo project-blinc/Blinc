@@ -5,8 +5,13 @@
 
 russl::russl! {
     use super::primitive::{Primitive, Uniforms};
+    use super::node_table::{NodeRow, apply_node, scales_node, snap_glyph};
+    use super::clip::{abi_shape_clip_alpha, abi_shape_clip_alpha_back};
 
     #[pipeline] const TIER: u32 = 0;
+    // 1 binds the animated node table and applies a node's delta to the primitives that follow it;
+    // 0 leaves the primitives as they are stored.
+    #[pipeline] const NODES: u32 = 0;
 
     #[group(0)] #[binding(0)] pub static UNIFORMS: Uniform<Uniforms>;
     // Glyph atlas textures for unified text rendering
@@ -18,8 +23,8 @@ russl::russl! {
         // Primitive rows, one RGBA32F texel per vec4 field.
         #[group(0)] #[binding(1)] pub static PRIM_DATA: Texture2D<f32>;
 
-        // Primitive `index`: each row is one primitive, the column is the field.
-        pub fn prim(index: u32) -> Primitive {
+        // Primitive `index` as stored: each row is one primitive, the column is the field.
+        pub fn prim_rest(index: u32) -> Primitive {
             let y = index as i32;
             let mut p: Primitive;
             p.bounds = PRIM_DATA.load(IVec2::new(0, y), 0);
@@ -57,14 +62,119 @@ russl::russl! {
             p.clip_fade_bounds = PRIM_DATA.load(IVec2::new(31, y), 0);
             p.notch_info = PRIM_DATA.load(IVec2::new(32, y), 0);
             p.clip_shape = PRIM_DATA.load(IVec2::new(33, y), 0);
+            p.node_slot = PRIM_DATA.load(IVec2::new(34, y), 0);
             return p;
         }
     #else
         #[group(0)] #[binding(1)] pub static PRIMITIVES: Storage<[Primitive]>;
 
-        // Primitive `index`.
-        pub fn prim(index: u32) -> Primitive {
+        // Primitive `index` as stored.
+        pub fn prim_rest(index: u32) -> Primitive {
             return PRIMITIVES[index];
+        }
+    #endif
+
+    #if NODES == 1
+        #if TIER == 2
+            // Node rows, three RGBA32F texels each: motion, pivot, link.
+            #[group(0)] #[binding(6)] pub static NODE_DATA: Texture2D<f32>;
+
+            pub fn node_row(slot: u32) -> NodeRow {
+                let y = slot as i32;
+                let mut r: NodeRow;
+                r.motion = NODE_DATA.load(IVec2::new(0, y), 0);
+                r.pivot = NODE_DATA.load(IVec2::new(1, y), 0);
+                r.link = NODE_DATA.load(IVec2::new(2, y), 0);
+                return r;
+            }
+        #else
+            #[group(0)] #[binding(6)] pub static NODE_ROWS: Storage<[NodeRow]>;
+
+            pub fn node_row(slot: u32) -> NodeRow {
+                return NODE_ROWS[slot];
+            }
+        #endif
+
+        // Primitive `index` as it is drawn: under its node's delta, then each parent's, up to four,
+        // and a glyph under a row that scales put on a whole device pixel.
+        pub fn prim(index: u32) -> Primitive {
+            let mut p = prim_rest(index);
+            let mut slot = p.node_slot.x as u32;
+            let mut scaled = false;
+            for depth in 0u32..4u32 {
+                if slot != 0u32 {
+                    let row = node_row(slot - 1u32);
+                    if scales_node(row) || (depth == 0u32 && row.link.y > 0.5) {
+                        scaled = true;
+                    }
+                    p = apply_node(p, row, depth);
+                    slot = row.link.x as u32;
+                }
+            }
+            if scaled {
+                p = snap_glyph(p);
+            }
+            return p;
+        }
+
+        // The path clip of `p` at `pixel`, taken back through the rows the clip follows (from
+        // depth `clip_shape.y - 1` of `p`'s chain up) so it is tested where it was painted.
+        pub fn path_clip_alpha(p: Primitive, pixel: Vec2) -> f32 {
+            if p.clip_shape.y < 0.5 {
+                return abi_shape_clip_alpha(pixel, p.clip_shape.x);
+            }
+            let from = (p.clip_shape.y as u32) - 1u32;
+            // x' = a x + c y + e, y' = b x + d y + f: the rows from `from` up, first row first.
+            let mut a = 1.0;
+            let mut b = 0.0;
+            let mut c = 0.0;
+            let mut d = 1.0;
+            let mut e = 0.0;
+            let mut f = 0.0;
+            let mut slot = p.node_slot.x as u32;
+            for depth in 0u32..4u32 {
+                if slot != 0u32 {
+                    let row = node_row(slot - 1u32);
+                    if depth >= from {
+                        let s = sin(row.pivot.z);
+                        let k = cos(row.pivot.z);
+                        let ra = k * row.motion.z;
+                        let rb = s * row.motion.z;
+                        let rc = -s * row.motion.w;
+                        let rd = k * row.motion.w;
+                        let re = row.pivot.x + row.motion.x - (ra * row.pivot.x + rc * row.pivot.y);
+                        let rf = row.pivot.y + row.motion.y - (rb * row.pivot.x + rd * row.pivot.y);
+                        let na = ra * a + rc * b;
+                        let nb = rb * a + rd * b;
+                        let nc = ra * c + rc * d;
+                        let nd = rb * c + rd * d;
+                        let ne = ra * e + rc * f + re;
+                        let nf = rb * e + rd * f + rf;
+                        a = na;
+                        b = nb;
+                        c = nc;
+                        d = nd;
+                        e = ne;
+                        f = nf;
+                    }
+                    slot = row.link.x as u32;
+                }
+            }
+            let det = a * d - b * c;
+            if abs(det) < 1e-12 {
+                return abi_shape_clip_alpha(pixel, p.clip_shape.x);
+            }
+            let back = Vec4::new(d, -b, -c, a) / det;
+            let shift = -Vec2::new(back.x * e + back.z * f, back.y * e + back.w * f);
+            return abi_shape_clip_alpha_back(pixel, p.clip_shape.x, back, shift, true);
+        }
+    #else
+        pub fn prim(index: u32) -> Primitive {
+            return prim_rest(index);
+        }
+
+        pub fn path_clip_alpha(p: Primitive, pixel: Vec2) -> f32 {
+            return abi_shape_clip_alpha(pixel, p.clip_shape.x);
         }
     #endif
 }

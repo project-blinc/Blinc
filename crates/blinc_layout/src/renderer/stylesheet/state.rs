@@ -211,7 +211,7 @@ impl RenderTree {
 
         // Apply state-specific styles in order of precedence
         let mut applied = false;
-        let render_node = match self.render_nodes.get_mut(&node_id) {
+        let mut render_node = match self.render_nodes.get_mut(&node_id) {
             Some(node) => node,
             None => return false,
         };
@@ -219,20 +219,22 @@ impl RenderTree {
         // Reset to base style first
         render_node.props = base_props;
 
-        // Reset taffy style to base before applying state layout overrides
-        if let Some(base_taffy) = self.base_taffy_styles.get(&node_id) {
-            self.layout_tree.set_style(node_id, base_taffy.clone());
-        }
+        // The layout style is built from the base and set once, so a node whose layout comes
+        // out as it was does not count as a layout change.
+        let mut taffy = self
+            .base_taffy_styles
+            .get(&node_id)
+            .cloned()
+            .or_else(|| self.layout_tree.get_style(node_id));
 
         // The rules of the classes the node has now are part of its base.
         if let Some(dynamic) = self.dynamic_classes.get(&node_id) {
             for style in dynamic.layers() {
                 Self::apply_element_style_to_props(&mut render_node.props, style);
                 if style.has_layout_props()
-                    && let Some(mut taffy_style) = self.layout_tree.get_style(node_id)
+                    && let Some(taffy_style) = taffy.as_mut()
                 {
-                    Self::apply_element_style_to_taffy(&mut taffy_style, style);
-                    self.layout_tree.set_style(node_id, taffy_style);
+                    Self::apply_element_style_to_taffy(taffy_style, style);
                 }
             }
         }
@@ -241,10 +243,9 @@ impl RenderTree {
         if let Some(base_style) = base_lookup.as_deref() {
             Self::apply_element_style_to_props(&mut render_node.props, base_style);
             if base_style.has_layout_props()
-                && let Some(mut taffy_style) = self.layout_tree.get_style(node_id)
+                && let Some(taffy_style) = taffy.as_mut()
             {
-                Self::apply_element_style_to_taffy(&mut taffy_style, base_style);
-                self.layout_tree.set_style(node_id, taffy_style);
+                Self::apply_element_style_to_taffy(taffy_style, base_style);
             }
             applied = true;
         }
@@ -256,10 +257,9 @@ impl RenderTree {
             layers.push(hover_style.clone());
             Self::apply_element_style_to_props(&mut render_node.props, hover_style);
             if hover_style.has_layout_props()
-                && let Some(mut taffy_style) = self.layout_tree.get_style(node_id)
+                && let Some(taffy_style) = taffy.as_mut()
             {
-                Self::apply_element_style_to_taffy(&mut taffy_style, hover_style);
-                self.layout_tree.set_style(node_id, taffy_style);
+                Self::apply_element_style_to_taffy(taffy_style, hover_style);
             }
             applied = true;
         }
@@ -269,10 +269,9 @@ impl RenderTree {
             layers.push(active_style.clone());
             Self::apply_element_style_to_props(&mut render_node.props, active_style);
             if active_style.has_layout_props()
-                && let Some(mut taffy_style) = self.layout_tree.get_style(node_id)
+                && let Some(taffy_style) = taffy.as_mut()
             {
-                Self::apply_element_style_to_taffy(&mut taffy_style, active_style);
-                self.layout_tree.set_style(node_id, taffy_style);
+                Self::apply_element_style_to_taffy(taffy_style, active_style);
             }
             applied = true;
         }
@@ -285,14 +284,20 @@ impl RenderTree {
             layers.push(focus_style.clone());
             Self::apply_element_style_to_props(&mut render_node.props, focus_style);
             if focus_style.has_layout_props()
-                && let Some(mut taffy_style) = self.layout_tree.get_style(node_id)
+                && let Some(taffy_style) = taffy.as_mut()
             {
-                Self::apply_element_style_to_taffy(&mut taffy_style, focus_style);
-                self.layout_tree.set_style(node_id, taffy_style);
+                Self::apply_element_style_to_taffy(taffy_style, focus_style);
             }
             applied = true;
         }
+        if let Some(mut taffy) = taffy {
+            self.layout_tree
+                .yield_incidental_align_self(node_id, &mut taffy);
+            self.layout_tree.set_style(node_id, taffy);
+        }
 
+        // The borrow of the node ends here, where the revision of the nodes is settled.
+        drop(render_node);
         if layers.is_empty() {
             self.state_layers.remove(&node_id);
         } else {
@@ -381,7 +386,7 @@ impl RenderTree {
             // `gotcha_event_router_layout_id_staleness`); resolve
             // the layout id to a stable id before asking.
             let stable = self.stable_id(node_id);
-            let hovered = stable.is_some_and(|s| router.is_hovered(s));
+            let hovered = router.is_hovered_layout(self, node_id);
             let pressed = stable.is_some_and(|s| router.is_active(s));
             let focused = router.is_focused(node_id);
 
@@ -502,9 +507,7 @@ impl RenderTree {
             // Hover state (overrides base) — router stores hover by
             // stable id (survives rebuilds); resolve the layout id
             // first.
-            if self
-                .stable_id(node_id)
-                .is_some_and(|s| router.is_hovered(s))
+            if router.is_hovered_layout(self, node_id)
                 && let Some(hover) = stylesheet.get_with_state(element_id, ElementState::Hover)
                 && let Some(ref dps) = hover.dynamic_properties
             {
@@ -545,7 +548,7 @@ impl RenderTree {
             }
 
             // Evaluate and apply to RenderProps
-            if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+            if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
                 // If any dynamic properties are transform-related (SkewX, SkewY, Rotate, etc.),
                 // reset props.transform to its base value first to prevent frame-compounding.
                 // Without this, compose_affine() would accumulate onto the previous frame's
@@ -592,7 +595,7 @@ impl RenderTree {
                 if let Some(base) = self.base_styles.get_mut(&node_id) {
                     write(base);
                 }
-                if let Some(node) = self.render_nodes.get_mut(&node_id) {
+                if let Some(mut node) = self.render_nodes.get_mut(&node_id) {
                     for style in &layers {
                         Self::apply_element_style_to_props(&mut node.props, style);
                     }
@@ -841,5 +844,30 @@ mod p5_2_table_consumer_tests {
             "hover-state table entry must override base, got {}",
             props.opacity
         );
+    }
+
+    #[test]
+    fn a_restyle_that_leaves_the_layout_as_it_was_is_not_a_layout_change() {
+        // A `w_fit` child's `align_self` yields to its parent's `align-items`; a hover restyle
+        // that rebuilds the child's style from its base must not put it back.
+        let ui = div()
+            .w(200.0)
+            .h(100.0)
+            .flex_col()
+            .items_center()
+            .child(div().id("chip").w_fit().h(20.0).p(2.0));
+        let mut tree = RenderTree::from_element(&ui);
+        tree.set_stylesheet(parse(
+            "#chip { padding: 4px; } #chip:hover { opacity: 0.5; }",
+        ));
+        let chip = tree.layout_tree.children(tree.root().unwrap())[0];
+        // The base is taken before the first layout, as a mounted tree's is.
+        assert!(tree.apply_state_styles(chip, false, false, false));
+        for hovered in [true, false, true] {
+            tree.compute_layout(200.0, 100.0);
+            let epoch = tree.layout_tree.epoch();
+            tree.apply_state_styles(chip, hovered, false, false);
+            assert_eq!(tree.layout_tree.epoch(), epoch, "hovered {hovered}");
+        }
     }
 }

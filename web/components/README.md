@@ -217,6 +217,20 @@ The refinement checks use actual Chrome worker canvases:
 python3 web/components/tests/refinements_browser.py --url http://127.0.0.1:8094
 ```
 
+The retained-frame check uses a `browser-tests` bundle and an isolated local server.
+It counts tree paints during idle and signal-driven translation, then compares
+property, style, input and resize updates with forced full paints. Run it at both
+display densities after building the fixture:
+
+```sh
+CARGO_BUILD_JOBS=2 wasm-pack build examples/blinc_component_demos --target web \
+  --release --out-dir "$PWD/target/web-cache-runtime" -- --locked --features browser-tests
+python3 web/components/tests/frame_cache_browser.py --mode candidate --dpr 1 \
+  --runtime target/web-cache-runtime --out target/component-browser/frame-cache-1x
+python3 web/components/tests/frame_cache_browser.py --mode candidate --dpr 2 \
+  --runtime target/web-cache-runtime --out target/component-browser/frame-cache-2x
+```
+
 They cover navigation order/scroll retention, wrapping in the CSS editor, repeated Calendar gestures, host context-menu suppression and real browser Audio/Video playback. The native gallery checks cover measured virtualisation, Card/Sheet bounds, menu reopening and the interactive Notch dropdown.
 
 The Canvas page adapts gradient, layered-shape, palette and text/progress samples

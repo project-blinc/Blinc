@@ -6,6 +6,7 @@ russl::russl! {
     use super::three_d::{VertexOutput, three_d_vertex, three_d_fragment};
 
     #[pipeline] const TIER: u32 = 0;
+    #[pipeline] const NODES: u32 = 0;
 
     #[vertex]
     fn vs_main(

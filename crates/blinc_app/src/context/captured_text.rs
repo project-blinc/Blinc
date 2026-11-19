@@ -12,6 +12,22 @@ impl RenderContext {
         viewport: (u32, u32),
         dpi: f32,
     ) -> PrimitiveBatch {
+        self.prepare_captured_text_at(text, viewport, dpi, 1.0, None)
+    }
+
+    /// [`prepare_captured_text`](Self::prepare_captured_text), laid out at the base size and
+    /// rasterized `k` times finer with the quads shrunk back. `snap` of `Some` puts the glyphs
+    /// of text that only moves and scales on the display grid, or leaves them smooth, as motion
+    /// text is; `None` keeps the rule of text that is not moved by the node table, which rounds
+    /// the glyph origins of text with no transform.
+    pub(super) fn prepare_captured_text_at(
+        &mut self,
+        text: &TextElement,
+        viewport: (u32, u32),
+        dpi: f32,
+        k: f32,
+        snap: Option<bool>,
+    ) -> PrimitiveBatch {
         let alignment = match text.align {
             TextAlign::Left => TextAlignment::Left,
             TextAlign::Center => TextAlignment::Center,
@@ -47,22 +63,22 @@ impl RenderContext {
         }
         paints.push((text.x, y, text.color));
         for (x, y, color) in paints {
-            let glyphs = match self.text_ctx.prepare_text_with_style(
+            let mut glyphs = match self.text_ctx.prepare_text_with_style(
                 &text.content,
-                x,
-                y,
-                text.font_size,
+                x * k,
+                y * k,
+                text.font_size * k,
                 color,
                 anchor,
                 alignment,
-                Some(text.width),
+                Some(text.width * k),
                 wrap,
                 text.font_family.name.as_deref(),
                 to_gpu_generic_font(text.font_family.generic),
                 text.weight.weight(),
                 text.italic,
-                height,
-                text.letter_spacing,
+                height.map(|h| h * k),
+                text.letter_spacing * k,
             ) {
                 Ok(glyphs) => glyphs,
                 Err(error) => {
@@ -70,8 +86,15 @@ impl RenderContext {
                     continue;
                 }
             };
+            if k != 1.0 {
+                for glyph in &mut glyphs {
+                    for b in &mut glyph.bounds {
+                        *b /= k;
+                    }
+                }
+            }
             let mut owned = text_clip::prepare_glyphs(text, glyphs, viewport);
-            if text.css_affine.is_none() {
+            if snap.is_none() && text.css_affine.is_none() {
                 for glyph in &mut owned.glyphs {
                     glyph.bounds[0] = glyph.bounds[0].round();
                     glyph.bounds[1] = glyph.bounds[1].round();
@@ -83,6 +106,9 @@ impl RenderContext {
                 dpi,
                 text.z_index,
             );
+            if snap == Some(true) && super::frame_text::is_axis_aligned(text.css_affine) {
+                super::frame_text::snap_to_pixels(&mut owned);
+            }
             result.merge(owned);
         }
 

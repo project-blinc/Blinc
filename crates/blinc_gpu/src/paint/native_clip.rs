@@ -30,24 +30,34 @@ impl GpuPaintContext<'_> {
             }));
     }
 
-    fn native_path_clip(&mut self) -> Option<f32> {
+    /// The shape clip a primitive emitted now carries: one more than its rows' offset in the
+    /// batch, and whether it is the inner clips of content that rows move (which then stay out of
+    /// its scissor). `None` when the topmost shape clip is not one drawn from aux rows here.
+    pub(super) fn native_path_clip(&mut self) -> Option<(f32, bool)> {
         let start = self.composite_layer_clip_base.first().copied().unwrap_or(0);
-        let index = self.clip_stack[start..].iter().rposition(|(shape, _, _)| {
-            matches!(
-                shape,
-                ClipShape::Circle { .. }
-                    | ClipShape::Ellipse { .. }
-                    | ClipShape::Polygon(_)
-                    | ClipShape::Path(_)
-            )
-        })? + start;
+        let index = self.clip_stack[start..]
+            .iter()
+            .rposition(|(shape, meta, _)| {
+                matches!(meta, Some(ClipData::Inner(_)))
+                    || matches!(
+                        shape,
+                        ClipShape::Circle { .. }
+                            | ClipShape::Ellipse { .. }
+                            | ClipShape::Polygon(_)
+                            | ClipShape::Path(_)
+                    )
+            })?
+            + start;
         let owner = self.aux_batch();
+        if matches!(self.clip_stack[index].1, Some(ClipData::Inner(_))) {
+            return Some((self.inner_clip_rows(start, index, owner), true));
+        }
         let (ClipShape::Path(shape), Some(ClipData::Path(path)), _) = &mut self.clip_stack[index]
         else {
             return None;
         };
         if let Some((_, offset)) = path.offsets.iter().find(|(key, _)| *key == owner) {
-            return Some(*offset as f32 + 1.0);
+            return Some((*offset as f32 + 1.0, false));
         }
         // Native shape headers start at the frame; the five image-only rows stay out.
         let rows = &path.rows(shape)[5..];
@@ -61,12 +71,100 @@ impl GpuPaintContext<'_> {
         let offset = batch.aux_data.len() as u32;
         batch.aux_data.extend_from_slice(rows);
         path.offsets.push((owner, offset));
-        Some(offset as f32 + 1.0)
+        Some((offset as f32 + 1.0, false))
+    }
+
+    /// Where the topmost shape clip in force is, if it is an inner clip of content that rows
+    /// move: the clip stack base and its index.
+    pub(super) fn topmost_inner_clip(&self) -> Option<(usize, usize)> {
+        let start = self.composite_layer_clip_base.first().copied().unwrap_or(0);
+        let index = self.clip_stack[start..]
+            .iter()
+            .rposition(|(shape, meta, _)| {
+                matches!(meta, Some(ClipData::Inner(_)))
+                    || matches!(
+                        shape,
+                        ClipShape::Circle { .. }
+                            | ClipShape::Ellipse { .. }
+                            | ClipShape::Polygon(_)
+                            | ClipShape::Path(_)
+                    )
+            })?
+            + start;
+        matches!(self.clip_stack[index].1, Some(ClipData::Inner(_))).then_some((start, index))
+    }
+
+    /// The type-4 shape rows (frame, info, rect, corner radii, corner shapes) for the inner clips
+    /// in force from `start` up to `index`: their rects intersected, and at each corner the
+    /// largest radius with its shape.
+    pub(super) fn inner_shape_rows(&self, start: usize, index: usize) -> [[f32; 4]; 5] {
+        let (mut x0, mut y0, mut x1, mut y1) = (f32::MIN, f32::MIN, f32::MAX, f32::MAX);
+        let mut radii = [0.0f32; 4];
+        let mut shapes = [1.0f32; 4];
+        for (shape, meta, _) in &self.clip_stack[start..=index] {
+            if !matches!(meta, Some(ClipData::Inner(_))) {
+                continue;
+            }
+            let (rect, r, n) = match shape {
+                ClipShape::Rect(rect) => (*rect, [0.0; 4], [1.0; 4]),
+                ClipShape::RoundedRect {
+                    rect,
+                    corner_radius: c,
+                    corner_shape: k,
+                } => (
+                    *rect,
+                    [c.top_left, c.top_right, c.bottom_right, c.bottom_left],
+                    [k.top_left, k.top_right, k.bottom_right, k.bottom_left],
+                ),
+                _ => continue,
+            };
+            x0 = x0.max(rect.x());
+            y0 = y0.max(rect.y());
+            x1 = x1.min(rect.x() + rect.width());
+            y1 = y1.min(rect.y() + rect.height());
+            for corner in 0..4 {
+                if r[corner] > radii[corner] {
+                    radii[corner] = r[corner];
+                    shapes[corner] = n[corner];
+                }
+            }
+        }
+        [
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 0.0, 4.0, 0.0],
+            [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)],
+            radii,
+            shapes,
+        ]
+    }
+
+    /// The pointer to the inner clips' shape rows for `owner`, written to its aux rows once and
+    /// kept on the entry at `index`.
+    fn inner_clip_rows(&mut self, start: usize, index: usize, owner: super::AuxBatch) -> f32 {
+        if let Some(ClipData::Inner(inner)) = &self.clip_stack[index].1
+            && let Some((_, offset)) = inner.offsets.iter().find(|(key, _)| *key == owner)
+        {
+            return *offset as f32 + 1.0;
+        }
+        let rows = self.inner_shape_rows(start, index);
+        let batch = match owner {
+            super::AuxBatch::Static => &mut self.batch,
+            super::AuxBatch::Dynamic => &mut self.dynamic_batch,
+            super::AuxBatch::Composite(node) => {
+                self.composite_layer_batches.entry(node).or_default()
+            }
+        };
+        let offset = batch.aux_data.len() as u32;
+        batch.aux_data.extend_from_slice(&rows);
+        if let Some(ClipData::Inner(inner)) = &mut self.clip_stack[index].1 {
+            inner.offsets.push((owner, offset));
+        }
+        offset as f32 + 1.0
     }
 
     pub(super) fn native_primitive_path_clip(&mut self) -> Option<([f32; 4], f32)> {
-        let pointer = self.native_path_clip()?;
-        let (scissor, _, _, _) = self.get_clip_data_with_path_scissor(true);
+        let (pointer, inner) = self.native_path_clip()?;
+        let (scissor, _, _, _) = self.get_clip_data_with_path_scissor(true, inner);
         Some((scissor, pointer))
     }
 
@@ -81,7 +179,8 @@ impl GpuPaintContext<'_> {
         self.push_native_primitive(primitive);
     }
 
-    pub(super) fn push_native_primitive(&mut self, primitive: GpuPrimitive) {
+    pub(super) fn push_native_primitive(&mut self, mut primitive: GpuPrimitive) {
+        primitive.set_node_ordinal(self.motion_node_ordinal);
         if self.emit_foreground() {
             self.active_batch_mut().push_foreground(primitive);
         } else {
@@ -93,16 +192,21 @@ impl GpuPaintContext<'_> {
         mut path: crate::path::TessellatedPath,
         brush: &crate::path::PathBrushInfo,
     ) {
-        let (bounds, radius, kind) =
-            if let Some((bounds, pointer)) = self.native_primitive_path_clip() {
-                for v in &mut path.vertices {
-                    v.clip_shape = pointer as u32;
-                }
-                (bounds, [0.0; 4], ClipType::Rect)
-            } else {
-                let (bounds, radius, _, kind) = self.get_clip_data();
-                (bounds, radius, kind)
-            };
+        // Inner clips stay a plain clip rect here: a path's clip shape orders the batch, and rows
+        // do not move path vertices.
+        let inner = self.native_path_clip().is_some_and(|(_, inner)| inner);
+        let (bounds, radius, kind) = if let Some((bounds, pointer)) = (!inner)
+            .then(|| self.native_primitive_path_clip())
+            .flatten()
+        {
+            for v in &mut path.vertices {
+                v.clip_shape = pointer as u32;
+            }
+            (bounds, [0.0; 4], ClipType::Rect)
+        } else {
+            let (bounds, radius, _, kind) = self.get_clip_data();
+            (bounds, radius, kind)
+        };
         if self.emit_foreground() {
             self.active_batch_mut()
                 .push_foreground_path_with_brush_info(path, bounds, radius, kind, brush);

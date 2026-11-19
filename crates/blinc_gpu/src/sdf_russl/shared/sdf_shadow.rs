@@ -6,6 +6,7 @@ russl::russl! {
     use super::shadow::{VertexOutput, shadow_vertex, shadow_fragment};
 
     #[pipeline] const TIER: u32 = 0;
+    #[pipeline] const NODES: u32 = 0;
 
     #[vertex]
     fn vs_main(
@@ -14,14 +15,16 @@ russl::russl! {
         #if TIER >= 1
             #[location(0)] instance_bounds: Vec4,
             #[location(1)] instance_shadow: Vec4,
+            #[location(5)] instance_local_affine: Vec4,
         #endif
     ) -> VertexOutput {
         #if TIER == 0
             let p = prim(instance_index);
             let instance_bounds = p.bounds;
             let instance_shadow = p.shadow;
+            let instance_local_affine = p.local_affine;
         #endif
-        return shadow_vertex(vertex_index, instance_index, instance_bounds, instance_shadow);
+        return shadow_vertex(vertex_index, instance_index, instance_bounds, instance_shadow, instance_local_affine);
     }
 
     #[fragment]

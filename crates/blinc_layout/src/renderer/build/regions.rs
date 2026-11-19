@@ -14,14 +14,20 @@ impl RenderTree {
     /// position and animations stay too. A new row is built and put at its
     /// place, and a row that went is torn down before the scope it was built
     /// under is disposed. Children before and after the rows are not touched.
-    pub(crate) fn reconcile_region(&mut self, parent: LayoutNodeId, region_id: u64) {
+    pub(crate) fn reconcile_region(
+        &mut self,
+        parent: LayoutNodeId,
+        region_id: u64,
+    ) -> crate::property::SideEffects {
+        use crate::property::SideEffects;
         let _tree_scope = self.layout_tree.enter_scope();
         let Some(region) = crate::region::region_of(parent, region_id) else {
-            return;
+            return SideEffects::VISUAL;
         };
         if !self.render_nodes.contains_key(&parent) {
-            return;
+            return SideEffects::VISUAL;
         }
+        let mut effects = SideEffects::VISUAL;
         let evaluation = region.logic.borrow_mut().evaluate();
         // What a row's `start` queued (a class that takes it out of flow, say)
         // lands in this pass, so the frame never shows the old row and the
@@ -32,7 +38,7 @@ impl RenderTree {
                 .into_iter()
                 .partition(|update| update.region_update.is_some());
             crate::stateful::requeue_partial_updates(regions);
-            self.apply_partial_property_updates(writes);
+            effects = effects.or(self.apply_partial_property_updates(writes));
         }
         // A row that is leaving is asked again next frame.
         if region.logic.borrow().is_leaving() {
@@ -118,19 +124,20 @@ impl RenderTree {
         let mut all = head;
         all.extend(row_nodes);
         all.extend(tail);
-        self.layout_tree.replace_children(parent, all.clone());
-        let total = all.len();
-        for (index, &child) in all.iter().enumerate() {
-            self.element_registry.register_parent(child, parent);
-            self.element_registry
-                .register_child_index(child, index, total);
+        // Waiting for an exit to finish does not change the tree's child order or identity.
+        if all == children && built.is_empty() && evaluation.removed.is_empty() {
+            return effects;
         }
+        self.property_paint_revision = self.property_paint_revision.wrapping_add(1);
+        effects = effects.or(SideEffects::ALL);
+        self.layout_tree.replace_children(parent, all.clone());
+        self.element_registry.replace_children(parent, &all);
 
         if built.is_empty() && evaluation.removed.is_empty() && all.len() == children.len() {
             // Same rows, in whatever order: only the layout moved.
             self.build_generation = self.build_generation.wrapping_add(1);
             self.mint_stable_ids_walk();
-            return;
+            return effects;
         }
 
         self.invalidate_mouse_move_pipeline_cache();
@@ -156,6 +163,7 @@ impl RenderTree {
                 self.refresh_bindings_in_subtree(*node);
             }
         }
+        effects
     }
 
     fn refresh_bindings_in_subtree(&self, node: LayoutNodeId) {

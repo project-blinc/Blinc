@@ -96,6 +96,14 @@ pub(crate) fn note_animations(tree: &RenderTree, rs: &RenderState) {
         })
         .collect();
     note("css", css);
+    note("css_carried", tree.css_carried_samples());
+    note(
+        "css_gate",
+        json!({
+            "all_promotable": tree.css_active_all_composite_promotable(),
+            "flip_off_rows": tree.has_flip_animations_off_rows(),
+        }),
+    );
     note("motions", motions);
 }
 

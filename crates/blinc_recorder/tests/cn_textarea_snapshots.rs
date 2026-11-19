@@ -6,9 +6,12 @@
 use blinc_cn::textarea;
 use blinc_core::Color;
 use blinc_layout::div::div;
-use blinc_layout::widgets::text_area::text_area_state;
-use blinc_recorder::Headless;
+use blinc_layout::text_measure::TextFace;
+use blinc_layout::widgets::text_area::{
+    SharedTextAreaState, TextAreaConfig, text_area, text_area_state,
+};
 use blinc_recorder::testing::Golden;
+use blinc_recorder::{CapturedFrame, Headless, ScreenshotExporter};
 use blinc_theme::{ColorScheme, ColorToken, HybridTheme, ThemeState};
 
 const W: u32 = 260;
@@ -147,4 +150,102 @@ fn only_a_focused_caret_asks_for_frames() {
         !ui.tree().canvas_wants_frames(),
         "a blurred textarea kept its caret asking for frames"
     );
+}
+
+fn save_interaction(frame: &CapturedFrame, name: &str) {
+    if let Some(directory) = std::env::var_os("BLINC_TEXT_AREA_ARTIFACTS") {
+        let directory = std::path::PathBuf::from(directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        ScreenshotExporter::save_png(frame, directory.join(format!("{name}.png"))).unwrap();
+    }
+}
+
+#[test]
+fn double_click_paints_the_selected_word() {
+    let Some(mut ui) = session() else { return };
+    let state = text_area_state();
+    state.lock().unwrap().set_value("hello world\nsecond line");
+    let value = state.clone();
+    ui.mount(move |_| {
+        div()
+            .size(W as f32, H as f32)
+            .p(3.0)
+            .child(text_area(&value).id("notes").w(220.0).rows(3))
+    });
+    ui.settle().snapshot().expect("warm frame");
+    let cfg = TextAreaConfig::default();
+    let node = ui.find("#notes").unwrap();
+    let bounds = ui.tree().get_absolute_bounds(node).unwrap();
+    let x = bounds.x
+        + cfg.padding_x
+        + cfg.border_width
+        + TextFace::default().measure("hello w", cfg.font_size).width;
+    let y = bounds.y + cfg.padding_y + cfg.border_width + cfg.font_size * 0.5;
+    ui.key(9).settle();
+    assert_eq!(ui.focused(), Some(node));
+    let before = ui.snapshot().expect("focused without selection");
+    // Capture outside the click pair so GPU readback cannot expire the double-click window.
+    ui.move_to(x, y)
+        .mouse_down()
+        .mouse_up()
+        .mouse_down()
+        .mouse_up();
+    let selected = ui.snapshot().expect("double click");
+    assert_eq!(
+        state.lock().unwrap().selected_text().as_deref(),
+        Some("world")
+    );
+    assert!(
+        before.diff_pixel_count(&selected) > 100,
+        "selection was not painted"
+    );
+    save_interaction(&selected, "word-selection");
+}
+
+fn mount_growing(ui: &mut Headless, state: &SharedTextAreaState) {
+    let rows = state.lock().unwrap().line_count();
+    let state = state.clone();
+    ui.mount(move |_| {
+        div()
+            .size(W as f32, H as f32)
+            .p(3.0)
+            .child(text_area(&state).id("notes").w(220.0).rows(rows))
+    });
+    ui.settle();
+}
+
+#[test]
+fn growing_rows_keep_the_first_line_visible() {
+    let Some(mut ui) = session() else { return };
+    let state = text_area_state();
+    state.lock().unwrap().set_value("First line");
+    mount_growing(&mut ui, &state);
+    ui.click("#notes").key(35);
+    for _ in 0..3 {
+        ui.key(13).type_text("Next line");
+        mount_growing(&mut ui, &state);
+        assert!(state.lock().unwrap().scroll_offset().abs() < 0.01);
+    }
+    let frame = ui.snapshot().expect("grown field");
+    let bounds = ui
+        .tree()
+        .get_absolute_bounds(ui.find("#notes").unwrap())
+        .unwrap();
+    let cfg = TextAreaConfig::default();
+    let top = (bounds.y + cfg.padding_y + cfg.border_width) as u32;
+    let left = (bounds.x + cfg.padding_x + cfg.border_width) as u32;
+    let bottom = top + (cfg.font_size * cfg.line_height) as u32;
+    let ink = (top..bottom)
+        .flat_map(|y| (left..left + 90).map(move |x| (x, y)))
+        .filter(|&(x, y)| {
+            frame
+                .get_pixel(x, y)
+                .is_some_and(|p| p[..3].iter().all(|&v| v > 160))
+        })
+        .count();
+    assert!(
+        ink > 20,
+        "first-line glyphs were clipped: {ink} bright pixels"
+    );
+    save_interaction(&frame, "grown-rows");
 }

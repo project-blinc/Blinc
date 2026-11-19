@@ -179,7 +179,43 @@ button("Open navigation").on_click(|_| {
 `Wide`. Use a bottom sheet for a panel entering from below. `.header(|| ...)`
 replaces the title header. Each `.child(|| ...)` adds a body section.
 
-When opened with the keyboard, a dialog focuses its first enabled control.
+## Initial Focus
+
+Use `.initial_focus("control-id")` to choose the starting control. The target
+must be visible, enabled and inside the dialog. For example, a form can
+start with its second field:
+
+```rust
+let first = blinc::layout::widgets::text_input::text_input_state();
+let last = blinc::layout::widgets::text_input::text_input_state();
+
+dialog()
+    .title("Edit profile")
+    .initial_focus("profile-last-name")
+    .content(move || {
+        div().w_full().flex_col().gap_3()
+            .child(input(&first).placeholder("First name"))
+            .child(
+                input(&last)
+                    .placeholder("Last name")
+                    .build_component()
+                    .id("profile-last-name"),
+            )
+    })
+    .show();
+```
+
+An input's outer ID resolves to its editable field. A container with several
+focusable controls needs a more specific target ID.
+
+Without an available named target, the dialog prefers a control marked with
+`autofocus`. The normal fallback selects the first enabled control, or the
+panel when it has no controls. This preference applies once per opening.
+
+The stack `OverlayBuilder` and the legacy modal and dialog builders accept
+`.initial_focus(...)` as well. `Div::autofocus()` marks a custom control or a
+container with one focusable control.
+
 Tab and Shift+Tab stay inside the topmost dialog or nested popup. Closing
 restores focus to the opening control if it still exists and is enabled.
 Pointer focus uses the same target without a keyboard outline; keyboard

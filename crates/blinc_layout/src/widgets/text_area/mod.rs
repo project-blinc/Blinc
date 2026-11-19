@@ -16,6 +16,7 @@ mod focus;
 mod handlers;
 mod ime;
 mod lines;
+mod selection;
 mod state;
 mod widget;
 

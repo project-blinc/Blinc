@@ -152,6 +152,105 @@ impl GpuRenderer {
         self.render_images_with_aux(target, image_view, instances, &[]);
     }
 
+    /// Draw `draws`, each an image and its instance, in order, in one pass and one submission.
+    /// What [`render_images`](Self::render_images) does for each, without a submission each.
+    pub fn render_image_set(
+        &mut self,
+        target: &wgpu::TextureView,
+        draws: &[(&wgpu::TextureView, GpuImageInstance)],
+    ) {
+        // The instance buffer holds this many; a longer set is drawn in parts.
+        const CHUNK: usize = 1000;
+        if draws.is_empty() {
+            return;
+        }
+        self.ensure_image_pipeline();
+        let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
+        for part in draws.chunks(CHUNK) {
+            let image_pipeline = self.image_pipeline.as_ref().unwrap();
+            let instances: Vec<GpuImageInstance> = part.iter().map(|(_, i)| *i).collect();
+            self.uploads.write(
+                &self.device,
+                &self.queue,
+                &image_pipeline.instance_buffer,
+                0,
+                bytemuck::cast_slice(&instances),
+            );
+            let aux = if self.has_storage_buffers {
+                self.buffers.aux_data.as_entire_binding()
+            } else {
+                wgpu::BindingResource::TextureView(
+                    self.buffers
+                        .aux_data_view
+                        .as_ref()
+                        .expect("image DT auxiliary texture"),
+                )
+            };
+            let bind_groups: Vec<wgpu::BindGroup> = part
+                .iter()
+                .map(|(view, _)| {
+                    self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("Image Bind Group"),
+                        layout: &image_pipeline.bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: self.buffers.uniforms.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: wgpu::BindingResource::TextureView(view),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: wgpu::BindingResource::Sampler(&image_pipeline.sampler),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 3,
+                                resource: aux.clone(),
+                            },
+                        ],
+                    })
+                })
+                .collect();
+            let mut encoder = self.uploads.lend(&self.device);
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Image Set Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: target,
+                        resolve_target: None,
+                        depth_slice: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                pass.set_pipeline(&image_pipeline.pipeline);
+                pass.set_vertex_buffer(0, image_pipeline.instance_buffer.slice(..));
+                if let Some((sx, sy, sw, sh)) = self.pending_scissor {
+                    pass.set_scissor_rect(sx, sy, sw, sh);
+                }
+                for (i, bind_group) in bind_groups.iter().enumerate() {
+                    pass.set_bind_group(0, bind_group, &[]);
+                    pass.draw(0..6, i as u32..i as u32 + 1);
+                }
+            }
+            self.uploads.give_back(&self.queue, encoder);
+        }
+    }
+
     /// Draw images with the auxiliary clip rows addressed by their instances.
     pub fn render_images_with_aux(
         &mut self,
@@ -184,11 +283,18 @@ impl GpuRenderer {
 
         // Update uniforms
         let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         // Update instance buffer
-        self.queue.write_buffer(
+        self.uploads.write(
+            &self.device,
+            &self.queue,
             &image_pipeline.instance_buffer,
             0,
             bytemuck::cast_slice(instances),
@@ -228,11 +334,7 @@ impl GpuRenderer {
         });
 
         // Create command encoder
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Image Render Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -264,7 +366,7 @@ impl GpuRenderer {
             render_pass.draw(0..6, 0..instances.len() as u32);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

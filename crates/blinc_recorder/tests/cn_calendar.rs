@@ -16,6 +16,8 @@ const RIGHT: u32 = 39;
 const PAGE_DOWN: u32 = 34;
 const ENTER: u32 = 13;
 
+#[path = "cn_calendar/continuous.rs"]
+mod continuous;
 #[path = "cn_calendar/selected.rs"]
 mod selected;
 
@@ -29,6 +31,8 @@ fn session_sized(w: u32, h: u32) -> Option<Headless> {
         return None;
     }
     let mut ui = Headless::new(w, h).ok()?;
+    // Each fixture starts a new application, without a previous calendar's keyed state.
+    *blinc_core::BlincContextState::get().hooks().lock().unwrap() = Default::default();
     ui.theme(
         HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
         ColorScheme::Dark,

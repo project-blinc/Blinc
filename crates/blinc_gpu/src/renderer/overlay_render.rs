@@ -42,8 +42,13 @@ impl GpuRenderer {
         // Standard overlay rendering (no layer effects)
         // Update uniforms
         let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         // Update auxiliary data buffer
         self.update_aux_data_buffer(batch);
@@ -58,11 +63,7 @@ impl GpuRenderer {
         }
 
         // Create command encoder
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Blinc Overlay Render Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         // Begin render pass (load existing content, don't clear)
         {
@@ -108,7 +109,7 @@ impl GpuRenderer {
         }
 
         // Submit commands
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     /// Render overlay with layer effect/blend-mode processing
@@ -197,7 +198,7 @@ impl GpuRenderer {
                 let mut max_y = f32::MIN;
                 let mut clip: Option<([f32; 4], [f32; 4])> = None;
                 for p in primitives {
-                    let (px, py, pw, ph) = (p.bounds[0], p.bounds[1], p.bounds[2], p.bounds[3]);
+                    let [px, py, pw, ph] = self.drawn_bounds(p);
                     min_x = min_x.min(px);
                     min_y = min_y.min(py);
                     max_x = max_x.max(px + pw);
@@ -306,8 +307,13 @@ impl GpuRenderer {
 
         // Update uniforms
         let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         // Update auxiliary data buffer
         self.update_aux_data_buffer(batch);
@@ -321,11 +327,7 @@ impl GpuRenderer {
         // Sort and upload filtered primitives
         let sdf_ranges = self.upload_sorted_primitives(&included_primitives);
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Blinc Overlay Excluding Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -369,7 +371,7 @@ impl GpuRenderer {
             }
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     /// Simple overlay render without layer effect processing
@@ -380,8 +382,13 @@ impl GpuRenderer {
     ) {
         // Update uniforms
         let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         self.update_aux_data_buffer(batch);
 
@@ -395,11 +402,7 @@ impl GpuRenderer {
         }
 
         // Create command encoder
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Blinc Overlay Simple Render Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         // Begin render pass (load existing content, don't clear)
         {
@@ -445,7 +448,7 @@ impl GpuRenderer {
         }
 
         // Submit commands
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     /// Render a slice of primitives as overlay (LoadOp::Load, keeps existing content)
@@ -465,18 +468,19 @@ impl GpuRenderer {
 
         // Update uniforms
         let uniforms = Uniforms::new([self.viewport_size.0 as f32, self.viewport_size.1 as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         // Sort and upload primitives
         let sdf_ranges = self.upload_sorted_primitives(primitives);
 
         // Create command encoder
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Blinc Layer Primitives Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         // Begin render pass (load existing content)
         {
@@ -511,7 +515,7 @@ impl GpuRenderer {
         }
 
         // Submit commands
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     /// Render paths (tessellated geometry like SVGs) as an overlay
@@ -531,11 +535,7 @@ impl GpuRenderer {
 
         // Render paths
         if let (Some(vb), Some(ib)) = (&self.buffers.path_vertices, &self.buffers.path_indices) {
-            let mut encoder = self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Blinc Paths Overlay Encoder"),
-                });
+            let mut encoder = self.uploads.lend(&self.device);
 
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Paths Overlay Pass"),
@@ -561,7 +561,7 @@ impl GpuRenderer {
             render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
 
             drop(render_pass);
-            self.queue.submit(std::iter::once(encoder.finish()));
+            self.uploads.give_back(&self.queue, encoder);
         }
     }
 

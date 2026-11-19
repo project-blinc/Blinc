@@ -151,32 +151,64 @@ impl RenderTree {
     ) -> Option<crate::css_parser::CssAnimation> {
         let none: HashSet<LayoutNodeId> = HashSet::new();
         let rules = stylesheet.complex_rules();
-        rules
-            .iter()
-            .enumerate()
-            .filter(|(_, (selector, style))| style.animation.is_some() && !selector.has_state())
-            .filter(|(_, (selector, _))| {
-                self.complex_selector_matches(selector, node, &none, &none, None)
-            })
-            .max_by_key(|(i, (selector, style))| (Self::rule_order(selector, style), *i))
-            .and_then(|(_, (_, style))| style.animation.clone())
+        self.candidate_rules_for(stylesheet, node)
+            .into_iter()
+            .filter(|i| rules[*i].1.animation.is_some() && !rules[*i].0.has_state())
+            .filter(|i| self.complex_selector_matches(&rules[*i].0, node, &none, &none, None))
+            .max_by_key(|i| (Self::rule_order(&rules[*i].0, &rules[*i].1), *i))
+            .and_then(|i| rules[i].1.animation.clone())
     }
 
     /// Start the animations the stateless rules give nodes that play none,
     /// whatever the rule keys on: an attribute, a class in a compound, a
     /// descendant.
-    pub(crate) fn start_rule_animations(&mut self) {
+    pub(crate) fn start_rule_animations(
+        &mut self,
+        class_to_nodes: &std::collections::HashMap<String, Vec<LayoutNodeId>>,
+    ) {
+        use crate::css_parser::RuleKey;
         let Some(stylesheet) = self.stylesheet.clone() else {
             return;
         };
-        if !stylesheet
-            .complex_rules()
-            .iter()
-            .any(|(selector, style)| style.animation.is_some() && !selector.has_state())
-        {
+        let rules = stylesheet.complex_rules();
+        let animating: Vec<usize> = (0..rules.len())
+            .filter(|i| rules[*i].1.animation.is_some() && !rules[*i].0.has_state())
+            .collect();
+        if animating.is_empty() {
             return;
         }
-        let nodes: Vec<LayoutNodeId> = self.render_nodes.keys().copied().collect();
+        // Only the nodes an animation rule can reach are asked: those with the class, the
+        // attribute or the id it is keyed on. A rule keyed on a type, or on nothing, asks them all.
+        let mut reached: HashSet<LayoutNodeId> = HashSet::new();
+        let mut all = false;
+        for &i in &animating {
+            match stylesheet.rule_key(i) {
+                RuleKey::Class(class) => {
+                    if let Some(ids) = class_to_nodes.get(class) {
+                        reached.extend(ids);
+                    }
+                }
+                RuleKey::Attribute(name) => {
+                    for (entry, ids) in class_to_nodes {
+                        if entry.split_once('=').is_some_and(|(n, _)| n == name) {
+                            reached.extend(ids);
+                        }
+                    }
+                }
+                RuleKey::Id(id) => {
+                    reached.extend(self.element_registry.get(id));
+                }
+                RuleKey::Type(_) | RuleKey::Universal => all = true,
+            }
+        }
+        let nodes: Vec<LayoutNodeId> = if all {
+            self.render_nodes.keys().copied().collect()
+        } else {
+            reached
+                .into_iter()
+                .filter(|n| self.render_nodes.contains_key(n))
+                .collect()
+        };
         for node in nodes {
             let Some(stable) = self.stable_id(node) else {
                 continue;
@@ -370,22 +402,19 @@ impl RenderTree {
         }
     }
 
-    /// The indices of the base (stateless) rules that match the node now.
-    fn matching_base_rules(
+    /// The indices of the base (stateless) rules that match the node now, in the order the rules
+    /// were written. Only the rules that can match it, by its id, classes and type, are tried.
+    pub(super) fn matching_base_rules(
         &self,
         node: LayoutNodeId,
         stylesheet: &crate::css_parser::Stylesheet,
     ) -> Vec<usize> {
         let none: HashSet<LayoutNodeId> = HashSet::new();
-        stylesheet
-            .complex_rules()
-            .iter()
-            .enumerate()
-            .filter(|(_, (selector, _))| !selector.has_state())
-            .filter(|(_, (selector, _))| {
-                self.complex_selector_matches(selector, node, &none, &none, None)
-            })
-            .map(|(i, _)| i)
+        let rules = stylesheet.complex_rules();
+        self.candidate_rules_for(stylesheet, node)
+            .into_iter()
+            .filter(|i| !rules[*i].0.has_state())
+            .filter(|i| self.complex_selector_matches(&rules[*i].0, node, &none, &none, None))
             .collect()
     }
 
@@ -520,7 +549,7 @@ impl RenderTree {
             .unwrap_or_default();
         let state_layers = self.state_layers.get(&node).cloned().unwrap_or_default();
 
-        if let (Some(base), Some(render_node)) = (
+        if let (Some(base), Some(mut render_node)) = (
             self.base_styles.get(&node),
             self.render_nodes.get_mut(&node),
         ) {

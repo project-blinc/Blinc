@@ -1,5 +1,7 @@
 //! Easing functions for animations
 
+use crate::descriptor::{Curve, PowerMode};
+
 /// Easing function type
 #[derive(Clone, Copy, Debug, Default)]
 pub enum Easing {
@@ -21,6 +23,25 @@ pub enum Easing {
 }
 
 impl Easing {
+    /// The same easing as a [`Curve`], exactly: the polynomial easings are power curves, and a
+    /// cubic bezier stays one.
+    pub fn to_curve(&self) -> Curve {
+        use PowerMode::{In, InOut, Out};
+        match *self {
+            Easing::Linear => Curve::Linear,
+            Easing::EaseIn | Easing::EaseInCubic => Curve::Power(3, In),
+            Easing::EaseOut | Easing::EaseOutCubic => Curve::Power(3, Out),
+            Easing::EaseInOut | Easing::EaseInOutCubic => Curve::Power(3, InOut),
+            Easing::EaseInQuad => Curve::Power(2, In),
+            Easing::EaseOutQuad => Curve::Power(2, Out),
+            Easing::EaseInOutQuad => Curve::Power(2, InOut),
+            Easing::EaseInQuart => Curve::Power(4, In),
+            Easing::EaseOutQuart => Curve::Power(4, Out),
+            Easing::EaseInOutQuart => Curve::Power(4, InOut),
+            Easing::CubicBezier(x1, y1, x2, y2) => Curve::CubicBezier(x1, y1, x2, y2),
+        }
+    }
+
     /// Apply the easing function to a progress value (0.0 to 1.0)
     pub fn apply(&self, t: f32) -> f32 {
         match self {
@@ -67,31 +88,41 @@ impl Easing {
 }
 
 /// Cubic bezier easing calculation (matches CSS spec / browser implementations).
-///
-/// Uses Newton-Raphson with binary-search fallback for robustness.
-/// Computes in f64 internally to avoid f32 precision jitter at 120fps.
 fn cubic_bezier_ease(t: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
+    cubic_bezier_with_slope(t, x1, y1, x2, y2).0
+}
+
+/// The curve's progress and its slope with respect to `t`: the one solver, so an easing and a
+/// descriptor agree to the last bit. Computes in f64 internally to avoid f32 precision jitter at
+/// 120fps.
+pub(crate) fn cubic_bezier_with_slope(t: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> (f32, f32) {
+    let (x1, y1, x2, y2) = (x1 as f64, y1 as f64, x2 as f64, y2 as f64);
     // Endpoints are always exact
-    if t <= 0.0 {
-        return 0.0;
-    }
-    if t >= 1.0 {
-        return 1.0;
-    }
+    let (p, value) = if t <= 0.0 {
+        (0.0, 0.0)
+    } else if t >= 1.0 {
+        (1.0, 1.0)
+    } else {
+        let p = bezier_param(t as f64, x1, x2);
+        (p, bezier_sample(p, y1, y2) as f32)
+    };
+    let dx = bezier_slope(p, x1, x2);
+    let slope = if dx.abs() < 1e-9 {
+        0.0
+    } else {
+        (bezier_slope(p, y1, y2) / dx) as f32
+    };
+    (value, slope)
+}
 
-    let x = t as f64;
-    let x1 = x1 as f64;
-    let y1 = y1 as f64;
-    let x2 = x2 as f64;
-    let y2 = y2 as f64;
-
-    // Solve for parameter `p` where bezier_x(p) == x using Newton-Raphson,
-    // falling back to binary search if the slope is too flat.
+/// The parameter `p` where `bezier_x(p) == x`, by Newton-Raphson with a binary-search fallback
+/// for robustness.
+fn bezier_param(x: f64, x1: f64, x2: f64) -> f64 {
     let mut p = x; // initial guess
     for _ in 0..8 {
         let err = bezier_sample(p, x1, x2) - x;
         if err.abs() < 1e-7 {
-            return bezier_sample(p, y1, y2) as f32;
+            return p;
         }
         let slope = bezier_slope(p, x1, x2);
         if slope.abs() < 1e-7 {
@@ -116,8 +147,7 @@ fn cubic_bezier_ease(t: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
         }
         p = (lo + hi) * 0.5;
     }
-
-    bezier_sample(p, y1, y2) as f32
+    p
 }
 
 /// Evaluate cubic bezier at parameter t: B(t) = 3(1-t)²t·p1 + 3(1-t)t²·p2 + t³

@@ -3,17 +3,28 @@ use super::{DrawContext, GpuPaintContext, ImageElement, PrimitiveBatch, Rect, Re
 use blinc_core::{Affine2D, ClipShape, Color, CornerRadius, DrawContextExt, Transform};
 
 impl RenderContext {
+    /// `ordinal` is that of the motion-bound node the image is painted under, which rows read
+    /// to move it.
     pub(super) fn prepare_captured_image(
         &mut self,
         image: &ImageElement,
         viewport: (u32, u32),
         dpi: f32,
+        ordinal: u32,
     ) -> PrimitiveBatch {
         let mut paint = if let Some(path) = &image.path_clip {
             path.clip_context(None, viewport)
         } else {
             GpuPaintContext::new(viewport.0 as f32, viewport.1 as f32)
         };
+        paint.set_motion_node_ordinal(ordinal);
+        // The scroll clip stays with the viewport; the clip inside it is an inner clip, which
+        // moves with the content when rows move it.
+        let mut row_clips = false;
+        if let Some([x, y, w, h]) = image.scroll_clip {
+            paint.push_clip(ClipShape::rect(Rect::new(x, y, w, h)));
+            row_clips = paint.begin_row_clips();
+        }
         if let Some([x, y, w, h]) = image.clip_bounds {
             let [tl, tr, br, bl] = image.clip_radius;
             paint.push_clip(ClipShape::RoundedRect {
@@ -104,6 +115,7 @@ impl RenderContext {
                 );
             }
         }
+        paint.end_row_clips(row_clips);
         paint.take_batch()
     }
 }

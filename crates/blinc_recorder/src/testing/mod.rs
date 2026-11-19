@@ -19,4 +19,4 @@ pub use framebuffer::{
 #[cfg(feature = "headless")]
 pub use golden::{Difference, Golden, diff_image, difference, load_png};
 #[cfg(feature = "headless")]
-pub use headless::Headless;
+pub use headless::{Headless, MotionPaint};

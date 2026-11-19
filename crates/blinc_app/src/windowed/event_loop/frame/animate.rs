@@ -142,11 +142,9 @@ pub(super) fn tick_animations(
         drop(s);
         let flip = tree.tick_flip_animations(dt_ms);
         let active = anim || trans || flip || tree.css_has_active();
-        // Composite-promotable predicate ignores FLIP
-        // (FLIP animations re-layout under the hood,
-        // so they always need the slow path).
-        let promotable = !flip && tree.css_active_all_composite_promotable();
-        (active, promotable)
+        // A FLIP slide no binding carries re-lays out under the hood, so it needs the slow
+        // path.
+        (active, !tree.animation_needs_full_paint())
     } else {
         (false, true)
     };
@@ -235,16 +233,98 @@ pub(super) fn tick_animations(
     // the self-driving Frame loop rendered at vsync, and an
     // idle window sat at 25-40% CPU with nothing moving on
     // screen.
-    let needs_vsync = motion_was_visible_pre_tick
-        || ws
-            .render_tree
-            .as_ref()
-            .is_some_and(|t| rs.has_active_motions_visible(&t.painted_node_ids()))
-        || ws.render_tree.as_ref().is_some_and(|t| {
-            let store = t.css_anim_store();
-            let guard = store.lock().unwrap();
-            guard.has_visible_vsync_class(&t.painted_stable_ids())
-        });
+    let motions_visible_now = ws
+        .render_tree
+        .as_ref()
+        .is_some_and(|t| rs.has_active_motions_visible(&t.painted_node_ids()));
+    let css_vsync_class = ws.render_tree.as_ref().is_some_and(|t| {
+        let store = t.css_anim_store();
+        let guard = store.lock().unwrap();
+        guard.has_visible_vsync_class(&t.painted_stable_ids())
+    });
+    let needs_vsync = motion_was_visible_pre_tick || motions_visible_now || css_vsync_class;
+    // While the only motion is the last small wobble of a spring, nothing visible changes from
+    // one frame to the next. The springs keep ticking at every wake, so they settle when they
+    // would have, but frames are drawn at a lower rate. Anything else that moves, or any rebuild
+    // or relayout, draws at once.
+    const TAIL_FPS: u32 = 20;
+    let tail_only = !needs_vsync
+        && !scroll_animating
+        && !css_active
+        && !theme_animating
+        && ws.render_tree.as_ref().is_some_and(|t| {
+            t.bindings_in_tail()
+                && !blinc_layout::has_visible_animating_statefuls(&t.painted_node_ids())
+        })
+        && !blinc_app.has_active_flows()
+        && !blinc_app.context().has_pending_image_fade()
+        && windowed_ctx.pointer_query.is_empty();
+    // An opacity or colour cycle that repeats, a skeleton or an indeterminate bar, looks the same
+    // at 30 frames a second as at the display's rate (`has_visible_vsync_class` names what does
+    // not). While that is all that moves, frames are drawn at that rate. A rebuild, a relayout,
+    // anything that is vsync class and a scroll draw at once.
+    const AMBIENT_FPS: u32 = 30;
+    // A binding that carries a CSS animation reads as moving for as long as the animation plays;
+    // one that only fades is not a reason to draw at the display's rate.
+    let bindings_moving = ws.render_tree.as_ref().is_some_and(|t| {
+        let painted = t.painted_node_ids();
+        t.motion_bindings_map().iter().any(|(node, b)| {
+            if !painted.contains(node) {
+                false
+            } else if t.css_carried(*node) {
+                b.translate_x.is_some()
+                    || b.translate_y.is_some()
+                    || b.scale_x.is_some()
+                    || b.scale_y.is_some()
+                    || b.rotation.is_some()
+            } else {
+                b.is_visibly_moving()
+            }
+        })
+    });
+    let statefuls_animating = ws
+        .render_tree
+        .as_ref()
+        .is_some_and(|t| blinc_layout::has_visible_animating_statefuls(&t.painted_node_ids()));
+    let flows_active = blinc_app.has_active_flows();
+    let image_fading = blinc_app.context().has_pending_image_fade();
+    let pointer_queries = !windowed_ctx.pointer_query.is_empty();
+    let ambient_only = css_active
+        && !needs_vsync
+        && !scroll_animating
+        && !theme_animating
+        && !bindings_moving
+        && !statefuls_animating
+        && !flows_active
+        && !image_fading
+        && !pointer_queries;
+    if crate::motion_trace::enabled() {
+        crate::motion_trace::note(
+            "ambient_terms",
+            serde_json::json!({
+                "motion_pre": motion_was_visible_pre_tick,
+                "motions_visible": motions_visible_now,
+                "css_vsync_class": css_vsync_class,
+                "scroll_animating": scroll_animating,
+                "theme_animating": theme_animating,
+                "bindings_moving": bindings_moving,
+                "statefuls_animating": statefuls_animating,
+                "flows": flows_active,
+                "image_fading": image_fading,
+                "pointer_queries": pointer_queries,
+            }),
+        );
+    }
+    let cap_interval_ms = if tail_only {
+        Some(cap_interval_ms.map_or(1000 / TAIL_FPS as u64, |c| c.max(1000 / TAIL_FPS as u64)))
+    } else if ambient_only {
+        Some(cap_interval_ms.map_or(1000 / AMBIENT_FPS as u64, |c| {
+            c.max(1000 / AMBIENT_FPS as u64)
+        }))
+    } else {
+        cap_interval_ms
+    };
+    crate::motion_trace::note("ambient_only", ambient_only);
     let should_render = match cap_interval_ms {
         None => true,
         Some(_) if did_rebuild => true,

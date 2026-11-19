@@ -28,6 +28,10 @@ pub static LAST_ANIMATING_ON_SCREEN_Y: std::sync::atomic::AtomicI64 =
 pub static LAST_ANIMATING_SCROLL_Y: std::sync::atomic::AtomicI64 =
     std::sync::atomic::AtomicI64::new(0);
 
+/// Set on the id of the group of a node a motion binding moves, which no id a caller gives a layer
+/// has.
+const BOUND_GROUP_TAG: u64 = 1 << 63;
+
 impl RenderTree {
     /// Render with motion animations from RenderState
     ///
@@ -91,12 +95,17 @@ impl RenderTree {
         // reads this between full paints to patch the cached
         // primitive buffer in place.
         self.composite_bindings.borrow_mut().clear();
+        self.binding_clip_bounds.borrow_mut().clear();
+        self.binding_ordinals.borrow_mut().clear();
+        self.clear_scroll_rows_record();
+        self.bound_svg.set(false);
         self.painted_unpromoted_binding.set(false);
         // Phase 4b: per-CSS-animated-node paint metadata. Same
         // lifecycle as composite_bindings — cleared every full
         // paint, repopulated below for every node whose
         // `current_animation_status` is `Animating(Css)`.
         self.css_anim_paint_records.borrow_mut().clear();
+        self.css_backgrounds.borrow_mut().clear();
         // Canvas paint records have the same lifecycle: the walker
         // rebuilds them on every full paint, the fast path consumes
         // them between full paints.
@@ -105,6 +114,8 @@ impl RenderTree {
         // subtrees — dispatched AFTER the popover's dyn-batch SDF
         // pass so caret canvases survive above their overlay's bg.
         self.overlay_canvas_paint_records.borrow_mut().clear();
+        self.rows_canvas_paint_records.borrow_mut().clear();
+        self.scroll_rows_depth.set(0);
         // Compositor v2 dynamic-region map — populated by the walker
         // (Phase 2: in parallel with the legacy records above; Phase 3:
         // becomes the sole source). Cleared at the top of every full
@@ -137,32 +148,9 @@ impl RenderTree {
                 ctx.push_transform(Transform::scale(self.scale_factor, self.scale_factor));
             }
 
-            // Skip Glass / Foreground passes when no node in the tree
-            // is on those layers. Each walker pass costs a full tree
-            // traversal (transform pushes / viewport-cull checks /
-            // child recursion) even when it ends up emitting nothing,
-            // so on a typical UI without glass material or
-            // `.foreground()` nodes — most cn / styling examples —
-            // two of the three passes were ~99 % wasted work.
-            //
-            // Scanning `render_nodes` once is O(N) but the check is
-            // a single `matches!` per node, an order of magnitude
-            // cheaper than the walker's per-node bounds lookups +
-            // prop reads + stack ops. Net win is roughly 2 × walker
-            // cost when the page has no glass / foreground content.
-            let mut has_glass = false;
-            let mut has_foreground = false;
-            for (_, node) in self.render_nodes.iter() {
-                if !has_glass && node.props.is_glass() {
-                    has_glass = true;
-                }
-                if !has_foreground && matches!(node.props.layer, RenderLayer::Foreground) {
-                    has_foreground = true;
-                }
-                if has_glass && has_foreground {
-                    break;
-                }
-            }
+            // Extra passes follow only branches containing their layer's content.
+            let (has_glass, has_foreground) =
+                self.with_node_scan(|scan| (scan.has_glass, scan.has_foreground));
 
             // Pass 1: Background (primitives go to background batch)
             ctx.set_foreground_layer(false);
@@ -368,8 +356,18 @@ impl RenderTree {
         inherited_opacity: f32,
         cumulative_scroll: (f32, f32),
     ) {
-        // Debug: uncomment to trace all nodes
-        // eprintln!("render_layer_with_motion: visiting node {:?}, target_layer={:?}", node, target_layer);
+        // Keep ancestor state on the path to each layer; descendants inherit their owner's layer.
+        if target_layer != RenderLayer::Background
+            && glass_depth == 0
+            && !inside_foreground
+            && !self.with_node_scan(|scan| match target_layer {
+                RenderLayer::Glass => scan.glass_branches.contains(&node),
+                RenderLayer::Foreground => scan.foreground_branches.contains(&node),
+                RenderLayer::Background => true,
+            })
+        {
+            return;
+        }
 
         // Use animated bounds if a layout animation is active, otherwise use layout bounds
         let Some(bounds) = self.get_render_bounds(node, parent_offset) else {
@@ -502,18 +500,46 @@ impl RenderTree {
 
         // Motion and portal scopes use dynamic paint unless an ordinary native
         // group retains them. CSS-only scopes keep their collected content anchor.
+        let shared_motion_scope = self.shared_motion_scope(node);
+        let inherited_dynamic = ctx.bg_batch_is_dynamic();
         let in_motion_subtree = motion_bindings_ref.is_some()
             || render_node.props.motion.is_some()
-            || render_node.props.is_overlay_root;
+            || render_node.props.is_overlay_root
+            || shared_motion_scope;
         if in_motion_subtree {
             ctx.push_motion_subtree();
         }
+        // A bound node's primitives carry its ordinal, until the node's walk ends.
+        // A node walked again, for the foreground stream, keeps the ordinal it had.
+        let previous_ordinal = motion_bindings_ref.map(|_| {
+            let mut ordinals = self.binding_ordinals.borrow_mut();
+            let next = ordinals.values().copied().max().unwrap_or(0) + 1;
+            let ordinal = *ordinals.entry(node).or_insert(next);
+            drop(ordinals);
+            ctx.set_motion_node_ordinal(ordinal)
+        });
+        // Nested dynamic groups keep their shared paint order. A new scope retains its static
+        // anchor when later content overlaps it or media needs a separate dispatch.
+        let bound_media = motion_bindings_ref.is_some() && self.subtree_has_media(node);
+        if motion_bindings_ref.is_some() && self.subtree_has_svg(node) {
+            self.bound_svg.set(true);
+        }
+        let previous_groups = in_motion_subtree.then(|| {
+            let was = ctx.set_moving_groups_dynamic(false);
+            if was
+                && (motion_bindings_ref.is_some() || shared_motion_scope)
+                && !bound_media
+                && (inherited_dynamic || !self.later_content_overlaps_any(node))
+            {
+                ctx.set_moving_groups_dynamic(true);
+            }
+            was
+        });
         // Keep portals late while retaining inherited native group state.
         let in_overlay_subtree_node = render_node.props.is_overlay_root;
         if in_overlay_subtree_node {
             ctx.push_overlay_subtree();
         }
-        let composite_bg_start = in_motion_subtree.then(|| ctx.bg_primitive_count());
         // Phase 4b: bracket CSS-animated subtrees the same way
         // `composite_bg_start` brackets motion-bound subtrees, so
         // the post-walk recording at the bottom of this fn can
@@ -615,7 +641,6 @@ impl RenderTree {
             false
         };
         let pushed_composite_layer = pushed_for_css || pushed_for_motion_subtree;
-        let css_anim_bg_start = in_css_subtree.then(|| ctx.bg_primitive_count());
         // P4.3 sibling of `css_anim_bg_start`. We snapshot the scratch
         // batch index AFTER `push_composite_layer` so the AABB at the
         // insert site below covers exactly the primitives this subtree
@@ -637,6 +662,17 @@ impl RenderTree {
         // The actual `DynamicRegion` insert happens at the bottom of
         // this fn alongside the legacy `composite_bindings` insert,
         // gated on the node's `AnimationStatus` being `Animating`.
+        let ambient_clip = ctx.current_row_clip_aabb();
+        if motion_bindings_ref.is_some()
+            && let Some(clip) = ctx.current_clip_aabb()
+        {
+            self.binding_clip_bounds.borrow_mut().insert(node, clip);
+        }
+        let ambient_path = if motion_bindings_ref.is_some() {
+            ctx.current_path_clip()
+        } else {
+            0.0
+        };
         let v2_motion_ambient = (in_motion_subtree && ctx.bg_batch_is_dynamic()).then(|| {
             (
                 ctx.current_affine_elements(),
@@ -786,6 +822,12 @@ impl RenderTree {
             if in_motion_subtree {
                 ctx.pop_motion_subtree();
             }
+            if let Some(previous) = previous_ordinal {
+                ctx.set_motion_node_ordinal(previous);
+            }
+            if let Some(was) = previous_groups {
+                ctx.set_moving_groups_dynamic(was);
+            }
             // Same balancing for the composite-layer push.
             if pushed_composite_layer {
                 ctx.pop_composite_layer();
@@ -864,6 +906,11 @@ impl RenderTree {
             ctx.push_transform(Transform::translate(-center_x, -center_y));
         }
 
+        // The stack the binding's scale and turn pivot in: they were pushed above, before the
+        // node's own transform, so the pivot is the centre the binding leaves fixed, not the
+        // centre the node's own transform moves it to.
+        let binding_pivot = ctx.current_transform();
+
         // Apply element-specific transform if present
         let has_element_transform = render_node.props.transform.is_some();
         if let Some(ref transform) = render_node.props.transform {
@@ -939,9 +986,17 @@ impl RenderTree {
         let use_3d_layer = has_3d_css_transform && !has_3d_shape;
         // Child count does not bound overlapping draws, including canvas output.
         let has_motion_opacity_binding = motion_bindings_ref.is_some_and(|b| b.opacity.is_some());
+        // A bound opacity on a node of one primitive is that primitive's alpha, which a row
+        // carries, so no group is pushed.
+        let fades_in_place = has_motion_opacity_binding
+            && !cross_stream_group
+            && glass_depth == 0
+            && !inside_foreground
+            && self.fades_without_group(node);
         // Keep the group at motion opacity endpoints. Background can patch its
         // command; foreground requests a full paint with its own command stream.
         let keep_motion_group = has_motion_opacity_binding
+            && !fades_in_place
             && (ctx.bg_batch_is_dynamic() || !ctx.can_promote_composite_layer())
             && matches!(
                 effective_layer,
@@ -957,11 +1012,12 @@ impl RenderTree {
             || foreground_content_group
             || (cross_stream_group && in_motion_subtree)
             || keep_motion_group
-            || node_motion_opacity < 1.0
+            || (node_motion_opacity < 1.0 && !fades_in_place)
             || has_layer_effects
             || has_blend_mode
             || use_3d_layer;
         let mut should_push_layer = false;
+        let mut group_config: Option<LayerConfig> = None;
         if has_opacity_layer
             && (effective_layer == target_layer
                 || (cross_stream_group && target_layer == RenderLayer::Foreground))
@@ -1008,7 +1064,11 @@ impl RenderTree {
                 None
             };
             let config = LayerConfig {
-                id: None,
+                // A bound node's group is found again by this, since its position and size are
+                // local to its parent and equal cards have the same ones.
+                id: motion_bindings_ref.map(|_| {
+                    blinc_core::LayerId::new(slotmap::Key::data(&node).as_ffi() | BOUND_GROUP_TAG)
+                }),
                 position: Some(blinc_core::Point::new(bounds.x, bounds.y)),
                 size: Some(blinc_core::Size::new(bounds.width, bounds.height)),
                 blend_mode: node_blend_mode,
@@ -1017,6 +1077,7 @@ impl RenderTree {
                 effects: scaled_effects,
                 transform_3d,
             };
+            group_config = Some(config.clone());
             if cross_stream_group {
                 use slotmap::Key as _;
                 should_push_layer = if grouped_glass {
@@ -1056,6 +1117,9 @@ impl RenderTree {
         } else {
             None
         };
+        // Native groups may change the owning batch. Both ends of each range use that owner.
+        let composite_bg_start = in_motion_subtree.then(|| ctx.bg_primitive_count());
+        let css_anim_bg_start = in_css_subtree.then(|| ctx.bg_primitive_count());
 
         // Corner shape setup (superellipse per-corner) — MUST be set before draw_shadow
         // so shadows use the same corner_shape as the fill+border SDF.
@@ -1389,6 +1453,7 @@ impl RenderTree {
                     false
                 };
                 if let Some(ref bg) = render_node.props.background {
+                    let background_start = ctx.bg_primitive_count();
                     // When using opacity layer, draw at full opacity (layer handles it)
                     // Otherwise, apply motion opacity to brush for fallback
                     let brush = if captured_background {
@@ -1421,6 +1486,14 @@ impl RenderTree {
                         );
                     } else {
                         ctx.fill_rect(rect, radius, brush);
+                    }
+                    if effective_layer == RenderLayer::Background {
+                        let alpha = if !has_opacity_layer && motion_opacity < 1.0 {
+                            motion_opacity
+                        } else {
+                            1.0
+                        };
+                        self.record_css_background(ctx, node, background_start, alpha);
                     }
                 } else if is_3d_group {
                     // 3D group elements need a primitive even without a background —
@@ -1641,7 +1714,15 @@ impl RenderTree {
                 // Independent callbacks defer to overlay replay when requested.
                 // A canvas something later in the tree is drawn over also paints with its
                 // batch, in order: the independent replay comes after everything cached.
+                // Inside a scroll container on rows the canvas paints into the dynamic batch, and
+                // each frame replays it there at the pose it was painted at, which the rows move.
+                let rows_canvas = !canvas_data.is_static
+                    && self.scroll_rows_depth.get() > 0
+                    && ctx.bg_batch_is_dynamic()
+                    && !ctx.bg_batch_is_composite()
+                    && !self.later_content_overlaps(node);
                 let retained_canvas = !canvas_data.is_static
+                    && !rows_canvas
                     && (!ctx.can_promote_composite_layer()
                         || ctx.bg_batch_is_dynamic()
                         || ctx.bg_batch_is_composite()
@@ -1652,7 +1733,8 @@ impl RenderTree {
                         .borrow_mut()
                         .push(canvas_data.redraw_while.clone());
                 }
-                let skip_drawing = skip_drawing_flag && !canvas_data.is_static && !retained_canvas;
+                let skip_drawing =
+                    skip_drawing_flag && !canvas_data.is_static && !retained_canvas && !rows_canvas;
                 if !skip_drawing {
                     render_fn(ctx, canvas_bounds);
                 }
@@ -1667,7 +1749,24 @@ impl RenderTree {
                 // including image-only and empty draws that can change later.
                 let layer_matches = effective_layer == target_layer;
                 let is_static_canvas = canvas_data.is_static;
-                if layer_matches && !is_static_canvas && !retained_canvas {
+                if layer_matches && rows_canvas {
+                    self.rows_canvas_paint_records.borrow_mut().insert(
+                        node,
+                        super::super::CanvasPaintRecord {
+                            visit_seq: 0,
+                            primitive_range: canvas_start..canvas_end,
+                            affine: saved_affine,
+                            bounds_wh: (bounds.width, bounds.height),
+                            render_fn: render_fn.clone(),
+                            clips_content: should_clip,
+                            ancestor_clip_aabb: saved_ancestor_clip,
+                            z_layer: saved_z_layer,
+                            opacity: saved_opacity,
+                            in_overlay_subtree: false,
+                            redraw_while: canvas_data.redraw_while.clone(),
+                        },
+                    );
+                } else if layer_matches && !is_static_canvas && !retained_canvas {
                     // Overlay callbacks follow their host's dynamic content.
                     let nested_overlay = ctx.in_overlay_subtree();
                     let visit_seq = self.canvas_paint_records.borrow().len()
@@ -1855,6 +1954,50 @@ impl RenderTree {
         // Apply scroll offset (AFTER children inset clip so clip stays fixed)
         let scroll_offset = self.get_scroll_offset(node);
         let has_scroll = scroll_offset.0.abs() > 0.001 || scroll_offset.1.abs() > 0.001;
+        let node_is_scroll = self.scroll_physics.contains_key(&node);
+        if node_is_scroll {
+            self.record_scroll_painted(node, scroll_offset);
+        }
+        // A container whose content is painted once into the dynamic batch, at the offset it has
+        // now, and moved by a row as it scrolls. The viewport clip is already in force here and
+        // stays: it is what a clip on the content equals.
+        let scroll_rows = (node_is_scroll
+            && self.scroll_rows.get()
+            && motion_bindings_ref.is_none()
+            && !ctx.bg_batch_is_dynamic()
+            && !ctx.bg_batch_is_composite()
+            && self.scroll_content_qualifies(node)
+            && self.scroll_moved_recently(node))
+        .then(|| {
+            // The window of content painted reaches as far past the viewport as the viewport is
+            // long; a container that does not cull paints all of it.
+            let overscan = if self.viewport_cull_scrolls.contains(&node) {
+                super::super::cull::CULL_OVERSCAN.max(bounds.width.max(bounds.height))
+            } else {
+                f32::INFINITY
+            };
+            ctx.push_motion_subtree();
+            let ordinal = {
+                let mut ordinals = self.binding_ordinals.borrow_mut();
+                let next = ordinals.values().copied().max().unwrap_or(0) + 1;
+                *ordinals.entry(node).or_insert(next)
+            };
+            let previous_ordinal = ctx.set_motion_node_ordinal(ordinal);
+            let start = ctx.bg_primitive_count();
+            let ambient_clip = ctx.current_row_clip_aabb();
+            let ambient_path = ctx.current_path_clip();
+            // Clips the content pushes move with it while the viewport stays.
+            let row_clips = ctx.begin_row_clips();
+            let previous_overscan = self.set_cull_overscan(overscan);
+            self.scroll_rows_depth.set(self.scroll_rows_depth.get() + 1);
+            (
+                start,
+                previous_ordinal,
+                (ambient_clip, ambient_path, row_clips),
+                previous_overscan,
+                overscan,
+            )
+        });
         if has_scroll {
             ctx.push_transform(Transform::translate(scroll_offset.0, scroll_offset.1));
         }
@@ -1909,8 +2052,12 @@ impl RenderTree {
         }
         // A clip with no area shows nothing beneath it (a closed collapsible, say).
         let clip_is_empty = clips_content && (bounds.width <= 0.0 || bounds.height <= 0.0);
+        // Viewport cull: only the children that, with everything under them, draw inside the
+        // nearest culling scroll container's on-screen rect.
         let children = if clip_is_empty {
             Vec::new()
+        } else if let Some((cx, cy, cw, ch)) = self.cull_viewport.get() {
+            self.visible_children(node, child_paint_scroll, [cx, cy, cw, ch])
         } else {
             self.layout_tree.children(node)
         };
@@ -1924,14 +2071,6 @@ impl RenderTree {
             let child_render = self.render_nodes.get(&child_id);
             let child_is_fixed = child_render.map(|n| n.props.is_fixed).unwrap_or(false);
             let child_is_sticky = child_render.map(|n| n.props.is_sticky).unwrap_or(false);
-
-            // Viewport cull: skip a child that, with everything under it, draws outside the
-            // nearest culling scroll container's on-screen rect.
-            if let Some((cx, cy, cw, ch)) = self.cull_viewport.get()
-                && self.draws_outside(child_id, child_paint_scroll, [cx, cy, cw, ch])
-            {
-                continue;
-            }
 
             // Fixed: push counter-scroll to cancel ALL accumulated scroll
             let has_fixed_counter = child_is_fixed
@@ -2004,10 +2143,53 @@ impl RenderTree {
             ctx.pop_transform();
         }
 
+        // The content of a container on rows is painted: record it as a binding whose pose is
+        // its scroll offset.
+        let scroll_on_rows = scroll_rows.is_some();
+        if let Some((
+            start,
+            previous_ordinal,
+            (ambient_clip, ambient_path, row_clips),
+            previous_overscan,
+            overscan,
+        )) = scroll_rows
+        {
+            ctx.end_row_clips(row_clips);
+            let end = ctx.bg_primitive_count();
+            if effective_layer == target_layer {
+                let margin = self.record_scroll_row_node(node, scroll_offset, overscan);
+                self.composite_bindings.borrow_mut().insert(
+                    node,
+                    super::super::CompositeBindingMeta {
+                        dynamic_batch: true,
+                        primitive_range: start..end,
+                        last_translate: scroll_offset,
+                        last_scale: (1.0, 1.0),
+                        last_rotation_rad: 0.0,
+                        last_opacity: 1.0,
+                        layer_push_index: None,
+                        layer_config: None,
+                        centre: (0.0, 0.0),
+                        ambient_clip,
+                        ambient_path,
+                        scroll_margin: Some(margin),
+                        last_screen_aabb: None,
+                    },
+                );
+            }
+            ctx.pop_motion_subtree();
+            ctx.set_motion_node_ordinal(previous_ordinal);
+            self.set_cull_overscan(previous_overscan);
+            self.scroll_rows_depth
+                .set(self.scroll_rows_depth.get().saturating_sub(1));
+        }
+
         // Render scrollbar overlay if this is a scroll container
         // Scrollbar is rendered after scroll transform is popped (in viewport space)
-        // but before children inset clip is popped (clipped within content area)
+        // but before children inset clip is popped (clipped within content area).
+        // The renderer draws the scrollbar of a container on rows, from its physics, each frame.
         if effective_layer == target_layer
+            && !scroll_on_rows
             && let Some(physics) = self.scroll_physics.get(&node)
             && let Ok(p) = physics.try_lock()
         {
@@ -2065,7 +2247,20 @@ impl RenderTree {
                 && motion_bindings_ref.is_some()
                 && !ctx.bg_batch_is_dynamic()
                 && !ctx.bg_batch_is_composite();
-            if end > start || retained_foreground {
+            // A node that paints nothing of its own but moves text still needs a record when the
+            // GPU node table moves it, which is when motion is not baked to textures.
+            let moves_text_only = end == start
+                && !self.motion_promotion.get()
+                && motion_bindings_ref.is_some()
+                && ctx.bg_batch_is_dynamic()
+                && !ctx.bg_batch_is_composite();
+            // A bound node painted into the static batch with nothing of its own in the range, a
+            // group whose content is captured, still has to be seen to move, or nothing repaints
+            // it while the rows move the other nodes.
+            let static_bound = motion_bindings_ref.is_some()
+                && !ctx.bg_batch_is_dynamic()
+                && !ctx.bg_batch_is_composite();
+            if end > start || retained_foreground || moves_text_only || static_bound {
                 let (binding_tx, binding_ty) = motion_bindings_ref
                     .map(|b| {
                         let tx = b
@@ -2084,7 +2279,11 @@ impl RenderTree {
                 let (state_tx, state_ty) = motion_values
                     .map(|m| m.resolved_translate())
                     .unwrap_or((0.0, 0.0));
-                let last_translate = (state_tx + binding_tx, state_ty + binding_ty);
+                let property_translate = self.property_row_translation(node).unwrap_or((0.0, 0.0));
+                let last_translate = (
+                    state_tx + binding_tx + property_translate.0,
+                    state_ty + binding_ty + property_translate.1,
+                );
                 let (state_sx, state_sy) = motion_values
                     .map(|m| m.resolved_scale())
                     .unwrap_or((1.0, 1.0));
@@ -2178,7 +2377,7 @@ impl RenderTree {
                     let local_cx = bounds.width / 2.0;
                     let local_cy = bounds.height / 2.0;
                     let scale_factor = self.scale_factor.max(f32::EPSILON);
-                    match ctx.current_transform() {
+                    match &binding_pivot {
                         Transform::Affine2D(a) => {
                             let p = a.transform_point(Point::new(local_cx, local_cy));
                             (p.x / scale_factor, p.y / scale_factor)
@@ -2246,7 +2445,11 @@ impl RenderTree {
                             last_rotation_rad,
                             last_opacity,
                             layer_push_index: motion_binding_layer_push_index,
+                            layer_config: motion_binding_layer_push_index.and(group_config.clone()),
                             centre,
+                            ambient_clip,
+                            ambient_path,
+                            scroll_margin: None,
                             last_screen_aabb,
                         },
                     );
@@ -2284,8 +2487,9 @@ impl RenderTree {
                     }),
                     _ => None,
                 };
-                if let (Some(kind), Some((amb_affine, amb_opacity, amb_clip, amb_z))) =
-                    (kind_match, v2_motion_ambient)
+                if end > start
+                    && let (Some(kind), Some((amb_affine, amb_opacity, amb_clip, amb_z))) =
+                        (kind_match, v2_motion_ambient)
                 {
                     let region_screen_aabb = Self::affine_screen_aabb(
                         &amb_affine,
@@ -2642,6 +2846,12 @@ impl RenderTree {
         }
         if in_motion_subtree {
             ctx.pop_motion_subtree();
+        }
+        if let Some(previous) = previous_ordinal {
+            ctx.set_motion_node_ordinal(previous);
+        }
+        if let Some(was) = previous_groups {
+            ctx.set_moving_groups_dynamic(was);
         }
         // Balance the composite-layer push (same reasoning — the
         // walker emits this node's primitives into the per-node

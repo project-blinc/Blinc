@@ -43,6 +43,10 @@ pub struct PrimitiveBatch {
     pub cross_stream_groups: super::cross_stream::CrossStreamGroups,
     /// Background primitives (rendered before glass)
     pub primitives: Vec<GpuPrimitive>,
+    /// Which assignment of node slots the primitives carry, zero for none. The owner of the
+    /// node table sets it, and a batch built anew starts at zero, so a stale assignment is
+    /// never mistaken for a current one.
+    pub node_slots_epoch: u64,
     /// Foreground primitives (rendered after glass)
     pub foreground_primitives: Vec<GpuPrimitive>,
     pub glass_primitives: Vec<GpuGlassPrimitive>,
@@ -119,6 +123,12 @@ pub struct DynamicImage {
     /// Coordinates are in physical pixels; pointers are relative to these rows.
     /// Empty for unfaded ordinary rectangular/rounded or absent clips.
     pub clip_aux: Vec<[f32; 4]>,
+    /// The ordinal of the motion-bound node it was painted under, zero for none.
+    pub node_ordinal: u32,
+    /// The row of the animated node table that moves it, once rows have taken it.
+    pub node_slot: Option<u32>,
+    /// From which row of its chain the shape clip in `clip_aux` follows the rows.
+    pub shape_from: Option<u32>,
 }
 
 impl PrimitiveBatch {
@@ -126,6 +136,7 @@ impl PrimitiveBatch {
         Self {
             cross_stream_groups: super::cross_stream::CrossStreamGroups::default(),
             primitives: Vec::new(),
+            node_slots_epoch: 0,
             foreground_primitives: Vec::new(),
             glass_primitives: Vec::new(),
             nested_glass_primitives: Vec::new(),
@@ -144,6 +155,7 @@ impl PrimitiveBatch {
 
     pub fn clear(&mut self) {
         self.cross_stream_groups = super::cross_stream::CrossStreamGroups::default();
+        self.node_slots_epoch = 0;
         self.primitives.clear();
         self.foreground_primitives.clear();
         self.glass_primitives.clear();
@@ -255,8 +267,13 @@ impl PrimitiveBatch {
     /// samples, meshes, GPU passes and clipped paths. A batch that has only been through
     /// cross-stream resolution keeps that mark with none of these in it.
     pub fn has_ordered_content(&self) -> bool {
+        self.has_ordered_images() || self.has_ordered_content_besides_images()
+    }
+
+    /// [`has_ordered_content`](Self::has_ordered_content) leaving out ordered images, which rows
+    /// can move.
+    pub fn has_ordered_content_besides_images(&self) -> bool {
         !self.cross_stream_groups.captures.is_empty()
-            || self.has_ordered_images()
             || self.layer_commands.iter().any(|entry| {
                 matches!(
                     &entry.command,

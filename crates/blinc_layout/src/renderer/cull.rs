@@ -10,13 +10,15 @@ pub const CULL_OVERSCAN: f32 = 200.0;
 /// A rect as `[x, y, width, height]`.
 pub type CullRect = [f32; 4];
 
-fn intersects(b: CullRect, view: CullRect) -> bool {
-    let (x0, y0) = (view[0] - CULL_OVERSCAN, view[1] - CULL_OVERSCAN);
-    let (x1, y1) = (
-        view[0] + view[2] + CULL_OVERSCAN,
-        view[1] + view[3] + CULL_OVERSCAN,
-    );
+fn intersects(b: CullRect, view: CullRect, overscan: f32) -> bool {
+    let (x0, y0) = (view[0] - overscan, view[1] - overscan);
+    let (x1, y1) = (view[0] + view[2] + overscan, view[1] + view[3] + overscan);
     b[0] + b[2] > x0 && b[0] < x1 && b[1] + b[3] > y0 && b[1] < y1
+}
+
+/// Whether the transform is one that moves what is drawn.
+pub(super) fn moves_by_transform(t: &Option<Transform>) -> bool {
+    !is_identity(t)
 }
 
 fn is_identity(t: &Option<Transform>) -> bool {
@@ -55,13 +57,32 @@ impl RenderTree {
     /// with anything that moves its content is never outside. A descendant that clips its
     /// content stands for its whole subtree, since nothing beneath it draws past it.
     pub fn draws_outside(&self, node: LayoutNodeId, shift: (f32, f32), view: CullRect) -> bool {
+        self.draws_outside_at(node, shift, view, None)
+    }
+
+    fn draws_outside_at(
+        &self,
+        node: LayoutNodeId,
+        shift: (f32, f32),
+        view: CullRect,
+        parent_offset: Option<(f32, f32)>,
+    ) -> bool {
         if self.moves_its_content(node) {
             return false;
         }
-        let Some(b) = self.layout_tree.get_absolute_bounds(node) else {
+        let bounds = match parent_offset {
+            Some(offset) => self.layout_tree.get_bounds(node, offset),
+            None => self.layout_tree.get_absolute_bounds(node),
+        };
+        let Some(b) = bounds else {
             return false;
         };
-        if intersects([b.x + shift.0, b.y + shift.1, b.width, b.height], view) {
+        let overscan = self.cull_overscan();
+        if intersects(
+            [b.x + shift.0, b.y + shift.1, b.width, b.height],
+            view,
+            overscan,
+        ) {
             return false;
         }
         let clips = self
@@ -72,9 +93,8 @@ impl RenderTree {
             return true;
         }
         self.layout_tree
-            .children(node)
-            .into_iter()
-            .all(|child| self.draws_outside(child, shift, view))
+            .children_iter(node)
+            .all(|child| self.draws_outside_at(child, shift, view, Some((b.x, b.y))))
     }
 }
 
@@ -85,7 +105,8 @@ mod tests {
     #[test]
     fn overscan_keeps_near_edges() {
         let view = [0.0, 0.0, 100.0, 100.0];
-        assert!(intersects([0.0, 250.0, 10.0, 10.0], view));
-        assert!(!intersects([0.0, 350.0, 10.0, 10.0], view));
+        assert!(intersects([0.0, 250.0, 10.0, 10.0], view, CULL_OVERSCAN));
+        assert!(!intersects([0.0, 350.0, 10.0, 10.0], view, CULL_OVERSCAN));
+        assert!(intersects([0.0, 550.0, 10.0, 10.0], view, 500.0));
     }
 }

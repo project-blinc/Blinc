@@ -422,6 +422,7 @@ impl RenderTree {
         let hovered_nodes: HashSet<LayoutNodeId> = router
             .hovered_nodes()
             .filter_map(|s| self.layout_id(s))
+            .filter(|node| router.is_hovered_layout(self, *node))
             .collect();
         let pressed_nodes: HashSet<LayoutNodeId> = router.active_nodes(self);
         // Use the router's focused node directly. Previously we walked
@@ -433,8 +434,16 @@ impl RenderTree {
         // focus by `LayoutNodeId`, so just ask it directly.
         let focused_node: Option<LayoutNodeId> = router.focused();
 
-        // Collect ALL render node IDs (not just those with IDs — .class selectors can match any node)
-        let all_node_ids: Vec<LayoutNodeId> = self.render_nodes.keys().copied().collect();
+        // The nodes that hold a pointer or focus state now: a rule with a state can only match
+        // what is reachable from them.
+        let mut holders: Vec<LayoutNodeId> = hovered_nodes
+            .iter()
+            .chain(pressed_nodes.iter())
+            .copied()
+            .chain(focused_node)
+            .collect();
+        holders.sort_unstable();
+        holders.dedup();
 
         // Reset previously state-affected nodes to their base props so that
         // styles from rules that no longer match (e.g. :hover ended) are removed
@@ -455,7 +464,7 @@ impl RenderTree {
         for &node_id in &prev_affected {
             self.state_layers.remove(&node_id);
             if let Some(base) = self.base_styles.get(&node_id)
-                && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+                && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
             {
                 render_node.props = base.clone();
             }
@@ -465,27 +474,29 @@ impl RenderTree {
             }
         }
 
-        // Re-apply all base (non-state) complex rules for reset nodes,
-        // sorted by specificity so type < class < id.
+        // Re-apply the base (non-state) complex rules for reset nodes, by specificity so
+        // type < class < id. A node is matched against the rules that can match it only.
         {
-            let mut base_rules: Vec<&(ComplexSelector, crate::element_style::ElementStyle)> =
-                complex_rules
-                    .iter()
-                    .filter(|(selector, _)| !selector.has_state())
+            let rules = stylesheet.complex_rules();
+            for &node_id in &prev_affected {
+                let mut matched: Vec<usize> = self
+                    .candidate_rules_for(&stylesheet, node_id)
+                    .into_iter()
+                    .filter(|i| !rules[*i].0.has_state())
+                    .filter(|i| {
+                        self.complex_selector_matches(
+                            &rules[*i].0,
+                            node_id,
+                            &hovered_nodes,
+                            &pressed_nodes,
+                            focused_node,
+                        )
+                    })
                     .collect();
-            base_rules.sort_by_key(|(selector, style)| Self::rule_order(selector, style));
-
-            for (selector, style) in &base_rules {
-                for &node_id in &prev_affected {
-                    if self.complex_selector_matches(
-                        selector,
-                        node_id,
-                        &hovered_nodes,
-                        &pressed_nodes,
-                        focused_node,
-                    ) && let Some(render_node) = self.render_nodes.get_mut(&node_id)
-                    {
-                        Self::apply_element_style_to_props(&mut render_node.props, style);
+                matched.sort_by_key(|&i| (Self::rule_order(&rules[i].0, &rules[i].1), i));
+                if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
+                    for i in matched {
+                        Self::apply_element_style_to_props(&mut render_node.props, &rules[i].1);
                     }
                 }
             }
@@ -497,7 +508,7 @@ impl RenderTree {
             for &node_id in &prev_affected {
                 if let Some(element_id) = self.element_registry.get_id(node_id)
                     && let Some(base_style) = stylesheet.get(&element_id)
-                    && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+                    && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
                 {
                     Self::apply_element_style_to_props(&mut render_node.props, base_style);
                 }
@@ -522,7 +533,14 @@ impl RenderTree {
                 continue;
             }
 
-            for &node_id in &all_node_ids {
+            let candidates = self.state_rule_candidates(
+                selector,
+                &holders,
+                &hovered_nodes,
+                &pressed_nodes,
+                focused_node,
+            );
+            for &node_id in &candidates {
                 if self.complex_selector_matches(
                     selector,
                     node_id,
@@ -584,7 +602,7 @@ impl RenderTree {
                         None
                     };
 
-                    if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+                    if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
                         Self::apply_element_style_to_props(&mut render_node.props, style);
                         self.state_layers
                             .entry(node_id)
@@ -667,6 +685,112 @@ impl RenderTree {
         any_applied
     }
 
+    /// The nodes a rule with a pointer or focus state can match: those reachable from a node that
+    /// holds the state, through the combinators that follow the state's compound, each step kept
+    /// only if it matches the next compound. A superset of the matches, which
+    /// `complex_selector_matches` then decides, so what the rule matches is what matching every
+    /// node finds, in a cost that follows the nodes holding the state and not the tree.
+    fn state_rule_candidates(
+        &self,
+        selector: &ComplexSelector,
+        holders: &[LayoutNodeId],
+        hovered: &HashSet<LayoutNodeId>,
+        pressed: &HashSet<LayoutNodeId>,
+        focused: Option<LayoutNodeId>,
+    ) -> Vec<LayoutNodeId> {
+        let segments = &selector.segments;
+        let Some(from) = segments
+            .iter()
+            .rposition(|(compound, _)| compound.has_state())
+        else {
+            return Vec::new();
+        };
+        let matches = |compound: &CompoundSelector, node: LayoutNodeId| {
+            self.compound_matches(compound, node, hovered, pressed, focused)
+        };
+        let mut frontier: Vec<LayoutNodeId> = holders
+            .iter()
+            .copied()
+            .filter(|n| matches(&segments[from].0, *n))
+            .collect();
+        for i in from..segments.len() - 1 {
+            if frontier.is_empty() {
+                break;
+            }
+            let combinator = segments[i].1.unwrap_or(Combinator::Descendant);
+            let next = &segments[i + 1].0;
+            let mut reached: Vec<LayoutNodeId> = Vec::new();
+            for &node in &frontier {
+                match combinator {
+                    Combinator::Child => reached.extend(self.element_registry.get_children(node)),
+                    Combinator::Descendant => {
+                        let mut stack = self.element_registry.get_children(node);
+                        while let Some(n) = stack.pop() {
+                            // Only what matches the next compound is kept, but the walk goes on
+                            // through everything under the node.
+                            stack.extend(self.element_registry.get_children(n));
+                            reached.push(n);
+                        }
+                    }
+                    Combinator::AdjacentSibling => reached.extend(
+                        self.element_registry
+                            .get_following_siblings(node)
+                            .into_iter()
+                            .take(1),
+                    ),
+                    Combinator::GeneralSibling => {
+                        reached.extend(self.element_registry.get_following_siblings(node))
+                    }
+                }
+            }
+            reached.retain(|n| matches(next, *n));
+            reached.sort_unstable();
+            reached.dedup();
+            frontier = reached;
+        }
+        frontier
+    }
+
+    /// The indices of the stylesheet's complex rules that can match `node`, from what the node
+    /// has: its id, its classes and attributes, its element type. A superset of the matches, in
+    /// the order the rules were written; see `Stylesheet::candidate_rules`.
+    pub(crate) fn candidate_rules_for(
+        &self,
+        stylesheet: &crate::css_parser::Stylesheet,
+        node: LayoutNodeId,
+    ) -> Vec<usize> {
+        let id = self.element_registry.get_id(node);
+        let classes = self.element_registry.get_classes(node).unwrap_or_default();
+        let element_type = self.element_registry.get_element_type(node);
+        stylesheet.candidate_rules(id.as_deref(), &classes, element_type)
+    }
+
+    /// Apply the stateless complex rules of `stylesheet` to `nodes`: each takes the rules that
+    /// match it, in cascade order (a component's own rules first, then by specificity, then as
+    /// written). The cost follows the nodes and the rules that can match each, not their product.
+    pub(crate) fn apply_base_complex_rules(
+        &mut self,
+        stylesheet: &crate::css_parser::Stylesheet,
+        nodes: &[LayoutNodeId],
+    ) {
+        let rules = stylesheet.complex_rules();
+        if rules.is_empty() {
+            return;
+        }
+        for &node_id in nodes {
+            let mut matched = self.matching_base_rules(node_id, stylesheet);
+            if matched.is_empty() {
+                continue;
+            }
+            matched.sort_by_key(|&i| (Self::rule_order(&rules[i].0, &rules[i].1), i));
+            if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
+                for i in matched {
+                    Self::apply_element_style_to_props(&mut render_node.props, &rules[i].1);
+                }
+            }
+        }
+    }
+
     /// The `transition` a node has: its id rule's, else that of a base complex
     /// rule that matches it.
     fn complex_transition_for(
@@ -682,21 +806,25 @@ impl RenderTree {
             .get_id(node_id)
             .and_then(|eid| stylesheet.get(&eid).and_then(|s| s.transition.clone()));
         by_id.or_else(|| {
-            stylesheet.complex_rules().iter().find_map(|(sel, sty)| {
-                if !sel.has_state()
-                    && self.complex_selector_matches(
-                        sel,
-                        node_id,
-                        hovered_nodes,
-                        pressed_nodes,
-                        focused_node,
-                    )
-                {
-                    sty.transition.clone()
-                } else {
-                    None
-                }
-            })
+            let rules = stylesheet.complex_rules();
+            self.candidate_rules_for(stylesheet, node_id)
+                .into_iter()
+                .find_map(|i| {
+                    let (sel, sty) = &rules[i];
+                    if !sel.has_state()
+                        && self.complex_selector_matches(
+                            sel,
+                            node_id,
+                            hovered_nodes,
+                            pressed_nodes,
+                            focused_node,
+                        )
+                    {
+                        sty.transition.clone()
+                    } else {
+                        None
+                    }
+                })
         })
     }
 
@@ -745,6 +873,7 @@ impl RenderTree {
         let hovered_nodes: HashSet<LayoutNodeId> = router
             .hovered_nodes()
             .filter_map(|s| self.layout_id(s))
+            .filter(|node| router.is_hovered_layout(self, *node))
             .collect();
         let pressed_nodes: HashSet<LayoutNodeId> = router.active_nodes(self);
         let focused_node: Option<LayoutNodeId> = router.focused();
@@ -778,7 +907,7 @@ impl RenderTree {
                     self.base_taffy_styles.insert(node_id, taffy_style);
                 }
                 self.complex_state_affected.insert(node_id);
-                if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+                if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
                     Self::apply_element_style_to_props(&mut render_node.props, style);
                     self.state_layers
                         .entry(node_id)
@@ -818,6 +947,7 @@ impl RenderTree {
         let hovered_nodes: HashSet<LayoutNodeId> = router
             .hovered_nodes()
             .filter_map(|s| self.layout_id(s))
+            .filter(|node| router.is_hovered_layout(self, *node))
             .collect();
         let pressed_nodes: HashSet<LayoutNodeId> = router.active_nodes(self);
         let focused_node: Option<LayoutNodeId> = {
@@ -834,12 +964,7 @@ impl RenderTree {
         };
 
         // Find all SVG layout nodes
-        let svg_nodes: Vec<LayoutNodeId> = self
-            .render_nodes
-            .keys()
-            .copied()
-            .filter(|&nid| self.element_registry.get_element_type(nid) == Some("svg"))
-            .collect();
+        let svg_nodes: Vec<LayoutNodeId> = self.with_node_scan(|scan| scan.svgs.clone());
 
         if svg_nodes.is_empty() {
             return false;
@@ -958,13 +1083,13 @@ impl RenderTree {
 
             // Apply tag styles to render props
             if !tag_styles.is_empty() {
-                if let Some(render_node) = self.render_nodes.get_mut(&svg_node)
+                if let Some(mut render_node) = self.render_nodes.get_mut(&svg_node)
                     && render_node.props.svg_tag_styles != tag_styles
                 {
                     render_node.props.svg_tag_styles = tag_styles;
                     any_changed = true;
                 }
-            } else if let Some(render_node) = self.render_nodes.get_mut(&svg_node)
+            } else if let Some(mut render_node) = self.render_nodes.get_mut(&svg_node)
                 && !render_node.props.svg_tag_styles.is_empty()
             {
                 render_node.props.svg_tag_styles.clear();
@@ -973,5 +1098,159 @@ impl RenderTree {
         }
 
         any_changed
+    }
+}
+
+#[cfg(test)]
+mod candidate_tests {
+    use super::*;
+    use crate::css_parser::Stylesheet;
+    use crate::div::div;
+
+    /// A tree with containers, rows and leaves, classed so every combinator has something to
+    /// relate.
+    fn tree() -> RenderTree {
+        let leaf = |c: &str| div().class(c).w(10.0).h(10.0);
+        let row = |c: &str| {
+            div()
+                .class(c)
+                .w(100.0)
+                .h(30.0)
+                .child(leaf("c"))
+                .child(leaf("d"))
+        };
+        let group = |c: &str| {
+            div()
+                .class(c)
+                .flex_col()
+                .child(row("b"))
+                .child(row("b"))
+                .child(row("e"))
+                .child(row("b"))
+        };
+        let ui = div()
+            .class("a")
+            .flex_col()
+            .child(group("g"))
+            .child(group("g"))
+            .child(row("b"));
+        let mut tree = RenderTree::from_element(&ui);
+        tree.compute_layout(200.0, 600.0);
+        tree
+    }
+
+    /// Whatever a rule with a state matches, for any node holding the state, is among its
+    /// candidates.
+    #[test]
+    fn candidates_hold_every_match() {
+        let rules = [
+            ".b:hover { opacity: 0.9; }",
+            ".g:hover .c { opacity: 0.9; }",
+            ".g:hover > .b { opacity: 0.9; }",
+            ".b:hover + .b { opacity: 0.9; }",
+            ".b:hover ~ .e { opacity: 0.9; }",
+            ".b + .b:hover { opacity: 0.9; }",
+            ".b ~ .e:hover { opacity: 0.9; }",
+            ".a .g:active .d { opacity: 0.9; }",
+            ".a > .g:hover > .b:hover .c { opacity: 0.9; }",
+            ".c:focus { opacity: 0.9; }",
+            ".b:focus .d { opacity: 0.9; }",
+            ".b:hover:active .c { opacity: 0.9; }",
+            ".g:hover .b + .b .c { opacity: 0.9; }",
+            ".b:hover .c:not(.d) { opacity: 0.9; }",
+        ];
+        let tree = tree();
+        let nodes: Vec<LayoutNodeId> = tree.render_nodes.keys().copied().collect();
+        for css in rules {
+            let stylesheet = Stylesheet::parse(css).expect("css");
+            let mut matched = 0;
+            for (selector, _) in stylesheet.complex_rules() {
+                for &holder in &nodes {
+                    // What a hit on `holder` makes hover and press: it and what holds it.
+                    let mut chain: HashSet<LayoutNodeId> = tree
+                        .element_registry
+                        .ancestors(holder)
+                        .into_iter()
+                        .collect();
+                    chain.insert(holder);
+                    let focused = Some(holder);
+                    let mut holders: Vec<LayoutNodeId> = chain.iter().copied().collect();
+                    holders.push(holder);
+                    holders.sort_unstable();
+                    holders.dedup();
+                    let candidates =
+                        tree.state_rule_candidates(selector, &holders, &chain, &chain, focused);
+                    for &node in &nodes {
+                        if tree.complex_selector_matches(selector, node, &chain, &chain, focused) {
+                            matched += 1;
+                            assert!(
+                                candidates.contains(&node),
+                                "`{css}`: a node it matches, with a hit on {holder:?}, was not a candidate"
+                            );
+                        }
+                    }
+                }
+            }
+            // A rule that matches nothing proves nothing.
+            assert!(matched > 0, "`{css}` matched no node for any holder");
+        }
+    }
+
+    /// The rules that match a node are the same with the index as with every rule tried.
+    #[test]
+    fn the_index_finds_every_rule_that_matches() {
+        let css = "\
+            .a .b { opacity: 0.9; }\n\
+            .b { opacity: 0.8; }\n\
+            div { opacity: 0.7; }\n\
+            .a > div.c { opacity: 0.6; }\n\
+            [data-state=open] { opacity: 0.5; }\n\
+            .b[data-state=open] .c { opacity: 0.4; }\n\
+            * { opacity: 0.3; }\n\
+            :not(.z) { opacity: 0.2; }\n\
+            .a #x { opacity: 0.1; }\n\
+            .b + .b { opacity: 0.95; }\n\
+            .c:first-child { opacity: 0.85; }\n\
+            div:not(.b) .c { opacity: 0.75; }\n\
+            .d:hover { opacity: 0.65; }\n\
+            text { opacity: 0.55; }\n\
+            ";
+        let stylesheet = Stylesheet::parse(css).expect("css");
+        let leaf = |c: &str| div().class(c).w(10.0).h(10.0);
+        let ui = div()
+            .class("a")
+            .flex_col()
+            .child(
+                div()
+                    .class("b")
+                    .class("data-state=open")
+                    .child(leaf("c"))
+                    .child(leaf("c d")),
+            )
+            .child(div().class("b").id("x").child(leaf("c")))
+            .child(div().child(crate::text::text("label").class("c")))
+            .child(div().class("z b").child(leaf("c")));
+        let mut tree = RenderTree::from_element(&ui);
+        tree.compute_layout(200.0, 400.0);
+        let none = HashSet::new();
+        let rules = stylesheet.complex_rules();
+        let nodes: Vec<LayoutNodeId> = tree.render_nodes.keys().copied().collect();
+        let mut found = 0;
+        for node in nodes {
+            let brute: Vec<usize> = (0..rules.len())
+                .filter(|i| !rules[*i].0.has_state())
+                .filter(|i| tree.complex_selector_matches(&rules[*i].0, node, &none, &none, None))
+                .collect();
+            assert_eq!(
+                tree.matching_base_rules(node, &stylesheet),
+                brute,
+                "rules for {node:?}"
+            );
+            found += brute.len();
+        }
+        assert!(
+            found > 20,
+            "the rules matched only {found} times: a weak test"
+        );
     }
 }

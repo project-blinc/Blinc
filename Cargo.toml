@@ -56,6 +56,9 @@ members = [
     # `cargo run -p <name>`.
     "tools/build-web-examples",
     "tools/blinc-regression",
+    # Window harnesses for frame cost; kept out of `blinc_app_examples`, whose
+    # examples are published to the examples page.
+    "tools/blinc-bench",
     "tools/emoji-scan",
     # Drop-in NotoColorEmoji fallback that auto-registers with
     # `blinc_text` via `#[ctor]`. Opt-in by the consumer app.

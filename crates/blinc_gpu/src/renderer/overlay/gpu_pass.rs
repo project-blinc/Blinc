@@ -49,6 +49,8 @@ impl GpuRenderer {
             pass.frame_size,
             origin,
             |renderer, edit| {
+                // Custom passes submit on the raw queue, after the renderer's queued work.
+                renderer.uploads.flush(&renderer.queue);
                 let context = crate::custom_pass::RenderPassContext {
                     device: &renderer.device,
                     queue: &renderer.queue,
@@ -118,7 +120,7 @@ impl GpuRenderer {
         self.ensure_overlay_alpha();
         self.overlay_alpha.as_ref().unwrap().capture(
             &self.device,
-            &self.queue,
+            &|commands| self.uploads.submit(&self.queue, [commands]),
             &self.bind_group_layouts.composite,
             &self.path_image_sampler,
             target,
@@ -128,7 +130,7 @@ impl GpuRenderer {
         edit_draw(self, &edit.view);
         self.overlay_alpha.as_ref().unwrap().straighten(
             &self.device,
-            &self.queue,
+            &|commands| self.uploads.submit(&self.queue, [commands]),
             &self.bind_group_layouts.composite,
             &self.path_image_sampler,
             &edit,

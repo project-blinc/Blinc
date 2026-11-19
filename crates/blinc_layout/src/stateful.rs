@@ -59,7 +59,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, RwLock};
 
 use crate::div::{Div, ElementBuilder, ElementRef, ElementTypeId};
@@ -329,26 +329,42 @@ static PERSISTED_KEYFRAME_TRACKS: LazyLock<RwLock<HashMap<String, SharedKeyframe
 // =========================================================================
 
 /// Global flag for requesting a redraw without tree rebuild
-static NEEDS_REDRAW: AtomicBool = AtomicBool::new(false);
+const PROPERTY_REDRAW: u8 = 1;
+const FULL_PAINT_REDRAW: u8 = 2;
+static NEEDS_REDRAW: AtomicU8 = AtomicU8::new(0);
 
 /// Request a redraw without rebuilding the tree
 ///
 /// This is used by stateful elements when state changes cause visual updates
 /// but don't require a tree structure change.
 pub fn request_redraw() {
-    NEEDS_REDRAW.store(true, Ordering::SeqCst);
+    NEEDS_REDRAW.fetch_or(FULL_PAINT_REDRAW, Ordering::SeqCst);
+}
+
+fn request_property_redraw() {
+    NEEDS_REDRAW.fetch_or(PROPERTY_REDRAW, Ordering::SeqCst);
 }
 
 /// Check and clear the redraw flag
 /// Returns true if a redraw was requested since last check
 pub fn take_needs_redraw() -> bool {
-    NEEDS_REDRAW.swap(false, Ordering::SeqCst)
+    NEEDS_REDRAW.swap(0, Ordering::SeqCst) != 0 || pending_focus_request()
 }
 
 /// Peek at the redraw flag without clearing it
 /// Used by iOS needs_render() to check if stateful updates are pending
 pub fn peek_needs_redraw() -> bool {
-    NEEDS_REDRAW.load(Ordering::SeqCst)
+    NEEDS_REDRAW.load(Ordering::SeqCst) != 0 || pending_focus_request()
+}
+
+fn pending_focus_request() -> bool {
+    blinc_core::context_state::BlincContextState::try_get()
+        .is_some_and(|ctx| ctx.has_pending_focus())
+}
+
+/// Whether an explicit repaint was requested, independently of queued property writes.
+pub fn peek_needs_full_paint() -> bool {
+    NEEDS_REDRAW.load(Ordering::SeqCst) & FULL_PAINT_REDRAW != 0
 }
 
 /// External-animation tick request. Set by code that drives its own
@@ -1094,7 +1110,7 @@ pub fn queue_prop_update_partial<F>(
             class_toggle: None,
             region_update: None,
         });
-    request_redraw();
+    request_property_redraw();
 }
 
 /// [`queue_prop_update_partial`] for a signal-bound write: `beneath` makes the
@@ -1125,7 +1141,7 @@ pub(crate) fn queue_prop_update_partial_beneath<F, G>(
             class_toggle: None,
             region_update: None,
         });
-    request_redraw();
+    request_property_redraw();
 }
 
 /// Queue a partial taffy-style update.
@@ -1162,7 +1178,7 @@ pub fn queue_layout_update_partial<F>(
             class_toggle: None,
             region_update: None,
         });
-    request_redraw();
+    request_property_redraw();
 }
 
 /// [`queue_layout_update_partial`] for a signal-bound write: `beneath` makes
@@ -1193,7 +1209,7 @@ pub(crate) fn queue_layout_update_partial_beneath<F, G>(
             class_toggle: None,
             region_update: None,
         });
-    request_redraw();
+    request_property_redraw();
 }
 
 /// Queue new text content for a text node.
@@ -1222,7 +1238,7 @@ pub fn queue_text_update(
             class_toggle: None,
             region_update: None,
         });
-    request_redraw();
+    request_property_redraw();
 }
 
 /// Queue a class a node gains or loses. The drain restyles the node from the
@@ -1243,7 +1259,7 @@ pub fn queue_class_toggle(node_id: LayoutNodeId, class: std::sync::Arc<str>, on:
             class_toggle: Some((class, on)),
             region_update: None,
         });
-    request_redraw();
+    request_property_redraw();
 }
 
 /// Put updates taken from the queue back, to be applied on a later drain.
@@ -1273,7 +1289,7 @@ pub fn queue_region_update(node_id: LayoutNodeId, region: u64) {
             class_toggle: None,
             region_update: Some(region),
         });
-    request_redraw();
+    request_property_redraw();
 }
 
 /// Whether any partial-form updates are queued. Cheap check for the

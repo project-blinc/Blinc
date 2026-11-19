@@ -173,13 +173,38 @@ let (x, y, scale) = timeline.lock().unwrap().configure(|t| {
 });
 ```
 
-A CSS animation or transition of `opacity` and `transform` alone is the
-cheapest kind: the subtree is painted once into a texture and the
-compositor moves it each frame. That holds only while nothing in the
-subtree is drawn in a pass of its own. A subtree with text, an SVG or a
-canvas in it is painted with the animation applied on every frame, so the
-text moves, scales and fades with its container about its
-`transform-origin`.
+A CSS keyframe animation of `transform` alone (translate, scale, rotate) on
+an element with no `transform` of its own is the cheapest kind: the element
+is painted once and the renderer moves it each frame, its text, images, SVG
+icons and nested animations included, with no texture held for it. An element
+with a `clip-path` polygon or path is moved the same way, its clip turning and
+moving with it, so a `cn::spinner` turns without painting again. So is a CSS
+transition of `transform` that scales uniformly, which may start and end on
+poses with a `transform` of their own (a card lifted on hover), and a
+keyframe animation or a transition of `opacity` on an element that paints a
+single filled rectangle: a solid background and no border, outline, shadow,
+children or effect, such as a skeleton placeholder. A transition that
+changes a colour, a shadow or anything else along with the transform is not
+moved that way, and neither is an element that paints more than a filled
+rectangle, because a fade has to treat its overlapping draws as one picture.
+Those are painted once into a texture and the compositor moves it each frame,
+or, where the subtree cannot be a texture, painted again every frame. A
+texture holds only while nothing in the subtree is drawn in a pass of its
+own. A subtree with text, an SVG or a canvas in it is painted with the
+animation applied on every frame, so the text moves, scales and fades with
+its container about its
+`transform-origin`. Fading siblings of that kind, a grid of cards with labels,
+share one offscreen atlas and are composited in one pass, so the cost of the
+grid does not grow by a few render passes per card. Cards against the edge of
+the window are in the atlas too, and a grid of equal cards that each fade by a
+motion binding is moved by rows like any other bound node.
+
+While the only thing moving is a CSS animation of opacity or colour that repeats, an
+indeterminate progress bar or a skeleton, the window draws 30 frames a second, not
+the display's rate, and an idle window with one on screen costs about half what it
+did. A transform, a layout change, a clip reveal, a scroll or a rebuild draws at the
+display's rate as before. A frame that input asks for during an ambient animation
+can wait up to 33 ms.
 
 Each animation step is capped, so after a long frame (a stall, a debugger
 pause) an animation slows down instead of jumping to its end.
@@ -232,6 +257,11 @@ Benefits:
 - **Faster startup.** No waiting for off-screen images.
 - **Automatic cleanup.** LRU cache evicts old images.
 
+In a window, an image is loaded on a worker thread: decoding, compression and
+upload do not hold up the frame that scrolls it into view. Its placeholder, or
+nothing, is drawn until it arrives, and the next frame draws it. Headless
+rendering loads images in the frame that needs them, so a snapshot has them.
+
 Emoji images (`emoji()` and `emoji_sized()`) are automatically lazy-loaded.
 The ~180MB system emoji font is only loaded when emoji characters actually
 appear on screen.
@@ -246,6 +276,24 @@ no pointer events. Animations on off-screen children still tick but don't
 request the next frame. A descendant that overflows its row into view keeps
 the row drawn.
 
+A scroll container whose content is boxes, text, images, SVG icons,
+translucent or faded elements and canvases is painted once and moved by the
+renderer as it scrolls, so a scroll frame costs what a frame that only moves
+something does. A canvas in it is drawn again each frame where it was painted
+and moved with the rest; one whose drawing changes its number of shapes, or
+uses meshes or GPU passes, makes that frame a full paint. Elements with a
+transform of their own, and elements a motion binding moves, are moved with
+the container too, the binding's change on top of the scroll, and so are
+elements with a `clip-path`, stacks, nested scroll containers and images
+inside groups. A clip inside the container (a card's rounded corners, a nested
+scroll area's viewport) moves with the content while the container's own
+viewport stays. A container holding something fixed or sticky, or a CSS
+animation that is not moved by rows, is painted again on each frame it
+scrolls, and so is a frame where it holds a filled path (a chart's pie or
+donut). Half a second after a container stops scrolling, its content is painted
+back into the cached static layer, so a frame at rest draws only what still
+moves, such as a spinner.
+
 Culling stops below anything that places its content apart from layout (a
 CSS or bound transform, a motion, a layout animation) and at fixed and sticky
 children. `.viewport_cull(false)` turns it off for one container.
@@ -256,6 +304,11 @@ never opened costs nothing and a closed one draws nothing. A tab that is not
 selected is not built at all, and `show(when, ..)` builds nothing while `when`
 is false.
 
+On macOS a window that is fully covered by another, minimized or on another
+Space is not rendered at all: its frames are dropped until the OS reports it
+visible again, and the first frame after paints whatever changed meanwhile.
+Animations in it stop with it.
+
 ## Avoid the slow path
 
 These changes trip the compositor fast path and require a full walker run:
@@ -265,7 +318,7 @@ These changes trip the compositor fast path and require a full walker run:
 | Animating `width`, `height`, `padding`, `gap`, `margin` | Triggers Taffy re-layout                  |
 | Animating `clip-path` inset / circle radius             | Damage-rect path can't patch in place     |
 | Animating `filter: blur(…)` or `backdrop-filter`        | Out of scope for `apply_css_deltas`       |
-| Scroll physics actively moving                          | Cache invalidated by scroll offset        |
+| Scrolling a container that is not moved by rows         | Cache invalidated by scroll offset        |
 | Overlay / dialog / sheet open or close                  | Layer composition changes                 |
 | Stateful flips that change child structure              | Subtree rebuild                           |
 | CSS animation on a subtree with text, SVG or canvas     | Painted every frame instead of baked      |
@@ -310,6 +363,17 @@ the clock step the animations took, whether the frame was drawn and by
 which path, what asked for another frame, and the progress of every CSS
 animation, transition and motion still running. It finds an animation that
 stalls, skips or waits for input. Unset, it costs nothing.
+
+`cost_us` gives what each phase of the frame took, in microseconds. For a
+frame whose `p4` (render) is long, `p4_done_us` says where in it the time
+went: when the style and animation pass finished and when the paint did,
+measured from the start of the phase. What is left of `p4` after `render`
+is presenting the frame.
+
+On macOS a trace of a new window has one gap of a fraction of a second after
+the first frame. The window is waiting for the app to become active, and no
+event, a scheduled wake included, is delivered until it is. It is not a slow
+frame, and it does not recur.
 
 ```sh
 BLINC_MOTION_TRACE=/tmp/motion.jsonl cargo run -p blinc_app_examples --example cn_demo --features cn

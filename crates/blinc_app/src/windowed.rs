@@ -37,6 +37,8 @@ use std::sync::{Arc, Mutex};
 pub type SharedAnimationScheduler = Arc<Mutex<AnimationScheduler>>;
 
 #[cfg(all(feature = "windowed", not(target_os = "android")))]
+mod accessibility;
+#[cfg(all(feature = "windowed", not(target_os = "android")))]
 mod app_init;
 mod context;
 #[cfg(all(feature = "windowed", not(target_os = "android")))]
@@ -388,6 +390,16 @@ impl WindowedApp {
             );
         }
 
+        {
+            let focus_wake = event_loop.wake_proxy();
+            let focus_dirty = Arc::clone(&frame_dirty);
+            BlincContextState::get().set_focus_callback(Arc::new(move |_| {
+                blinc_layout::stateful::request_redraw();
+                focus_dirty.store(true, Ordering::Release);
+                focus_wake.wake();
+            }));
+        }
+
         // Outside the init guard on purpose. Anything that builds a
         // widget before the window opens initialises the context state
         // itself -- `BlincDsl` does, through `ensure_context_state` --
@@ -580,7 +592,7 @@ impl WindowedApp {
         };
         let mut desktop_loop = desktop_loop;
         event_loop
-            .run(move |event, window| desktop_loop.handle(event, window))
+            .run(move |event, window| desktop_loop.dispatch(event, window))
             .map_err(|e| BlincError::Platform(e.to_string()))?;
 
         Ok(())

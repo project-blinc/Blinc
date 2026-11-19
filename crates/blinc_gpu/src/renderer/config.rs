@@ -129,6 +129,12 @@ pub struct RendererConfig {
     ///
     /// Default: `None`.
     pub pipeline_cache_path: Option<std::path::PathBuf>,
+    /// Bind the animated node table and draw with the shaders that apply it. The shaders cost a
+    /// little more for every primitive, so it is off unless asked for; only devices whose vertex
+    /// stage reads storage buffers have it, and others ignore the setting.
+    ///
+    /// Default: `false`. Override with `BLINC_NODE_TABLE=1`.
+    pub node_table: bool,
 }
 
 impl Default for RendererConfig {
@@ -141,7 +147,7 @@ impl Default for RendererConfig {
         Self {
             // Conservative defaults for low memory footprint
             // Buffers are re-created if scenes exceed these limits, so no hard cap
-            max_primitives: 20_000, // ~10.9 MB at 544 B each — handles complex UI screens
+            max_primitives: 20_000, // ~11.2 MB at 560 B each — handles complex UI screens
             max_glass_primitives: 32, // ~8 KB
             max_glyphs: 4_000,      // ~384 KB at 96 B each — handles full-screen text content
             sample_count: 1,
@@ -149,6 +155,9 @@ impl Default for RendererConfig {
             unified_text_rendering: true, // Enabled for consistent transforms during animations
             gpu_memory_budget: budget_mb * 1024 * 1024,
             pipeline_cache_path: None,
+            node_table: std::env::var("BLINC_NODE_TABLE")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
         }
     }
 }

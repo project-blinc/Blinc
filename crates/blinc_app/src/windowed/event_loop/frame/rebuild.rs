@@ -309,8 +309,11 @@ pub(super) fn check_rebuild(
             .unwrap_or_default();
         let had_prop_updates = !prop_updates.is_empty();
         let mut prop_effects = blinc_layout::SideEffects::default();
+        let mut needs_property_paint = false;
         if let Some(ref mut tree) = ws.render_tree {
+            let paint_revision = tree.property_paint_revision();
             prop_effects = prop_effects.or(tree.apply_partial_property_updates(prop_updates));
+            needs_property_paint |= tree.property_paint_revision() != paint_revision;
         }
 
         // Process subtree rebuilds (from stateful changes OR overlay changes).
@@ -403,68 +406,30 @@ pub(super) fn check_rebuild(
         let had_post_focus_updates = !post_focus_updates.is_empty();
         if had_post_focus_updates {
             if let Some(ref mut tree) = ws.render_tree {
+                let paint_revision = tree.property_paint_revision();
                 prop_effects =
                     prop_effects.or(tree.apply_partial_property_updates(post_focus_updates));
+                needs_property_paint |= tree.property_paint_revision() != paint_revision;
             }
             needs_layout |= prop_effects.needs_layout;
-            blinc_app.invalidate_render_cache_tagged("post_focus_prop_update");
+            if needs_property_paint {
+                blinc_app.invalidate_render_cache_tagged("post_focus_prop_update");
+            }
         }
 
-        // `refresh_props_internal` (driven by
-        // focus_text_input / focus_text_area
-        // via refresh_stateful) queues BOTH a
-        // partial prop update AND a subtree
-        // rebuild — the rebuild lives in
-        // PENDING_SUBTREE_REBUILDS, NOT in the
-        // partial channel, so the drain above
-        // did NOT process it. cn::input /
-        // cn::textarea hit the topology
-        // rebuild path because their on_state
-        // callback adds the cursor canvas only
-        // when visual.is_focused(); Idle →
-        // Focused therefore queues a full
-        // structural rebuild whose post-step
-        // calls apply_stylesheet_base_styles_for_subtree
-        // and silently clobbers the focused
-        // bg/border with the `.cn-input` /
-        // `.cn-textarea` base CSS rule. Phase 4's
-        // apply_stylesheet_state_styles is gated
-        // on a router-state-fingerprint change;
-        // focus didn't change between the
-        // build frame and the next paint frame,
-        // so the gate fails and `:focus` never
-        // re-applies. The popup appears
-        // unfocused until a mouse-move bumps
-        // the fingerprint. Fix: unconditionally
-        // drain the queued subtree rebuilds and
-        // clear last_router_state_fp here so
-        // (1) the focus-triggered rebuild
-        // applies on the SAME frame as focus,
-        // and (2) Phase 4 re-runs the state-
-        // style pass and restores the :focus
-        // visuals on top of the just-clobbered
-        // base.
+        // Focusing can queue another rebuild. Synchronize router focus before applying it
+        // so the rebuilt nodes receive the current focus styles.
         let pending_after_focus = blinc_layout::has_pending_subtree_rebuilds();
         if had_post_focus_updates || pending_after_focus {
-            // Bridge EventRouter.focus to the
-            // freshly-focused text input BEFORE
-            // the rebuild runs, so the routed
-            // base-pass sees the correct focused
-            // node when it evaluates `:focus`
-            // selectors against the subtree.
-            // (Phase 4's standard focus sync at
-            // line ~6354 runs too late for the
-            // state pass that fires inside
-            // process_pending_subtree_rebuilds_routed.)
             let text_focus = blinc_layout::widgets::text_input::focused_text_input_node_id()
                 .or_else(blinc_layout::widgets::text_input::focused_text_area_node_id);
             windowed_ctx.event_router.sync_text_focus(text_focus);
-            if let Some(ref mut tree) = ws.render_tree {
-                if tree.process_pending_subtree_rebuilds_routed(Some(&windowed_ctx.event_router)) {
-                    needs_layout = true;
-                }
+            if let Some(ref mut tree) = ws.render_tree
+                && tree.process_pending_subtree_rebuilds_routed(Some(&windowed_ctx.event_router))
+            {
+                needs_layout = true;
+                blinc_app.invalidate_render_cache_tagged("post_focus_subtree_rebuild");
             }
-            blinc_app.invalidate_render_cache_tagged("post_focus_subtree_rebuild");
         }
 
         if needs_layout {
@@ -502,25 +467,8 @@ pub(super) fn check_rebuild(
             tracing::trace!("Visual-only prop updates, skipping layout");
         }
 
-        // Stateful animations (springs, keyframes,
-        // timelines) queue prop updates here when their
-        // scheduler-driven `refresh_callback` re-runs
-        // the `on_state` callback. Without an explicit
-        // cache invalidate, the fast path's
-        // `cached_bg_batch` would keep the previous
-        // frame's primitives — and the walker (which is
-        // what reads `render_node.props` to emit fresh
-        // primitives) doesn't run on the fast path.
-        // Symptom: timeline_demo's bouncing ball,
-        // motion_demo's pull-to-refresh contents, and
-        // any other stateful-animation-driven visual
-        // stay frozen on the previous frame until some
-        // input (mouse move, scroll) trips a different
-        // invalidate. The state-driven path through
-        // `handle_event_internal` already covers
-        // event-fired transitions via `state_changed`
-        // above; this catches the scheduler-driven half.
-        if had_prop_updates {
+        // Retained translations update rows; other property writes need fresh paint.
+        if needs_property_paint {
             blinc_app.invalidate_render_cache_tagged("stateful_prop_update");
         }
 

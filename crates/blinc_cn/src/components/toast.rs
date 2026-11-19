@@ -304,6 +304,20 @@ impl ToastBuilder {
     }
 }
 
+fn toast_semantics(variant: ToastVariant) -> blinc_layout::accessibility::AccessibilitySemantics {
+    use blinc_layout::accessibility::{
+        AccessibilityLive, AccessibilityRole, AccessibilitySemantics,
+    };
+    let (role, priority) = if variant == ToastVariant::Destructive {
+        (AccessibilityRole::Alert, AccessibilityLive::Assertive)
+    } else {
+        (AccessibilityRole::Status, AccessibilityLive::Polite)
+    };
+    AccessibilitySemantics::new(role)
+        .children(true)
+        .live(priority, true)
+}
+
 /// Build the toast content. Its look is the `.cn-toast*` rules, keyed on
 /// `data-variant`. `toast_handle` is captured so the action button and close
 /// button can dismiss this specific toast.
@@ -326,12 +340,14 @@ fn build_toast_content(
     if let Some(custom_fn) = custom_content {
         return custom_fn()
             .class("cn-toast")
+            .accessibility(toast_semantics(variant))
             .attr("data-variant", variant.attr())
             .w(360.0);
     }
 
     let toast = div()
         .class("cn-toast")
+        .accessibility(toast_semantics(variant))
         .attr("data-variant", variant.attr())
         .w(360.0);
 
@@ -390,6 +406,9 @@ fn build_toast_content(
         inner = inner.child(
             div()
                 .class("cn-toast-close")
+                .attr("role", "button")
+                .attr("tabindex", "0")
+                .attr("aria-label", "Dismiss notification")
                 .flex_shrink_0()
                 .w(24.0)
                 .h(24.0)

@@ -21,6 +21,14 @@ pub struct BlincConfig {
     pub max_glyphs: usize,
     /// MSAA sample count (1, 2, 4, or 8)
     pub sample_count: u32,
+    /// Move motion-bound nodes with rows of the GPU node table, not by patching primitives.
+    /// Default follows `BLINC_NODE_TABLE`, off when it is unset.
+    pub node_table: bool,
+    /// Bake motion-bound subtrees to textures and blit them while they move. Off, the default,
+    /// they are painted as vectors and moved by rows, on the GPU with the node table and
+    /// otherwise on the CPU; the node table does that whatever this says. Default follows
+    /// `BLINC_MOTION_PROMOTION`, off when it is unset and `1` or `true` turns it on.
+    pub motion_promotion: bool,
 }
 
 impl Default for BlincConfig {
@@ -30,6 +38,10 @@ impl Default for BlincConfig {
             max_glass_primitives: 1_000,
             max_glyphs: 50_000,
             sample_count: 4, // 4x MSAA for path anti-aliasing
+            node_table: blinc_gpu::RendererConfig::default().node_table,
+            motion_promotion: std::env::var("BLINC_MOTION_PROMOTION")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
         }
     }
 }
@@ -68,7 +80,8 @@ impl BlincApp {
     ///
     /// This is used internally for platform-specific initialization (Android, iOS)
     /// where the GPU setup is done differently.
-    pub(crate) fn from_context(ctx: RenderContext, config: BlincConfig) -> Self {
+    pub(crate) fn from_context(mut ctx: RenderContext, config: BlincConfig) -> Self {
+        ctx.set_promote_motion(config.motion_promotion);
         Self { ctx, config }
     }
 
@@ -83,6 +96,7 @@ impl BlincApp {
             sample_count: 1, // SDF pipelines always use single-sampled textures
             texture_format: None,
             unified_text_rendering: true,
+            node_table: config.node_table,
             ..RendererConfig::default()
         };
 
@@ -130,7 +144,8 @@ impl BlincApp {
         );
         text_ctx.preload_generic_styles(blinc_gpu::GenericFont::Monospace, &[400, 700], false);
 
-        let ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
+        let mut ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
+        ctx.set_promote_motion(config.motion_promotion);
 
         Ok(Self { ctx, config })
     }
@@ -828,7 +843,8 @@ impl BlincApp {
         );
         text_ctx.preload_generic_styles(blinc_gpu::GenericFont::Monospace, &[400, 700], false);
 
-        let ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
+        let mut ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
+        ctx.set_promote_motion(config.motion_promotion);
         let app = Self { ctx, config };
 
         Ok((app, surface))
@@ -921,9 +937,32 @@ impl BlincApp {
         );
         text_ctx.preload_generic_styles(blinc_gpu::GenericFont::Monospace, &[400, 700], false);
 
-        let ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
+        let mut ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
+        ctx.set_promote_motion(config.motion_promotion);
         let app = Self { ctx, config };
 
         Ok((app, surface))
+    }
+}
+
+#[cfg(test)]
+mod from_context_tests {
+    use super::*;
+
+    /// The mobile runners build the app from a context they made themselves, and the configuration
+    /// decides whether bound nodes are baked into textures or moved by rows.
+    #[test]
+    fn a_context_takes_the_motion_promotion_of_its_configuration() {
+        let config = |motion_promotion| BlincConfig {
+            node_table: false,
+            motion_promotion,
+            ..BlincConfig::default()
+        };
+        let Ok(app) = BlincApp::with_config(config(true)) else {
+            return;
+        };
+        assert!(!app.ctx.rows_mode());
+        let app = BlincApp::from_context(app.ctx, config(false));
+        assert!(app.ctx.rows_mode());
     }
 }

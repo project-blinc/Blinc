@@ -639,7 +639,24 @@ fn reconcile_children(
 // =============================================================================
 
 /// Hash a Div's own properties (not including children).
+fn hash_accessibility(element: &dyn ElementBuilder, hasher: &mut impl Hasher) {
+    if let Some(s) = element.accessibility_semantics() {
+        1_u8.hash(hasher);
+        s.role.hash(hasher);
+        s.children.hash(hasher);
+        s.actions.hash(hasher);
+        s.live.hash(hasher);
+        if let Some(binding) = &s.binding {
+            (std::sync::Arc::as_ptr(&binding.read) as *const () as usize).hash(hasher);
+            (std::sync::Arc::as_ptr(&binding.action) as *const () as usize).hash(hasher);
+        }
+    } else {
+        0_u8.hash(hasher);
+    }
+}
+
 fn hash_div_props(div: &Div, hasher: &mut impl Hasher) {
+    hash_accessibility(div, hasher);
     hash_style(&div.style, hasher);
     hash_option_brush(&div.background, hasher);
     hash_corner_radius(&div.border_radius, hasher);
@@ -675,6 +692,7 @@ fn hash_div_tree(div: &Div, hasher: &mut impl Hasher) {
 
 /// Hash an ElementBuilder (without children).
 fn hash_element(element: &dyn ElementBuilder, hasher: &mut impl Hasher) {
+    hash_accessibility(element, hasher);
     // Hash element type using discriminant
     std::mem::discriminant(&element.element_type_id()).hash(hasher);
 

@@ -213,7 +213,8 @@ impl GpuRenderer {
                         depth_or_array_layers: 1,
                     },
                 );
-                self.queue.submit(std::iter::once(copy_encoder.finish()));
+                self.uploads
+                    .submit(&self.queue, std::iter::once(copy_encoder.finish()));
                 Some(temp)
             } else {
                 None
@@ -238,11 +239,7 @@ impl GpuRenderer {
             )
         };
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Tight Blit Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -308,7 +305,7 @@ impl GpuRenderer {
             }
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
 
         if let Some(snapshot) = dest_snapshot {
             self.layer_texture_cache.release(snapshot);
@@ -364,7 +361,8 @@ impl GpuRenderer {
                         depth_or_array_layers: 1,
                     },
                 );
-                self.queue.submit(std::iter::once(copy_encoder.finish()));
+                self.uploads
+                    .submit(&self.queue, std::iter::once(copy_encoder.finish()));
                 Some(temp)
             } else {
                 // No target texture available — fall back to Normal blend
@@ -424,11 +422,7 @@ impl GpuRenderer {
             )
         };
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Blit Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -453,7 +447,7 @@ impl GpuRenderer {
             render_pass.draw(0..6, 0..1);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
 
         // Release the dest snapshot texture
         if let Some(snapshot) = dest_snapshot {
@@ -546,11 +540,7 @@ impl GpuRenderer {
             &self.path_image_sampler,
         );
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Region Blit Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -582,7 +572,7 @@ impl GpuRenderer {
             render_pass.draw(0..6, 0..1);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────

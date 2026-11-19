@@ -38,6 +38,8 @@ mod accessors;
 mod bind_group_layouts;
 mod blit;
 mod buffers;
+#[cfg(test)]
+mod capacity_tests;
 mod config;
 mod construction;
 mod device_setup;
@@ -50,12 +52,15 @@ mod images;
 mod init;
 mod layer_cache;
 mod layers;
+#[cfg(test)]
+mod node_table_tests;
 mod overlay_msaa;
 mod overlay_render;
 mod pipelines;
 mod sdf_dispatch;
 mod static_layer;
 mod text;
+mod uploads;
 mod viewports;
 pub use config::{GpuMemoryBudget, RendererConfig, RendererError};
 use config::{apply_renderer_config_overrides, env_u64, env_usize, log_renderer_config};
@@ -247,6 +252,8 @@ struct Buffers {
     /// Width = 1024 texels, height grows on demand. Format: Rgba32Float.
     aux_data_texture: Option<wgpu::Texture>,
     aux_data_view: Option<wgpu::TextureView>,
+    /// Storage buffer of animated node rows; present only when the node table is on.
+    node_rows: Option<wgpu::Buffer>,
     /// Current height of the aux data texture (for resize detection)
     aux_data_texture_height: u32,
     /// Data texture for glyph data (WebGL2 fallback).
@@ -274,18 +281,16 @@ struct CachedGlassResources {
     data: Option<glass::GlassDataTexture>,
 }
 
-/// Active glyph atlas pointers for SDF bind group (set per-frame).
+/// Glyph atlas views bound into the SDF bind group.
 ///
 /// When CSS-transformed text is present, the real glyph atlas textures are bound
-/// into `self.bind_groups.sdf` instead of the placeholder textures. These pointers
-/// track the currently-bound atlas views so that `rebind_sdf_bind_group()` (called
-/// during aux buffer resize) can recreate the bind group with the real atlas.
-///
-/// SAFETY: Pointers are valid for the duration of a frame — they point to TextureViews
-/// owned by the text context, which outlives all render calls within a frame.
+/// into `self.bind_groups.sdf` instead of the placeholder textures. These views are
+/// what `rebind_sdf_bind_group()` binds when a buffer resize recreates the group, and
+/// what `set_glyph_atlas` compares against to skip an unchanged rebind.
+#[derive(PartialEq)]
 struct ActiveGlyphAtlas {
-    atlas_view_ptr: *const wgpu::TextureView,
-    color_atlas_view_ptr: *const wgpu::TextureView,
+    atlas_view: wgpu::TextureView,
+    color_atlas_view: wgpu::TextureView,
 }
 
 /// Cached resources for SDF 3D raymarching viewports
@@ -337,6 +342,8 @@ pub struct GpuRenderer {
     pub(crate) device: Arc<wgpu::Device>,
     /// Command queue
     pub(crate) queue: Arc<wgpu::Queue>,
+    /// Buffer writes, staged until the next submit
+    pub(crate) uploads: uploads::Uploads,
     /// Render pipelines
     pipelines: Pipelines,
     /// Effect pipelines (lazily created on first use)
@@ -373,6 +380,11 @@ pub struct GpuRenderer {
     /// `None` = no damage scissor (default; blit uses its own
     /// visible-bounds scissor only).
     pending_damage_scissor: Option<(u32, u32, u32, u32)>,
+    /// Whether consecutive plain opacity groups are drawn through one atlas and composited in
+    /// one pass; off draws each group on its own.
+    batch_opacity_layers: bool,
+    /// Atlases the batched opacity groups have been drawn through.
+    opacity_atlases: u64,
     /// Renderer configuration
     config: RendererConfig,
     /// Resolved texture format used by pipelines
@@ -441,6 +453,10 @@ pub struct GpuRenderer {
     /// primitive and auxiliary data to fragment shaders instead of storage
     /// buffers. This is the Tier 3 / WebGL2 fallback path.
     pub(crate) has_storage_buffers: bool,
+    /// Whether the animated node table is bound and the SDF shaders apply it.
+    node_table: bool,
+    /// The rows last written, for the placement the CPU needs (culling, layer bounds).
+    node_rows_cpu: std::sync::Mutex<Vec<crate::node_table::NodeRow>>,
     /// `true` when `device.features()` reports
     /// `TEXTURE_COMPRESSION_BC` — the renderer can upload BC1 / BC3
     /// / BC4 / BC5 material textures and cut GPU VRAM by 4-8× vs

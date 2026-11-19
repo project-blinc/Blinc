@@ -1191,6 +1191,11 @@ impl MultiKeyframeAnimation {
         self.fill_mode = fill_mode;
     }
 
+    /// Whether the animation repeats with no end.
+    pub fn is_infinite(&self) -> bool {
+        self.iterations < 0
+    }
+
     /// Set number of iterations (mutating, -1 for infinite)
     pub fn set_iterations(&mut self, count: i32) {
         self.iterations = count;

@@ -31,6 +31,7 @@ use std::sync::Arc;
 
 use blinc_core::context_state::BlincContextState;
 use blinc_core::{Signal, State};
+use blinc_layout::accessibility::{AccessibilityRole, AccessibilitySemantics};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
 use blinc_layout::overlay_state::overlay_stack;
@@ -322,6 +323,10 @@ impl TooltipBuilder {
                         // It takes no input, so the pointer stays on the trigger.
                         div()
                             .class("cn-tooltip")
+                            .accessibility(
+                                AccessibilitySemantics::new(AccessibilityRole::Tooltip)
+                                    .children(false),
+                            )
                             .class(side_class)
                             .flex_row()
                             .items_center()

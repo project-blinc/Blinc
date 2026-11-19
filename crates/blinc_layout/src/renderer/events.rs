@@ -325,10 +325,7 @@ impl RenderTree {
         );
     }
 
-    /// Broadcast a key event to ALL key handlers
-    ///
-    /// This is used when the router's focused node ID may be stale after a tree rebuild.
-    /// Each handler checks its own internal focus state to determine if it should process.
+    /// Broadcast a key event. Handlers check their own focus state.
     pub fn broadcast_key_event(
         &mut self,
         event_type: blinc_core::events::EventType,
@@ -338,6 +335,20 @@ impl RenderTree {
         alt: bool,
         meta: bool,
     ) {
+        self.broadcast_key_event_cancellable(event_type, key_code, shift, ctrl, alt, meta);
+    }
+
+    /// Broadcast a key event and report whether a handler cancelled its default action.
+    /// Each handler checks its own focus state, including after a tree rebuild.
+    pub fn broadcast_key_event_cancellable(
+        &mut self,
+        event_type: blinc_core::events::EventType,
+        key_code: u32,
+        shift: bool,
+        ctrl: bool,
+        alt: bool,
+        meta: bool,
+    ) -> bool {
         let _tree_scope = self.layout_tree.enter_scope();
         let ctx = crate::event_handler::EventContext::new(
             event_type,
@@ -350,6 +361,7 @@ impl RenderTree {
         self.handler_registry.broadcast(event_type, &ctx, |stable| {
             resolver_map.get(&stable).copied()
         });
+        ctx.is_default_prevented()
     }
 
     /// Dispatch a scroll event with scroll delta

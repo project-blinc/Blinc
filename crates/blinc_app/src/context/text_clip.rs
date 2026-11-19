@@ -70,6 +70,21 @@ pub(super) fn prepare_glyphs(
         path.prepare(&glyphs, text.clip_bounds, size)
     } else {
         let mut owned = PrimitiveBatch::new();
+        if let Some((stays, [x, y, w, h], radius)) = text.split_clip {
+            // The clip rect stays with the viewport; the clip inside it is a rounded-rect shape
+            // (type 4, round corners) in the batch's aux rows, which can move with the content.
+            owned.aux_data.extend_from_slice(&[
+                [1.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 4.0, 0.0],
+                [x, y, w, h],
+                radius,
+                [1.0; 4],
+            ]);
+            for glyph in &mut glyphs {
+                glyph.clip_bounds = stays;
+                glyph.flags[1] = 1.0;
+            }
+        }
         owned.glyphs = glyphs;
         owned
     };

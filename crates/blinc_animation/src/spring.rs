@@ -127,8 +127,26 @@ impl Spring {
         self.target
     }
 
+    /// This spring's motion from now on as data: from its value and velocity at `now_ms` towards
+    /// its target, in closed form. It settles when the descriptor says, not on the thresholds
+    /// [`Self::is_settled`] uses.
+    pub fn to_descriptor(&self, now_ms: f64) -> crate::descriptor::AnimationDescriptor {
+        crate::descriptor::AnimationDescriptor::spring(
+            now_ms,
+            self.value,
+            self.target,
+            self.velocity,
+            self.config,
+        )
+    }
+
     pub fn set_target(&mut self, target: f32) {
         self.target = target;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn velocity_for_test(&mut self, velocity: f32) {
+        self.velocity = velocity;
     }
 
     /// Check if the spring has settled (within epsilon of target with minimal velocity)

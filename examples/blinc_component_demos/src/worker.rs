@@ -11,6 +11,10 @@ use wasm_bindgen::prelude::*;
 #[path = "../tests/fixtures/calendar_pair.rs"]
 mod calendar_pair;
 
+#[cfg(feature = "browser-tests")]
+#[path = "../tests/fixtures/web_cache.rs"]
+mod web_cache_probe;
+
 #[wasm_bindgen]
 pub fn set_media_bridge(callback: js_sys::Function) {
     blinc_media::set_web_media_bridge(callback);

@@ -827,6 +827,21 @@ impl RenderTree {
         self.viewport_cull_scrolls.contains(&node_id)
     }
 
+    /// The scroll containers that are scrolled, as their raw ids and offsets, sorted by id: what a
+    /// trace of a frame records to show when a page's scroll changes.
+    pub fn scrolled_offsets(&self) -> Vec<(u64, f32, f32)> {
+        let mut scrolled: Vec<(u64, f32, f32)> = self
+            .scroll_physics
+            .keys()
+            .filter_map(|node| {
+                let (x, y) = self.get_scroll_offset(*node);
+                (x.abs() > 0.5 || y.abs() > 0.5).then(|| (node.to_raw(), x, y))
+            })
+            .collect();
+        scrolled.sort_by_key(|entry| entry.0);
+        scrolled
+    }
+
     pub fn get_scroll_offset(&self, node_id: LayoutNodeId) -> (f32, f32) {
         // Check scroll physics first (has direction-aware scroll from element)
         let (x, y) = if let Some(physics) = self.scroll_physics.get(&node_id) {
@@ -1204,6 +1219,7 @@ impl RenderTree {
     }
 
     pub fn tick_scroll_physics(&mut self, current_time_ms: u64) -> bool {
+        self.scroll_clock_ms.set(Some(current_time_ms));
         // Delta time from a MICROSECOND clock, not the millisecond
         // `current_time_ms` arg: integer-ms `dt` quantises a 16.67ms
         // vsync into alternating 16/17ms steps (~6% jitter), which the
@@ -1226,10 +1242,12 @@ impl RenderTree {
         let node_ids: Vec<_> = self.scroll_physics.keys().copied().collect();
 
         let mut any_animating = false;
+        let mut off_rows_animating = false;
         for node_id in node_ids {
             let Some(physics_arc) = self.scroll_physics.get(&node_id) else {
                 continue;
             };
+            let on_rows = self.is_scroll_row_node(node_id);
 
             let mut physics = physics_arc.lock().unwrap();
 
@@ -1242,11 +1260,13 @@ impl RenderTree {
             // Tick the physics
             if physics.tick(dt_secs) {
                 any_animating = true;
+                off_rows_animating |= !on_rows;
             }
 
             // Tick scrollbar animations (opacity fade in/out)
             if physics.tick_scrollbar(dt_secs) {
                 any_animating = true;
+                off_rows_animating |= !on_rows;
             }
 
             // Sync ScrollRef state with current physics (for scrollbar position updates)
@@ -1259,6 +1279,7 @@ impl RenderTree {
             }
         }
 
+        self.set_scroll_off_rows_animating(off_rows_animating);
         any_animating
     }
 }

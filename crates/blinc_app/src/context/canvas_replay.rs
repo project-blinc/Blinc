@@ -31,16 +31,17 @@ impl RenderContext {
         use blinc_gpu::GpuPaintContext;
 
         let batch = self.cached_bg_batch.as_mut()?;
-
-        if batch.has_ordered_draws()
+        let records_ref = tree.canvas_paint_records();
+        if records_ref.is_empty() {
+            return Some(CanvasOverlay::default());
+        }
+        // Only an actual ordered draw prevents splicing a canvas range. A batch can keep
+        // the resolver's marker after its ordered content has been consumed.
+        if batch.has_ordered_content()
             || batch.has_foreground_content()
             || batch.has_foreground_layers()
         {
             return None;
-        }
-        let records_ref = tree.canvas_paint_records();
-        if records_ref.is_empty() {
-            return Some(CanvasOverlay::default());
         }
         // Release the tree borrow before callbacks can access it again.
         let mut sorted: Vec<blinc_layout::renderer::CanvasPaintRecord> =
@@ -107,6 +108,93 @@ impl RenderContext {
         }
 
         Some(output)
+    }
+
+    /// Replay the canvases painted inside scroll containers on rows into the dynamic batch, at
+    /// the pose they were painted at, keeping each primitive's row so the rows move them. `false`
+    /// when one draws something a splice cannot hold (a different count, auxiliary rows, meshes,
+    /// passes or ordered draws): the frame is then painted in full.
+    pub(super) fn replay_rows_canvases(&mut self, tree: &RenderTree) -> bool {
+        use blinc_core::{DrawContext, Rect, Transform, layer::Affine2D};
+        use blinc_gpu::GpuPaintContext;
+
+        let records: Vec<blinc_layout::renderer::CanvasPaintRecord> =
+            tree.rows_canvas_paint_records().values().cloned().collect();
+        if records.is_empty() {
+            return true;
+        }
+        let (width, height) = self.renderer.viewport_size();
+        let Some(batch) = self.cached_dynamic_batch.as_mut() else {
+            return false;
+        };
+        for record in &records {
+            if !record.wants_frames() {
+                continue;
+            }
+            let mut scratch = GpuPaintContext::new(width as f32, height as f32);
+            scratch.set_gpu_pass_scale_factor(tree.scale_factor() as f64);
+            // The clips in force at the paint, in screen space before the canvas affine; the saved
+            // intersection already includes the canvas's own clip. One that was empty drew nothing
+            // to replace.
+            let ancestor_clip = record.ancestor_clip_aabb;
+            if let Some([cx, cy, cw, ch]) = ancestor_clip {
+                if cw <= 0.0 || ch <= 0.0 {
+                    continue;
+                }
+                scratch.push_clip(blinc_core::layer::ClipShape::rect(Rect::new(
+                    cx, cy, cw, ch,
+                )));
+            }
+            scratch.push_transform(Transform::Affine2D(Affine2D {
+                elements: record.affine,
+            }));
+            scratch.push_opacity(record.opacity);
+            scratch.set_z_layer(record.z_layer);
+            let local_clip = record.clips_content && ancestor_clip.is_none();
+            if local_clip {
+                let clip = Rect::new(0.0, 0.0, record.bounds_wh.0, record.bounds_wh.1);
+                scratch.push_clip(blinc_core::layer::ClipShape::rect(clip));
+            }
+            let bounds = blinc_layout::canvas::CanvasBounds {
+                x: 0.0,
+                y: 0.0,
+                width: record.bounds_wh.0,
+                height: record.bounds_wh.1,
+            };
+            tree.with_property_updates(|| {
+                (record.render_fn)(&mut scratch as &mut dyn DrawContext, bounds);
+            });
+            if local_clip {
+                scratch.pop_clip();
+            }
+            let new_batch = scratch.take_batch();
+            let range = record.primitive_range.clone();
+            if !new_batch.aux_data.is_empty()
+                || new_batch.has_ordered_draws()
+                || new_batch.has_foreground_content()
+                || new_batch.has_foreground_layers()
+                || !scratch.take_pending_meshes().is_empty()
+                || !scratch.take_pending_gpu_passes().is_empty()
+                || new_batch.primitives.len() != range.len()
+                || range.end > batch.primitives.len()
+            {
+                return false;
+            }
+            for (i, mut p) in new_batch.primitives.into_iter().enumerate() {
+                let old = &batch.primitives[range.start + i];
+                // The ordinal, the row and the clip origin the table gave the painted primitive,
+                // and its clip: drawn at the painted pose, the clip is the one painted, split into
+                // the part that stays and the shape that follows the rows.
+                p.node_slot = old.node_slot;
+                p.clip_bounds = old.clip_bounds;
+                p.clip_radius = old.clip_radius;
+                p.clip_corner_shape = old.clip_corner_shape;
+                p.clip_shape = old.clip_shape;
+                p.type_info[2] = old.type_info[2];
+                batch.primitives[range.start + i] = p;
+            }
+        }
+        true
     }
 
     /// Collect independent canvas primitives for callers that do not consume other output

@@ -22,6 +22,8 @@ impl RenderContext {
                 }
             })
             .collect();
+        self.image_failures
+            .forget(|k| !k.is_empty() && abs_str.ends_with(k));
         for k in &dropped {
             self.image_cache.pop(k);
             self.image_load_times.remove(k);
@@ -60,6 +62,47 @@ impl RenderContext {
         self.render_images_ref(&target, images);
     }
 
+    /// Put the images the worker has finished into the cache, and ask for a full paint when one
+    /// arrived, so it is drawn. Start again the failed loads whose wait is over.
+    pub(super) fn take_decoded_images(&mut self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(decoder) = self.image_decode.as_mut() else {
+                return;
+            };
+            let bc = self.renderer.has_texture_compression_bc();
+            for due in self.image_failures.due() {
+                if !decoder.request(&due.source, due.fade_duration_ms, due.retry, bc) {
+                    self.image_failures
+                        .failed(&due.source, due.fade_duration_ms, due.retry);
+                }
+            }
+            for decoded in decoder.take() {
+                let Some(image) = decoded.image else {
+                    tracing::trace!("Failed to load image '{}'", decoded.source);
+                    self.image_failures.failed(
+                        &decoded.source,
+                        decoded.fade_duration_ms,
+                        decoded.retry,
+                    );
+                    continue;
+                };
+                self.image_failures.loaded(&decoded.source);
+                self.image_cache.put(decoded.source.clone(), image);
+                let now = web_time::Instant::now();
+                self.image_load_times.insert(decoded.source.clone(), now);
+                if decoded.fade_duration_ms > 0
+                    && let Some(deadline) = now.checked_add(std::time::Duration::from_millis(
+                        decoded.fade_duration_ms as u64,
+                    ))
+                {
+                    self.image_fade_deadlines.insert(decoded.source, deadline);
+                }
+                self.captured_images_need_repaint = true;
+            }
+        }
+    }
+
     /// Load image sources and populate the bounded GPU cache before dispatch.
     pub(super) fn preload_images(
         &mut self,
@@ -69,6 +112,7 @@ impl RenderContext {
     ) {
         // Buffer zone: load images that are within 100px of becoming visible
         const VISIBILITY_BUFFER: f32 = 100.0;
+        self.take_decoded_images();
 
         // Eagerly load placeholder images for any lazy element with placeholder_type == 2
         // (so the placeholder is already in cache when we go to render it).
@@ -143,15 +187,33 @@ impl RenderContext {
                 }
             }
 
+            // A failed load waits as the image's retry says.
+            if !self.image_failures.may_try(&image.source) {
+                continue;
+            }
+
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(decoder) = self.image_decode.as_mut() {
+                let bc = self.renderer.has_texture_compression_bc();
+                if !decoder.request(&image.source, image.fade_duration_ms, image.retry, bc) {
+                    self.image_failures
+                        .failed(&image.source, image.fade_duration_ms, image.retry);
+                }
+                continue;
+            }
+
             // Try to load the image - use from_uri to handle emoji://, data:, and file paths
             let source = blinc_image::ImageSource::from_uri(&image.source);
             let image_data = match blinc_image::ImageData::load(source) {
                 Ok(data) => data,
                 Err(e) => {
                     tracing::trace!("Failed to load image '{}': {:?}", image.source, e);
-                    continue; // Skip images that fail to load
+                    self.image_failures
+                        .failed(&image.source, image.fade_duration_ms, image.retry);
+                    continue;
                 }
             };
+            self.image_failures.loaded(&image.source);
 
             // Compress eligible large images when supported; keep small icons and emoji
             // lossless.
@@ -336,6 +398,9 @@ impl RenderContext {
     ) {
         use blinc_image::{ObjectFit, ObjectPosition, calculate_fit_rects, src_rect_to_uv};
 
+        // Loaded images with nothing drawn between them share one pass; anything else drawn in
+        // between ends the run first, so the order is kept.
+        let mut run: Vec<(String, GpuImageInstance)> = Vec::new();
         for image in images {
             // Get cached GPU image
             let gpu_image = self.image_cache.get(&image.source);
@@ -356,6 +421,7 @@ impl RenderContext {
 
             // If image is not loaded and has a placeholder, render placeholder
             if gpu_image.is_none() && image.placeholder_type != 0 {
+                self.flush_image_run(target, &mut run);
                 match image.placeholder_type {
                     // Type 1: Solid color
                     1 => {
@@ -460,9 +526,11 @@ impl RenderContext {
             let Some(gpu_image) = gpu_image else {
                 continue; // Skip images that failed to load
             };
+            let (image_w, image_h) = (gpu_image.width(), gpu_image.height());
 
             // Render shadow before image if present
             if let Some(ref shadow) = image.shadow {
+                self.flush_image_run(target, &mut run);
                 let mut shadow_ctx = GpuPaintContext::new(viewport_width, viewport_height);
                 // Push scroll/parent clip so shadow doesn't escape the container
                 if let Some(clip) = image.clip_bounds {
@@ -485,18 +553,36 @@ impl RenderContext {
                 self.renderer.render_overlay(target, &shadow_batch);
             }
 
-            let instance = Self::image_instance(
-                image,
-                gpu_image.width(),
-                gpu_image.height(),
-                fade_factor,
-                scale_factor,
-            );
+            let instance = Self::image_instance(image, image_w, image_h, fade_factor, scale_factor);
 
-            // Render the image
-            self.renderer
-                .render_images(target, gpu_image.view(), &[instance]);
+            run.push((image.source.clone(), instance));
         }
+        self.flush_image_run(target, &mut run);
+    }
+
+    /// Draw the loaded images collected in `run` in one pass, and empty it.
+    fn flush_image_run(
+        &mut self,
+        target: &wgpu::TextureView,
+        run: &mut Vec<(String, GpuImageInstance)>,
+    ) {
+        if run.is_empty() {
+            return;
+        }
+        let images: Vec<_> = run
+            .iter()
+            .filter_map(|(source, instance)| {
+                self.image_cache
+                    .peek(source)
+                    .map(|image| (image, *instance))
+            })
+            .collect();
+        let draws: Vec<_> = images
+            .iter()
+            .map(|(image, instance)| (image.view(), *instance))
+            .collect();
+        self.renderer.render_image_set(target, &draws);
+        run.clear();
     }
 
     /// Render borrowed image elements through the standard image path.

@@ -122,6 +122,26 @@ struct AndroidSurfaceState {
 /// with automatic event handling and rendering.
 pub struct AndroidApp;
 
+/// Reconfigures the swapchain after draining the queue.
+///
+/// `Surface::configure` waits for the GPU and aborts if the queue is not empty
+/// afterwards. A Vulkan driver can report a timeline semaphore's new value a
+/// moment after the wait on it returned, so the drain is retried here, where a
+/// late value is not fatal.
+fn configure_surface(
+    surface: &wgpu::Surface<'_>,
+    device: &wgpu::Device,
+    config: &wgpu::SurfaceConfiguration,
+) {
+    for _ in 0..8 {
+        if matches!(device.poll(wgpu::PollType::Wait), Ok(status) if status.is_queue_empty()) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    surface.configure(device, config);
+}
+
 impl AndroidApp {
     /// Initialize the Android asset loader
     fn init_asset_loader(app: NdkAndroidApp) {
@@ -295,7 +315,7 @@ impl AndroidApp {
 
         let surface = Self::create_surface_for_native_window(app_instance, window)?;
         let config = Self::android_surface_config(app_instance, &surface, width, height);
-        surface.configure(app_instance.device(), &config);
+        configure_surface(&surface, app_instance.device(), &config);
 
         let scale_factor = blinc_platform_android::get_display_density(app);
         let logical_width = width as f32 / scale_factor as f32;
@@ -686,7 +706,7 @@ impl AndroidApp {
                                             config.width != width || config.height != height;
                                         config.width = width;
                                         config.height = height;
-                                        surf.configure(app_instance.device(), config);
+                                        configure_surface(surf, app_instance.device(), config);
 
                                         if size_changed {
                                             if let Some(ref mut windowed_ctx) = ctx {
@@ -1808,7 +1828,14 @@ impl AndroidApp {
                     // Apply CSS state styles (:hover, :active, :focus)
                     // This also detects property changes and starts new transitions
                     let mut state_changed = false;
-                    if let Some(ref windowed_ctx) = ctx {
+                    if let Some(ref mut windowed_ctx) = ctx {
+                        let text_focus =
+                            blinc_layout::widgets::text_input::focused_text_input_node_id()
+                                .or_else(
+                                    blinc_layout::widgets::text_input::focused_text_area_node_id,
+                                );
+                        windowed_ctx.event_router.sync_text_focus(text_focus);
+                        tree.sync_keyboard_focus(&mut windowed_ctx.event_router);
                         if tree.stylesheet().is_some()
                             && state_styles
                                 .should_apply(windowed_ctx.event_router.state_fingerprint())
@@ -1817,7 +1844,9 @@ impl AndroidApp {
                                 tree.apply_stylesheet_state_styles(&windowed_ctx.event_router);
                         }
                     }
-                    if state_changed || css_active || !tree.css_transitions_empty() {
+                    // What a binding carries or a baked layer shows leaves the cached paint
+                    // usable; the rest of the animation work has the next frame paint in full.
+                    if state_changed || tree.animation_needs_full_paint() {
                         crate::mobile_paint::request_full_paint();
                     }
                     if css_active
@@ -1926,12 +1955,12 @@ impl AndroidApp {
                             let was_suboptimal = output.suboptimal;
                             output.present();
                             if was_suboptimal {
-                                surf.configure(app_instance.device(), config);
+                                configure_surface(surf, app_instance.device(), config);
                             }
                         }
                         Err(wgpu::SurfaceError::Lost) | Err(wgpu::SurfaceError::Outdated) => {
                             tracing::warn!("Surface lost / outdated — reconfiguring swapchain");
-                            surf.configure(app_instance.device(), config);
+                            configure_surface(surf, app_instance.device(), config);
                             needs_redraw_next_frame = true;
                         }
                         Err(wgpu::SurfaceError::OutOfMemory) => {

@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 /// monolithic event loop closure. This is the foundation for multi-window support.
 #[cfg(all(feature = "windowed", not(target_os = "android")))]
 pub(crate) struct WindowState {
+    pub accessibility: super::accessibility::AccessibilityCache,
     /// GPU app (renderer, device, queue)
     pub app: Option<BlincApp>,
     /// Window surface for rendering
@@ -31,6 +32,8 @@ pub(crate) struct WindowState {
         Arc<std::sync::RwLock<std::collections::HashMap<String, blinc_core::MotionAnimationState>>>,
     /// Whether the UI tree needs rebuilding
     pub needs_rebuild: bool,
+    /// The last swapchain acquire failed with an unknown error and a retry was asked for.
+    pub acquire_other_retried: bool,
     /// The scope each build runs in; a fresh tree disposes the builds before it.
     pub build_scope: blinc_core::owner::BuildScope,
     /// Whether layout needs recomputing
@@ -95,6 +98,11 @@ pub(crate) struct WindowState {
     /// the full event-buffer refactor.
     /// ([[project-reactive-architecture-v2]] Phase 3.1.)
     pub last_pointer_dispatch: Option<std::time::Instant>,
+    /// Where the pointer is, in physical pixels, while it is over the window.
+    pub pointer_px: Option<(f32, f32)>,
+    /// The scroll offsets and layout the pointer was last tested against: when they change, what
+    /// is under a still pointer may have too (`DesktopLoop::refresh_hover`).
+    pub hover_stamp: Option<(u64, u64)>,
     /// EXPERIMENTAL: hand-rolled Wayland `wl_surface::frame()` gate.
     /// `Some(...)` only when (a) the `wayland-frame-gate` feature is
     /// enabled, (b) we're on Linux/Wayland, and (c) the gate's
@@ -105,10 +113,8 @@ pub(crate) struct WindowState {
     #[cfg(all(feature = "wayland-frame-gate", target_os = "linux"))]
     pub wayland_gate: Option<crate::wayland_frame_gate::WaylandFrameGate>,
     #[cfg(target_os = "linux")]
-    /// Wayland only: keep the swapchain cycling when the scene is static
-    /// (self-driven, vsync-paced presents) so the compositor never starves
-    /// the next `get_current_texture()`. Set at surface creation from the
-    /// detected display backend; override with `BLINC_KEEP_ALIVE=1/0`.
+    /// Keep presenting at vsync while the scene is static. Set at surface
+    /// creation from the display backend; override with `BLINC_KEEP_ALIVE=1/0`.
     pub wayland_keep_alive: bool,
     /// Whether any CSS animation/transition was active last frame.
     /// Falling edge triggers a one-shot render-cache invalidation so
@@ -118,6 +124,8 @@ pub(crate) struct WindowState {
     /// When the last frame ended with no further frame asked for. Once the window has stayed
     /// parked for [`IDLE_RELEASE`], the app frees its between-frame GPU memory.
     pub parked_at: Option<std::time::Instant>,
+    /// The grid point the next capped frame is scheduled for. See [`super::fps::next_grid_delay`].
+    pub frame_grid: Option<std::time::Instant>,
 }
 
 /// How long a window stays parked before its app frees the GPU memory kept between frames.
@@ -133,6 +141,7 @@ impl WindowState {
         >,
     ) -> Self {
         Self {
+            accessibility: super::accessibility::AccessibilityCache::default(),
             app: None,
             surface: None,
             surface_config: None,
@@ -142,6 +151,7 @@ impl WindowState {
             css_anim_store,
             shared_motion_states,
             needs_rebuild: true,
+            acquire_other_retried: false,
             build_scope: blinc_core::owner::BuildScope::new(),
             needs_relayout: false,
             hot_reload_restyle: false,
@@ -154,12 +164,15 @@ impl WindowState {
             cached_modifiers: blinc_platform::Modifiers::default(),
             last_router_state_fp: None,
             last_pointer_dispatch: None,
+            pointer_px: None,
+            hover_stamp: None,
             #[cfg(all(feature = "wayland-frame-gate", target_os = "linux"))]
             wayland_gate: None,
             #[cfg(target_os = "linux")]
             wayland_keep_alive: false,
             prev_css_active: false,
             parked_at: None,
+            frame_grid: None,
         }
     }
 }

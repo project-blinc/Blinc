@@ -227,6 +227,7 @@ impl RenderTree {
         self.node_states.remove(&node_id);
         self.ime_bindings.remove(&node_id);
         self.accessibility_bindings.remove(&node_id);
+        self.accessibility_semantics.remove(&node_id);
         self.scroll_offsets.remove(&node_id);
         self.scroll_physics.remove(&node_id);
         self.scroll_refs.remove(&node_id);
@@ -246,6 +247,8 @@ impl RenderTree {
         self.layout_bounds_storages.remove(&node_id);
         self.animated_render_bounds.remove(&node_id);
         self.motion_bindings.remove(&node_id);
+        self.property_translation_nodes.remove(&node_id);
+        self.binding_clip_bounds.borrow_mut().remove(&node_id);
         self.hover_css_animations.remove(&node_id);
         self.complex_state_affected.remove(&node_id);
 
@@ -457,7 +460,7 @@ impl RenderTree {
 
                 // Update the parent node's own render props AND layout style
                 // This is critical for overlay layer where size changes from 0x0 to full viewport
-                if let Some(render_node) = self.render_nodes.get_mut(&rebuild.parent_id) {
+                if let Some(mut render_node) = self.render_nodes.get_mut(&rebuild.parent_id) {
                     let mut new_props = rebuild.new_child.render_props();
                     new_props.node_id = Some(rebuild.parent_id);
                     new_props.motion = render_node.props.motion.clone();
@@ -643,7 +646,7 @@ impl RenderTree {
         if let Some(style) = new_element.effective_layout_style() {
             self.layout_tree.set_style(parent_id, style);
         }
-        if let Some(render_node) = self.render_nodes.get_mut(&parent_id) {
+        if let Some(mut render_node) = self.render_nodes.get_mut(&parent_id) {
             let mut new_props = new_element.render_props();
             new_props.node_id = Some(parent_id);
             new_props.motion = render_node.props.motion.clone();
@@ -674,7 +677,7 @@ impl RenderTree {
 
                 // Full replace of render props — preserve node_id and motion.
                 let mut new_props = new_child.render_props();
-                if let Some(render_node) = self.render_nodes.get_mut(child_id) {
+                if let Some(mut render_node) = self.render_nodes.get_mut(child_id) {
                     new_props.node_id = render_node.props.node_id;
                     new_props.motion = render_node.props.motion.clone();
                     render_node.props = new_props;
@@ -721,7 +724,7 @@ impl RenderTree {
             if let Some(new_child) = new_children.get(i) {
                 // Full replace of visual props, preserving node_id and motion
                 let mut new_props = new_child.render_props();
-                if let Some(render_node) = self.render_nodes.get_mut(child_id) {
+                if let Some(mut render_node) = self.render_nodes.get_mut(child_id) {
                     new_props.node_id = render_node.props.node_id;
                     new_props.motion = render_node.props.motion.clone();
                     render_node.props = new_props;

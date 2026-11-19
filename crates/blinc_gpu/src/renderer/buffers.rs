@@ -2,6 +2,7 @@
 
 use super::{BindGroupLayouts, BindGroups, Buffers, GpuRenderer, RendererConfig};
 use crate::gradient_texture::GradientTextureCache;
+use crate::node_table::{NODE_TABLE_CAPACITY, NodeRow};
 use crate::path::PathVertex;
 use crate::primitives::{
     GlassUniforms, GpuGlassPrimitive, GpuGlyph, GpuPrimitive, PathUniforms, PrimitiveBatch,
@@ -13,6 +14,7 @@ impl GpuRenderer {
         device: &wgpu::Device,
         config: &RendererConfig,
         has_storage_buffers: bool,
+        node_table: bool,
     ) -> Buffers {
         let uniforms = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Uniforms Buffer"),
@@ -66,6 +68,15 @@ impl GpuRenderer {
             size: 16, // 1 vec4<f32> minimum
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
+        });
+
+        let node_rows = node_table.then(|| {
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Node Rows Buffer"),
+                size: (std::mem::size_of::<NodeRow>() * NODE_TABLE_CAPACITY) as u64,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
         });
 
         // Create data textures for DT (Tier 3) fallback when no storage buffers
@@ -156,6 +167,7 @@ impl GpuRenderer {
             glow_uniforms: None,
             color_matrix_uniforms: None,
             aux_data,
+            node_rows,
             sdf_vertex_instances: None,
             prim_data_texture,
             prim_data_view,
@@ -241,7 +253,13 @@ impl GpuRenderer {
                     resource: wgpu::BindingResource::TextureView(color_glyph_atlas_view),
                 },
                 binding_5,
-            ],
+            ]
+            .into_iter()
+            .chain(buffers.node_rows.as_ref().map(|rows| wgpu::BindGroupEntry {
+                binding: 6,
+                resource: rows.as_entire_binding(),
+            }))
+            .collect::<Vec<_>>(),
         });
 
         // Path bind group (with gradient texture, image texture, and backdrop for glass)
@@ -363,8 +381,13 @@ impl GpuRenderer {
             self.rebind_path_bind_group();
         }
 
-        self.queue
-            .write_buffer(&self.buffers.aux_data, 0, bytemuck::cast_slice(aux_data));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.aux_data,
+            0,
+            bytemuck::cast_slice(aux_data),
+        );
     }
 
     /// Upload auxiliary data to the DT fallback texture (Tier 3 / WebGL2).
@@ -493,11 +516,9 @@ impl GpuRenderer {
     /// Uses the real glyph atlas if `active_glyph_atlas` is set, otherwise
     /// falls back to placeholder textures.
     pub(super) fn rebind_sdf_bind_group(&mut self) {
-        // SAFETY: When active_glyph_atlas is Some, the pointers are valid for the
-        // duration of the frame (they point to TextureViews owned by the text context).
         let (atlas_view, color_atlas_view): (&wgpu::TextureView, &wgpu::TextureView) =
             if let Some(active) = &self.active_glyph_atlas {
-                unsafe { (&*active.atlas_view_ptr, &*active.color_atlas_view_ptr) }
+                (&active.atlas_view, &active.color_atlas_view)
             } else {
                 (
                     &self.placeholder_glyph_atlas_view,
@@ -563,7 +584,18 @@ impl GpuRenderer {
                     resource: wgpu::BindingResource::TextureView(color_atlas_view),
                 },
                 binding_5,
-            ],
+            ]
+            .into_iter()
+            .chain(
+                self.buffers
+                    .node_rows
+                    .as_ref()
+                    .map(|rows| wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: rows.as_entire_binding(),
+                    }),
+            )
+            .collect::<Vec<_>>(),
         });
     }
 
@@ -573,6 +605,9 @@ impl GpuRenderer {
         if batch.paths.use_gradient_texture
             && let Some(ref stops) = batch.paths.gradient_stops
         {
+            // One texture holds the current gradient, so draws queued before the new
+            // stops are submitted first.
+            self.uploads.flush(&self.queue);
             self.gradient_texture_cache.upload_stops(
                 &self.queue,
                 stops,
@@ -598,7 +633,9 @@ impl GpuRenderer {
             glass_tint: batch.paths.glass_tint,
             ..PathUniforms::default()
         };
-        self.queue.write_buffer(
+        self.uploads.write(
+            &self.device,
+            &self.queue,
             &self.buffers.path_uniforms,
             0,
             bytemuck::bytes_of(&path_uniforms),
@@ -621,8 +658,13 @@ impl GpuRenderer {
         }
 
         if let Some(vb) = &self.buffers.path_vertices {
-            self.queue
-                .write_buffer(vb, 0, bytemuck::cast_slice(&batch.paths.vertices));
+            self.uploads.write(
+                &self.device,
+                &self.queue,
+                vb,
+                0,
+                bytemuck::cast_slice(&batch.paths.vertices),
+            );
         }
 
         // Create or recreate index buffer if needed
@@ -642,8 +684,13 @@ impl GpuRenderer {
         }
 
         if let Some(ib) = &self.buffers.path_indices {
-            self.queue
-                .write_buffer(ib, 0, bytemuck::cast_slice(&batch.paths.indices));
+            self.uploads.write(
+                &self.device,
+                &self.queue,
+                ib,
+                0,
+                bytemuck::cast_slice(&batch.paths.indices),
+            );
         }
     }
 }

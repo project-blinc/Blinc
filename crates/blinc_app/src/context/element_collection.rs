@@ -7,6 +7,39 @@ use super::{
 };
 use blinc_core::Affine2D;
 
+/// The intersection of two rounded clips (x, y, width, height and corner radii tl, tr, br, bl):
+/// a corner of the result keeps a radius only from a clip whose corner it is, so a sharp clip
+/// cut inside a rounded one stays sharp.
+fn intersect_rounded(a: [f32; 4], ra: [f32; 4], b: [f32; 4], rb: [f32; 4]) -> ([f32; 4], [f32; 4]) {
+    let (x0, y0) = (a[0].max(b[0]), a[1].max(b[1]));
+    let (x1, y1) = (
+        (a[0] + a[2]).min(b[0] + b[2]),
+        (a[1] + a[3]).min(b[1] + b[3]),
+    );
+    let near = |p: f32, q: f32| (p - q).abs() < 0.5;
+    let corner = |c: [f32; 4], r: [f32; 4], i: usize| {
+        let (cx, cy) = match i {
+            0 => (c[0], c[1]),
+            1 => (c[0] + c[2], c[1]),
+            2 => (c[0] + c[2], c[1] + c[3]),
+            _ => (c[0], c[1] + c[3]),
+        };
+        let (px, py) = match i {
+            0 => (x0, y0),
+            1 => (x1, y0),
+            2 => (x1, y1),
+            _ => (x0, y1),
+        };
+        if near(cx, px) && near(cy, py) {
+            r[i]
+        } else {
+            0.0
+        }
+    };
+    let radius = std::array::from_fn(|i| corner(a, ra, i).max(corner(b, rb, i)));
+    ([x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)], radius)
+}
+
 impl RenderContext {
     /// Collect text, SVG, and image elements from the render tree
     pub(super) fn collect_render_elements(
@@ -226,9 +259,21 @@ impl RenderContext {
         // binding transform here.
         let binding_scale = tree.get_motion_scale(node);
         let binding_opacity = tree.get_motion_opacity(node);
+        let binding_rotation = tree
+            .get_motion_rotation(node)
+            .filter(|deg| deg.abs() > 1e-4);
+        // The node's own binding translate; descendants are placed with it already applied.
+        let own_translate = tree
+            .get_motion_transform(node)
+            .map(|t| match t {
+                blinc_core::Transform::Affine2D(a) => (a.elements[4], a.elements[5]),
+                _ => (0.0, 0.0),
+            })
+            .unwrap_or((0.0, 0.0));
 
         // Bindings and motion FSMs both make this node a motion container.
         let is_motion_container_node = tree.motion_bindings_map().contains_key(&node)
+            || tree.is_scroll_row_node(node)
             || tree
                 .get_render_node(node)
                 .map(|n| n.props.motion.is_some() || n.props.is_overlay_root)
@@ -282,15 +327,17 @@ impl RenderContext {
         // Determine the motion scale center for children
         // If this node has motion scale (from RenderState or binding), use its center as the scale center
         // Otherwise, inherit the parent's scale center
-        let this_node_has_scale = (node_motion_scale.0 - 1.0).abs() > 0.001
-            || (node_motion_scale.1 - 1.0).abs() > 0.001
-            || (binding_scale_values.0 - 1.0).abs() > 0.001
-            || (binding_scale_values.1 - 1.0).abs() > 0.001;
+        // The same bound as the one that decides a text affine has a scale at all (1e-6): a scale
+        // between the two used to scale text about the origin.
+        let this_node_has_scale = (node_motion_scale.0 - 1.0).abs() > 1e-6
+            || (node_motion_scale.1 - 1.0).abs() > 1e-6
+            || (binding_scale_values.0 - 1.0).abs() > 1e-6
+            || (binding_scale_values.1 - 1.0).abs() > 1e-6;
 
         let effective_motion_scale_center = if this_node_has_scale {
             // This node has motion scale - compute its center in absolute layout coordinates
-            let center_x = abs_x + bounds.width / 2.0;
-            let center_y = abs_y + bounds.height / 2.0;
+            let center_x = abs_x + own_translate.0 + bounds.width / 2.0;
+            let center_y = abs_y + own_translate.1 + bounds.height / 2.0;
             Some((center_x, center_y))
         } else {
             // No scale on this node - inherit the parent's scale center
@@ -414,135 +461,68 @@ impl RenderContext {
             let this_has_radius = this_clip_radius
                 .map(|r| r.iter().any(|&v| v > 0.5))
                 .unwrap_or(false);
-            let parent_has_radius = current_clip_radius
-                .map(|r| r.iter().any(|&v| v > 0.5))
-                .unwrap_or(false);
 
-            if let Some(parent_clip) = current_clip {
-                if this_has_radius && !parent_has_radius {
-                    // This node is rounded (card), parent is sharp (scroll container).
-                    // Keep them separate to avoid SDF radius clamping/morphing.
-                    // Primary clip = this node's rounded clip (full card bounds).
-                    // Scroll clip = parent's sharp clip intersected with any existing scroll clip.
-                    (
-                        Some(this_clip),
-                        this_clip_radius,
-                        merge_scroll_clip(parent_clip, current_scroll_clip),
-                    )
-                } else if !this_has_radius && parent_has_radius {
-                    // This node is sharp (scroll), parent is rounded (card).
-                    // Keep parent as primary rounded clip, this as scroll clip
-                    // intersected with any existing scroll clip.
-                    (
-                        current_clip,
-                        current_clip_radius,
-                        merge_scroll_clip(this_clip, current_scroll_clip),
-                    )
-                } else {
-                    // Both have same kind of radius — intersect normally.
-                    let x1 = parent_clip[0].max(this_clip[0]);
-                    let y1 = parent_clip[1].max(this_clip[1]);
-                    let parent_right = parent_clip[0] + parent_clip[2];
-                    let parent_bottom = parent_clip[1] + parent_clip[3];
-                    let this_right = this_clip[0] + this_clip[2];
-                    let this_bottom = this_clip[1] + this_clip[3];
-                    let x2 = parent_right.min(this_right);
-                    let y2 = parent_bottom.min(this_bottom);
-                    let w = (x2 - x1).max(0.0);
-                    let h = (y2 - y1).max(0.0);
-                    let clip = Some([x1, y1, w, h]);
-
-                    let child_r = this_clip_radius.unwrap_or([0.0; 4]);
-                    let parent_r = current_clip_radius.unwrap_or([0.0; 4]);
-                    let radius = Some([
-                        child_r[0].max(parent_r[0]),
-                        child_r[1].max(parent_r[1]),
-                        child_r[2].max(parent_r[2]),
-                        child_r[3].max(parent_r[3]),
-                    ]);
-
-                    (clip, radius, current_scroll_clip)
-                }
+            // A sharp scroll container's clip is the scroll clip, kept apart from the primary
+            // clip so a rounded card it cuts keeps its corners, and so content moved inside the
+            // viewport is cut where the viewport stays: the outermost scroll container's, and that
+            // of one whose content rows move. Any other clip, a nested scroll container's
+            // included, goes into the primary clip, which moves with the content around it.
+            if !this_has_radius
+                && tree.is_scroll_container(node)
+                && (current_scroll_clip.is_none() || tree.is_scroll_row_node(node))
+            {
+                (
+                    current_clip,
+                    current_clip_radius,
+                    merge_scroll_clip(this_clip, current_scroll_clip),
+                )
+            } else if let Some(parent_clip) = current_clip {
+                let (clip, radius) = intersect_rounded(
+                    parent_clip,
+                    current_clip_radius.unwrap_or([0.0; 4]),
+                    this_clip,
+                    this_clip_radius.unwrap_or([0.0; 4]),
+                );
+                (Some(clip), Some(radius), current_scroll_clip)
             } else {
-                // No parent clip — this is the first clip level.
-                if this_has_radius {
-                    // Rounded clip becomes primary, scroll clip passes through.
-                    (Some(this_clip), this_clip_radius, current_scroll_clip)
-                } else {
-                    // Sharp clip becomes scroll clip; intersect with existing scroll clip
-                    // so nested sharp clips (scroll + stack wrapper) don't lose the outer boundary.
-                    let new_scroll_clip = if let Some(existing) = current_scroll_clip {
-                        let x1 = existing[0].max(this_clip[0]);
-                        let y1 = existing[1].max(this_clip[1]);
-                        let x2 = (existing[0] + existing[2]).min(this_clip[0] + this_clip[2]);
-                        let y2 = (existing[1] + existing[3]).min(this_clip[1] + this_clip[3]);
-                        [x1, y1, (x2 - x1).max(0.0), (y2 - y1).max(0.0)]
-                    } else {
-                        this_clip
-                    };
-                    (None, None, Some(new_scroll_clip))
-                }
+                (Some(this_clip), this_clip_radius, current_scroll_clip)
             }
         } else {
             (current_clip, current_clip_radius, current_scroll_clip)
         };
 
-        // Compose the node's CSS transform before collecting its own content.
-        let node_css_affine = if let Some(render_node) = tree.get_render_node(node) {
-            let has_non_identity = if let Some(blinc_core::Transform::Affine2D(affine)) =
-                &render_node.props.transform
-            {
-                let [a, b, c, d, tx, ty] = affine.elements;
-                !((a - 1.0).abs() < 0.0001
-                    && b.abs() < 0.0001
-                    && c.abs() < 0.0001
-                    && (d - 1.0).abs() < 0.0001
-                    && tx.abs() < 0.0001
-                    && ty.abs() < 0.0001)
-            } else {
-                false
+        // Compose the node's transform (CSS transform, then binding rotation) before collecting
+        // its own content. Descendants are placed with the node's binding translate applied, so
+        // their copy pivots about the translated centre.
+        let compose_transform = |shift: (f32, f32)| -> Option<[f32; 6]> {
+            let (x, y) = (abs_x + shift.0, abs_y + shift.1);
+            let css = tree
+                .get_render_node(node)
+                .and_then(|rn| css_transform_affine(&rn.props, x, y, bounds.width, bounds.height));
+            let rotation = binding_rotation.map(|deg| {
+                rotation_about(
+                    deg.to_radians(),
+                    x + bounds.width / 2.0,
+                    y + bounds.height / 2.0,
+                )
+            });
+            let own = match (rotation, css) {
+                (Some(r), Some(c)) => Some(r.then(&c)),
+                (r, c) => r.or(c),
             };
-
-            if has_non_identity {
-                let affine = match &render_node.props.transform {
-                    Some(blinc_core::Transform::Affine2D(a)) => a.elements,
-                    _ => unreachable!(),
-                };
-                let [a, b, c, d, tx, ty] = affine;
-                // Compute transform center in absolute layout coords
-                let (cx, cy) = if let Some([ox_pct, oy_pct]) = render_node.props.transform_origin {
-                    (
-                        abs_x + bounds.width * ox_pct / 100.0,
-                        abs_y + bounds.height * oy_pct / 100.0,
-                    )
-                } else {
-                    (abs_x + bounds.width / 2.0, abs_y + bounds.height / 2.0)
-                };
-                // Build full 6-element affine: T(center) * [a,b,c,d,tx,ty] * T(-center)
-                // = [a, b, c, d, cx*(1-a) - cy*c + tx, cy*(1-d) - cx*b + ty]
-                let this_affine = [
-                    a,
-                    b,
-                    c,
-                    d,
-                    cx * (1.0 - a) - cy * c + tx,
-                    cy * (1.0 - d) - cx * b + ty,
-                ];
-                match inherited_css_affine {
-                    Some(parent) => Some(
-                        Affine2D { elements: parent }
-                            .then(&Affine2D {
-                                elements: this_affine,
-                            })
-                            .elements,
-                    ),
-                    None => Some(this_affine),
+            match (inherited_css_affine, own) {
+                (Some(parent), Some(own)) => {
+                    Some(Affine2D { elements: parent }.then(&own).elements)
                 }
-            } else {
-                inherited_css_affine
+                (parent, None) => parent,
+                (None, Some(own)) => Some(own.elements),
             }
+        };
+        let node_css_affine = compose_transform((0.0, 0.0));
+        let child_css_affine = if own_translate != (0.0, 0.0) {
+            compose_transform(own_translate)
         } else {
-            inherited_css_affine
+            node_css_affine
         };
 
         let text_path = tree
@@ -607,17 +587,9 @@ impl RenderContext {
 
         // Include scroll offset and motion offset when calculating child positions
         let scroll_offset = tree.get_scroll_offset(node);
-        let static_motion_offset = tree
-            .get_motion_transform(node)
-            .map(|t| match t {
-                blinc_core::Transform::Affine2D(a) => (a.elements[4], a.elements[5]),
-                _ => (0.0, 0.0),
-            })
-            .unwrap_or((0.0, 0.0));
-
         let new_offset = (
-            abs_x + scroll_offset.0 + static_motion_offset.0,
-            abs_y + scroll_offset.1 + static_motion_offset.1,
+            abs_x + scroll_offset.0 + own_translate.0,
+            abs_y + scroll_offset.1 + own_translate.1,
         );
 
         // Compute inherited CSS opacity for children: compound this node's CSS opacity
@@ -684,18 +656,19 @@ impl RenderContext {
             .map(|a| (new_offset.0 - a.x, new_offset.1 - a.y));
         // A clip with no area shows nothing beneath it (a closed collapsible, say).
         let clip_is_empty = should_clip && (bounds.width <= 0.0 || bounds.height <= 0.0);
+        // A container on rows was painted as a window wider than its viewport, and is collected
+        // for the same window.
+        let previous_overscan = tree
+            .scroll_row_overscan(node)
+            .map(|overscan| tree.set_cull_overscan(overscan));
         let children = if clip_is_empty {
             Vec::new()
+        } else if let (Some(view), Some(shift)) = (children_cull_view, cull_shift) {
+            tree.visible_children(node, shift, view)
         } else {
             tree.layout().children(node)
         };
-
         for child_id in children {
-            if let (Some(view), Some(shift)) = (children_cull_view, cull_shift)
-                && tree.draws_outside(child_id, shift, view)
-            {
-                continue;
-            }
             self.collect_elements_recursive(
                 tree,
                 child_id,
@@ -714,7 +687,7 @@ impl RenderContext {
                 texts,
                 svgs,
                 images,
-                node_css_affine,
+                child_css_affine,
                 child_css_opacity,
                 effective_text_color,
                 Some(node), // pass current node as parent for children
@@ -733,9 +706,67 @@ impl RenderContext {
             );
         }
 
+        if let Some(previous) = previous_overscan {
+            tree.set_cull_overscan(previous);
+        }
+
         // Restore z_layer after this subtree
         if node_z_index > 0 {
             *z_layer = saved_z_layer;
         }
+    }
+}
+
+/// The node's CSS transform as a layout-space affine about its transform origin, or `None`
+/// when it is the identity.
+fn css_transform_affine(
+    props: &blinc_layout::element::RenderProps,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+) -> Option<Affine2D> {
+    let Some(blinc_core::Transform::Affine2D(affine)) = &props.transform else {
+        return None;
+    };
+    let [a, b, c, d, tx, ty] = affine.elements;
+    let identity = (a - 1.0).abs() < 0.0001
+        && b.abs() < 0.0001
+        && c.abs() < 0.0001
+        && (d - 1.0).abs() < 0.0001
+        && tx.abs() < 0.0001
+        && ty.abs() < 0.0001;
+    if identity {
+        return None;
+    }
+    let (cx, cy) = match props.transform_origin {
+        Some([ox_pct, oy_pct]) => (x + width * ox_pct / 100.0, y + height * oy_pct / 100.0),
+        None => (x + width / 2.0, y + height / 2.0),
+    };
+    // T(center) * [a b c d tx ty] * T(-center)
+    Some(Affine2D {
+        elements: [
+            a,
+            b,
+            c,
+            d,
+            cx * (1.0 - a) - cy * c + tx,
+            cy * (1.0 - d) - cx * b + ty,
+        ],
+    })
+}
+
+/// Rotation by `radians` about `(cx, cy)`.
+fn rotation_about(radians: f32, cx: f32, cy: f32) -> Affine2D {
+    let (sin, cos) = radians.sin_cos();
+    Affine2D {
+        elements: [
+            cos,
+            sin,
+            -sin,
+            cos,
+            cx * (1.0 - cos) + cy * sin,
+            cy * (1.0 - cos) - cx * sin,
+        ],
     }
 }

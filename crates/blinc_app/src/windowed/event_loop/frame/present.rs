@@ -40,6 +40,8 @@ pub(super) fn render_and_schedule(
         &mut ws.ctx,
         &mut ws.render_state,
     ) else {
+        // Not reachable: the caller has already returned for a window without app, surface
+        // config, context or render state, so no acquired image is dropped here.
         return None;
     };
     let FrameVars {
@@ -93,11 +95,13 @@ pub(super) fn render_and_schedule(
             let current_fp = windowed_ctx.event_router.state_fingerprint();
             let should_apply = ws.last_router_state_fp != Some(current_fp);
             if should_apply {
+                let epoch = tree.layout_tree.epoch();
                 let state_changed = tree.apply_stylesheet_state_styles(&windowed_ctx.event_router);
                 ws.last_router_state_fp = Some(current_fp);
                 // Recompute layout if state styles affected layout properties
-                // (e.g. visibility: hidden → display: none, or height changes on hover)
-                if state_changed {
+                // (e.g. visibility: hidden → display: none, or height changes on hover): a
+                // style that only repaints leaves the layout as it is.
+                if state_changed && tree.layout_due_since(epoch) {
                     tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
                     tree.update_flip_bounds();
                 }
@@ -123,6 +127,8 @@ pub(super) fn render_and_schedule(
             }
         }
     }
+
+    let p4_styles_done = phase4_start.elapsed();
 
     // Update continuous pointer query state
     if !windowed_ctx.pointer_query.is_empty() {
@@ -181,63 +187,8 @@ pub(super) fn render_and_schedule(
         // the same BlincApp.
         blinc_app.set_clear_alpha(if ws.transparent { 0.0 } else { 1.0 });
 
-        // Compositor fast-path eligibility.
-        //
-        // Cache invalidation is now wired through
-        // `Event::Input` (any input event clears
-        // the cache), so scroll / hover / focus /
-        // IME changes can't smuggle stale state
-        // into the fast path — the very next
-        // paint after any input takes the full
-        // walker route and repopulates the cache.
-        // The fast path engages between input
-        // events, which is exactly when idle
-        // animations (spinner / skeleton /
-        // progress fill) need it.
-        //
-        // Per-frame gate stays conservative — any
-        // frame-loop signal that the fast path's
-        // delta-apply can't reproduce trips the
-        // full path:
-        //  - structural change (`did_rebuild`,
-        //    `ws.needs_relayout`)
-        //  - CSS animation / transition tick
-        //    (`css_active`)
-        //  - scroll physics decay
-        //    (`scroll_animating`)
-        //  - cold start (no cache yet,
-        //    `last_paint_time_ms == 0`)
-        // Per-frame gate. The walker now records
-        // `composite_bindings` for every painted
-        // motion-bound node (animating or not),
-        // so a newly-active spring on a visible
-        // node finds its target entry already in
-        // the map on the very next fast-path
-        // frame. Off-screen nodes are still
-        // culled and unrecorded — when they
-        // scroll into view, the input event
-        // invalidates the cache and the next
-        // full paint records them.
-        // Canvas presence no longer bails the fast
-        // path — `BlincApp::redraw_canvases`
-        // re-invokes each recorded canvas's
-        // `render_fn` into a scratch context and
-        // splices the fresh primitives into the
-        // cached batch, so the surrounding tree
-        // stays cached and the walker doesn't run.
-        // See the split-paint flow in
-        // `render_tree_with_motion_opt`.
-        // CSS-only animation frames take the fast path
-        // when every playing animation / transition is
-        // composite-promotable (opacity / 2D translate /
-        // 2D scale): the walker doesn't need to run
-        // because the layer textures were rasterized on
-        // the last full paint and `composite_frame`
-        // already calls `composite_css_layers_overlay`
-        // to blit them with the current animated
-        // dest_pos / dest_size / opacity. Non-promotable
-        // CSS work (colour / layout / 3D / rotate-z)
-        // still trips the slow path through `css_active`.
+        // Property writes are classified when drained. Rows carry eligible scroll and
+        // transform changes; structural, layout and unsupported animation work repaints.
         let css_blocks_fast = css_active && !css_only_composite_promotable;
         // Visual / FLIP / layout animations resize / reposition
         // bounds each frame — the cached primitive batch
@@ -253,7 +204,7 @@ pub(super) fn render_and_schedule(
         let bounds_anim_active = ws.render_tree.as_ref().is_some_and(|t| {
             t.has_active_visual_animations()
                 || t.has_active_layout_animations()
-                || t.has_active_flip_animations()
+                || t.has_flip_animations_off_rows()
         });
         // Block the fast path while an overlay /
         // toast is structurally changing or animating.
@@ -301,15 +252,40 @@ pub(super) fn render_and_schedule(
                 .unwrap_or(false);
             s || t
         };
+        // A scroll container the rows move needs no paint as it scrolls; any other does, while it
+        // glides or bounces and when its offset has changed since it was painted.
+        let scroll_blocks_fast = ws.render_tree.as_ref().map_or(scroll_animating, |t| {
+            t.scroll_paint_stale() || (scroll_animating && t.scroll_off_rows_animating())
+        });
         let try_fast_paint = !did_rebuild
             && !ws.needs_relayout
             && !css_blocks_fast
-            && !scroll_animating
+            && !scroll_blocks_fast
             && !bounds_anim_active
             && !new_overlay_active
             && ws.last_paint_time_ms != 0
             && blinc_app.has_render_cache();
         crate::motion_trace::note("fast", try_fast_paint);
+        if crate::motion_trace::enabled() {
+            if let Some(t) = ws.render_tree.as_ref() {
+                crate::motion_trace::note("scrolls", serde_json::json!(t.scrolled_offsets()));
+            }
+            crate::motion_trace::note(
+                "fast_gate",
+                serde_json::json!({
+                    "did_rebuild": did_rebuild,
+                    "needs_relayout": ws.needs_relayout,
+                    "css_blocks_fast": css_blocks_fast,
+                    "scroll_stale": ws.render_tree.as_ref().is_some_and(|t| t.scroll_paint_stale()),
+                    "scroll_gliding": scroll_animating
+                        && ws.render_tree.as_ref().is_some_and(|t| t.scroll_off_rows_animating()),
+                    "bounds_anim": bounds_anim_active,
+                    "overlay": new_overlay_active,
+                    "first_paint": ws.last_paint_time_ms == 0,
+                    "no_cache": !blinc_app.has_render_cache(),
+                }),
+            );
+        }
 
         // Render with motion animations
         // Use physical pixel dimensions for the render surface
@@ -328,6 +304,8 @@ pub(super) fn render_and_schedule(
 
         blinc_app.clear_blend_target();
     }
+
+    let p4_render_done = phase4_start.elapsed();
 
     // =========================================================
     // PHASE 4b: Overlay state management (overlays now in main tree)
@@ -384,20 +362,12 @@ pub(super) fn render_and_schedule(
         gate.arm_before_present();
     }
     frame.present();
-    // Wayland keep-alive self-drive: request the next frame
-    // so the swapchain keeps cycling while the scene is
-    // static. `pre_present_notify` (called above) armed the
-    // compositor's frame callback, so winit paces this to
-    // vsync (Done) — steady ~7% CPU, not a busy spin.
-    // `keep_alive` is false off Wayland, so this is a no-op
-    // on X11 / macOS / Windows.
+    // Wayland keep-alive: ask for the next frame right after presenting. `pre_present_notify`
+    // armed the frame callback, so winit delivers it at vsync; no-op off Wayland.
     if keep_alive {
         window.request_redraw();
     }
-    // Frame-gate self-drive: keep presents flowing at the
-    // compositor's Done cadence so the swapchain never goes
-    // idle (see the keep-alive note above). The gate's Done
-    // wait throttles this to vsync, so it is not a spin.
+    // Frame-gate: keep presents flowing at the compositor's Done cadence.
     #[cfg(all(feature = "wayland-frame-gate", target_os = "linux"))]
     if _gate_active {
         window.request_redraw();
@@ -628,7 +598,10 @@ pub(super) fn render_and_schedule(
             .map(|s| s.has_visible_overlays())
             .unwrap_or(false);
         let overlay_present = mgr_present || stack_present;
-        let css_active = ws.render_tree.as_ref().is_some_and(|t| t.css_has_active());
+        let css_active = ws
+            .render_tree
+            .as_ref()
+            .is_some_and(|t| t.css_has_active_for_overlay());
         overlay_present && css_active
     };
 
@@ -765,7 +738,8 @@ pub(super) fn render_and_schedule(
                 // platform shim's timer thread so the next
                 // Frame arrives at the exact moment Phase 4
                 // is allowed to render.
-                let delay = std::time::Duration::from_millis(1000 / live_cap_chain as u64);
+                let delay =
+                    crate::windowed::fps::next_grid_delay(&mut ws.frame_grid, live_cap_chain);
                 crate::motion_trace::note("wake_in_ms", delay.as_millis() as u64);
                 frame_dirty.store(true, Ordering::Release);
                 wake_proxy_for_pacing.wake_at(delay);
@@ -853,6 +827,14 @@ pub(super) fn render_and_schedule(
                 "p3": t_phase3.as_micros() as u64,
                 "p4": t_phase4.as_micros() as u64,
                 "p5": t_phase5.as_micros() as u64,
+            }),
+        );
+        // Offsets from the start of phase 4: what is left of `p4` after the second is the present.
+        crate::motion_trace::note(
+            "p4_done_us",
+            serde_json::json!({
+                "styles": p4_styles_done.as_micros() as u64,
+                "render": p4_render_done.as_micros() as u64,
             }),
         );
     }

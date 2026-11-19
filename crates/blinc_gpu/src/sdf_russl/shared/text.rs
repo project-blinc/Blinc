@@ -30,7 +30,7 @@ russl::russl! {
         clip_bounds: Vec4,
         // Overflow fade distances (top, right, bottom, left) in pixels
         clip_fade: Vec4,
-        // Flags: [is_color, clip_shape, unused, unused]
+        // Flags: [is_color, clip_shape, node_slot, unused]
         flags: Vec4,
     }
 

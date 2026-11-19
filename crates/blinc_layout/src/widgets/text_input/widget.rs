@@ -54,7 +54,8 @@ impl TextInput {
             d.mounted = true;
         }
         let mut inner = Self::create_inner_with_handlers(Arc::clone(&data), Arc::clone(&config))
-            .class(DEFAULT_CLASS);
+            .class(DEFAULT_CLASS)
+            .class("tabindex=text");
 
         // HTML input behaviour in flex layouts: stretch to the parent's
         // width by default, and `min_w(0)` so the field can shrink below its

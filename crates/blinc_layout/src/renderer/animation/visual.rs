@@ -24,7 +24,7 @@
 //! `flip.rs` in this directory. CSS keyframes / transitions are also
 //! distinct (different storage, different tick path).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use blinc_core::Rect;
 
@@ -322,19 +322,39 @@ impl RenderTree {
         // Clear previous computation
         self.animated_render_bounds.clear();
 
+        // Without a node that animates its visual bounds, what would be stored is the layout
+        // bounds of every node, which is what `get_absolute_bounds` says.
+        if self.visual_animation_configs.is_empty() && self.visual_animations.is_empty() {
+            return;
+        }
+
         // Get root node
         let Some(root_id) = self.root else {
             return;
         };
 
+        // The key each animated node goes by, once, so a node is looked up and not searched for.
+        let key_of: HashMap<LayoutNodeId, String> = self
+            .visual_animation_key_to_node
+            .iter()
+            .map(|(key, node)| (*node, key.clone()))
+            .collect();
+
         // Start recursive computation from root
         self.compute_bounds_recursive(
             root_id, 0.0, 0.0, // Parent offset starts at screen origin
+            &key_of,
         );
     }
 
     /// Recursively compute animated render bounds for a subtree
-    fn compute_bounds_recursive(&mut self, node_id: LayoutNodeId, parent_x: f32, parent_y: f32) {
+    fn compute_bounds_recursive(
+        &mut self,
+        node_id: LayoutNodeId,
+        parent_x: f32,
+        parent_y: f32,
+        key_of: &HashMap<LayoutNodeId, String>,
+    ) {
         // Get layout bounds relative to parent (from taffy)
         let Some(layout_bounds) = self.layout_tree.get_bounds(node_id, (0.0, 0.0)) else {
             return;
@@ -342,17 +362,9 @@ impl RenderTree {
 
         // Check if this node has an active visual animation
         // Find the key for this node (reverse lookup - O(n) but typically few animated nodes)
-        let stable_key = self
-            .visual_animation_key_to_node
-            .iter()
-            .find(|&(_, &n)| n == node_id)
-            .map(|(k, _)| k.clone());
-        let animation = stable_key
-            .as_ref()
-            .and_then(|k| self.visual_animations.get(k));
-        let config = stable_key
-            .as_ref()
-            .and_then(|k| self.visual_animation_configs.get(k));
+        let stable_key = key_of.get(&node_id);
+        let animation = stable_key.and_then(|k| self.visual_animations.get(k));
+        let config = stable_key.and_then(|k| self.visual_animation_configs.get(k));
 
         // Calculate this node's animated bounds
         let animated_bounds = if let Some(anim) = animation {
@@ -421,7 +433,7 @@ impl RenderTree {
         // Children use THIS node's animated position as their parent offset
         let children = self.layout_tree.children(node_id);
         for child_id in children {
-            self.compute_bounds_recursive(child_id, child_parent_x, child_parent_y);
+            self.compute_bounds_recursive(child_id, child_parent_x, child_parent_y, key_of);
         }
     }
 

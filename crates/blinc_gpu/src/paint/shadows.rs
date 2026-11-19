@@ -86,6 +86,7 @@ impl GpuPaintContext<'_> {
             clip_fade_bounds: [0.0; 4],
             notch_info: [0.0; 4],
             clip_shape: [0.0; 4],
+            node_slot: [0.0; 4],
         };
 
         self.emit_native_primitive(primitive);
@@ -165,6 +166,7 @@ impl GpuPaintContext<'_> {
             clip_fade_bounds: [0.0; 4],
             notch_info: [0.0; 4],
             clip_shape: [0.0; 4],
+            node_slot: [0.0; 4],
         };
 
         self.emit_native_primitive(primitive);
@@ -227,6 +229,7 @@ impl GpuPaintContext<'_> {
             clip_fade_bounds: [0.0; 4],
             notch_info: [0.0; 4],
             clip_shape: [0.0; 4],
+            node_slot: [0.0; 4],
         };
 
         self.emit_native_primitive(primitive);
@@ -293,6 +296,7 @@ impl GpuPaintContext<'_> {
             clip_fade_bounds: [0.0; 4],
             notch_info: [0.0; 4],
             clip_shape: [0.0; 4],
+            node_slot: [0.0; 4],
         };
 
         self.emit_native_primitive(primitive);

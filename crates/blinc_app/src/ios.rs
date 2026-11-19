@@ -40,6 +40,8 @@
 
 #[path = "ios/accessibility.rs"]
 mod accessibility;
+#[path = "ios/bench.rs"]
+mod bench;
 #[path = "ios/ime.rs"]
 mod ime;
 
@@ -715,6 +717,10 @@ impl IOSRenderContext {
         let Some(ref mut tree) = self.render_tree else {
             return false;
         };
+        let text_focus = blinc_layout::widgets::text_input::focused_text_input_node_id()
+            .or_else(blinc_layout::widgets::text_input::focused_text_area_node_id);
+        self.windowed_ctx.event_router.sync_text_focus(text_focus);
+        tree.sync_keyboard_focus(&mut self.windowed_ctx.event_router);
         let current_time = blinc_layout::prelude::elapsed_ms();
         let dt_ms = if self.last_frame_time_ms > 0 {
             (current_time - self.last_frame_time_ms) as f32
@@ -733,11 +739,9 @@ impl IOSRenderContext {
                 .state_styles
                 .should_apply(self.windowed_ctx.event_router.state_fingerprint())
             && tree.apply_stylesheet_state_styles(&self.windowed_ctx.event_router);
-        if state_changed
-            || active
-            || !tree.css_transitions_empty()
-            || tree.has_active_flip_animations()
-        {
+        // What a binding carries or a baked layer shows leaves the cached paint usable; the rest
+        // of the animation work has the next frame paint in full.
+        if state_changed || tree.animation_needs_full_paint() {
             crate::mobile_paint::request_full_paint();
         }
         if active || !tree.css_transitions_empty() || tree.has_active_flip_animations() {
@@ -1283,6 +1287,8 @@ pub extern "C" fn blinc_build_frame(ctx: *mut IOSRenderContext) {
         return;
     }
 
+    let _build_timer = bench::BuildTimer::start();
+
     unsafe {
         let ctx = &mut *ctx;
 
@@ -1511,6 +1517,14 @@ pub extern "C" fn blinc_create_context(
 pub extern "C" fn blinc_needs_render(ctx: *mut IOSRenderContext) -> bool {
     if ctx.is_null() {
         return false;
+    }
+    // The display link asks this on every tick, whether or not it then draws, so a scripted
+    // touch advances on idle ticks too.
+    if bench::scroll_on() {
+        let (w, h) = unsafe { ((*ctx).windowed_ctx.width, (*ctx).windowed_ctx.height) };
+        if let Some((x, y, phase)) = bench::scripted_touch(bench::next_frame(), w, h) {
+            blinc_handle_touch(ctx, 1, x, y, phase);
+        }
     }
     unsafe { (*ctx).needs_render() }
 }
@@ -2141,6 +2155,7 @@ pub extern "C" fn blinc_render_frame(gpu: *mut IOSGpuRenderer) -> bool {
         };
 
         // Get surface texture
+        let acquire_start = bench::stats_on().then(std::time::Instant::now);
         let surface_texture = match gpu.surface.get_current_texture() {
             Ok(st) => st,
             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
@@ -2169,7 +2184,12 @@ pub extern "C" fn blinc_render_frame(gpu: *mut IOSGpuRenderer) -> bool {
             }
         };
 
+        if let Some(start) = acquire_start {
+            bench::note_acquire(start.elapsed());
+        }
+
         // Render
+        let render_start = bench::stats_on().then(std::time::Instant::now);
         let view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -2196,7 +2216,13 @@ pub extern "C" fn blinc_render_frame(gpu: *mut IOSGpuRenderer) -> bool {
             return false;
         }
 
+        if let Some(start) = render_start {
+            bench::note_render(start.elapsed());
+        }
         surface_texture.present();
+        if render_start.is_some() {
+            bench::frame_done();
+        }
         true
     }
 }

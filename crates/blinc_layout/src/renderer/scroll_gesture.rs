@@ -98,6 +98,7 @@ impl RenderTree {
 
     /// The handler the gesture under way belongs to, while it is in the tree.
     pub(crate) fn latched_scroll_target(&self) -> Option<LayoutNodeId> {
+        self.scroll_gesture_now();
         let latch = self.scroll_gesture.lock().unwrap().latch?;
         self.render_nodes.contains_key(&latch).then_some(latch)
     }

@@ -301,6 +301,8 @@ pub struct AnimationScheduler {
     /// to keep poking it from the bg thread on every tick. Reset to
     /// `false` whenever the bg thread ticks while inactive.
     last_active: Arc<AtomicBool>,
+    /// The caller steps time with [`Self::tick_by`]; `tick` leaves the animations alone.
+    manual_stepping: Arc<AtomicBool>,
 }
 
 // SAFETY: On wasm32 the wake callback is `Arc<dyn Fn()>` (no `Send +
@@ -341,7 +343,16 @@ impl AnimationScheduler {
             wake_callback: None,
             wakeup: Arc::new((Mutex::new(false), Condvar::new())),
             last_active: Arc::new(AtomicBool::new(false)),
+            manual_stepping: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Hand time to the caller: with it on, [`Self::tick`] steps nothing and reports whether
+    /// anything is active, and only [`Self::tick_by`] moves the animations. An offscreen or test
+    /// driver that steps a fixed `dt` sets this so a tick made on the way by a frame (the render
+    /// state's) does not add the time since the last frame.
+    pub fn set_manual_stepping(&self, on: bool) {
+        self.manual_stepping.store(on, Ordering::Relaxed);
     }
 
     /// Wake the background thread if it's parked.
@@ -919,6 +930,9 @@ impl AnimationScheduler {
         if self.thread_handle.is_some() {
             return self.has_active_animations();
         }
+        if self.manual_stepping.load(Ordering::Relaxed) {
+            return self.has_active_animations();
+        }
 
         let dt = {
             let mut inner = self.inner.lock().unwrap();
@@ -1273,6 +1287,7 @@ impl Clone for AnimationScheduler {
             wake_callback: self.wake_callback.clone(),
             wakeup: Arc::clone(&self.wakeup),
             last_active: Arc::clone(&self.last_active),
+            manual_stepping: Arc::clone(&self.manual_stepping),
         }
     }
 }
@@ -1452,6 +1467,13 @@ impl SchedulerHandle {
         self.inner
             .upgrade()
             .and_then(|inner| inner.lock().unwrap().springs.get(id).map(|s| s.value()))
+    }
+
+    /// A copy of a spring, with its value, velocity and target as they are now.
+    pub fn get_spring(&self, id: SpringId) -> Option<Spring> {
+        self.inner
+            .upgrade()
+            .and_then(|inner| inner.lock().unwrap().springs.get(id).copied())
     }
 
     /// Check if a spring has settled (at rest at target)
@@ -1842,6 +1864,11 @@ pub struct AnimatedValue {
     current: f32,
     /// The target value we're animating towards
     target: f32,
+    /// Driven by hand (`drive`): on its way to `target` until it gets there, with no spring.
+    driven: bool,
+    /// Driven by something that plays with no end in view (`drive_playing`): animating until it
+    /// is set by another route.
+    playing: bool,
 }
 
 impl AnimatedValue {
@@ -1854,6 +1881,8 @@ impl AnimatedValue {
             config,
             current: initial,
             target: initial,
+            driven: false,
+            playing: false,
         }
     }
 
@@ -1865,6 +1894,8 @@ impl AnimatedValue {
     /// Set the target value - starts animation if different from current
     pub fn set_target(&mut self, target: f32) {
         self.target = target;
+        self.driven = false;
+        self.playing = false;
 
         // If we have a spring, just update its target (spring persists until dropped)
         if let Some(id) = self.spring_id {
@@ -1893,8 +1924,55 @@ impl AnimatedValue {
         }
     }
 
+    /// The motion under way as data, from the value and velocity now, or `None` when the value is
+    /// at rest. It is the same motion `get` reads, as a closed form that needs no tick.
+    pub fn descriptor(&self) -> Option<crate::descriptor::AnimationDescriptor> {
+        let spring = self.handle.get_spring(self.spring_id?)?;
+        let descriptor = spring.to_descriptor(crate::descriptor::now_ms());
+        (descriptor.duration_ms > 0.0).then_some(descriptor)
+    }
+
+    /// Set the value to `value` with no spring, as something else that plays an animation moves
+    /// it: the value is `value` and is on its way to `target`, so it reads as animating until it
+    /// gets there. A timed animation that is not a spring drives a binding this way.
+    pub fn drive(&mut self, value: f32, target: f32) {
+        if let Some(id) = self.spring_id.take() {
+            self.handle.remove_spring(id);
+        }
+        let changed = (self.current - value).abs() > f32::EPSILON
+            || (self.target - target).abs() > f32::EPSILON;
+        self.current = value;
+        self.target = target;
+        self.driven = true;
+        self.playing = false;
+        if changed {
+            self.handle.wake();
+        }
+    }
+
+    /// Set the value to `value` as something that plays with no end in view moves it, a CSS
+    /// animation that repeats: the value reads as animating, and as visibly moving, until it is
+    /// set by another route. The player of the animation paces the frames, so this does not ask
+    /// for one: a wake from every write would keep the event loop running between them.
+    pub fn drive_playing(&mut self, value: f32) {
+        if let Some(id) = self.spring_id.take() {
+            self.handle.remove_spring(id);
+        }
+        self.current = value;
+        self.target = value;
+        self.driven = true;
+        self.playing = true;
+    }
+
+    /// Whether the value is driven by something that is playing (`drive_playing`).
+    pub fn is_playing(&self) -> bool {
+        self.driven && self.playing
+    }
+
     /// Set value immediately without animation
     pub fn set_immediate(&mut self, value: f32) {
+        self.driven = false;
+        self.playing = false;
         // Remove any active spring
         if let Some(id) = self.spring_id.take() {
             self.handle.remove_spring(id);
@@ -1943,7 +2021,7 @@ impl AnimatedValue {
             // Check actual settled state, not just existence
             !self.handle.is_spring_settled(id)
         } else {
-            false
+            self.driven && (self.playing || (self.current - self.target).abs() > f32::EPSILON)
         }
     }
 
@@ -2646,6 +2724,29 @@ mod tests {
             "{first:?}"
         );
         assert_eq!(first, run());
+    }
+
+    /// With manual stepping on, a tick that reads the clock steps nothing, so the values depend
+    /// on the fixed steps alone.
+    #[test]
+    fn a_tick_by_the_clock_steps_nothing_when_time_is_manual() {
+        let run = |sleep: bool| {
+            let scheduler = AnimationScheduler::new();
+            scheduler.set_manual_stepping(true);
+            let mut value = AnimatedValue::new(scheduler.handle(), 0.0, SpringConfig::snappy());
+            value.set_target(100.0);
+            let mut seen = Vec::new();
+            for _ in 0..10 {
+                scheduler.tick_by(1.0 / 60.0);
+                if sleep {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                scheduler.tick();
+                seen.push(value.get());
+            }
+            seen
+        };
+        assert_eq!(run(false), run(true));
     }
 
     #[test]

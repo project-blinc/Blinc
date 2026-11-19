@@ -39,6 +39,13 @@ impl GpuRenderer {
         if batch.paths.vertices.is_empty() && batch.primitives.is_empty() {
             return;
         }
+        // One sample and no paths: drawing onto the target in order is the same composite as
+        // drawing into a cleared texture and blending that over it, in one pass.
+        if sample_count <= 1 && batch.paths.vertices.is_empty() {
+            self.update_aux_data_buffer(batch);
+            self.render_primitives_overlay(target, &batch.primitives);
+            return;
+        }
 
         self.ensure_overlay_alpha();
 
@@ -55,6 +62,7 @@ impl GpuRenderer {
                 sample_count,
                 self.has_vertex_storage,
                 self.has_storage_buffers,
+                self.node_table,
             ));
         }
 
@@ -72,8 +80,13 @@ impl GpuRenderer {
         // ignores the flag.
         let msaa_flag = if sample_count > 1 { 1.0 } else { 0.0 };
         let uniforms = Uniforms::new([width as f32, height as f32]).with_msaa(msaa_flag);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         // Sort and upload primitives
         let sdf_ranges = self.upload_sorted_primitives(&batch.primitives);
@@ -99,11 +112,7 @@ impl GpuRenderer {
         // Get references to the cached textures (after mutable borrows are done)
         let cached = self.overlay_targets.get(overlay);
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Overlay MSAA Render Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         // Pass 1: Render paths + SDF primitives to an offscreen texture.
         //
@@ -229,7 +238,7 @@ impl GpuRenderer {
             render_pass.draw(0..3, 0..1); // Fullscreen triangle
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     /// Render only paths with MSAA anti-aliasing
@@ -259,6 +268,7 @@ impl GpuRenderer {
                 sample_count,
                 self.has_vertex_storage,
                 self.has_storage_buffers,
+                self.node_table,
             ));
         }
 
@@ -268,8 +278,13 @@ impl GpuRenderer {
 
         // Update uniforms
         let uniforms = Uniforms::new([width as f32, height as f32]);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         self.update_aux_data_buffer(batch);
 
@@ -279,11 +294,7 @@ impl GpuRenderer {
         // Get references to the cached textures
         let cached = self.overlay_targets.get(overlay);
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Path MSAA Render Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         // Pass 1: Render paths to an offscreen texture.
         //
@@ -361,7 +372,7 @@ impl GpuRenderer {
             render_pass.draw(0..3, 0..1);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 
     /// Render a slice of SDF primitives with MSAA anti-aliasing.
@@ -407,6 +418,7 @@ impl GpuRenderer {
                 sample_count,
                 self.has_vertex_storage,
                 self.has_storage_buffers,
+                self.node_table,
             ));
         }
 
@@ -428,8 +440,13 @@ impl GpuRenderer {
         // restores the resolve to hardware-accurate coverage.
         let msaa_flag = if sample_count > 1 { 1.0 } else { 0.0 };
         let uniforms = Uniforms::new([width as f32, height as f32]).with_msaa(msaa_flag);
-        self.queue
-            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         // Sort + upload primitives into the shared instance / aux buffers
         // exactly the way `render_primitives_overlay` does.
@@ -437,11 +454,7 @@ impl GpuRenderer {
 
         let cached = self.overlay_targets.get(overlay);
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Primitives MSAA Render Encoder"),
-            });
+        let mut encoder = self.uploads.lend(&self.device);
 
         // Pass 1: draw into MSAA (or single-sampled resolve) texture.
         // WebGPU: `resolve_target` must be None when the color
@@ -525,6 +538,6 @@ impl GpuRenderer {
             render_pass.draw(0..3, 0..1);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.uploads.give_back(&self.queue, encoder);
     }
 }

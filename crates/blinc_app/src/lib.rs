@@ -1,5 +1,6 @@
 #![allow(unused, dead_code, deprecated)]
-#![cfg_attr(test, recursion_limit = "256")]
+// Proving wgpu handles `Send` for the image decode worker goes deeper than the default limit.
+#![recursion_limit = "256"]
 //! Blinc Application Framework
 //!
 //! Clean API for building Blinc applications with layout and rendering.
@@ -125,7 +126,12 @@ pub fn system_font_paths() -> &'static [&'static str] {
 
 #[cfg(any(target_os = "ios", target_os = "android"))]
 mod ime;
-#[cfg(any(target_os = "ios", target_os = "android", test))]
+#[cfg(any(
+    target_os = "ios",
+    target_os = "android",
+    all(feature = "web", target_arch = "wasm32"),
+    test
+))]
 #[cfg_attr(test, allow(dead_code))]
 mod mobile_paint;
 

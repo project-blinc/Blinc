@@ -422,9 +422,10 @@ impl RenderTree {
         // props, which already carry the stylesheet; a replaced node is queued
         // for a restyle.
         let unchanged = self.own_hash_unchanged(node_id, element);
+        self.register_accessibility(node_id, element);
         if unchanged && self.render_nodes.contains_key(&node_id) {
             // Kept: the own hash covers every field of the element's props.
-        } else if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+        } else if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
             let mut new_props = element.render_props();
             new_props.node_id = Some(node_id);
             // Preserve motion from old props (set by parent)
@@ -515,9 +516,10 @@ impl RenderTree {
         node_id: LayoutNodeId,
     ) {
         let unchanged = self.own_hash_unchanged(node_id, element);
+        self.register_accessibility(node_id, element);
         if unchanged && self.render_nodes.contains_key(&node_id) {
             // Kept: the own hash covers every field of the element's props.
-        } else if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
+        } else if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
             let mut new_props = element.render_props();
             new_props.node_id = Some(node_id);
             new_props.motion = render_node.props.motion.clone();

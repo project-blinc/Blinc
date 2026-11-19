@@ -184,6 +184,12 @@ pub struct GpuPaintContext<'a> {
     /// outside an overlay keeps its existing pre-dyn-batch
     /// canvas-overlay slot.
     overlay_subtree_depth: u32,
+    /// Keep the groups of a motion subtree in the dynamic batch, where something can move them,
+    /// instead of in the static batch at their painted position.
+    moving_groups_dynamic: bool,
+    /// The ordinal the primitives being emitted are stamped with (see
+    /// `DrawContext::set_motion_node_ordinal`).
+    motion_node_ordinal: u32,
     overlay_visit_sequence: u32,
     overlay_root_pending: Option<u32>,
     overlay_layer_scope: Option<overlay::OverlayLayerScope>,
@@ -246,6 +252,8 @@ pub struct GpuPaintContext<'a> {
     blend_mode_stack: Vec<BlendMode>,
     /// Clip stack (for tracking, actual clipping done in shader)
     clip_stack: Vec<ClipStackEntry>,
+    /// The clip stack depth where the content that rows move began, if painting is inside it.
+    row_clip_base: Option<usize>,
     /// Viewport size
     viewport: Size,
     /// Whether we're in a 3D context
@@ -424,6 +432,33 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         GpuPaintContext::push_motion_subtree(self)
     }
 
+    fn set_motion_node_ordinal(&mut self, ordinal: u32) -> u32 {
+        std::mem::replace(&mut self.motion_node_ordinal, ordinal)
+    }
+
+    fn tag_background_color(&mut self, start: usize, end: usize, owner: u32) -> Option<f32> {
+        use crate::primitives::{FillType, PrimitiveType};
+        let opacity = self.combined_opacity();
+        let primitives = self.active_batch_mut().primitives.get_mut(start..end)?;
+        if primitives.len() != 1
+            || primitives.iter().any(|p| {
+                p.type_info[0] != PrimitiveType::Rect as u32
+                    || p.type_info[1] != FillType::Solid as u32
+            })
+        {
+            return None;
+        }
+        for p in primitives {
+            // Positive tags identify captured text runs. Negative tags identify fills.
+            p.node_slot[3] = -(owner as f32);
+        }
+        Some(opacity)
+    }
+
+    fn set_moving_groups_dynamic(&mut self, on: bool) -> bool {
+        GpuPaintContext::set_moving_groups_dynamic(self, on)
+    }
+
     fn pop_motion_subtree(&mut self) {
         GpuPaintContext::pop_motion_subtree(self)
     }
@@ -466,7 +501,29 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
     }
 
     fn current_clip_aabb(&self) -> Option<[f32; 4]> {
-        self.current_clip_aabb_impl()
+        self.clip_aabb(false)
+    }
+
+    fn current_path_clip(&mut self) -> f32 {
+        self.native_path_clip().map_or(0.0, |(pointer, _)| pointer)
+    }
+
+    fn begin_row_clips(&mut self) -> bool {
+        if self.row_clip_base.is_some() {
+            return false;
+        }
+        self.row_clip_base = Some(self.clip_stack.len());
+        true
+    }
+
+    fn end_row_clips(&mut self, began: bool) {
+        if began {
+            self.row_clip_base = None;
+        }
+    }
+
+    fn current_row_clip_aabb(&self) -> Option<[f32; 4]> {
+        self.clip_aabb(true)
     }
 
     fn current_clip_rounded(&self) -> Option<([f32; 4], [f32; 4])> {
@@ -782,10 +839,14 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         self.glass_layers
     }
     fn push_glass_layer(&mut self, id: u64, config: LayerConfig) -> bool {
-        if !self.glass_layers
-            || !self.emit_foreground()
-            || !self.begin_cross_stream_layer(id, config)
-        {
+        if !self.glass_layers || !self.emit_foreground() {
+            return false;
+        }
+        // Glass samples what was painted before it, so it keeps its place in the paint order.
+        let dynamic = std::mem::replace(&mut self.moving_groups_dynamic, false);
+        let began = self.begin_cross_stream_layer(id, config);
+        self.moving_groups_dynamic = dynamic;
+        if !began {
             return false;
         }
         self.layer_stack.last_mut().unwrap().captures_glass = true;

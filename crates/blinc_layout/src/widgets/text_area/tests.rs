@@ -1,6 +1,60 @@
 use super::*;
 
 #[test]
+fn right_click_preserves_selection_without_leaving_a_row_hit() {
+    blinc_theme::ThemeState::init_default();
+    let state = text_area_state();
+    state.lock().unwrap().set_value("hello world\nsecond line");
+    let area = text_area(&state);
+    let tree = crate::renderer::RenderTree::from_element(&area);
+    {
+        let mut d = state.lock().unwrap();
+        d.selection_start = Some(TextPosition::new(0, 6));
+        d.cursor = TextPosition::new(0, 11);
+        d.clicked_visual_line = Some(1);
+    }
+    let mut ctx = crate::event_handler::EventContext::new(
+        blinc_core::events::event_types::POINTER_DOWN,
+        tree.root().unwrap(),
+    );
+    ctx.mouse_button = 2;
+    area.event_handlers().unwrap().dispatch(&ctx);
+    let d = state.lock().unwrap();
+    assert_eq!(d.selected_text().as_deref(), Some("world"));
+    assert_eq!(d.clicked_visual_line, None);
+}
+
+#[test]
+fn repeated_clicks_require_time_and_distance_proximity() {
+    let mut clicks = super::selection::ClickSequence::default();
+    let now = web_time::Instant::now();
+    assert_eq!(clicks.register((10.0, 10.0), now), 1);
+    assert_eq!(clicks.register((12.0, 10.0), now), 2);
+    assert_eq!(clicks.register((12.0, 11.0), now), 3);
+    assert_eq!(clicks.register((12.0, 11.0), now), 1);
+    assert_eq!(clicks.register((40.0, 11.0), now), 1);
+    assert_eq!(
+        clicks.register((40.0, 11.0), now + std::time::Duration::from_millis(401)),
+        1,
+    );
+}
+
+#[test]
+fn repainting_unchanged_lines_preserves_manual_scrolling() {
+    blinc_theme::ThemeState::init_default();
+    let cfg = TextAreaConfig {
+        rows: Some(2),
+        ..Default::default()
+    };
+    let mut state = TextAreaState::with_value("one\ntwo\nthree\nfour\nfive");
+    state.visual = TextFieldState::Focused;
+    layout_lines(&mut state, &cfg);
+    state.scroll_physics.lock().unwrap().offset_y = -state.line_height;
+    layout_lines(&mut state, &cfg);
+    assert!((state.scroll_offset() - state.line_height).abs() < 0.01);
+}
+
+#[test]
 fn test_text_area_state_insert() {
     let mut state = TextAreaState::new();
     state.insert("hello");

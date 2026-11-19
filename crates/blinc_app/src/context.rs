@@ -35,11 +35,16 @@ mod cache_lifecycle;
 mod canvas_replay;
 mod composite_replay;
 mod compositor;
+mod css_backgrounds;
 mod css_cache_lifecycle;
 mod css_updates;
 mod debug_rendering;
+#[cfg(not(target_arch = "wasm32"))]
+mod image_decode;
 mod image_rendering;
+mod image_retry;
 mod mesh_rendering;
+mod node_rows;
 mod overlay_frame;
 mod overlay_rendering;
 mod svg_rendering;
@@ -274,6 +279,12 @@ pub struct RenderContext {
     image_load_times: std::collections::HashMap<String, web_time::Instant>,
     /// Screen-space damage from the most recent binding update.
     last_binding_damage_rects: Vec<[f32; 4]>,
+    /// The node table rows that move the dynamic batch's motion-bound primitives.
+    node_rows: node_rows::NodeRows,
+    /// The texts painted inside groups of the dynamic batch, which the node table keeps sharp.
+    captured_runs: Vec<cached_text::CapturedRun>,
+    /// Whether motion-bound subtrees may be baked to textures; the node table never bakes them.
+    promote_motion: bool,
     /// Screen-space bounds of CSS records changed by the most recent patch.
     last_css_damage_rects: Vec<[f32; 4]>,
     /// CSS sources and promotion ownership observed on the last public frame.
@@ -304,6 +315,8 @@ pub struct RenderContext {
     /// above. Re-dispatched via `render_rasterized_svgs` after the
     /// overlay so the icon lands on top of its motion container's bg.
     cached_motion_subtree_svgs: Option<Vec<SvgElement>>,
+    /// The images inside motion containers, drawn after the dynamic batch.
+    cached_motion_subtree_images: Option<Vec<ImageElement>>,
     /// Same as `cached_glyphs_by_layer` but for CSS-transformed text
     /// primitives (text with a `transform:` style — routed through
     /// the SDF pipeline, not the glyph pipeline).
@@ -325,6 +338,15 @@ pub struct RenderContext {
     /// Whether image fades require another frame, tracked independently of flow shaders.
     has_pending_image_fade: bool,
     captured_images_need_repaint: bool,
+    /// Whether the collected content (texts, SVGs, images, motion text and images) is that of the
+    /// last full paint. A cleared cache reads as empty, so a frame may reuse them, and skip
+    /// collecting, only while this is set.
+    collected_valid: bool,
+    /// Decodes images on a worker thread when set; images load inline when not.
+    #[cfg(not(target_arch = "wasm32"))]
+    image_decode: Option<image_decode::ImageDecoder>,
+    /// Sources that failed to load, and when each is tried again.
+    image_failures: image_retry::ImageFailures,
     cached_tree_scope: Option<(u64, bool)>,
     // Frame counter for periodic cache stats logging
     frame_count: u64,
@@ -401,6 +423,10 @@ struct TextElement {
     /// Clip bounds from parent scroll container (x, y, width, height)
     clip_bounds: Option<[f32; 4]>,
     clip_fade: [f32; 4],
+    /// For text in a motion subtree inside a scroll container, its clip in two parts: the scroll
+    /// clip, which stays with the viewport, and the clip inside it (rect and corner radii), which
+    /// moves with the content. Glyphs draw the first as their clip rect and the second as a shape.
+    split_clip: Option<([f32; 4], [f32; 4], [f32; 4])>,
     /// Clip geometry and its owner's physical frame, shared across collected spans.
     path_clip: Option<Arc<text_clip::CollectedTextPath>>,
     /// Motion opacity inherited from parent motion container
@@ -442,6 +468,9 @@ struct TextElement {
     is_foreground: bool,
     /// Defer motion-subtree text until its dynamic geometry has been dispatched.
     in_motion_subtree: bool,
+    /// Whether the text is inside a scroll container whose content is painted as a window wider
+    /// than its clip: outside the clip is not outside what is shown once it scrolls.
+    in_scroll_window: bool,
     /// Nearest promoted ancestor whose live opacity is applied at dispatch instead of
     /// collect time.
     composite_ancestor: Option<blinc_layout::tree::StableNodeId>,
@@ -479,6 +508,8 @@ struct ImageElement {
     placeholder_image: Option<String>,
     /// Fade-in duration in milliseconds (0 = no fade)
     fade_duration_ms: u32,
+    /// How a failed load is tried again
+    retry: blinc_layout::ImageRetry,
     /// Z-layer index for interleaved rendering with primitives
     z_index: u32,
     /// Border width (0 = no border)
@@ -503,6 +534,13 @@ struct ImageElement {
     mask_info: [f32; 4],
     /// 3D layer info if this image is inside a perspective-transformed parent
     transform_3d_layer: Option<Transform3DLayerInfo>,
+    /// Whether the image is inside a motion container, and so is drawn after the dynamic batch
+    /// that its card's background is in.
+    in_motion_subtree: bool,
+    /// The row of the node table that moves this image, set when the table has taken it.
+    row: Option<u32>,
+    /// From which row of its chain the image's clip moves with the rows.
+    clip_from: Option<u32>,
 }
 
 /// SVG element data for rendering
@@ -531,6 +569,13 @@ struct SvgElement {
     svg_path_data: Option<String>,
     /// Clip bounds from parent scroll container (x, y, width, height)
     clip_bounds: Option<[f32; 4]>,
+    /// For an SVG in a motion subtree inside a scroll container, the scroll clip, which stays
+    /// with the viewport while `clip_bounds`, the clip inside it, moves with the content.
+    scroll_clip: Option<[f32; 4]>,
+    /// Inside a scroll container, the clip inside it and the scroll clip apart, which
+    /// `clip_bounds` merges outside a motion subtree. A group capturing the SVG draws with
+    /// them, so rows can move the inner clip and keep the scroll clip.
+    split_clip: Option<([f32; 4], [f32; 4])>,
     /// Motion opacity inherited from parent motion container
     motion_opacity: f32,
     /// Inherited CSS transform from ancestor elements (full 6-element affine in layout coords)
@@ -549,6 +594,10 @@ struct SvgElement {
     /// opacity is excluded from `motion_opacity` at collect and
     /// applied from the live store at dispatch.
     composite_ancestor: Option<blinc_layout::tree::StableNodeId>,
+    /// The row of the node table that moves this SVG, set when the table has taken it.
+    row: Option<u32>,
+    /// From which row of its chain the SVG's clip moves with the rows.
+    clip_from: Option<u32>,
 }
 
 /// Debug bounds element for layout visualization
@@ -574,6 +623,17 @@ const ATLAS_GC_PRESSURE: f32 = 0.85;
 const ATLAS_GC_MAX_AGE: u64 = 120;
 
 impl RenderContext {
+    /// Allow or forbid baking motion-bound subtrees to textures.
+    /// Whether bound nodes are painted as vectors once and moved by rows: of the GPU node table
+    /// where there is one, and otherwise by the same rows applied on the CPU.
+    pub(crate) fn rows_mode(&self) -> bool {
+        self.renderer.node_table_enabled() || !self.promote_motion
+    }
+
+    pub(crate) fn set_promote_motion(&mut self, on: bool) {
+        self.promote_motion = on;
+    }
+
     /// Create a new render context
     pub(crate) fn new(
         renderer: GpuRenderer,
@@ -598,6 +658,9 @@ impl RenderContext {
             image_load_times: std::collections::HashMap::new(),
             image_fade_deadlines: std::collections::HashMap::new(),
             last_binding_damage_rects: Vec::new(),
+            node_rows: node_rows::NodeRows::default(),
+            captured_runs: Vec::new(),
+            promote_motion: true,
             last_css_damage_rects: Vec::new(),
             css_cache_owners: std::collections::HashMap::new(),
             scratch_css_cache_owners: std::collections::HashMap::new(),
@@ -607,6 +670,7 @@ impl RenderContext {
             motion_subtree_text_patch: Vec::new(),
             composite_patch_baselines: std::collections::HashMap::new(),
             cached_motion_subtree_svgs: None,
+            cached_motion_subtree_images: None,
             cached_css_transformed_text_prims: None,
             svg_cache: LruCache::new(NonZeroUsize::new(SVG_CACHE_CAPACITY).unwrap()),
             svg_atlas,
@@ -617,6 +681,10 @@ impl RenderContext {
             has_active_flows: false,
             has_pending_image_fade: false,
             captured_images_need_repaint: false,
+            collected_valid: false,
+            #[cfg(not(target_arch = "wasm32"))]
+            image_decode: None,
+            image_failures: image_retry::ImageFailures::default(),
             cached_tree_scope: None,
             frame_count: 0,
             clear_alpha: 1.0,
@@ -665,7 +733,34 @@ impl RenderContext {
     /// this signal, the fade ticks invisibly and the user has to
     /// jiggle the cursor for the image to finish fading in.
     pub fn has_pending_image_fade(&self) -> bool {
-        self.has_pending_image_fade
+        self.has_pending_image_fade || self.image_decode_busy()
+    }
+
+    /// Load images on a worker thread, so a frame does not wait for one to decode; an image is
+    /// drawn from the first paint after it arrives. Off by default, where every image is drawn
+    /// in the frame that first needs it. Has no effect on wasm.
+    pub fn set_async_image_decode(&mut self, on: bool) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.image_decode = on.then(|| {
+                image_decode::ImageDecoder::new(
+                    self.image_ctx.device().clone(),
+                    self.image_ctx.queue().clone(),
+                )
+            });
+        }
+        #[cfg(target_arch = "wasm32")]
+        let _ = on;
+    }
+
+    /// Whether an image is loading on the worker.
+    fn image_decode_busy(&self) -> bool {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.image_decode.as_ref().is_some_and(|d| d.busy())
+        }
+        #[cfg(target_arch = "wasm32")]
+        false
     }
 
     /// Set the current render target texture for blend mode two-pass compositing.

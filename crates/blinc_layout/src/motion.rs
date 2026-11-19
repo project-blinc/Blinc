@@ -310,6 +310,35 @@ impl MotionBindings {
     /// bindings consult `is_animating()` on the underlying
     /// `SharedAnimatedValue`.
     pub fn is_any_animating(&self) -> bool {
+        self.is_any_animating_inner()
+    }
+
+    /// Whether some bound value is further from its target than can be seen: more than half a
+    /// pixel or half a degree, or a hundredth of a scale or an opacity, or a rotation timeline
+    /// is playing. A spring's last small oscillations are not.
+    pub fn is_visibly_moving(&self) -> bool {
+        const PIXELS: f32 = 0.5;
+        const DEGREES: f32 = 0.5;
+        let far = |v: &Option<SharedAnimatedValue>, eps: f32| {
+            v.as_ref()
+                .and_then(|s| s.lock().ok())
+                .is_some_and(|g| g.is_playing() || (g.get() - g.target()).abs() > eps)
+        };
+        far(&self.translate_x, PIXELS)
+            || far(&self.translate_y, PIXELS)
+            || far(&self.scale, 0.01)
+            || far(&self.scale_x, 0.01)
+            || far(&self.scale_y, 0.01)
+            || far(&self.rotation, DEGREES)
+            || far(&self.opacity, 0.01)
+            || self
+                .rotation_timeline
+                .as_ref()
+                .and_then(|t| t.timeline.lock().ok())
+                .is_some_and(|g| g.is_playing())
+    }
+
+    fn is_any_animating_inner(&self) -> bool {
         let spring_animating = |v: &Option<SharedAnimatedValue>| {
             v.as_ref()
                 .and_then(|s| s.lock().ok())

@@ -4,6 +4,18 @@ use crate::element::RenderLayer;
 use crate::tree::LayoutNodeId;
 use std::collections::HashSet;
 
+/// What a plan of the native groups is made from.
+#[derive(PartialEq, Eq)]
+pub(in crate::renderer) struct PlanKey {
+    layout: u64,
+    nodes: u64,
+    bindings: u64,
+    root: Option<LayoutNodeId>,
+    capabilities: DeferredContent,
+    glass_layers: bool,
+    css_opacity: Vec<LayoutNodeId>,
+}
+
 impl RenderTree {
     pub(super) fn plan_cross_stream_groups(
         &self,
@@ -183,7 +195,7 @@ impl RenderTree {
             )
         }
         // Keep glass ownership at settled CSS opacity endpoints.
-        let css_opacity = self
+        let css_opacity: HashSet<LayoutNodeId> = self
             .css_anim_store
             .lock()
             .ok()
@@ -197,6 +209,20 @@ impl RenderTree {
                     .collect()
             })
             .unwrap_or_default();
+        let mut css_opacity_nodes: Vec<LayoutNodeId> = css_opacity.iter().copied().collect();
+        css_opacity_nodes.sort_unstable();
+        let key = PlanKey {
+            layout: self.layout_tree.epoch(),
+            nodes: self.render_nodes.revision(),
+            bindings: self.motion_bindings.revision(),
+            root: self.root,
+            capabilities,
+            glass_layers,
+            css_opacity: css_opacity_nodes,
+        };
+        if self.cross_stream_plan_key.borrow().as_ref() == Some(&key) {
+            return;
+        }
         let mut groups = self.cross_stream_groups.borrow_mut();
         groups.clear();
         if let Some(root) = self.root {
@@ -212,5 +238,6 @@ impl RenderTree {
             );
             groups.extend(planned);
         }
+        *self.cross_stream_plan_key.borrow_mut() = Some(key);
     }
 }

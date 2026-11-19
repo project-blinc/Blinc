@@ -54,7 +54,7 @@ pub use testing::{
     CapturedFrame, FrameSequence, RegressionResult, ScreenshotExporter, compare_frames,
 };
 #[cfg(feature = "headless")]
-pub use testing::{Golden, Headless};
+pub use testing::{Golden, Headless, MotionPaint};
 
 use parking_lot::RwLock;
 use std::sync::Arc;

@@ -156,6 +156,21 @@ impl RenderContext {
         tree: &blinc_layout::RenderTree,
         target_view: &wgpu::TextureView,
     ) {
+        // IMAGES: above the card's background, below its text. The compositor's cache paint
+        // does not draw them: the static layer would keep a copy at the painted pose.
+        if !self.in_compositor_inner_call
+            && let Some(images) = self.cached_motion_subtree_images.clone()
+        {
+            let (width, height) = self.renderer.viewport_size();
+            let images = self.node_rows.place_images(&images, tree.scale_factor());
+            self.render_images(
+                target_view,
+                &images,
+                width as f32,
+                height as f32,
+                tree.scale_factor(),
+            );
+        }
         // TEXT — alpha + blit-anchored center remap.
         if let Some(mut text) = self.cached_motion_subtree_text_prims.clone()
             && !text.is_empty()
@@ -202,6 +217,15 @@ impl RenderContext {
                     }
                 }
             }
+            // Without a table to read them, the rows move the glyphs here.
+            if self.node_rows.cpu_backend() && text.node_slots_epoch == self.node_rows.epoch() {
+                let mut aux = std::mem::take(std::sync::Arc::make_mut(&mut text.aux_data));
+                for p in &mut text.primitives {
+                    blinc_gpu::node_table::follow_path_clip(self.node_rows.rows(), p, &mut aux);
+                }
+                *std::sync::Arc::make_mut(&mut text.aux_data) = aux;
+                text.primitives = self.node_rows.resolve_primitives(&text.primitives);
+            }
             self.render_text(target_view, &text);
         }
         // SVG — alpha only (icons are small; the settle repaint lands
@@ -233,6 +257,7 @@ impl RenderContext {
                 }
             }
             let dpi = tree.scale_factor();
+            let svgs = self.node_rows.place_svgs(&svgs, dpi);
             self.render_rasterized_svgs(target_view, &svgs, dpi);
         }
     }

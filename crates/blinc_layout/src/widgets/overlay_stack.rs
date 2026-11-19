@@ -1121,9 +1121,18 @@ fn position_wrapper(
                     const MIN_BELOW: f32 = 96.0;
                     let open_upward = viewport.1 - *y < MIN_BELOW && *y - margin > MIN_BELOW;
                     if open_upward {
+                        // A box from the top of the viewport to just above the anchor, with the
+                        // panel at its bottom: it hangs from the anchor whatever its height, and
+                        // the placement does not depend on the size of the layer this sits in,
+                        // which can be a zero-sized box when the entry arrived after it was
+                        // built.
                         outer
                             .left(cx)
-                            .bottom((viewport.1 - *y + margin).max(margin))
+                            .top(0.0)
+                            .h((*y - margin).max(margin))
+                            .flex_col()
+                            .justify_end()
+                            .pointer_events_none()
                             .child(child)
                     } else {
                         outer.left(cx).top((*y).max(margin)).child(child)
@@ -1204,6 +1213,7 @@ pub struct OverlayBuilder {
     motion_enter: Option<ElementAnimation>,
     motion_exit: Option<ElementAnimation>,
     motion_class: Option<Arc<str>>,
+    initial_focus: Option<String>,
 }
 
 impl OverlayBuilder {
@@ -1228,6 +1238,7 @@ impl OverlayBuilder {
             motion_enter: None,
             motion_exit: None,
             motion_class: None,
+            initial_focus: None,
         }
     }
 
@@ -1327,6 +1338,13 @@ impl OverlayBuilder {
         self
     }
 
+    /// Choose a focusable element by ID when the overlay opens.
+    /// An unavailable target uses the normal focus fallback.
+    pub fn initial_focus(mut self, id: impl Into<String>) -> Self {
+        self.initial_focus = Some(id.into());
+        self
+    }
+
     // ----- Lifecycle -----
 
     pub fn on_open(mut self, f: impl Fn() + Send + Sync + 'static) -> Self {
@@ -1392,6 +1410,11 @@ impl OverlayBuilder {
             .unwrap_or_else(|| format!("cn-overlay:{}", handle.raw()));
         let spawned_at_ms = stack.current_time_ms;
 
+        let content = self.content_fn.unwrap_or_else(|| Arc::new(Div::new));
+        let initial_focus = self.initial_focus;
+        let content_fn = Arc::new(move || {
+            super::overlay_focus::initial_target(content(), initial_focus.as_deref())
+        });
         let entry = OverlayEntry {
             handle,
             kind: self.kind,
@@ -1399,7 +1422,7 @@ impl OverlayBuilder {
             anchor_direction: self.anchor_direction,
             size: self.size,
             dismiss: self.dismiss,
-            content_fn: self.content_fn.unwrap_or_else(|| Arc::new(Div::new)),
+            content_fn,
             motion_key,
             motion_enter: self.motion_enter,
             motion_exit: self.motion_exit,

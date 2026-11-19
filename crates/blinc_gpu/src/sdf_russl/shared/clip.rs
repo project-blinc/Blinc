@@ -211,7 +211,9 @@ russl::russl! {
         return if if even_odd { (winding & 1) != 0 } else { winding != 0 } { 1 } else { 0 };
     }
 
-    pub fn abi_clip_polygon(p: Vec2, first: u32, count: u32, even_odd: bool, aa: f32) -> f32 {
+    // `ex` and `ey` are a screen pixel's steps along x and y in the clip's frame: the four samples
+    // sit at `p ± s ex ± s ey`.
+    pub fn abi_clip_polygon(p: Vec2, first: u32, count: u32, even_odd: bool, aa: f32, ex: Vec2, ey: Vec2) -> f32 {
         let s = aa * 0.7;
         let mut w0 = 0;
         let mut w1 = 0;
@@ -230,10 +232,10 @@ russl::russl! {
                 let closest = delta - edge * clamp(dot(delta, edge) / max(dot(edge, edge), 1e-12), 0.0, 1.0);
                 distance_sq = min(distance_sq, dot(closest, closest));
                 w0 += abi_clip_crossing(previous, v, p);
-                w1 += abi_clip_crossing(previous, v, p + Vec2::new(s, s));
-                w2 += abi_clip_crossing(previous, v, p + Vec2::new(-s, s));
-                w3 += abi_clip_crossing(previous, v, p + Vec2::new(s, -s));
-                w4 += abi_clip_crossing(previous, v, p + Vec2::new(-s, -s));
+                w1 += abi_clip_crossing(previous, v, p + (ex + ey) * s);
+                w2 += abi_clip_crossing(previous, v, p + (ey - ex) * s);
+                w3 += abi_clip_crossing(previous, v, p + (ex - ey) * s);
+                w4 += abi_clip_crossing(previous, v, p - (ex + ey) * s);
             }
             previous = v;
         }
@@ -247,16 +249,37 @@ russl::russl! {
     }
 
     pub fn abi_shape_clip_alpha(pixel: Vec2, pointer: f32) -> f32 {
+        return abi_shape_clip_alpha_back(pixel, pointer, Vec4::new(1.0, 0.0, 0.0, 1.0), Vec2::splat(0.0), false);
+    }
+
+    // The shape clip at `pixel` taken back first by `back` (x' = back.x x + back.z y + shift.x,
+    // y' = back.y x + back.w y + shift.y) when `moved`, its samples a screen pixel's steps
+    // taken back the same way.
+    pub fn abi_shape_clip_alpha_back(pixel_in: Vec2, pointer: f32, back: Vec4, shift: Vec2, moved: bool) -> f32 {
         if pointer < 0.5 { return 1.0; }
         let base = ((pointer) as u32) - 1u32;
         let frame = abi_clip_data(base);
         let info = abi_clip_data(base + 1u32);
         let shape = abi_clip_data(base + 2u32);
+        let mut pixel = pixel_in;
+        let mut ex = Vec2::new(1.0, 0.0);
+        let mut ey = Vec2::new(0.0, 1.0);
+        if moved {
+            pixel = Vec2::new(back.x * pixel_in.x + back.z * pixel_in.y, back.y * pixel_in.x + back.w * pixel_in.y) + shift;
+            ex = Vec2::new(frame.x * back.x + frame.z * back.y, frame.y * back.x + frame.w * back.y);
+            ey = Vec2::new(frame.x * back.z + frame.z * back.w, frame.y * back.z + frame.w * back.w);
+        }
         let p = Vec2::new(frame.x * pixel.x + frame.z * pixel.y, frame.y * pixel.x + frame.w * pixel.y) + info.xy;
         // Analytic halfPixel in the clip's frame, valid inside nonuniform control flow.
         let aa = max(0.25 * (length(frame.xy) + length(frame.zw)), 1e-6);
+        // A rounded rect with a radius for each corner (tl, tr, br, bl) in the row after the shape
+        // and a corner shape for each in the row after that.
+        if info.z > 3.5 {
+            let distance = sd_shaped_rect(p, shape.xy, shape.zw, abi_clip_data(base + 3u32), abi_clip_data(base + 4u32));
+            return 1.0 - smoothstep(-aa, aa, distance);
+        }
         if info.z > 2.5 {
-            return abi_clip_polygon(p, base + ((shape.x) as u32), ((shape.y) as u32), shape.z > 0.5, aa);
+            return abi_clip_polygon(p, base + ((shape.x) as u32), ((shape.y) as u32), shape.z > 0.5, aa, ex, ey);
         }
         if info.z > 1.5 {
             let distance = sd_rounded_rect(p, shape.xy, shape.zw, Vec4::splat(info.w));

@@ -4,6 +4,16 @@ All notable changes to `blinc_animation` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `AnimatedValue::drive_playing(value)` sets the value as something that plays with no end in view moves it, a CSS animation that repeats: it reads as animating until it is set by another route. `is_playing` says whether it is driven so.
+- `AnimatedValue::drive(value, target)` sets the value with no spring, as something else that plays an animation moves it, and reads as animating until it reaches `target`: a timed animation that is not a spring can drive a motion binding.
+- `AnimationScheduler::set_manual_stepping` makes `tick` step nothing, so only `tick_by` moves the animations. A driver that steps a fixed `dt` sets it so a tick made on the way by a frame does not add the time since the last frame.
+- `AnimationDescriptor`: an animation as data, `{ start_ms, duration_ms, from, to, curve, initial_velocity }`, with `evaluate`, `velocity`, `is_finished` and `retarget`. Nothing is stepped, so a value and its velocity at any time come straight from the descriptor and a stalled frame skips ahead as a CSS animation does. `descriptor::now_ms` reads the frame clock on the scale descriptors use.
+- `Curve`: `Linear`, `CubicBezier`, `Steps` with `StepJump`, `Power` with `PowerMode` (the polynomial easings, exactly) and `Spring`, a damped spring in closed form for under, critical and over damping. A spring's duration is when it has settled, within a thousandth of the distance it moved.
+- `Easing::to_curve`, `Spring::to_descriptor`, `AnimatedValue::descriptor` and `SchedulerHandle::get_spring`.
+- `descriptor::lerp_color_premultiplied`, the sRGB premultiplied colour mix CSS uses.
+- The curve maths is checked against one file of float64 vectors computed outside either implementation (`tests/vectors/curves.txt`, made by `generate.py`): the CPU code and the shader in blinc_gpu both agree with it to better than 1e-6 of the distance moved.
+
 ### Fixed
 - The README's examples use the API that exists. They called `Spring::animate_to` and `update`, `SpringConfig::bouncy`, `KeyframeAnimation::update`, `Timeline::play` and `AnimationScheduler::global`, none of which are there.
 
