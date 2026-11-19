@@ -28,7 +28,7 @@ use crate::div::{ElementBuilder, ElementTypeId};
 use crate::element::{ElementBounds, GlassMaterial, Material, RenderLayer, RenderProps};
 use crate::layout_animation::{LayoutAnimationConfig, LayoutAnimationState};
 use crate::selector::{ElementRegistry, ScrollRef};
-use crate::tree::{LayoutNodeId, LayoutTree};
+use crate::tree::{LayoutNodeId, LayoutTree, StableNodeId};
 use crate::visual_animation::{AnimatedRenderBounds, VisualAnimation, VisualAnimationConfig};
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -742,6 +742,8 @@ pub struct RenderTree {
     >,
     ime_bindings: HashMap<LayoutNodeId, crate::ime::ImeBinding>,
     accessibility_bindings: HashMap<LayoutNodeId, crate::accessibility::AccessibilityBinding>,
+    accessibility_semantics:
+        HashMap<LayoutNodeId, Arc<crate::accessibility::AccessibilitySemantics>>,
     /// Root node ID
     root: Option<LayoutNodeId>,
     /// Event handlers registry for dispatching events
@@ -1218,6 +1220,8 @@ pub struct RenderTree {
     /// the replacement for today's blanket `remove_subtree_nodes`
     /// wipe. Saturates harmlessly after 2⁶⁴ builds.
     build_generation: u64,
+    accessibility_focus: Option<StableNodeId>,
+    accessibility_viewport: (f32, f32),
     /// Process-global build epoch this tree's `LayoutNodeId`s were
     /// minted in. Queued subtree rebuilds carry the epoch they were
     /// queued in, and an older one names a node in a tree that no
@@ -1252,6 +1256,7 @@ impl RenderTree {
             render_nodes: tracked::Tracked::default(),
             ime_bindings: HashMap::new(),
             accessibility_bindings: HashMap::new(),
+            accessibility_semantics: HashMap::new(),
             root: None,
             handler_registry: crate::event_handler::HandlerRegistry::new(),
             property_write_logs: Vec::new(),
@@ -1359,6 +1364,8 @@ impl RenderTree {
             stable_to_layout: HashMap::new(),
             layout_to_stable: HashMap::new(),
             build_generation: 0,
+            accessibility_focus: None,
+            accessibility_viewport: (0.0, 0.0),
             build_epoch: 0,
         }
     }
@@ -2703,6 +2710,7 @@ impl RenderTree {
 
     /// Compute layout for the given viewport size
     pub fn compute_layout(&mut self, width: f32, height: f32) {
+        self.accessibility_viewport = (width, height);
         // Before measuring: CSS text properties that affect measurement
         // reach the contexts here, not at build time. A text node's font is part of what the
         // revision of the nodes counts, so with none changed there is nothing to bring up to date.

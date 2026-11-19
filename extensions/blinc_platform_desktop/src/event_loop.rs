@@ -361,6 +361,9 @@ where
         winit_id: WinitWindowId,
         event: WinitWindowEvent,
     ) {
+        if let Some(window) = self.windows.get(&winit_id) {
+            window.process_accessibility_event(&event);
+        }
         // Block input to non-modal windows when a modal is active
         if let Some(modal_id) = self.modal_window {
             if winit_id != modal_id {
@@ -437,7 +440,12 @@ where
                 // can block the main thread on the window server. The app's
                 // dirty flags are left as they are, so the first frame after
                 // `Occluded(false)` paints whatever changed meanwhile.
-                if !self.occluded.contains(&winit_id) {
+                if !self.occluded.contains(&winit_id)
+                    || self
+                        .windows
+                        .get(&winit_id)
+                        .is_some_and(|w| w.accessibility_pending())
+                {
                     self.handle_event_for(winit_id, Event::Frame(wid));
                     if self.should_exit {
                         event_loop.exit();
@@ -446,6 +454,9 @@ where
             }
 
             WinitWindowEvent::Occluded(occluded) => {
+                if let Some(window) = self.windows.get(&winit_id) {
+                    window.set_occluded(occluded);
+                }
                 tracing::debug!(
                     target: "blinc_platform_desktop::occlusion",
                     occluded,

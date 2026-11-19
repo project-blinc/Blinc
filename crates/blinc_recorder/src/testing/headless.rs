@@ -374,6 +374,21 @@ impl Headless {
         self.tree.as_ref().expect("nothing is mounted")
     }
 
+    /// Send an assistive action through the shared semantic and focus routing.
+    pub fn accessibility_action(
+        &mut self,
+        id: blinc_layout::tree::StableNodeId,
+        action: blinc_layout::accessibility::AccessibilityAction,
+    ) -> bool {
+        let handled = self.tree.as_mut().is_some_and(|tree| {
+            tree.perform_accessibility_action_with_router(&mut self.ctx.event_router, id, action)
+        });
+        if handled {
+            blinc_layout::request_redraw();
+        }
+        handled
+    }
+
     /// Build `ui` and show it. `ui` runs again whenever a state it reads
     /// changes, as in a window.
     pub fn mount<E, F>(&mut self, ui: F) -> &mut Self

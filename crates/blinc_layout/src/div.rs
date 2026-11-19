@@ -431,6 +431,7 @@ pub struct Div {
     /// repeated class names share one allocation (see
     /// [`blinc_core::intern`]).
     pub(crate) classes: Vec<std::sync::Arc<str>>,
+    accessibility: Option<Arc<crate::accessibility::AccessibilitySemantics>>,
     // 3D transform properties (stored separately to flow through to render_props)
     pub(crate) rotate_x: Option<f32>,
     pub(crate) rotate_y: Option<f32>,
@@ -566,6 +567,7 @@ impl Div {
             event_handlers: crate::event_handler::EventHandlers::new(),
             element_id: None,
             classes: Vec::new(),
+            accessibility: None,
             rotate_x: None,
             rotate_y: None,
             perspective_3d: None,
@@ -634,6 +636,7 @@ impl Div {
             event_handlers: crate::event_handler::EventHandlers::new(),
             element_id: None,
             classes: Vec::new(),
+            accessibility: None,
             rotate_x: None,
             rotate_y: None,
             perspective_3d: None,
@@ -707,6 +710,20 @@ impl Div {
     /// every wrapper that forwards the element's classes forwards them too.
     pub fn attr(self, name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
         self.class(format!("{}={}", name.as_ref(), value.as_ref()))
+    }
+
+    /// Register this element's role, child behavior and optional value/action provider.
+    pub fn accessibility(
+        mut self,
+        semantics: crate::accessibility::AccessibilitySemantics,
+    ) -> Self {
+        self = self.attr("role", semantics.role.as_str());
+        self.accessibility = Some(Arc::new(semantics));
+        self
+    }
+
+    pub fn accessibility_role(self, role: crate::accessibility::AccessibilityRole) -> Self {
+        self.accessibility(crate::accessibility::AccessibilitySemantics::new(role))
     }
 
     /// `attr("data-name", value)`.
@@ -5352,6 +5369,12 @@ pub trait ElementBuilder {
 
     /// Optional live semantic value and editing actions for a custom control.
     fn accessibility_binding(&self) -> Option<crate::accessibility::AccessibilityBinding> {
+        self.accessibility_semantics()
+            .and_then(|semantics| semantics.binding.clone())
+    }
+
+    /// Component-owned semantics. Tags and ARIA attributes provide the fallback.
+    fn accessibility_semantics(&self) -> Option<Arc<crate::accessibility::AccessibilitySemantics>> {
         None
     }
 
@@ -5544,6 +5567,9 @@ impl<T: ?Sized + ElementBuilder> ElementBuilder for Box<T> {
     fn accessibility_binding(&self) -> Option<crate::accessibility::AccessibilityBinding> {
         (**self).accessibility_binding()
     }
+    fn accessibility_semantics(&self) -> Option<Arc<crate::accessibility::AccessibilitySemantics>> {
+        (**self).accessibility_semantics()
+    }
     fn semantic_type_name(&self) -> Option<&'static str> {
         (**self).semantic_type_name()
     }
@@ -5656,6 +5682,9 @@ impl Div {
 }
 
 impl ElementBuilder for Div {
+    fn accessibility_semantics(&self) -> Option<Arc<crate::accessibility::AccessibilitySemantics>> {
+        self.accessibility.clone()
+    }
     fn ime_binding(&self) -> Option<crate::ime::ImeBinding> {
         self.ime_binding.clone()
     }

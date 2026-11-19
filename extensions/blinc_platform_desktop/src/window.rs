@@ -9,8 +9,10 @@ use winit::window::{Window as WinitWindow, WindowAttributes, WindowLevel as Wini
 
 /// Desktop window wrapping a winit window
 pub struct DesktopWindow {
+    accessibility: crate::accessibility::DesktopAccessibility,
     window: Arc<WinitWindow>,
     focused: AtomicBool,
+    occluded: AtomicBool,
     /// Whether this window was configured as transparent. Cached at
     /// creation time because winit doesn't expose a way to query it
     /// back, and the GPU runner needs it to pick the wgpu
@@ -31,7 +33,7 @@ impl DesktopWindow {
             .with_decorations(config.decorations)
             .with_transparent(config.transparent)
             .with_maximized(config.maximized)
-            .with_visible(config.visible)
+            .with_visible(false)
             .with_active(config.active)
             .with_window_level(map_window_level(config.window_level));
 
@@ -50,7 +52,8 @@ impl DesktopWindow {
 
         attrs = apply_platform_attrs(attrs, config);
 
-        let window = event_loop.create_window(attrs)?;
+        let window = Arc::new(event_loop.create_window(attrs)?);
+        let accessibility = crate::accessibility::DesktopAccessibility::new(event_loop, &window);
         apply_window_level(&window, config.window_level);
 
         // Center window on screen if requested
@@ -72,9 +75,12 @@ impl DesktopWindow {
             window.set_cursor_visible(false);
         }
 
+        window.set_visible(config.visible);
         Ok(Self {
-            window: Arc::new(window),
+            accessibility,
+            window,
             focused: AtomicBool::new(config.active),
+            occluded: AtomicBool::new(false),
             transparent: config.transparent,
         })
     }
@@ -92,6 +98,32 @@ impl DesktopWindow {
     /// Whether this window was configured with a transparent surface.
     pub fn is_transparent(&self) -> bool {
         self.transparent
+    }
+
+    pub(crate) fn process_accessibility_event(&self, event: &winit::event::WindowEvent) {
+        self.accessibility.process_event(&self.window, event);
+    }
+
+    pub fn accessibility_active(&self) -> bool {
+        self.accessibility.is_active()
+    }
+    pub fn accessibility_pending(&self) -> bool {
+        self.accessibility.is_pending()
+    }
+    pub fn accessibility_generation(&self) -> u64 {
+        self.accessibility.generation()
+    }
+    pub fn take_accessibility_request(&self) -> Option<crate::AccessibilityRequest> {
+        self.accessibility.take()
+    }
+    pub fn update_accessibility(&self, update: impl FnOnce() -> accesskit::TreeUpdate) {
+        self.accessibility.update(update);
+    }
+    pub fn is_occluded(&self) -> bool {
+        self.occluded.load(Ordering::Acquire)
+    }
+    pub(crate) fn set_occluded(&self, occluded: bool) {
+        self.occluded.store(occluded, Ordering::Release);
     }
 
     /// Set focus state (called by event loop)

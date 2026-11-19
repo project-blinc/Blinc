@@ -37,6 +37,8 @@ use std::sync::{Arc, Mutex};
 pub type SharedAnimationScheduler = Arc<Mutex<AnimationScheduler>>;
 
 #[cfg(all(feature = "windowed", not(target_os = "android")))]
+mod accessibility;
+#[cfg(all(feature = "windowed", not(target_os = "android")))]
 mod app_init;
 mod context;
 #[cfg(all(feature = "windowed", not(target_os = "android")))]
@@ -590,7 +592,7 @@ impl WindowedApp {
         };
         let mut desktop_loop = desktop_loop;
         event_loop
-            .run(move |event, window| desktop_loop.handle(event, window))
+            .run(move |event, window| desktop_loop.dispatch(event, window))
             .map_err(|e| BlincError::Platform(e.to_string()))?;
 
         Ok(())

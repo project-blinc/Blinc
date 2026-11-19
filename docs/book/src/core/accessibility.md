@@ -45,7 +45,79 @@ the usual event handler and CSS for a custom control. `aria-hidden="true"`
 removes a decorative subtree from the semantic snapshot. Disabled controls
 remain discoverable, with their disabled state exposed, and reject actions.
 
+## Registering component semantics
+
+Components can supply their own accessibility description. Register it with
+`Div::accessibility(...)`, or implement `ElementBuilder::accessibility_semantics()`
+for a custom element. Store the descriptor on the element and return an Arc
+clone from the trait method. This preserves provider identity across unchanged
+builds. The description declares the role, child traversal,
+advertised actions and live-region defaults. A live region announces changing
+content to a screen reader.
+
+```rust,ignore
+use blinc::layout::accessibility::{
+    AccessibilityLive, AccessibilityRole, AccessibilitySemantics,
+};
+
+let activity = div()
+    .accessibility(
+        AccessibilitySemantics::new(AccessibilityRole::Custom("activity-feed"))
+            .children(true)
+            .live(AccessibilityLive::Polite, false),
+    )
+    .attr("aria-label", "Workspace activity")
+    .child(text("Build complete"));
+```
+
+Custom roles do not need an entry in a core lookup table. Desktop adapters
+expose an unknown custom role as a named group. Use a standard role such as
+`Button` or `Slider` when the element has that behavior.
+
+`AccessibilitySemantics::binding(...)` accepts an `AccessibilityBinding` for a
+live value and its action handler. This uses the same provider interface as
+built-in text fields. Read Signal or Computed values in the provider and apply
+assistive edits through the same state and constraints as ordinary input.
+The description's `.actions(...)` method declares the supported actions.
+An element still needs handlers for the actions that it advertises.
+
+`Div::accessibility_role(...)` is a shorter form for a standard role. A component
+can override child traversal with `.children(...)`: containers keep their child
+controls, while an atomic control exposes one accessible element. Registration
+survives boxed elements and incremental updates. Changes to semantic metadata
+are detected even when appearance stays the same.
+
+CN dialog, popover, tooltip and toast builders register their own descriptions.
+The shared role types describe standard semantics, rather than CN widget types.
+Tag names and `role` attributes remain the fallback for other elements.
+
+## Containers and announcements
+
+The snapshot keeps parent IDs and reading order for menus, trees, toolbars,
+dialogs and regions. Checkbox and radio menu items retain distinct roles.
+Dialogs use their title as their accessible name and their description as a
+hint. An alert dialog has a separate role from an ordinary dialog.
+
+Toasts use `Status` with polite announcements. Error toasts use `Alert` with
+assertive announcements. These defaults follow
+[WAI-ARIA live-region roles](https://www.w3.org/TR/wai-aria-1.2/#status).
+Use `aria-live`, `aria-atomic` and `aria-busy` to override announcement defaults.
+Atomic toast messages announce their whole content. Busy messages wait until ready.
+Unchanged repaints do not resend the same native update.
+
 ## Platform integration
+
+Desktop windows create an AccessKit bridge before they become visible. Semantic
+collection starts when a native accessibility client requests the tree. Native
+requests reach the UI thread and use the existing widget handlers and focus
+router. Updates preserve Blinc stable IDs and send changed native nodes.
+Deactivation releases the native-node cache.
+
+The desktop bridge targets macOS accessibility, Windows UI Automation and
+Linux AT-SPI. The native AppKit probe queries a hidden window and checks its
+hierarchy, actions, editing and object identity. Compilation and semantic tests
+do not establish screen-reader behavior on every platform. Test with VoiceOver,
+NVDA or Orca for the platform that you ship.
 
 The iOS host's `BlincAccessibility.swift` creates native accessibility elements
 for GPU-rendered content. It retains their objects by Blinc stable node ID,
@@ -81,7 +153,7 @@ composite-widget semantics and screen-reader focus restoration across overlays
 still need platform validation and integration; this adapter is not a claim of
 complete library coverage.
 
-The browser canvas, Android and desktop runners still require platform adapters
+The browser canvas and Android runners still require platform adapters
 for the semantic snapshot. A role stored in a Blinc tree is not automatically
 an HTML ARIA element or an operating-system accessibility node.
 

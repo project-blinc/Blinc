@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 /// monolithic event loop closure. This is the foundation for multi-window support.
 #[cfg(all(feature = "windowed", not(target_os = "android")))]
 pub(crate) struct WindowState {
+    pub accessibility: super::accessibility::AccessibilityCache,
     /// GPU app (renderer, device, queue)
     pub app: Option<BlincApp>,
     /// Window surface for rendering
@@ -140,6 +141,7 @@ impl WindowState {
         >,
     ) -> Self {
         Self {
+            accessibility: super::accessibility::AccessibilityCache::default(),
             app: None,
             surface: None,
             surface_config: None,

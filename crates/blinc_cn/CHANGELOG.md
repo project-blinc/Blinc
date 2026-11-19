@@ -4,6 +4,8 @@ All notable changes to `blinc_cn` will be documented in this file.
 
 ## [Unreleased]
 
+- Dialog, alert-dialog, popover, tooltip and toast builders register their own accessibility descriptions. Dialog names follow their titles. Toasts expose polite status updates or assertive error alerts, and their dismiss control accepts assistive actions.
+
 - Dialog builders accept `.initial_focus(id)` to choose the starting control. Unavailable targets use the marked control or the normal fallback.
 
 ### Changed

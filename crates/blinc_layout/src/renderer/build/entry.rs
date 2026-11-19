@@ -108,6 +108,7 @@ impl RenderTree {
         self.render_nodes.clear();
         self.ime_bindings.clear();
         self.accessibility_bindings.clear();
+        self.accessibility_semantics.clear();
         self.element_registry.clear();
         // Clear scroll_refs HashMap (node_id keyed) - it will be repopulated during rebuild
         // but active_scroll_refs persists for process_pending_scroll_refs

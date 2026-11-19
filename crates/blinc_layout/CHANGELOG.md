@@ -4,6 +4,9 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ## [Unreleased]
 
+- Elements can register roles, child traversal, live-region defaults and advertised actions through `AccessibilitySemantics`. Custom roles use a generic platform fallback. Registered value/action providers and metadata updates survive incremental rendering.
+- Accessibility snapshots preserve container descendants, parent IDs, menu checkbox/radio variants, live-region properties and non-editable focus. Assistive focus uses the shared scope and event routing.
+
 - Built-in text inputs and text areas expose their editable focus marker for Tab navigation and named focus requests.
 - Dialogs and modals accept a named initial focus target or an `autofocus` marker. Programmatic focus requests reach the router, preserve overlay boundaries and request a redraw without rebuilding the UI.
 

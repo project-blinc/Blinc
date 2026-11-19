@@ -30,9 +30,13 @@
 //! }
 //! ```
 
+mod accessibility;
 pub mod event_loop;
 pub mod input;
 pub mod window;
+
+pub use accessibility::AccessibilityRequest;
+pub use accesskit;
 
 pub use event_loop::{DesktopEventLoop, WakeProxy};
 pub use window::DesktopWindow;

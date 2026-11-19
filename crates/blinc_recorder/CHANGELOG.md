@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Headless sessions expose `accessibility_action` to test assistive activation, editing and focus through the shared semantic routing.
+
 ### Changed
 - Continuous Calendar checks verify that retired month pages and day cells leave the selector index after their exit animations.
 - Pixel and retention regressions cover rapid Calendar swipes and hover ownership, settled-month slides, overlapping CSS groups and later occluders, background-only hover colours and unsupported source handoffs on CPU and GPU rows.

@@ -10,12 +10,21 @@ impl RenderTree {
                     .element_registry()
                     .attribute(n, "data-focus-delegate")
                     .is_some()
-        }) && matches!(
-            self.element_registry()
-                .attribute(node, "tabindex")
-                .as_deref(),
-            Some("0" | "text" | "-1")
-        ) && self.focus_enabled(node)
+        }) && (self
+            .accessibility_semantics
+            .get(&node)
+            .is_some_and(|semantics| {
+                semantics.actions.is_some_and(|actions| {
+                    actions.contains(crate::accessibility::AccessibilityActions::FOCUS)
+                })
+            })
+            || matches!(
+                self.element_registry()
+                    .attribute(node, "tabindex")
+                    .as_deref(),
+                Some("0" | "text" | "-1")
+            ))
+            && self.focus_enabled(node)
     }
 
     pub(super) fn focus_enabled(&self, node: LayoutNodeId) -> bool {
@@ -81,7 +90,7 @@ impl RenderTree {
         .collect()
     }
 
-    pub(super) fn move_focus(&mut self, router: &mut EventRouter, node: LayoutNodeId) {
+    pub(crate) fn move_focus(&mut self, router: &mut EventRouter, node: LayoutNodeId) {
         let keyboard = router.keyboard_focus();
         crate::widgets::text_input::blur_all_text_inputs();
         self.scroll_into_view(node);
@@ -302,6 +311,7 @@ impl RenderTree {
             router.set_focus(None);
         }
         router.focus_stable = router.focused().and_then(|n| self.stable_id(n));
+        self.accessibility_focus = router.focus_stable;
         router.publish_focus();
         if let Some(context) = context
             && (request.is_some() || router.context_focus != router.focus_stable)

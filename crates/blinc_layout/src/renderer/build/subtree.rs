@@ -227,6 +227,7 @@ impl RenderTree {
         self.node_states.remove(&node_id);
         self.ime_bindings.remove(&node_id);
         self.accessibility_bindings.remove(&node_id);
+        self.accessibility_semantics.remove(&node_id);
         self.scroll_offsets.remove(&node_id);
         self.scroll_physics.remove(&node_id);
         self.scroll_refs.remove(&node_id);
