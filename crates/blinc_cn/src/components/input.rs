@@ -125,6 +125,9 @@ impl Input {
         // An error marks the box `data-invalid` while it is non-empty.
         if let Some(ref error) = config.error {
             text_input = text_input.invalid(crate::reactive_props::non_empty(error));
+        } else {
+            // No error any more: clear a mark left by an earlier build on the same data.
+            text_input = text_input.invalid(false);
         }
 
         // If no label, description, or error, return the input directly in a minimal container
@@ -665,5 +668,16 @@ mod tests {
             .label("Username")
             .placeholder("Enter username")
             .size(InputSize::Large);
+    }
+
+    /// A field rebuilt without an error no longer shows as invalid.
+    #[test]
+    fn test_invalid_clears_when_the_error_goes() {
+        init_theme();
+        let data = blinc_layout::widgets::text_input::text_input_data();
+        let _with_error = input(&data).error("Not a valid address").build_component();
+        assert!(data.lock().unwrap().invalid);
+        let _without_error = input(&data).build_component();
+        assert!(!data.lock().unwrap().invalid);
     }
 }
