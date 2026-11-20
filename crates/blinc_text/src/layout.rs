@@ -446,7 +446,7 @@ impl TextLayoutEngine {
 
         for glyph in &shaped.glyphs {
             let x_offset = shaped.scale(glyph.x_offset);
-            let advance = tracked_advance(&shaped, &glyph, options.letter_spacing);
+            let advance = tracked_advance(shaped, glyph, options.letter_spacing);
 
             glyphs.push(PositionedGlyph {
                 glyph_id: glyph.glyph_id,
@@ -501,7 +501,7 @@ impl TextLayoutEngine {
                 continue; // Don't include the newline glyph itself
             }
 
-            let advance = tracked_advance(&shaped, &glyph, options.letter_spacing);
+            let advance = tracked_advance(shaped, glyph, options.letter_spacing);
 
             // Check if this is a word boundary (at a whitespace character)
             let is_word_break = word_breaks.contains(&(glyph.cluster as usize));
@@ -529,7 +529,7 @@ impl TextLayoutEngine {
                             // Recalculate line width
                             line_width = current_line
                                 .iter()
-                                .map(|g| tracked_advance(&shaped, g, options.letter_spacing))
+                                .map(|g| tracked_advance(shaped, g, options.letter_spacing))
                                 .sum();
                             last_word_end = 0;
                             last_word_width = 0.0;
@@ -695,7 +695,7 @@ mod tests {
         let mut last_word_end = 0;
 
         for glyph in shaped.glyphs.iter() {
-            let advance = tracked_advance(&shaped, &glyph, options.letter_spacing);
+            let advance = tracked_advance(&shaped, glyph, options.letter_spacing);
             let is_word_break = word_breaks.contains(&(glyph.cluster as usize));
 
             if line_width + advance > max_width && !current_line.is_empty() {
@@ -809,7 +809,7 @@ mod tests {
         fn calc_width(shaped: &ShapedText, options: &LayoutOptions) -> f32 {
             let mut x = 0.0f32;
             for glyph in &shaped.glyphs {
-                let advance = tracked_advance(&shaped, &glyph, options.letter_spacing);
+                let advance = tracked_advance(shaped, glyph, options.letter_spacing);
                 x += advance;
             }
             x
@@ -865,7 +865,7 @@ mod tests {
         fn calc_width(shaped: &ShapedText, options: &LayoutOptions) -> f32 {
             let mut x = 0.0f32;
             for glyph in &shaped.glyphs {
-                let advance = tracked_advance(&shaped, &glyph, options.letter_spacing);
+                let advance = tracked_advance(shaped, glyph, options.letter_spacing);
                 x += advance;
             }
             x

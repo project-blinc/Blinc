@@ -1588,12 +1588,11 @@ mod tests {
 
         let mut fonts_with_check = Vec::new();
         for family in &families {
-            if let Ok(font) = registry.load_font(family) {
-                if let Some(gid) = font.glyph_id('✓') {
-                    if gid > 0 {
-                        fonts_with_check.push((family.clone(), gid));
-                    }
-                }
+            if let Ok(font) = registry.load_font(family)
+                && let Some(gid) = font.glyph_id('✓')
+                && gid > 0
+            {
+                fonts_with_check.push((family.clone(), gid));
             }
         }
 

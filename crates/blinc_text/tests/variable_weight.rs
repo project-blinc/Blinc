@@ -17,10 +17,10 @@ fn variable_face(reg: &mut FontRegistry) -> Option<std::sync::Arc<blinc_text::Fo
         GenericFont::Serif,
         GenericFont::Monospace,
     ] {
-        if let Ok(f) = reg.load_generic_with_style(generic, 400, false) {
-            if f.has_weight_axis() {
-                return Some(f);
-            }
+        if let Ok(f) = reg.load_generic_with_style(generic, 400, false)
+            && f.has_weight_axis()
+        {
+            return Some(f);
         }
     }
     eprintln!("SKIP: no variable face with a wght axis installed");

@@ -1,10 +1,12 @@
-//! Text shaping using rustybuzz (HarfBuzz)
+//! Text shaping using HarfRust
 //!
 //! Converts text strings into positioned glyph sequences with proper
 //! kerning, ligatures, and OpenType feature support.
 
 use crate::font::{FontData, FontFace};
-use rustybuzz::{Direction, Face, Language, Script, ShapePlan, UnicodeBuffer};
+use harfrust::{
+    Buffer, Direction, Feature, Font, Language, Script, ShapeOptions, ShapePlan, ShaperFont,
+};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -55,26 +57,19 @@ impl ShapedText {
     }
 }
 
-/// Text shaper using HarfBuzz via rustybuzz
-///
-/// Parsing a face for rustybuzz and planning how to shape for it are the cost of shaping a short
-/// string, so the shaper keeps the face and its plans for each font it is asked to shape with.
+/// Text shaper that keeps an owned HarfRust font and its default shape plans per face.
 pub struct TextShaper {
     faces: Mutex<HashMap<FaceKey, Arc<KeptFace>>>,
 }
 
-/// A face by its id and the bits of the `wght` value set on it, if any.
+/// A face by its id and the bits of the selected `wght` value.
 type FaceKey = (u64, Option<u32>);
 
-/// A rustybuzz face, and the plans made for it.
 struct KeptFace {
-    // Declared before `_data`, which it borrows: it is dropped first.
-    face: Face<'static>,
+    font: Font,
     plans: Mutex<HashMap<PlanKey, Arc<ShapePlan>>>,
-    _data: FontData,
 }
 
-/// What a shape plan is made for, within one face.
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct PlanKey {
     direction: Direction,
@@ -82,86 +77,88 @@ struct PlanKey {
     language: Option<Language>,
 }
 
-/// Faces kept before they are dropped to start again; one font and weight is one.
 const MAX_FACES: usize = 64;
-/// Plans kept for one face; a font, direction, script and language is one.
 const MAX_PLANS: usize = 128;
 
 impl KeptFace {
-    fn new(font_face: &FontFace) -> Option<Self> {
-        let data = font_face.font_data().clone();
-        let bytes = data.as_bytes();
-        // SAFETY: the bytes belong to the `Arc` that `_data` holds, which is not moved or
-        // changed for as long as it lives; the face is dropped before it, and is only lent out
-        // for the length of a borrow of this value.
-        let bytes: &'static [u8] =
-            unsafe { std::slice::from_raw_parts(bytes.as_ptr(), bytes.len()) };
-        let mut face = Face::from_slice(bytes, font_face.face_index())?;
-        // A variable face carries every weight in one file, so the axis has to be set or it
-        // shapes at its default instance. Advances differ per weight, so this has to happen
-        // before shaping, not only before rasterizing.
-        if let Some(w) = font_face.variation_weight() {
-            face.set_variation(ttf_parser::Tag::from_bytes(b"wght"), w);
+    fn new(face: &FontFace) -> Option<Self> {
+        let data: Arc<dyn AsRef<[u8]> + Send + Sync> = match face.font_data() {
+            FontData::Owned(data) => data.clone(),
+            FontData::Shared(data) => data.clone(),
+        };
+        // HarfRust retains the shared bytes, including a native memory map.
+        let mut font = Font::new(data, face.face_index())?;
+        if let Some(weight) = face.variation_weight() {
+            font = font
+                .instance_builder()
+                .variations([("wght", weight)])
+                .build();
         }
         Some(Self {
-            face,
+            font,
             plans: Mutex::new(HashMap::new()),
-            _data: data,
         })
     }
 
-    /// Shape `buffer` with the plan kept for its segment properties, making it once.
-    fn shape(&self, mut buffer: UnicodeBuffer) -> rustybuzz::GlyphBuffer {
+    fn shape(&self, mut buffer: Buffer, features: &[Feature]) -> Option<Buffer> {
         buffer.guess_segment_properties();
-        // The buffer reports no script as unknown; both are shaped as the default.
         let key = PlanKey {
             direction: buffer.direction(),
-            script: Some(buffer.script()).filter(|s| *s != rustybuzz::script::UNKNOWN),
-            language: buffer.language(),
+            script: buffer.script().filter(|s| *s != Script::UNKNOWN),
+            language: buffer.language().cloned(),
         };
-        let plan = {
+        let plan = if features.is_empty() {
             let mut plans = self.plans.lock().unwrap_or_else(|e| e.into_inner());
-            match plans.get(&key) {
-                Some(plan) => Arc::clone(plan),
-                None => {
-                    if plans.len() >= MAX_PLANS {
-                        plans.clear();
-                    }
-                    let plan = Arc::new(ShapePlan::new(
-                        &self.face,
-                        key.direction,
-                        key.script,
-                        key.language.as_ref(),
-                        &[],
-                    ));
-                    plans.insert(key, Arc::clone(&plan));
-                    plan
+            if let Some(plan) = plans.get(&key) {
+                Arc::clone(plan)
+            } else {
+                if plans.len() >= MAX_PLANS {
+                    plans.clear();
                 }
+                let plan = Arc::new(ShapePlan::new(
+                    &self.font,
+                    key.direction,
+                    key.script,
+                    key.language.as_ref(),
+                    &[],
+                ));
+                plans.insert(key, Arc::clone(&plan));
+                plan
             }
+        } else {
+            // Feature ranges belong to this call, not the default-plan cache.
+            Arc::new(ShapePlan::new(
+                &self.font,
+                key.direction,
+                key.script,
+                key.language.as_ref(),
+                features,
+            ))
         };
-        rustybuzz::shape_with_plan(&self.face, &plan, buffer)
+        harfrust::shape(
+            &ShaperFont::new(&self.font),
+            &mut buffer,
+            ShapeOptions::new().plan(Some(&plan)).features(features),
+        )
+        .ok()?;
+        Some(buffer)
     }
 }
 
 impl TextShaper {
-    /// Create a new text shaper
     pub fn new() -> Self {
         Self {
             faces: Mutex::new(HashMap::new()),
         }
     }
 
-    /// The face kept for `font_face`, parsed on the first ask. `None` when it does not parse.
-    fn kept_face(&self, font_face: &FontFace) -> Option<Arc<KeptFace>> {
-        let key = (
-            font_face.id(),
-            font_face.variation_weight().map(f32::to_bits),
-        );
+    fn kept_face(&self, face: &FontFace) -> Option<Arc<KeptFace>> {
+        let key = (face.id(), face.variation_weight().map(f32::to_bits));
         let mut faces = self.faces.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(kept) = faces.get(&key) {
             return Some(Arc::clone(kept));
         }
-        let kept = Arc::new(KeptFace::new(font_face)?);
+        let kept = Arc::new(KeptFace::new(face)?);
         if faces.len() >= MAX_FACES {
             faces.clear();
         }
@@ -169,137 +166,82 @@ impl TextShaper {
         Some(kept)
     }
 
-    /// Shape a text string using the given font
-    pub fn shape(&self, text: &str, font_face: &FontFace, font_size: f32) -> ShapedText {
-        let Some(kept) = self.kept_face(font_face) else {
-            // Fallback: return basic glyph sequence without shaping
-            return self.fallback_shape(text, font_face, font_size);
-        };
-
-        // Create and fill the Unicode buffer
-        let mut buffer = UnicodeBuffer::new();
-        buffer.push_str(text);
-
-        // Shape the buffer
-        let output = kept.shape(buffer);
-
-        // Extract glyph information
-        let glyph_infos = output.glyph_infos();
-        let glyph_positions = output.glyph_positions();
-
-        let mut glyphs = Vec::with_capacity(glyph_infos.len());
-        let mut total_advance = 0i32;
-
-        for (info, pos) in glyph_infos.iter().zip(glyph_positions.iter()) {
-            // Find the original character for this cluster
-            let codepoint = text
-                .char_indices()
-                .find(|(i, _)| *i as u32 == info.cluster)
-                .map(|(_, c)| c)
-                .unwrap_or('\u{FFFD}');
-
-            glyphs.push(ShapedGlyph {
-                glyph_id: info.glyph_id as u16,
-                codepoint,
-                x_offset: pos.x_offset,
-                y_offset: pos.y_offset,
-                x_advance: pos.x_advance,
-                y_advance: pos.y_advance,
-                cluster: info.cluster,
-                face: crate::fallback::FaceChoice::Primary,
-            });
-
-            total_advance += pos.x_advance;
-        }
-
-        ShapedText {
-            glyphs,
-            total_advance,
-            font_size,
-            units_per_em: font_face.metrics().units_per_em,
-        }
+    /// Shape a segment with inferred direction, script and language.
+    pub fn shape(&self, text: &str, face: &FontFace, font_size: f32) -> ShapedText {
+        self.shape_with_features(text, face, font_size, &[])
     }
 
-    /// Fallback shaping when rustybuzz fails
-    fn fallback_shape(&self, text: &str, font_face: &FontFace, font_size: f32) -> ShapedText {
-        let mut glyphs = Vec::new();
-        let mut total_advance = 0i32;
-
-        for (cluster, c) in text.char_indices() {
-            let glyph_id = font_face.glyph_id(c).unwrap_or(0);
-            let advance = font_face.glyph_advance(glyph_id).unwrap_or(500) as i32;
-
-            glyphs.push(ShapedGlyph {
-                glyph_id,
-                codepoint: c,
-                x_offset: 0,
-                y_offset: 0,
-                x_advance: advance,
-                y_advance: 0,
-                cluster: cluster as u32,
-                face: crate::fallback::FaceChoice::Primary,
-            });
-
-            total_advance += advance;
-        }
-
-        ShapedText {
-            glyphs,
-            total_advance,
-            font_size,
-            units_per_em: font_face.metrics().units_per_em,
-        }
-    }
-
-    /// Shape with specific OpenType features enabled/disabled
+    /// Shape a segment with call-scoped OpenType feature settings.
     pub fn shape_with_features(
         &self,
         text: &str,
-        font_face: &FontFace,
+        face: &FontFace,
         font_size: f32,
-        features: &[rustybuzz::Feature],
+        features: &[Feature],
     ) -> ShapedText {
-        let Some(kept) = self.kept_face(font_face) else {
-            return self.fallback_shape(text, font_face, font_size);
+        let Some(kept) = self.kept_face(face) else {
+            return self.fallback_shape(text, face, font_size);
         };
-
-        let mut buffer = UnicodeBuffer::new();
+        let mut buffer = Buffer::new();
         buffer.push_str(text);
-
-        let output = rustybuzz::shape(&kept.face, features, buffer);
-
-        let glyph_infos = output.glyph_infos();
-        let glyph_positions = output.glyph_positions();
-
-        let mut glyphs = Vec::with_capacity(glyph_infos.len());
-        let mut total_advance = 0i32;
-
-        for (info, pos) in glyph_infos.iter().zip(glyph_positions.iter()) {
-            let codepoint = text
-                .char_indices()
-                .find(|(i, _)| *i as u32 == info.cluster)
-                .map(|(_, c)| c)
-                .unwrap_or('\u{FFFD}');
-
-            glyphs.push(ShapedGlyph {
-                glyph_id: info.glyph_id as u16,
-                codepoint,
-                x_offset: pos.x_offset,
-                y_offset: pos.y_offset,
-                x_advance: pos.x_advance,
-                y_advance: pos.y_advance,
-                cluster: info.cluster,
-                face: crate::fallback::FaceChoice::Primary,
-            });
-
-            total_advance += pos.x_advance;
-        }
-
+        let Some(output) = kept.shape(buffer, features) else {
+            return self.fallback_shape(text, face, font_size);
+        };
+        let mut total_advance = 0;
+        let glyphs = output
+            .glyph_infos()
+            .iter()
+            .zip(output.glyph_positions())
+            .map(|(info, pos)| {
+                total_advance += pos.x_advance;
+                ShapedGlyph {
+                    glyph_id: info.glyph_id as u16,
+                    codepoint: text
+                        .get(info.cluster as usize..)
+                        .and_then(|s| s.chars().next())
+                        .unwrap_or('\u{FFFD}'),
+                    x_offset: pos.x_offset,
+                    y_offset: pos.y_offset,
+                    x_advance: pos.x_advance,
+                    y_advance: pos.y_advance,
+                    cluster: info.cluster,
+                    face: crate::fallback::FaceChoice::Primary,
+                }
+            })
+            .collect();
         ShapedText {
             glyphs,
             total_advance,
             font_size,
-            units_per_em: font_face.metrics().units_per_em,
+            units_per_em: face.metrics().units_per_em,
+        }
+    }
+
+    fn fallback_shape(&self, text: &str, face: &FontFace, font_size: f32) -> ShapedText {
+        let mut total_advance = 0;
+        let glyphs = text
+            .char_indices()
+            .map(|(cluster, c)| {
+                let glyph_id = face.glyph_id(c).unwrap_or(0);
+                let advance = face.glyph_advance(glyph_id).unwrap_or(500) as i32;
+                total_advance += advance;
+                ShapedGlyph {
+                    glyph_id,
+                    codepoint: c,
+                    x_offset: 0,
+                    y_offset: 0,
+                    x_advance: advance,
+                    y_advance: 0,
+                    cluster: cluster as u32,
+                    face: crate::fallback::FaceChoice::Primary,
+                }
+            })
+            .collect();
+        ShapedText {
+            glyphs,
+            total_advance,
+            font_size,
+            units_per_em: face.metrics().units_per_em,
         }
     }
 }

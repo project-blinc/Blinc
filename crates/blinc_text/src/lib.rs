@@ -3,7 +3,7 @@
 //!
 //! This crate provides:
 //! - Font loading and parsing (TTF/OTF via ttf-parser)
-//! - Text shaping (HarfBuzz via rustybuzz)
+//! - Text shaping (HarfRust)
 //! - Glyph rasterization
 //! - Glyph atlas management
 //! - Text layout engine (line breaking, alignment)
@@ -72,6 +72,7 @@ pub fn global_font_registry() -> Arc<Mutex<registry::FontRegistry>> {
 }
 
 // Re-export html-escape for entity decoding
+pub use harfrust::Feature;
 pub use html_escape::decode_html_entities;
 pub use layout::{
     LayoutOptions, LineBreakMode, PositionedGlyph, TextAlignment, TextAnchor, TextLayout,

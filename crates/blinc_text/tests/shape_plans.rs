@@ -1,15 +1,17 @@
 //! Shaping with a plan kept for a face gives what shaping with a plan made for the call gives.
 
 use blinc_text::{FontFace, TextShaper};
-use rustybuzz::{Face, UnicodeBuffer};
+use harfrust::{Buffer, Font, ShapeOptions, ShaperFont};
 
 const NOTO: &[u8] =
     include_bytes!("../../../examples/blinc_component_demos/assets/NotoSans-Regular.ttf");
 
-fn direct(face: &Face, text: &str) -> Vec<(u32, i32, i32, i32, i32)> {
-    let mut buffer = UnicodeBuffer::new();
+fn direct(face: &Font, text: &str) -> Vec<(u32, i32, i32, i32, i32)> {
+    let mut buffer = Buffer::new();
     buffer.push_str(text);
-    let out = rustybuzz::shape(face, &[], buffer);
+    buffer.guess_segment_properties();
+    harfrust::shape(&ShaperFont::new(face), &mut buffer, ShapeOptions::new()).unwrap();
+    let out = buffer;
     out.glyph_infos()
         .iter()
         .zip(out.glyph_positions())
@@ -20,7 +22,7 @@ fn direct(face: &Face, text: &str) -> Vec<(u32, i32, i32, i32, i32)> {
 #[test]
 fn a_kept_plan_shapes_as_a_fresh_one_does() {
     let font = FontFace::from_data(NOTO.to_vec()).expect("Noto Sans parses");
-    let face = Face::from_slice(font.data(), font.face_index()).unwrap();
+    let face = Font::new(NOTO.to_vec(), font.face_index()).unwrap();
     let shaper = TextShaper::new();
     // Latin, digits alone (no script of their own), empty, right to left, mixed, and a ligature.
     let texts = [
@@ -41,7 +43,15 @@ fn a_kept_plan_shapes_as_a_fresh_one_does() {
                 .shape(text, &font, 16.0)
                 .glyphs
                 .iter()
-                .map(|g| (g.glyph_id as u32, g.x_advance, g.y_advance, g.x_offset, g.y_offset))
+                .map(|g| {
+                    (
+                        g.glyph_id as u32,
+                        g.x_advance,
+                        g.y_advance,
+                        g.x_offset,
+                        g.y_offset,
+                    )
+                })
                 .collect();
             assert_eq!(kept, direct(&face, text), "round {round}: {text:?}");
         }

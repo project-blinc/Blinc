@@ -6,3 +6,6 @@ mod colr;
 mod fallback_layout;
 mod subpixel_cost;
 mod variable_weight;
+
+mod shape_plans;
+mod shaping_migration;

@@ -14,7 +14,7 @@ High-quality text rendering for Blinc UI.
 ## Features
 
 - **Font Loading**: TTF/OTF support via ttf-parser
-- **Text Shaping**: Complex script support via rustybuzz (HarfBuzz)
+- **Text Shaping**: Complex script support via HarfRust
 - **Glyph Rasterization**: High-quality rendering via swash
 - **Glyph Atlases**: Efficient GPU texture caching
 - **Text Layout**: Line breaking, word wrapping, alignment
@@ -139,7 +139,7 @@ let image = renderer.render_emoji("🚀", 64)?;
 ```
 blinc_text
 ├── font.rs          # Font loading and parsing
-├── shaper.rs        # Text shaping (rustybuzz)
+├── shaper.rs        # Text shaping (HarfRust)
 ├── rasterizer.rs    # Glyph rasterization (swash)
 ├── atlas.rs         # Glyph atlas management
 ├── layout.rs        # Text layout engine

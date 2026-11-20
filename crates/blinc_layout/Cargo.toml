@@ -34,7 +34,7 @@ media = ["dep:blinc_media"]
 # that only paste/copy text can stay off; image-paste flows opt in.
 clipboard_image = ["arboard/image-data"]
 # Font-backed text measurement. Off by default: it pulls in blinc_text
-# (ttf-parser + rustybuzz + fontdb + swash). Without it a standalone
+# (ttf-parser + HarfRust + fontdb + swash). Without it a standalone
 # `LayoutTree` measures text with `EstimatedTextMeasurer`, so every
 # width is an estimate. `blinc_app` turns it on for you.
 text_measurer = ["dep:blinc_text"]

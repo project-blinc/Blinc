@@ -9,7 +9,8 @@ All notable changes to `blinc_text` will be documented in this file.
 - `use_fontconfig_sans()`, opt-in: on Linux it asks `fc-match` for fontconfig's default sans and makes it the face `system-ui` resolves to, through the new `FontRegistry::set_system_ui_family`. Nothing changes unless an app calls it; the default stays the built-in list, which costs nothing at startup. Call it once before drawing text.
 
 ### Changed
-- `TextShaper` keeps the rustybuzz face and the shape plans for each font it shapes with, so shaping a short string no longer parses the face and plans the shaping again. `FontFace::id` names a loaded face.
+- Text shaping uses HarfRust. `shape_with_features` accepts `blinc_text::Feature`, re-exported from HarfRust. Font bytes remain shared and the same variable weight is applied to shaping and rasterization.
+- `TextShaper` keeps the owned HarfRust font and the shape plans for each font it shapes with, so shaping a short string no longer parses the face and plans the shaping again. `FontFace::id` names a loaded face.
 - `FontFace::from_file` memory-maps the file instead of reading it, so a loaded system font is clean, shared memory rather than a heap copy. New dependency off wasm: `memmap2`.
 
 ### Fixed

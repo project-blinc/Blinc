@@ -1,0 +1,2 @@
+https://github.com/google/fonts/tree/869789e84da92782c144d83d69b64cec54905b5f/ofl/notosansarabic
+Original filename: NotoSansArabic[wdth,wght].ttf

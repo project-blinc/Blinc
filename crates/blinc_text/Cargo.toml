@@ -18,8 +18,8 @@ blinc_core = { path = "../blinc_core", version = "0.6.0" }
 # Font parsing
 ttf-parser = { workspace = true }
 
-# Text shaping (HarfBuzz)
-rustybuzz = { workspace = true }
+# Text shaping (HarfRust)
+harfrust = { workspace = true }
 
 # Font discovery
 fontdb = { workspace = true }
