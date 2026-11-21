@@ -299,6 +299,11 @@ fn main() {
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
     {
+        // `COSTS_ONLY_PAINT_AT=<selector>`: scroll that element into view first.
+        if let Ok(selector) = std::env::var("COSTS_ONLY_PAINT_AT") {
+            assert!(bring_into_view(&mut ui, &selector), "{selector} in view");
+            rest(&mut ui);
+        }
         let mut times = Vec::new();
         for _ in 0..frames {
             let (session, render) = ui.paint_timed(false).expect("a frame");
