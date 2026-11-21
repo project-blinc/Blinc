@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1795248203,"nonce":"UP2vmQDs94YWSsy9tlMkdVbPJbE=","added":["bug","area:layout","source:github","milestone:0.6.1"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1795248685,"nonce":"JJDx+iQnCK/CSNtKcU2ahjBXM6A=","message":"The builder and Div::set_style path, which this fix leaves alone, is f7e2fe1.","files":null}]}
