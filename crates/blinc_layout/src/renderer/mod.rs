@@ -2069,6 +2069,9 @@ impl RenderTree {
         // `Animating` if it was animating recently.
         let mut result: Vec<(LayoutNodeId, AnimationStatus)> = Vec::with_capacity(candidates.len());
         let mut streak_writer = self.settled_streak.borrow_mut();
+        // A node with no animation source is static without a cooldown; one that comes back
+        // starts a new streak.
+        streak_writer.retain(|node, _| candidates.contains(node));
         for node in candidates {
             let raw_status = if canvas_nodes.contains(&node) {
                 // Canvases are unconditionally animating — no
