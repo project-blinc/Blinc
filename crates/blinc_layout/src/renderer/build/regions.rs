@@ -136,7 +136,7 @@ impl RenderTree {
         if built.is_empty() && evaluation.removed.is_empty() && all.len() == children.len() {
             // Same rows, in whatever order: only the layout moved.
             self.build_generation = self.build_generation.wrapping_add(1);
-            self.mint_stable_ids_walk();
+            self.mint_stable_ids_under(parent);
             return effects;
         }
 
@@ -145,7 +145,8 @@ impl RenderTree {
             self.register_element_ids_walk(builder.as_ref(), *node);
         }
         self.build_generation = self.build_generation.wrapping_add(1);
-        self.mint_stable_ids_walk();
+        // Only `parent`'s children changed, and the removed rows' ids went with their nodes.
+        self.mint_stable_ids_under(parent);
         for (builder, node, _) in &built {
             self.collect_render_props_boxed(builder.as_ref(), *node);
         }
