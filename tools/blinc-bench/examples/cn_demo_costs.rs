@@ -200,7 +200,13 @@ fn session() -> Option<(Headless, PathLog)> {
     if !Headless::available() {
         return None;
     }
-    let mut ui = Headless::with_motion_paint(W, height(), MotionPaint::Vector).ok()?;
+    // `COSTS_ROWS=1`: move bound groups with GPU node-table rows, as a window does.
+    let paint = if std::env::var_os("COSTS_ROWS").is_some() {
+        MotionPaint::NodeTable
+    } else {
+        MotionPaint::Vector
+    };
+    let mut ui = Headless::with_motion_paint(W, height(), paint).ok()?;
     ui.gate_state_styles().gate_animation_apply();
     ui.theme(cn_demo::theme_bundle(), blinc_theme::ColorScheme::Dark);
     if std::env::var("COSTS_CALENDAR_HOVER").as_deref() == Ok("0") {
