@@ -212,10 +212,27 @@ impl RenderTree {
         if let Some(qualifies) = self.indexed_qualification(node) {
             return qualifies && !self.animating_under(node);
         }
+        if self.index_key().is_some() {
+            return self.children_qualify_kept(node) && !self.animating_below(node);
+        }
         self.layout_tree
             .children(node)
             .into_iter()
             .all(|child| self.scroll_subtree_qualifies(child))
+    }
+
+    /// The checks under `node` that do not change by the frame, kept while the tree's revisions
+    /// stay.
+    fn children_qualify_kept(&self, node: LayoutNodeId) -> bool {
+        self.memo(
+            |c| &mut c.qualifies,
+            node,
+            || {
+                self.layout_tree.children_iter(node).all(|child| {
+                    self.scroll_node_qualifies(child) && self.children_qualify_kept(child)
+                })
+            },
+        )
     }
 
     fn scroll_subtree_qualifies(&self, node: LayoutNodeId) -> bool {

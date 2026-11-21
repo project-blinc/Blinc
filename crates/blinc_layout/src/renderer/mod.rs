@@ -64,6 +64,7 @@ mod scroll_gesture;
 mod scroll_rows;
 mod stable_ids;
 mod structure;
+mod subtree_cache;
 mod tracked;
 pub use scroll_gesture::ScrollGesturePhase;
 pub(crate) mod stylesheet;
@@ -796,6 +797,8 @@ pub struct RenderTree {
     scroll_row_nodes: RefCell<HashMap<LayoutNodeId, (f32, f32)>>,
     /// Indexes over the children of containers with very many; see `child_index`.
     child_indexes: RefCell<child_index::ChildIndexes>,
+    /// Answers about subtrees kept while the tree's revisions stay; see `subtree_cache`.
+    subtree_cache: RefCell<subtree_cache::SubtreeCache>,
     /// What a scan of the render nodes found, and the revision of the nodes it was made at: the
     /// layers that have nodes on them, and the canvases.
     node_scan: RefCell<Option<NodeScan>>,
@@ -1278,6 +1281,7 @@ impl RenderTree {
             scroll_rows: Cell::new(false),
             scroll_row_nodes: RefCell::new(HashMap::new()),
             child_indexes: RefCell::new(HashMap::new()),
+            subtree_cache: RefCell::new(subtree_cache::SubtreeCache::default()),
             node_scan: RefCell::new(None),
             text_synced_revision: Cell::new(None),
             scroll_painted: RefCell::new(HashMap::new()),

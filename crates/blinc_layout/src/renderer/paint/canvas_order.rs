@@ -49,6 +49,14 @@ impl RenderTree {
     }
 
     fn later_content_overlaps_with(&self, node: LayoutNodeId, any: bool) -> bool {
+        self.memo(
+            |c| &mut c.overlaps,
+            (node, any),
+            || self.later_content_overlaps_walk(node, any),
+        )
+    }
+
+    fn later_content_overlaps_walk(&self, node: LayoutNodeId, any: bool) -> bool {
         let Some(own) = self.get_absolute_bounds(node) else {
             return false;
         };

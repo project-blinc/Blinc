@@ -1,6 +1,7 @@
 //! Culling: whether a subtree can draw anything inside a visible rect.
 
 use super::RenderTree;
+use super::subtree_cache::Extent;
 use crate::tree::LayoutNodeId;
 use blinc_core::Transform;
 
@@ -57,9 +58,65 @@ impl RenderTree {
     /// with anything that moves its content is never outside. A descendant that clips its
     /// content stands for its whole subtree, since nothing beneath it draws past it.
     pub fn draws_outside(&self, node: LayoutNodeId, shift: (f32, f32), view: CullRect) -> bool {
-        self.draws_outside_at(node, shift, view, None)
+        if self.index_key().is_none() {
+            return self.draws_outside_at(node, shift, view, None);
+        }
+        let extent = self.subtree_extent(node, None);
+        let Some([x0, y0, x1, y1]) = extent.rect else {
+            return false;
+        };
+        !intersects(
+            [x0 + shift.0, y0 + shift.1, x1 - x0, y1 - y0],
+            view,
+            self.cull_overscan(),
+        )
     }
 
+    /// The extent of `node`'s subtree. `parent` is the parent's absolute origin when the caller
+    /// knows it.
+    fn subtree_extent(&self, node: LayoutNodeId, parent: Option<(f32, f32)>) -> Extent {
+        self.memo(
+            |c| &mut c.extents,
+            node,
+            || self.measure_extent(node, parent),
+        )
+    }
+
+    fn measure_extent(&self, node: LayoutNodeId, parent: Option<(f32, f32)>) -> Extent {
+        const NEVER: Extent = Extent { rect: None };
+        if self.moves_its_content(node) {
+            return NEVER;
+        }
+        let bounds = match parent {
+            Some(origin) => self.layout_tree.get_bounds(node, origin),
+            None => self.layout_tree.get_absolute_bounds(node),
+        };
+        let Some(b) = bounds else {
+            return NEVER;
+        };
+        let mut rect = [b.x, b.y, b.x + b.width, b.y + b.height];
+        let clips = self
+            .render_nodes
+            .get(&node)
+            .is_some_and(|n| n.props.clips_content);
+        if !clips {
+            for child in self.layout_tree.children_iter(node) {
+                let Some(r) = self.subtree_extent(child, Some((b.x, b.y))).rect else {
+                    return NEVER;
+                };
+                rect = [
+                    rect[0].min(r[0]),
+                    rect[1].min(r[1]),
+                    rect[2].max(r[2]),
+                    rect[3].max(r[3]),
+                ];
+            }
+        }
+        Extent { rect: Some(rect) }
+    }
+
+    /// `draws_outside` without the cache, for while a layout animation moves content by the
+    /// clock, which no revision records.
     fn draws_outside_at(
         &self,
         node: LayoutNodeId,

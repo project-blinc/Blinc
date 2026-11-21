@@ -32,6 +32,7 @@ pub(crate) struct Structure {
     fixed: bool,
     sticky: bool,
     overlay_root: bool,
+    visible: bool,
     glass: bool,
     /// Whether the opacity is full, and whether it is less than 1.
     opaque: bool,
@@ -46,6 +47,8 @@ pub(crate) struct Structure {
     material: bool,
     shadow: bool,
     border: bool,
+    /// A border with a width and a colour, which draws over what is under it.
+    border_painted: bool,
     border_sides: bool,
     outline: bool,
     rotated_x: bool,
@@ -82,6 +85,7 @@ impl Structural for RenderNode {
             fixed: p.is_fixed,
             sticky: p.is_sticky,
             overlay_root: p.is_overlay_root,
+            visible: p.visible,
             glass: p.is_glass(),
             opaque: p.opacity >= 0.999,
             faded: p.opacity < 1.0,
@@ -103,6 +107,7 @@ impl Structural for RenderNode {
             material: p.material.is_some(),
             shadow: !p.shadow.is_empty() || !p.inner_shadow.is_empty(),
             border: p.border_width != 0.0,
+            border_painted: p.border_width > 0.0 && p.border_color.is_some(),
             border_sides: p.border_sides.has_any(),
             outline: p.outline_width != 0.0,
             rotated_x: p.rotate_x.is_some(),
@@ -160,6 +165,7 @@ mod tests {
             ("overlay root", Box::new(|p| p.is_overlay_root = true)),
             ("fill dropped", Box::new(|p| p.background = None)),
             ("border", Box::new(|p| p.border_width = 2.0)),
+            ("hidden", Box::new(|p| p.visible = false)),
             ("rotation", Box::new(|p| p.rotate_x = Some(10.0))),
         ];
         for (what, write) in cases {

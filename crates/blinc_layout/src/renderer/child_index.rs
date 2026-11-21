@@ -114,7 +114,7 @@ impl RenderTree {
         self.with_child_index(node, |ix| ix.qualifies)
     }
 
-    fn index_key(&self) -> Option<Key> {
+    pub(super) fn index_key(&self) -> Option<Key> {
         // A layout animation moves content by the clock, which no revision records.
         if !self.layout_animations.is_empty() || !self.layout_animations_by_key.is_empty() {
             return None;
@@ -309,6 +309,16 @@ impl RenderTree {
             }
         }
         out
+    }
+
+    /// Whether anything strictly under `node` is animating now.
+    pub(super) fn animating_below(&self, node: LayoutNodeId) -> bool {
+        let status = self.current_animation_status.borrow();
+        status.iter().any(|(animated, status)| {
+            matches!(status, AnimationStatus::Animating(AnimatedKind::Css))
+                && *animated != node
+                && self.layout_tree.ancestors(*animated).contains(&node)
+        })
     }
 
     /// Whether anything under `container` is animating now.
