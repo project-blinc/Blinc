@@ -77,12 +77,22 @@ pub(super) fn affine_scale(affine: Option<[f32; 6]>) -> f32 {
     affine.map_or(1.0, |[a, b, c, d, ..]| a.hypot(b).max(c.hypot(d)))
 }
 
+/// Whether rows carry a reactive translation of `node`: it has one, and its content was painted
+/// into the dynamic batch. Content in the static batch is painted again when it moves.
+fn translated_by_rows(tree: &blinc_layout::RenderTree, node: super::LayoutNodeId) -> bool {
+    tree.property_row_translation(node).is_some()
+        && tree
+            .composite_bindings()
+            .get(&node)
+            .is_some_and(|meta| meta.dynamic_batch)
+}
+
 /// Whether rows translate `node` or an ancestor directly. Its glyphs keep their rows
 /// between writes instead of baking a settled pose that could be left behind.
 pub(super) fn in_scroll_rows(tree: &blinc_layout::RenderTree, node: super::LayoutNodeId) -> bool {
     std::iter::once(node)
         .chain(tree.layout_tree.ancestors(node))
-        .any(|n| tree.is_scroll_row_node(n) || tree.property_row_translation(n).is_some())
+        .any(|n| tree.is_scroll_row_node(n) || translated_by_rows(tree, n))
 }
 
 /// Whether text needs reusable, unrounded glyph positions for an animation or live translation.
@@ -91,7 +101,7 @@ pub(super) fn chain_moving(tree: &blinc_layout::RenderTree, node: super::LayoutN
     std::iter::once(node)
         .chain(tree.layout_tree.ancestors(node))
         .any(|n| {
-            tree.property_row_translation(n).is_some()
+            translated_by_rows(tree, n)
                 || bindings.get(&n).is_some_and(|b| b.is_any_animating())
         })
 }
@@ -101,7 +111,7 @@ pub(super) fn under_scroll_row(tree: &blinc_layout::RenderTree, node: super::Lay
     tree.layout_tree
         .ancestors(node)
         .into_iter()
-        .any(|a| tree.is_scroll_row_node(a) || tree.property_row_translation(a).is_some())
+        .any(|a| tree.is_scroll_row_node(a) || translated_by_rows(tree, a))
 }
 
 /// Whether a CSS animation that moves, scales or turns plays on `node` or an ancestor. One of
