@@ -33,6 +33,7 @@ use crate::tree::LayoutNodeId;
 use crate::visual_animation::{AnimatedRenderBounds, VisualAnimation, VisualAnimationConfig};
 
 use super::super::RenderTree;
+use crate::tree::{NodeMap, NodeSet};
 
 impl RenderTree {
     /// Check if any layout animations are currently active
@@ -334,7 +335,7 @@ impl RenderTree {
         };
 
         // The key each animated node goes by, once, so a node is looked up and not searched for.
-        let key_of: HashMap<LayoutNodeId, String> = self
+        let key_of: NodeMap<String> = self
             .visual_animation_key_to_node
             .iter()
             .map(|(key, node)| (*node, key.clone()))
@@ -353,7 +354,7 @@ impl RenderTree {
         node_id: LayoutNodeId,
         parent_x: f32,
         parent_y: f32,
-        key_of: &HashMap<LayoutNodeId, String>,
+        key_of: &NodeMap<String>,
     ) {
         // Get layout bounds relative to parent (from taffy)
         let Some(layout_bounds) = self.layout_tree.get_bounds(node_id, (0.0, 0.0)) else {
@@ -454,7 +455,7 @@ impl RenderTree {
     /// Only counts animations whose target node was painted in the
     /// most recent frame (i.e. the node id is present in `painted`).
     /// See `CssAnimationStore::has_visible_active` for the rationale.
-    pub fn has_active_visible_visual_animations(&self, painted: &HashSet<LayoutNodeId>) -> bool {
+    pub fn has_active_visible_visual_animations(&self, painted: &NodeSet) -> bool {
         self.visual_animations.iter().any(|(key, anim)| {
             if !anim.is_animating() {
                 return false;
@@ -546,8 +547,8 @@ impl RenderTree {
     pub fn has_any_active_animation_visible(
         &self,
         render_state: &crate::render_state::RenderState,
-        painted: &HashSet<LayoutNodeId>,
-        painted_stable: &HashSet<crate::tree::StableNodeId>,
+        painted: &NodeSet,
+        painted_stable: &crate::tree::StableSet,
     ) -> bool {
         // Culling diagnostic, rate-limited FIRST so it costs a single
         // atomic increment on the frames it does not log. An earlier

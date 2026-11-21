@@ -50,6 +50,7 @@ use crate::tree::LayoutNodeId;
 
 #[cfg(feature = "recorder")]
 use crate::recorder_bridge::{self, RecorderEventData, RecorderMouseButton};
+use crate::tree::NodeSet;
 
 /// Mouse button identifier (matches platform)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -136,7 +137,7 @@ pub struct EventRouter {
 
     /// Elements currently under the pointer, keyed by `StableNodeId`
     /// so a subtree rebuild between mouse-moves doesn't invalidate
-    /// the set. Pre-fix this was `HashSet<LayoutNodeId>` and any
+    /// the set. Pre-fix this was `NodeSet` and any
     /// rebuild (the OverlayStack rebuilds the overlay layer when a
     /// submenu mounts, for instance) replaced layout ids for the
     /// same logical elements → the next mouse-move's hit test saw
@@ -147,7 +148,7 @@ pub struct EventRouter {
     /// re-spawning the submenu and restarting its enter animation =
     /// constant flicker. Mirrors `pressed_target`'s `StableNodeId`
     /// keying — see `gotcha_event_router_layout_id_staleness`.
-    hovered: HashSet<crate::tree::StableNodeId>,
+    hovered: crate::tree::StableSet,
 
     /// Element where mouse button was pressed (for proper release
     /// targeting). Stored as `StableNodeId` so rebuilds between
@@ -234,7 +235,7 @@ impl EventRouter {
             last_hit_bounds_y: 0.0,
             last_hit_bounds_width: 0.0,
             last_hit_bounds_height: 0.0,
-            hovered: HashSet::new(),
+            hovered: HashSet::default(),
             pressed_target: None,
             pressed_ancestors: Vec::new(),
             focused: None,
@@ -402,7 +403,7 @@ impl EventRouter {
     }
 
     /// The nodes `:active` matches: the pressed one and those that hold it.
-    pub fn active_nodes(&self, tree: &RenderTree) -> std::collections::HashSet<LayoutNodeId> {
+    pub fn active_nodes(&self, tree: &RenderTree) -> NodeSet {
         self.pressed_target
             .iter()
             .chain(self.pressed_ancestors.iter())
@@ -784,36 +785,35 @@ impl EventRouter {
         // only needs the topmost hit chain (root -> leaf) for hover enter/leave
         // and event bubbling, so avoid `hit_test_all`'s sibling walk on every
         // mouse move in large scroll views.
-        let (hits, mut current_hovered): (Vec<HitTestResult>, HashSet<LayoutNodeId>) =
-            if overlay_bounds.is_empty() {
-                if let Some(hit) = self.hit_test(tree, x, y) {
-                    let hovered = hit
-                        .ancestors
-                        .iter()
-                        .copied()
-                        .filter(|node| {
-                            let in_bounds = hit.ancestor_bounds.get(&node.to_raw()).is_some_and(
-                                |&(bx, by, bw, bh)| {
-                                    x >= bx && x < bx + bw && y >= by && y < by + bh
-                                },
-                            );
-                            let pointer_events_none = tree
-                                .get_render_node(*node)
-                                .map(|n| n.props.pointer_events_none)
-                                .unwrap_or(false);
-                            in_bounds && !pointer_events_none
-                        })
-                        .collect();
-                    (vec![hit], hovered)
-                } else {
-                    (Vec::new(), HashSet::new())
-                }
+        let (hits, mut current_hovered): (Vec<HitTestResult>, NodeSet) = if overlay_bounds
+            .is_empty()
+        {
+            if let Some(hit) = self.hit_test(tree, x, y) {
+                let hovered = hit
+                    .ancestors
+                    .iter()
+                    .copied()
+                    .filter(|node| {
+                        let in_bounds = hit.ancestor_bounds.get(&node.to_raw()).is_some_and(
+                            |&(bx, by, bw, bh)| x >= bx && x < bx + bw && y >= by && y < by + bh,
+                        );
+                        let pointer_events_none = tree
+                            .get_render_node(*node)
+                            .map(|n| n.props.pointer_events_none)
+                            .unwrap_or(false);
+                        in_bounds && !pointer_events_none
+                    })
+                    .collect();
+                (vec![hit], hovered)
             } else {
-                let hits =
-                    self.hit_test_all_with_occlusion(tree, x, y, overlay_bounds, overlay_layer_id);
-                let hovered = hits.iter().map(|h| h.node).collect();
-                (hits, hovered)
-            };
+                (Vec::new(), HashSet::default())
+            }
+        } else {
+            let hits =
+                self.hit_test_all_with_occlusion(tree, x, y, overlay_bounds, overlay_layer_id);
+            let hovered = hits.iter().map(|h| h.node).collect();
+            (hits, hovered)
+        };
         // A claimed gesture owns its content until it ends. Keep the owner's hover so
         // leaving still cancels the gesture, without hovering items moving underneath it.
         if let Some(owner) = tree.latched_scroll_target() {
@@ -878,16 +878,17 @@ impl EventRouter {
         // Nodes without a stable id (anonymous layout-only nodes
         // inserted by the pipeline) drop out of hover tracking — they
         // wouldn't have stable handlers anyway.
-        let mut current_hovered_layout: std::collections::HashMap<
-            crate::tree::StableNodeId,
-            LayoutNodeId,
-        > = std::collections::HashMap::with_capacity(current_hovered.len());
+        let mut current_hovered_layout: crate::tree::StableMap<LayoutNodeId> =
+            std::collections::HashMap::with_capacity_and_hasher(
+                current_hovered.len(),
+                Default::default(),
+            );
         for &lid in &current_hovered {
             if let Some(stable) = tree.stable_id(lid) {
                 current_hovered_layout.insert(stable, lid);
             }
         }
-        let current_hovered_stable: HashSet<crate::tree::StableNodeId> =
+        let current_hovered_stable: crate::tree::StableSet =
             current_hovered_layout.keys().copied().collect();
 
         // Elements that were hovered but no longer are -> POINTER_LEAVE
@@ -1582,12 +1583,12 @@ impl EventRouter {
         let mut unmounted = Vec::new();
 
         // Collect all nodes from old tree
-        let old_nodes: HashSet<LayoutNodeId> = old_tree
+        let old_nodes: NodeSet = old_tree
             .map(|t| self.collect_all_nodes(t))
             .unwrap_or_default();
 
         // Collect all nodes from new tree
-        let new_nodes: HashSet<LayoutNodeId> = self.collect_all_nodes(new_tree);
+        let new_nodes: NodeSet = self.collect_all_nodes(new_tree);
 
         // Nodes in new but not old -> mounted
         for node in new_nodes.difference(&old_nodes) {
@@ -1605,8 +1606,8 @@ impl EventRouter {
     }
 
     /// Collect all node IDs from a render tree
-    fn collect_all_nodes(&self, tree: &RenderTree) -> HashSet<LayoutNodeId> {
-        let mut nodes = HashSet::new();
+    fn collect_all_nodes(&self, tree: &RenderTree) -> NodeSet {
+        let mut nodes = NodeSet::default();
         if let Some(root) = tree.root() {
             self.collect_nodes_recursive(tree, root, &mut nodes);
         }
@@ -1614,12 +1615,7 @@ impl EventRouter {
     }
 
     /// Recursively collect node IDs
-    fn collect_nodes_recursive(
-        &self,
-        tree: &RenderTree,
-        node: LayoutNodeId,
-        nodes: &mut HashSet<LayoutNodeId>,
-    ) {
+    fn collect_nodes_recursive(&self, tree: &RenderTree, node: LayoutNodeId, nodes: &mut NodeSet) {
         nodes.insert(node);
         let children = tree.layout().children(node);
         for child in children {

@@ -55,7 +55,7 @@ impl RenderTree {
         let ancestors = rules.iter().any(|(s, _)| has_in_subject(s));
         // Many updates name one root: the rows of a grid toggling classes all name the grid.
         let roots: HashSet<Restyle> = recorded.into_iter().collect();
-        let mut nodes = HashSet::new();
+        let mut nodes = crate::tree::NodeSet::default();
         let mut subtree = Vec::new();
         for restyle in roots {
             let root = match restyle {

@@ -7,6 +7,7 @@
 
 use super::{AnimatedKind, AnimationStatus, ElementType, RenderTree};
 use crate::tree::LayoutNodeId;
+use crate::tree::NodeMap;
 use std::collections::HashMap;
 
 /// Containers with fewer children than this are scanned.
@@ -360,7 +361,7 @@ impl ChildIndex {
     }
 }
 
-pub(super) type ChildIndexes = HashMap<LayoutNodeId, ChildIndex>;
+pub(super) type ChildIndexes = NodeMap<ChildIndex>;
 
 #[cfg(test)]
 mod tests {

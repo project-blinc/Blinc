@@ -33,6 +33,7 @@ use crate::div::ElementBuilder;
 use crate::tree::LayoutNodeId;
 
 use super::super::RenderTree;
+use crate::tree::NodeMap;
 
 impl RenderTree {
     /// True if any slot in `child_builders`/`child_node_ids` has a topology
@@ -383,7 +384,7 @@ impl RenderTree {
         // can supersede other pending entries. Layout-prop rebuilds patch
         // taffy styles on existing children without tearing them down, so
         // a descendant's prop update on the same frame should still apply.
-        let structural_rebuilds_by_node: std::collections::HashMap<LayoutNodeId, usize> = pending
+        let structural_rebuilds_by_node: NodeMap<usize> = pending
             .iter()
             .enumerate()
             .filter_map(|(idx, rebuild)| {

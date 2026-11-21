@@ -14,6 +14,8 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 
 ### Changed
+- Maps and sets keyed by `LayoutNodeId` or `StableNodeId` use FxHash instead of SipHash, through the new `NodeMap`, `NodeSet`, `StableMap` and `StableSet` aliases. Accessors that return such maps, such as `RenderTree::motion_bindings_map`, now return the aliased types.
+- `RenderTree::painted_stable_ids` returns a shared `Arc<StableSet>`. It is built again only after a paint walk changes the painted nodes or the render nodes change, so frames that reuse the cached paint no longer rebuild it.
 - The CSS layout pass reads and writes each node's layout style once, however many rules it takes, and a scoped pass looks up `#id` rules and `overflow: scroll` physics for its own nodes only instead of every node in the tree. `LayoutTree::style` borrows a node's style.
 - A region's rows coming and going re-mint the stable ids under the region's container only; the rest of the tree keeps its ids.
 - Culling, the scroll-row checks and the check for content painted over a bound group keep their answer for each subtree while the layout, the render nodes and the motion bindings stay at the same revisions. Paint and hit tests no longer walk every off-screen subtree, nor every node after a bound group, on each frame and input event. While a layout animation runs, they walk as before. A node's visibility and whether its border draws now count as structure, so a change to either moves the render nodes' revision.

@@ -17,6 +17,7 @@ use crate::element::ElementBounds;
 use crate::tree::LayoutNodeId;
 
 use super::{NodeStateStorage, RenderNode, RenderTree, RenderTreeDebugStats};
+use crate::tree::NodeMap;
 
 impl RenderTree {
     /// Get the tree hash for this render tree
@@ -61,7 +62,7 @@ impl RenderTree {
     }
 
     /// Get the node states map (for transferring to a new tree)
-    pub fn node_states(&self) -> &HashMap<LayoutNodeId, NodeStateStorage> {
+    pub fn node_states(&self) -> &NodeMap<NodeStateStorage> {
         &self.node_states
     }
 

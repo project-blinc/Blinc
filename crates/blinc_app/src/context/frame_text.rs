@@ -4,6 +4,7 @@ use super::{
     TextElement, TextVerticalAlign, cached_text, generate_text_decoration_primitives_by_layer,
     text_clip, to_gpu_generic_font,
 };
+use blinc_layout::NodeMap;
 
 pub(super) struct PreparedFrameText {
     pub(super) glyphs_by_layer: std::collections::BTreeMap<u32, cached_text::TextBatch>,
@@ -101,8 +102,7 @@ pub(super) fn chain_moving(tree: &blinc_layout::RenderTree, node: super::LayoutN
     std::iter::once(node)
         .chain(tree.layout_tree.ancestors(node))
         .any(|n| {
-            translated_by_rows(tree, n)
-                || bindings.get(&n).is_some_and(|b| b.is_any_animating())
+            translated_by_rows(tree, n) || bindings.get(&n).is_some_and(|b| b.is_any_animating())
         })
 }
 
@@ -183,7 +183,7 @@ impl RenderContext {
         fg_texts: &[TextElement],
         motion_subtree_texts: &[TextElement],
         motion_subtree_svgs: &[SvgElement],
-        raster_scales: &std::collections::HashMap<super::LayoutNodeId, (f32, bool)>,
+        raster_scales: &NodeMap<(f32, bool)>,
         viewport: (u32, u32),
         scale_factor: f32,
     ) -> PreparedFrameText {

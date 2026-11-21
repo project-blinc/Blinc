@@ -29,6 +29,7 @@ use crate::element::{ElementBounds, GlassMaterial, Material, RenderLayer, Render
 use crate::layout_animation::{LayoutAnimationConfig, LayoutAnimationState};
 use crate::selector::{ElementRegistry, ScrollRef};
 use crate::tree::{LayoutNodeId, LayoutTree, StableNodeId};
+use crate::tree::{NodeMap, NodeSet};
 use crate::visual_animation::{AnimatedRenderBounds, VisualAnimation, VisualAnimationConfig};
 use stylesheet::layout_scope::Restyle;
 
@@ -743,10 +744,9 @@ pub struct RenderTree {
         IndexMap<LayoutNodeId, RenderNode, rustc_hash::FxBuildHasher>,
         LayoutNodeId,
     >,
-    ime_bindings: HashMap<LayoutNodeId, crate::ime::ImeBinding>,
-    accessibility_bindings: HashMap<LayoutNodeId, crate::accessibility::AccessibilityBinding>,
-    accessibility_semantics:
-        HashMap<LayoutNodeId, Arc<crate::accessibility::AccessibilitySemantics>>,
+    ime_bindings: NodeMap<crate::ime::ImeBinding>,
+    accessibility_bindings: NodeMap<crate::accessibility::AccessibilityBinding>,
+    accessibility_semantics: NodeMap<Arc<crate::accessibility::AccessibilitySemantics>>,
     /// Root node ID
     root: Option<LayoutNodeId>,
     /// Event handlers registry for dispatching events
@@ -762,16 +762,16 @@ pub struct RenderTree {
     /// Dirty tracker for incremental rebuilds
     dirty_tracker: crate::interactive::DirtyTracker,
     /// Per-node state storage (survives across rebuilds if tree is reused)
-    node_states: HashMap<LayoutNodeId, NodeStateStorage>,
+    node_states: NodeMap<NodeStateStorage>,
     /// Scroll offsets for scroll containers (node_id -> (offset_x, offset_y))
-    scroll_offsets: HashMap<LayoutNodeId, (f32, f32)>,
+    scroll_offsets: NodeMap<(f32, f32)>,
     /// Scroll physics for scroll containers (keyed by node_id)
-    scroll_physics: HashMap<LayoutNodeId, crate::scroll::SharedScrollPhysics>,
+    scroll_physics: NodeMap<crate::scroll::SharedScrollPhysics>,
     /// Scroll containers that opted in to viewport culling. The paint
     /// walker skips any descendant whose post-scroll bounds don't
     /// intersect the viewport (plus a small overscan buffer). Layout
     /// is still computed for every child — only paint is culled.
-    viewport_cull_scrolls: std::collections::HashSet<LayoutNodeId>,
+    viewport_cull_scrolls: NodeSet,
     /// What rebuilding each node's subtree created, held while it is in place.
     subtree_owners: owners::SubtreeOwners,
     /// Active cull rect, in screen space, for the current paint walk. Set
@@ -794,7 +794,7 @@ pub struct RenderTree {
     /// The scroll containers the last paint put on rows, each with how far past its viewport its
     /// content was painted and how far its offset may move from the one it was painted at before
     /// the content has to be painted again.
-    scroll_row_nodes: RefCell<HashMap<LayoutNodeId, (f32, f32)>>,
+    scroll_row_nodes: RefCell<NodeMap<(f32, f32)>>,
     /// Indexes over the children of containers with very many; see `child_index`.
     child_indexes: RefCell<child_index::ChildIndexes>,
     /// Answers about subtrees kept while the tree's revisions stay; see `subtree_cache`.
@@ -806,9 +806,9 @@ pub struct RenderTree {
     /// properties ask for; see `sync_text_measure_contexts`.
     text_synced_revision: Cell<Option<u64>>,
     /// The offset of every scroll container at the last paint.
-    scroll_painted: RefCell<HashMap<LayoutNodeId, (f32, f32)>>,
+    scroll_painted: RefCell<NodeMap<(f32, f32)>>,
     /// The offsets the rows were last written for.
-    scroll_applied: RefCell<HashMap<LayoutNodeId, (f32, f32)>>,
+    scroll_applied: RefCell<NodeMap<(f32, f32)>>,
     /// The layout epoch when the containers on rows were last painted: the content they hold is
     /// whatever was mounted then.
     scroll_painted_epoch: Cell<Option<u64>>,
@@ -817,7 +817,7 @@ pub struct RenderTree {
     /// The nodes with a motion config, as of a `render_nodes` revision.
     motion_nodes: RefCell<(Option<u64>, Vec<LayoutNodeId>)>,
     /// Each scroll container's offset as last seen, and the clock time it last changed.
-    scroll_seen: RefCell<HashMap<LayoutNodeId, ((f32, f32), u64)>>,
+    scroll_seen: RefCell<NodeMap<((f32, f32), u64)>>,
     /// Whether, at the last tick, a scroll container that is not on rows was moving.
     scroll_off_rows_animating: Cell<bool>,
     /// How far past a cull rect content is drawn, for the walk in progress.
@@ -851,7 +851,7 @@ pub struct RenderTree {
     /// Frame predicates of the retained canvases; `None` always wants one.
     retained_canvas_redraws: RefCell<Vec<Option<crate::canvas::CanvasRedrawFn>>>,
     /// Capture candidates and their deferred-content requirements.
-    cross_stream_groups: RefCell<HashMap<LayoutNodeId, DeferredContent>>,
+    cross_stream_groups: RefCell<NodeMap<DeferredContent>>,
     /// What `cross_stream_groups` was planned from: a plan is made again only when it changes.
     cross_stream_plan_key: RefCell<Option<paint::cross_stream::PlanKey>>,
     /// When `true`, the paint walker skips invoking each
@@ -875,12 +875,17 @@ pub struct RenderTree {
     /// the paint walker is single-threaded so the borrow contract is
     /// trivially upheld. Cleared at the top of each `render_with_motion`
     /// pass and grown back during the recursive walk.
-    painted_node_ids: RefCell<HashSet<LayoutNodeId>>,
+    painted_node_ids: RefCell<NodeSet>,
+    /// Counts changes to `painted_node_ids`, so a projection of it can tell it is current.
+    painted_changes: Cell<u64>,
+    /// `painted_node_ids` as stable ids, and the painted change and render-node revision it was
+    /// made at.
+    painted_stable: RefCell<(u64, u64, Arc<crate::tree::StableSet>)>,
     /// Motion bindings for continuous animations (keyed by node_id)
-    motion_bindings: tracked::Tracked<HashMap<LayoutNodeId, crate::motion::MotionBindings>>,
+    motion_bindings: tracked::Tracked<NodeMap<crate::motion::MotionBindings>>,
     /// Reactive translations routed through the binding painter without animation handles.
-    property_translation_nodes: HashSet<LayoutNodeId>,
-    binding_clip_bounds: RefCell<HashMap<LayoutNodeId, [f32; 4]>>,
+    property_translation_nodes: NodeSet,
+    binding_clip_bounds: RefCell<NodeMap<[f32; 4]>>,
     /// Compositor-path metadata captured during paint for nodes whose
     /// transform / opacity is driven by motion bindings. Records the
     /// range of primitives the paint walker emitted for the binding's
@@ -899,7 +904,7 @@ pub struct RenderTree {
     /// (rebuild, layout change, structural state change) this map
     /// stays alive but its entries are ignored — the next full paint
     /// clears and repopulates.
-    composite_bindings: RefCell<HashMap<LayoutNodeId, CompositeBindingMeta>>,
+    composite_bindings: RefCell<NodeMap<CompositeBindingMeta>>,
     /// Set when the last full paint drew a motion-bound node outside a
     /// promoted composite layer. Such a node's output lives in the cached
     /// batches; a promoted layer's is blitted at its current transform.
@@ -909,8 +914,8 @@ pub struct RenderTree {
     /// `Animating(AnimatedKind::Css)`; consumed by Phase 4's
     /// `apply_css_deltas` to patch primitives + layer configs from
     /// current `css_anim_store` values without re-walking.
-    css_anim_paint_records: RefCell<HashMap<LayoutNodeId, CssAnimPaintMeta>>,
-    css_backgrounds: RefCell<HashMap<LayoutNodeId, css_backgrounds::Painted>>,
+    css_anim_paint_records: RefCell<NodeMap<CssAnimPaintMeta>>,
+    css_backgrounds: RefCell<NodeMap<css_backgrounds::Painted>>,
     /// Per-canvas paint state captured during full paint so the
     /// fast path can re-invoke each canvas's `render_fn` next frame
     /// without re-walking the rest of the tree. Same lifecycle as
@@ -919,7 +924,7 @@ pub struct RenderTree {
     /// the fast path's canvas-splice step. Stale entries are
     /// ignored after a cache invalidation; the next full paint
     /// repopulates from scratch.
-    canvas_paint_records: RefCell<HashMap<LayoutNodeId, CanvasPaintRecord>>,
+    canvas_paint_records: RefCell<NodeMap<CanvasPaintRecord>>,
     /// Sibling pool for canvases whose walker traversal was inside an
     /// `is_overlay_root` subtree. Same shape and lifecycle as
     /// `canvas_paint_records`, but iterated by a SEPARATE collect /
@@ -927,10 +932,10 @@ pub struct RenderTree {
     /// — so a caret canvas nested inside a focused cn::input stays
     /// painted above the popover bg/border the overlay's dyn-batch
     /// SDF pass paints.
-    overlay_canvas_paint_records: RefCell<HashMap<LayoutNodeId, CanvasPaintRecord>>,
+    overlay_canvas_paint_records: RefCell<NodeMap<CanvasPaintRecord>>,
     /// Canvases painted inside a scroll container on rows, with ranges into the dynamic batch:
     /// replayed there at their painted pose, so the rows move what they draw.
-    rows_canvas_paint_records: RefCell<HashMap<LayoutNodeId, CanvasPaintRecord>>,
+    rows_canvas_paint_records: RefCell<NodeMap<CanvasPaintRecord>>,
     /// How many scroll containers on rows the walk in progress is inside.
     scroll_rows_depth: Cell<u32>,
     // --- Compositor v2 storage (Phase 1; populated by Phase 2) ---
@@ -940,7 +945,7 @@ pub struct RenderTree {
     /// each region's primitives, and uses `screen_aabb` as the
     /// scissor rect. Cleared at the top of every full paint;
     /// repopulated by `render_layer_with_motion`.
-    dynamic_regions: RefCell<HashMap<LayoutNodeId, DynamicRegion>>,
+    dynamic_regions: RefCell<NodeMap<DynamicRegion>>,
     /// While set, the walker emits primitives but records no regions.
     ///
     /// The per-frame overlay re-walks each region into a scratch
@@ -955,7 +960,7 @@ pub struct RenderTree {
     /// damage-rect cache-rebuild path. Persists across full paints
     /// — Phase 1 only writes this from
     /// `compute_animation_status`; Phase 4 consumes it.
-    previous_animation_status: RefCell<HashMap<LayoutNodeId, AnimationStatus>>,
+    previous_animation_status: RefCell<NodeMap<AnimationStatus>>,
     /// Current frame's animation classification per node — the live
     /// map the walker reads from while emitting primitives. Written
     /// once at the top of every full paint by
@@ -967,7 +972,7 @@ pub struct RenderTree {
     /// `compute_animation_status` because the walker does point
     /// lookups: `current_animation_status.get(&node)` once per
     /// painted node, ~thousands of times per frame.
-    current_animation_status: RefCell<HashMap<LayoutNodeId, AnimationStatus>>,
+    current_animation_status: RefCell<NodeMap<AnimationStatus>>,
     /// CSS-animated nodes whose current animated properties are
     /// composite-promotable (only `opacity` / `translate` / `scale` /
     /// 2D `rotate`). Populated alongside `current_animation_status`
@@ -975,15 +980,15 @@ pub struct RenderTree {
     /// to decide whether to skip emitting a CSS-animated subtree
     /// into the bg batch (the composited-layer path rasterizes it
     /// into a `LayerTexture` instead).
-    composite_promotion: RefCell<std::collections::HashSet<LayoutNodeId>>,
+    composite_promotion: RefCell<NodeSet>,
     /// CSS animations sampled while playing, including baked sources. Their final
     /// values are written once when they stop, then the node leaves the set.
-    css_anim_written: HashSet<crate::tree::StableNodeId>,
+    css_anim_written: crate::tree::StableSet,
     /// The same for CSS transitions.
-    css_trans_written: HashSet<crate::tree::StableNodeId>,
+    css_trans_written: crate::tree::StableSet,
     /// Sources whose layout values were written last frame, so one that
     /// stops has its final value written once.
-    css_layout_written: HashSet<crate::tree::StableNodeId>,
+    css_layout_written: crate::tree::StableSet,
     /// Subtree-as-texture candidates — Phase 4.1 of the unified property
     /// channel ([[project-reactive-architecture-v2]]).
     ///
@@ -999,14 +1004,14 @@ pub struct RenderTree {
     /// (bake-at-motion-start) are the first consumers. Until then the
     /// detection is observable only via [`Self::subtree_texture_candidates`]
     /// for tracing / testing.
-    subtree_texture_candidates: RefCell<std::collections::HashSet<LayoutNodeId>>,
+    subtree_texture_candidates: RefCell<NodeSet>,
     /// Whether motion-bound subtrees may be baked to a texture and blitted. Off, they are
     /// painted as vectors into the dynamic batch, which is how the GPU node table moves them.
     motion_promotion: Cell<bool>,
     /// The ordinal each motion-bound node was given in the last paint, in walk order from one.
     /// The painter stamps a node's primitives with it, so they can be told apart whatever the
     /// batch does to them afterwards.
-    binding_ordinals: RefCell<HashMap<LayoutNodeId, u32>>,
+    binding_ordinals: RefCell<NodeMap<u32>>,
     /// Whether the last paint found an SVG inside a motion-bound node, content that is drawn
     /// apart from the batch and stays where it was painted when the batch is moved.
     bound_svg: Cell<bool>,
@@ -1031,7 +1036,7 @@ pub struct RenderTree {
     /// stays in the dynamic set even though no current
     /// animation source is mid-flight. Avoids flapping on
     /// under-damped spring oscillation around a target.
-    settled_streak: RefCell<HashMap<LayoutNodeId, u32>>,
+    settled_streak: RefCell<NodeMap<u32>>,
     /// Last tick time for scroll physics, in MICROSECONDS — millisecond
     /// resolution quantises the momentum-coast `dt` into a visible jitter.
     last_scroll_tick_us: Option<u64>,
@@ -1052,15 +1057,15 @@ pub struct RenderTree {
     tree_topology_hash: Option<DivHash>,
     /// Per-node hashes for incremental change detection
     /// Maps node_id to (own_hash, tree_hash, topology_hash).
-    node_hashes: HashMap<LayoutNodeId, (DivHash, DivHash, DivHash)>,
+    node_hashes: NodeMap<(DivHash, DivHash, DivHash)>,
     /// Layout bounds storages to update after layout computation
     /// Maps node_id to entry with shared storage and optional change callback
-    layout_bounds_storages: HashMap<LayoutNodeId, LayoutBoundsEntry>,
+    layout_bounds_storages: NodeMap<LayoutBoundsEntry>,
     /// Element registry for O(1) lookups by string ID
     element_registry: Arc<ElementRegistry>,
     /// Bound ScrollRefs for programmatic scroll control
     /// Note: NOT cleared on rebuild - ScrollRef inner state persists and node_id is updated
-    scroll_refs: HashMap<LayoutNodeId, ScrollRef>,
+    scroll_refs: NodeMap<ScrollRef>,
     /// Active scroll refs (persists across rebuilds, keyed by inner pointer address)
     /// Maps inner pointer -> ScrollRef for persistence across rebuilds
     active_scroll_refs: Vec<ScrollRef>,
@@ -1099,7 +1104,7 @@ pub struct RenderTree {
     state_style_table: RefCell<crate::state_style_table::StateStyleTable>,
     /// Base styles for elements (before state modifiers)
     /// Used to restore original styles when state changes
-    base_styles: HashMap<LayoutNodeId, RenderProps>,
+    base_styles: NodeMap<RenderProps>,
     /// Nodes whose props the last incremental update replaced with the new
     /// element's props, in tree order. They carry no stylesheet until
     /// `restyle_replaced_nodes` runs.
@@ -1108,21 +1113,21 @@ pub struct RenderTree {
     /// applied over each node's properties, in the order applied. A bound
     /// write made while one holds is put back under it, so the rule keeps
     /// winning and the written value is what the node returns to.
-    state_layers: HashMap<LayoutNodeId, Vec<crate::element_style::ElementStyle>>,
+    state_layers: NodeMap<Vec<crate::element_style::ElementStyle>>,
     /// Classes that follow a signal, and the rules applied for them.
-    dynamic_classes: HashMap<LayoutNodeId, stylesheet::classes::DynamicClasses>,
+    dynamic_classes: NodeMap<stylesheet::classes::DynamicClasses>,
     /// Base taffy layout styles for elements (before state modifiers)
     /// Used to restore original layout when state changes affect layout properties
-    base_taffy_styles: HashMap<LayoutNodeId, taffy::Style>,
+    base_taffy_styles: NodeMap<taffy::Style>,
     /// Layout animation configs for nodes (from element builders)
     /// Maps node_id to the LayoutAnimationConfig specifying which properties to animate
-    layout_animation_configs: HashMap<LayoutNodeId, LayoutAnimationConfig>,
+    layout_animation_configs: NodeMap<LayoutAnimationConfig>,
     /// Active layout animations (running or recently completed)
     /// Maps node_id to the active animation state with spring-driven values
-    layout_animations: HashMap<LayoutNodeId, LayoutAnimationState>,
+    layout_animations: NodeMap<LayoutAnimationState>,
     /// Previous bounds for layout animation comparison
     /// Stores the last known layout bounds to detect changes
-    previous_bounds: HashMap<LayoutNodeId, ElementBounds>,
+    previous_bounds: NodeMap<ElementBounds>,
     /// Stable key to node ID mapping for layout animations
     /// Used to transfer animation state when nodes are rebuilt with same stable key
     layout_animation_key_to_node: HashMap<String, LayoutNodeId>,
@@ -1152,7 +1157,7 @@ pub struct RenderTree {
     previous_visual_bounds: HashMap<String, ElementBounds>,
     /// Pre-computed animated render bounds for this frame
     /// Calculated after layout, used during rendering
-    animated_render_bounds: HashMap<LayoutNodeId, AnimatedRenderBounds>,
+    animated_render_bounds: NodeMap<AnimatedRenderBounds>,
 
     // ========================================================================
     // CSS Animation/Transition System (shared with AnimationScheduler thread)
@@ -1163,11 +1168,11 @@ pub struct RenderTree {
     /// can tick animations at 120fps while the main thread reads/writes.
     css_anim_store: Arc<Mutex<crate::render_state::CssAnimationStore>>,
     /// Nodes that currently have hover-triggered CSS animations
-    hover_css_animations: HashSet<LayoutNodeId>,
+    hover_css_animations: NodeSet,
 
     /// Nodes that were affected by complex selector state rules (e.g. .class:hover)
     /// Used to reset render props when the state rule no longer matches
-    complex_state_affected: HashSet<LayoutNodeId>,
+    complex_state_affected: NodeSet,
 
     // ========================================================================
     // FLIP Animation Support (CSS transitions on layout position changes)
@@ -1182,13 +1187,13 @@ pub struct RenderTree {
     /// The nodes a FLIP animation moves through a motion binding of its own, with the element id
     /// of the animation: the node is painted where layout put it and the binding carries the
     /// offset, so a frame of the slide changes a value and not what is painted.
-    flip_bound: HashMap<LayoutNodeId, String>,
+    flip_bound: NodeMap<String>,
     /// The nodes a CSS animation moves through a motion binding of its own, with the stable id of
     /// the animation's node: the node is painted at its base and the binding carries the
     /// animation, so a frame of it changes a value and not what is painted.
-    css_bound: HashMap<LayoutNodeId, crate::tree::StableNodeId>,
+    css_bound: NodeMap<crate::tree::StableNodeId>,
     /// The nodes of `css_bound` whose binding carries a CSS transition rather than an animation.
-    css_trans_bound: HashSet<LayoutNodeId>,
+    css_trans_bound: NodeSet,
 
     /// Cached "does the pointer pipeline need to run on a bare mouse-move?"
     /// predicate. Equivalent to:
@@ -1216,11 +1221,11 @@ pub struct RenderTree {
     // Stable node identities resolve within this tree's namespace.
     // ========================================================================
     /// Stable identity to the current live layout key.
-    stable_to_layout: HashMap<crate::tree::StableNodeId, LayoutNodeId>,
+    stable_to_layout: crate::tree::StableMap<LayoutNodeId>,
     /// Reverse: `LayoutNodeId` → `StableNodeId`. Used during the
     /// post-build sweep to evict stable entries whose backing layout
     /// node was removed.
-    layout_to_stable: HashMap<LayoutNodeId, crate::tree::StableNodeId>,
+    layout_to_stable: NodeMap<crate::tree::StableNodeId>,
     /// Monotonic build counter, bumped each time the tree is rebuilt
     /// from scratch (`from_element*`). Stable subsystems stamp the
     /// generation they last touched their entries with so a post-build
@@ -1262,94 +1267,96 @@ impl RenderTree {
         Self {
             layout_tree: LayoutTree::new(),
             render_nodes: tracked::Tracked::default(),
-            ime_bindings: HashMap::new(),
-            accessibility_bindings: HashMap::new(),
-            accessibility_semantics: HashMap::new(),
+            ime_bindings: HashMap::default(),
+            accessibility_bindings: HashMap::default(),
+            accessibility_semantics: HashMap::default(),
             root: None,
             handler_registry: crate::event_handler::HandlerRegistry::new(),
             property_write_logs: Vec::new(),
             property_paint_revision: 0,
             layout_restyle: Vec::new(),
             dirty_tracker: crate::interactive::DirtyTracker::new(),
-            node_states: HashMap::new(),
-            scroll_offsets: HashMap::new(),
-            scroll_physics: HashMap::new(),
-            viewport_cull_scrolls: std::collections::HashSet::new(),
+            node_states: HashMap::default(),
+            scroll_offsets: HashMap::default(),
+            scroll_physics: HashMap::default(),
+            viewport_cull_scrolls: std::collections::HashSet::default(),
             subtree_owners: owners::SubtreeOwners::default(),
             cull_viewport: Cell::new(None),
             paint_scroll: Cell::new((0.0, 0.0)),
             scroll_rows: Cell::new(false),
-            scroll_row_nodes: RefCell::new(HashMap::new()),
-            child_indexes: RefCell::new(HashMap::new()),
+            scroll_row_nodes: RefCell::new(HashMap::default()),
+            child_indexes: RefCell::new(HashMap::default()),
             subtree_cache: RefCell::new(subtree_cache::SubtreeCache::default()),
             node_scan: RefCell::new(None),
             text_synced_revision: Cell::new(None),
-            scroll_painted: RefCell::new(HashMap::new()),
-            scroll_applied: RefCell::new(HashMap::new()),
+            scroll_painted: RefCell::new(HashMap::default()),
+            scroll_applied: RefCell::new(HashMap::default()),
             scroll_painted_epoch: Cell::new(None),
             scroll_clock_ms: Cell::new(None),
             motion_nodes: RefCell::new((None, Vec::new())),
-            scroll_seen: RefCell::new(HashMap::new()),
+            scroll_seen: RefCell::new(HashMap::default()),
             scroll_off_rows_animating: Cell::new(false),
             cull_overscan: Cell::new(cull::CULL_OVERSCAN),
             visible_anim_active: Cell::new(false),
             had_canvas_painted: Cell::new(false),
             had_retained_canvas_painted: Cell::new(false),
             retained_canvas_redraws: RefCell::new(Vec::new()),
-            cross_stream_groups: RefCell::new(HashMap::new()),
+            cross_stream_groups: RefCell::new(HashMap::default()),
             cross_stream_plan_key: RefCell::new(None),
             skip_canvas_drawing: Cell::new(false),
-            painted_node_ids: RefCell::new(HashSet::new()),
+            painted_node_ids: RefCell::new(HashSet::default()),
+            painted_changes: Cell::new(0),
+            painted_stable: RefCell::new((u64::MAX, u64::MAX, Arc::default())),
             motion_bindings: tracked::Tracked::default(),
-            property_translation_nodes: HashSet::new(),
-            binding_clip_bounds: RefCell::new(HashMap::new()),
-            composite_bindings: RefCell::new(HashMap::new()),
+            property_translation_nodes: HashSet::default(),
+            binding_clip_bounds: RefCell::new(HashMap::default()),
+            composite_bindings: RefCell::new(HashMap::default()),
             painted_unpromoted_binding: Cell::new(false),
-            css_anim_paint_records: RefCell::new(HashMap::new()),
-            css_backgrounds: RefCell::new(HashMap::new()),
-            canvas_paint_records: RefCell::new(HashMap::new()),
-            overlay_canvas_paint_records: RefCell::new(HashMap::new()),
-            rows_canvas_paint_records: RefCell::new(HashMap::new()),
+            css_anim_paint_records: RefCell::new(HashMap::default()),
+            css_backgrounds: RefCell::new(HashMap::default()),
+            canvas_paint_records: RefCell::new(HashMap::default()),
+            overlay_canvas_paint_records: RefCell::new(HashMap::default()),
+            rows_canvas_paint_records: RefCell::new(HashMap::default()),
             scroll_rows_depth: Cell::new(0),
-            dynamic_regions: RefCell::new(HashMap::new()),
+            dynamic_regions: RefCell::new(HashMap::default()),
             suppress_region_capture: std::cell::Cell::new(false),
-            previous_animation_status: RefCell::new(HashMap::new()),
-            current_animation_status: RefCell::new(HashMap::new()),
-            composite_promotion: RefCell::new(std::collections::HashSet::new()),
-            css_anim_written: HashSet::new(),
-            css_trans_written: HashSet::new(),
-            css_layout_written: HashSet::new(),
-            subtree_texture_candidates: RefCell::new(std::collections::HashSet::new()),
+            previous_animation_status: RefCell::new(HashMap::default()),
+            current_animation_status: RefCell::new(HashMap::default()),
+            composite_promotion: RefCell::new(std::collections::HashSet::default()),
+            css_anim_written: HashSet::default(),
+            css_trans_written: HashSet::default(),
+            css_layout_written: HashSet::default(),
+            subtree_texture_candidates: RefCell::new(std::collections::HashSet::default()),
             motion_promotion: Cell::new(false),
-            binding_ordinals: RefCell::new(HashMap::new()),
+            binding_ordinals: RefCell::new(HashMap::default()),
             bound_svg: Cell::new(false),
             motion_subtree_bake_registry: RefCell::new(
                 crate::motion_texture_cache::MotionSubtreeBakeRegistry::empty(),
             ),
-            settled_streak: RefCell::new(HashMap::new()),
+            settled_streak: RefCell::new(HashMap::default()),
             last_scroll_tick_us: None,
             scale_factor: 1.0,
             animations: Weak::new(),
             tree_hash: None,
             tree_topology_hash: None,
-            node_hashes: HashMap::new(),
-            layout_bounds_storages: HashMap::new(),
+            node_hashes: HashMap::default(),
+            layout_bounds_storages: HashMap::default(),
             element_registry: Arc::new(ElementRegistry::new()),
-            scroll_refs: HashMap::new(),
+            scroll_refs: HashMap::default(),
             active_scroll_refs: Vec::new(),
             last_scroll_target: None,
             scroll_gesture: Default::default(),
             on_ready_callbacks: HashMap::new(),
             stylesheet: None,
             state_style_table: RefCell::new(crate::state_style_table::StateStyleTable::empty()),
-            base_styles: HashMap::new(),
+            base_styles: HashMap::default(),
             props_replaced: Vec::new(),
-            state_layers: HashMap::new(),
-            dynamic_classes: HashMap::new(),
-            base_taffy_styles: HashMap::new(),
-            layout_animation_configs: HashMap::new(),
-            layout_animations: HashMap::new(),
-            previous_bounds: HashMap::new(),
+            state_layers: HashMap::default(),
+            dynamic_classes: HashMap::default(),
+            base_taffy_styles: HashMap::default(),
+            layout_animation_configs: HashMap::default(),
+            layout_animations: HashMap::default(),
+            previous_bounds: HashMap::default(),
             layout_animation_key_to_node: HashMap::new(),
             layout_animations_by_key: HashMap::new(),
             previous_bounds_by_key: HashMap::new(),
@@ -1359,20 +1366,20 @@ impl RenderTree {
             visual_animation_last_node: HashMap::new(),
             visual_animations: HashMap::new(),
             previous_visual_bounds: HashMap::new(),
-            animated_render_bounds: HashMap::new(),
+            animated_render_bounds: HashMap::default(),
             // CSS animation/transition system (shared with scheduler thread)
             css_anim_store: Arc::new(Mutex::new(crate::render_state::CssAnimationStore::new())),
-            hover_css_animations: HashSet::new(),
-            complex_state_affected: HashSet::new(),
+            hover_css_animations: HashSet::default(),
+            complex_state_affected: HashSet::default(),
             flip_previous_bounds: HashMap::new(),
             flip_animations: HashMap::new(),
-            flip_bound: HashMap::new(),
-            css_bound: HashMap::new(),
-            css_trans_bound: HashSet::new(),
+            flip_bound: HashMap::default(),
+            css_bound: HashMap::default(),
+            css_trans_bound: HashSet::default(),
             mouse_move_pipeline_cache: std::sync::atomic::AtomicI8::new(0),
             // Phase 1 stable-id foundation — see `project_stable_node_id_design`.
-            stable_to_layout: HashMap::new(),
-            layout_to_stable: HashMap::new(),
+            stable_to_layout: HashMap::default(),
+            layout_to_stable: HashMap::default(),
             build_generation: 0,
             accessibility_focus: None,
             accessibility_viewport: (0.0, 0.0),
@@ -1637,8 +1644,7 @@ impl RenderTree {
     /// `handler_registry.register(stable, fresh_handlers)`. Only
     /// genuinely-removed nodes lose their entry.
     pub(crate) fn sweep_stale_handlers(&mut self) {
-        let valid: std::collections::HashSet<crate::tree::StableNodeId> =
-            self.stable_to_layout.keys().copied().collect();
+        let valid: crate::tree::StableSet = self.stable_to_layout.keys().copied().collect();
         // A node that did not survive the build is unmounted: its `on_unmount` handlers run,
         // after the registry no longer holds it. They get its stable id and no live node.
         let unmounted = self
@@ -1664,8 +1670,7 @@ impl RenderTree {
     /// see the comment there for why eager drain caused the
     /// cn-context-menu submenu-hover opacity flicker.
     pub(crate) fn sweep_stale_css_animations(&mut self) {
-        let valid: std::collections::HashSet<crate::tree::StableNodeId> =
-            self.stable_to_layout.keys().copied().collect();
+        let valid: crate::tree::StableSet = self.stable_to_layout.keys().copied().collect();
         if let Ok(mut store) = self.css_anim_store.lock() {
             store.animations.retain(|stable, _| valid.contains(stable));
             store.transitions.retain(|stable, _| valid.contains(stable));
@@ -1763,9 +1768,7 @@ impl RenderTree {
 
     /// The canvases painted inside a scroll container on rows on the last full paint, with
     /// ranges into the dynamic batch.
-    pub fn rows_canvas_paint_records(
-        &self,
-    ) -> std::cell::Ref<'_, HashMap<LayoutNodeId, CanvasPaintRecord>> {
+    pub fn rows_canvas_paint_records(&self) -> std::cell::Ref<'_, NodeMap<CanvasPaintRecord>> {
         self.rows_canvas_paint_records.borrow()
     }
 
@@ -1820,7 +1823,7 @@ impl RenderTree {
     /// `stateful::has_visible_animating_statefuls`. The set is rebuilt
     /// fresh by every `render_with_motion` call, so callers should
     /// read it after the paint pass and before the next frame begins.
-    pub fn painted_node_ids(&self) -> std::cell::Ref<'_, HashSet<LayoutNodeId>> {
+    pub fn painted_node_ids(&self) -> std::cell::Ref<'_, NodeSet> {
         self.painted_node_ids.borrow()
     }
 
@@ -1832,15 +1835,13 @@ impl RenderTree {
     /// node with `motion_bindings.is_any_animating()` is painted;
     /// stale entries (for nodes that didn't paint this frame) are
     /// cleared at the top of every full paint.
-    pub fn composite_bindings(
-        &self,
-    ) -> std::cell::Ref<'_, HashMap<LayoutNodeId, CompositeBindingMeta>> {
+    pub fn composite_bindings(&self) -> std::cell::Ref<'_, NodeMap<CompositeBindingMeta>> {
         self.composite_bindings.borrow()
     }
 
     /// The ordinal each motion-bound node was given in the last paint, which its primitives and
     /// its text carry.
-    pub fn binding_ordinals(&self) -> std::cell::Ref<'_, HashMap<LayoutNodeId, u32>> {
+    pub fn binding_ordinals(&self) -> std::cell::Ref<'_, NodeMap<u32>> {
         self.binding_ordinals.borrow()
     }
 
@@ -1872,9 +1873,7 @@ impl RenderTree {
     /// against the value just written to the GPU, not the original
     /// paint-time value — otherwise the second fast-path frame would
     /// double-apply).
-    pub fn composite_bindings_mut(
-        &self,
-    ) -> std::cell::RefMut<'_, HashMap<LayoutNodeId, CompositeBindingMeta>> {
+    pub fn composite_bindings_mut(&self) -> std::cell::RefMut<'_, NodeMap<CompositeBindingMeta>> {
         self.composite_bindings.borrow_mut()
     }
 
@@ -1882,9 +1881,7 @@ impl RenderTree {
     /// the most recent full paint. Phase 4's `apply_css_deltas`
     /// iterates this to patch primitives + layer configs from
     /// current `css_anim_store` values without re-walking.
-    pub fn css_anim_paint_records(
-        &self,
-    ) -> std::cell::Ref<'_, HashMap<LayoutNodeId, CssAnimPaintMeta>> {
+    pub fn css_anim_paint_records(&self) -> std::cell::Ref<'_, NodeMap<CssAnimPaintMeta>> {
         self.css_anim_paint_records.borrow()
     }
 
@@ -1893,9 +1890,7 @@ impl RenderTree {
     /// to write `last_*` values back after a successful patch so
     /// the next frame's delta is computed against what's actually
     /// in the GPU batch.
-    pub fn css_anim_paint_records_mut(
-        &self,
-    ) -> std::cell::RefMut<'_, HashMap<LayoutNodeId, CssAnimPaintMeta>> {
+    pub fn css_anim_paint_records_mut(&self) -> std::cell::RefMut<'_, NodeMap<CssAnimPaintMeta>> {
         self.css_anim_paint_records.borrow_mut()
     }
 
@@ -1903,9 +1898,7 @@ impl RenderTree {
     /// recent full paint. The compositor fast path iterates this to
     /// re-invoke each canvas's `render_fn` and splice the resulting
     /// primitives back into the cached batch in place.
-    pub fn canvas_paint_records(
-        &self,
-    ) -> std::cell::Ref<'_, HashMap<LayoutNodeId, CanvasPaintRecord>> {
+    pub fn canvas_paint_records(&self) -> std::cell::Ref<'_, NodeMap<CanvasPaintRecord>> {
         self.canvas_paint_records.borrow()
     }
 
@@ -1913,9 +1906,7 @@ impl RenderTree {
     /// fast path to update `primitive_range` if a re-paint emits
     /// a different number of primitives than the cached entry
     /// recorded.
-    pub fn canvas_paint_records_mut(
-        &self,
-    ) -> std::cell::RefMut<'_, HashMap<LayoutNodeId, CanvasPaintRecord>> {
+    pub fn canvas_paint_records_mut(&self) -> std::cell::RefMut<'_, NodeMap<CanvasPaintRecord>> {
         self.canvas_paint_records.borrow_mut()
     }
 
@@ -1923,16 +1914,14 @@ impl RenderTree {
     /// `canvas_paint_records`; entries here belong to canvases
     /// emitted inside an `is_overlay_root` ancestor, dispatched
     /// AFTER the popover's dyn-batch overlay pass.
-    pub fn overlay_canvas_paint_records(
-        &self,
-    ) -> std::cell::Ref<'_, HashMap<LayoutNodeId, CanvasPaintRecord>> {
+    pub fn overlay_canvas_paint_records(&self) -> std::cell::Ref<'_, NodeMap<CanvasPaintRecord>> {
         self.overlay_canvas_paint_records.borrow()
     }
 
     /// Mutable variant of [`Self::overlay_canvas_paint_records`].
     pub fn overlay_canvas_paint_records_mut(
         &self,
-    ) -> std::cell::RefMut<'_, HashMap<LayoutNodeId, CanvasPaintRecord>> {
+    ) -> std::cell::RefMut<'_, NodeMap<CanvasPaintRecord>> {
         self.overlay_canvas_paint_records.borrow_mut()
     }
 
@@ -1940,7 +1929,7 @@ impl RenderTree {
     /// walker for every node classified as
     /// [`AnimationStatus::Animating`]; consumed each frame by the
     /// compositor's per-region dispatch path.
-    pub fn dynamic_regions(&self) -> std::cell::Ref<'_, HashMap<LayoutNodeId, DynamicRegion>> {
+    pub fn dynamic_regions(&self) -> std::cell::Ref<'_, NodeMap<DynamicRegion>> {
         self.dynamic_regions.borrow()
     }
 
@@ -1960,9 +1949,7 @@ impl RenderTree {
     }
 
     /// Mutable variant of [`Self::dynamic_regions`].
-    pub fn dynamic_regions_mut(
-        &self,
-    ) -> std::cell::RefMut<'_, HashMap<LayoutNodeId, DynamicRegion>> {
+    pub fn dynamic_regions_mut(&self) -> std::cell::RefMut<'_, NodeMap<DynamicRegion>> {
         self.dynamic_regions.borrow_mut()
     }
 
@@ -1994,10 +1981,10 @@ impl RenderTree {
 
         // Step 1: collect candidate nodes from each source. A node
         // can appear in more than one; precedence resolves below.
-        let mut candidates: HashSet<LayoutNodeId> = HashSet::new();
-        let mut canvas_nodes: HashSet<LayoutNodeId> = HashSet::new();
-        let mut motion_animating: HashSet<LayoutNodeId> = HashSet::new();
-        let mut css_animating: HashSet<LayoutNodeId> = HashSet::new();
+        let mut candidates: NodeSet = HashSet::default();
+        let mut canvas_nodes: NodeSet = HashSet::default();
+        let mut motion_animating: NodeSet = HashSet::default();
+        let mut css_animating: NodeSet = HashSet::default();
 
         // Motion bindings: every node with a `MotionBindings` entry
         // is a candidate; the entry's `is_any_animating` decides
@@ -2036,7 +2023,7 @@ impl RenderTree {
         // alongside `css_animating` so the walker can pick up both
         // signals on the same `current_animation_status.borrow()`
         // dance.
-        let mut composite_promotion: HashSet<LayoutNodeId> = HashSet::new();
+        let mut composite_promotion: NodeSet = HashSet::default();
         if let Ok(store) = self.css_anim_store.lock() {
             for (stable, anim) in store.animations.iter() {
                 if !anim.is_playing {
@@ -2208,7 +2195,7 @@ impl RenderTree {
             let _demoted = self.demote_lapsed_motion_bake_records();
             return;
         }
-        let mut candidates = std::collections::HashSet::new();
+        let mut candidates = NodeSet::default();
 
         // Step 1: gather actively-animating motion-binding roots. The
         // disqualifier walk below short-circuits on the first bad
@@ -2241,21 +2228,20 @@ impl RenderTree {
         // the scheduler's tick thread; one lock per pass is the right
         // granularity.
         let css_store = self.css_anim_store.lock().ok();
-        let css_animations_playing: std::collections::HashSet<crate::tree::StableNodeId> =
-            css_store
-                .as_ref()
-                .map(|s| {
-                    s.animations
-                        .iter()
-                        .filter_map(|(stable, anim)| anim.is_playing.then_some(*stable))
-                        .chain(
-                            s.transitions
-                                .iter()
-                                .filter_map(|(stable, t)| t.is_playing.then_some(*stable)),
-                        )
-                        .collect()
-                })
-                .unwrap_or_default();
+        let css_animations_playing: crate::tree::StableSet = css_store
+            .as_ref()
+            .map(|s| {
+                s.animations
+                    .iter()
+                    .filter_map(|(stable, anim)| anim.is_playing.then_some(*stable))
+                    .chain(
+                        s.transitions
+                            .iter()
+                            .filter_map(|(stable, t)| t.is_playing.then_some(*stable)),
+                    )
+                    .collect()
+            })
+            .unwrap_or_default();
         drop(css_store);
 
         // Step 3: for each animating root, walk its layout-tree
@@ -2290,7 +2276,7 @@ impl RenderTree {
     fn subtree_has_no_independent_animation(
         &self,
         root: LayoutNodeId,
-        css_animations_playing: &std::collections::HashSet<crate::tree::StableNodeId>,
+        css_animations_playing: &crate::tree::StableSet,
     ) -> bool {
         // Iterative DFS over the layout tree. Reusable Vec keeps the
         // hot per-frame call from re-allocating on small subtrees.
@@ -2328,9 +2314,7 @@ impl RenderTree {
     /// populated as a side-effect of [`Self::compute_animation_status`]
     /// via [`Self::compute_subtree_texture_candidates`]. Phase 4.1 is
     /// foundation only; no in-tree consumer reads this yet.
-    pub fn subtree_texture_candidates(
-        &self,
-    ) -> std::cell::Ref<'_, std::collections::HashSet<LayoutNodeId>> {
+    pub fn subtree_texture_candidates(&self) -> std::cell::Ref<'_, NodeSet> {
         self.subtree_texture_candidates.borrow()
     }
 
@@ -2416,7 +2400,7 @@ impl RenderTree {
         // the borrow ends before we take the registry's `borrow_mut`.
         // The clone is bounded by the count of actively-animating
         // motion-bound roots — typically 0-3 in cn_demo scenarios.
-        let active: std::collections::HashSet<LayoutNodeId> = self
+        let active: NodeSet = self
             .subtree_texture_candidates
             .borrow()
             .iter()
@@ -2430,9 +2414,7 @@ impl RenderTree {
     /// Borrow the previous frame's animation status map. Used by
     /// the compositor to detect transitions (Static ↔ Animating)
     /// for damage-rect cache invalidation.
-    pub fn previous_animation_status(
-        &self,
-    ) -> std::cell::Ref<'_, HashMap<LayoutNodeId, AnimationStatus>> {
+    pub fn previous_animation_status(&self) -> std::cell::Ref<'_, NodeMap<AnimationStatus>> {
         self.previous_animation_status.borrow()
     }
 
@@ -2440,9 +2422,7 @@ impl RenderTree {
     /// a side-effect of [`Self::compute_animation_status`] and
     /// consumed by the walker on the same frame to decide which
     /// nodes are dynamic.
-    pub fn current_animation_status(
-        &self,
-    ) -> std::cell::Ref<'_, HashMap<LayoutNodeId, AnimationStatus>> {
+    pub fn current_animation_status(&self) -> std::cell::Ref<'_, NodeMap<AnimationStatus>> {
         self.current_animation_status.borrow()
     }
 
@@ -2452,9 +2432,7 @@ impl RenderTree {
     /// [`blinc_animation::KeyframeProperties::is_composite_promotable`].
     /// Populated alongside `current_animation_status` so the walker
     /// reads both off the same compute pass.
-    pub fn composite_promotion(
-        &self,
-    ) -> std::cell::Ref<'_, std::collections::HashSet<LayoutNodeId>> {
+    pub fn composite_promotion(&self) -> std::cell::Ref<'_, NodeSet> {
         self.composite_promotion.borrow()
     }
 
@@ -2471,24 +2449,24 @@ impl RenderTree {
         }
     }
 
-    /// `painted_node_ids()` projected through `layout_to_stable`.
+    /// `painted_node_ids()` projected through `layout_to_stable`, for subsystems keyed by
+    /// `StableNodeId` such as the CSS animation store.
     ///
-    /// Allocates a fresh `HashSet<StableNodeId>` each call so the
-    /// caller can hold it across mutating renderer calls (looking
-    /// up by `StableNodeId` against the CSS animation store, etc.).
-    /// Cost is proportional to the painted-set size, dominated by
-    /// the same paint walk that produced it — the once-per-frame
-    /// allocation is unmeasurable in practice.
-    ///
-    /// Migration helper for Phase 5: subsystems keyed by
-    /// `StableNodeId` (`CssAnimationStore`, soon others) need the
-    /// painted set in stable terms; this is the conversion point.
-    pub fn painted_stable_ids(&self) -> HashSet<crate::tree::StableNodeId> {
-        let painted = self.painted_node_ids.borrow();
-        painted
-            .iter()
-            .filter_map(|n| self.layout_to_stable.get(n).copied())
-            .collect()
+    /// The set is shared and made again only after a paint walk changes the painted nodes or
+    /// the render nodes change, so frames that do not walk the tree reuse it. The caller can hold
+    /// it across mutating renderer calls.
+    pub fn painted_stable_ids(&self) -> Arc<crate::tree::StableSet> {
+        let key = (self.painted_changes.get(), self.render_nodes.revision());
+        let mut cache = self.painted_stable.borrow_mut();
+        if (cache.0, cache.1) != key {
+            let painted = self.painted_node_ids.borrow();
+            let set = painted
+                .iter()
+                .filter_map(|n| self.layout_to_stable.get(n).copied())
+                .collect();
+            *cache = (key.0, key.1, Arc::new(set));
+        }
+        Arc::clone(&cache.2)
     }
 
     /// Update root node dimensions for window resize.
@@ -2555,7 +2533,7 @@ impl RenderTree {
     /// `sync_text_measure_contexts` for the nodes a change log names: each, and what takes its
     /// font from it where its own font inputs changed.
     fn sync_text_measure_contexts_for(&mut self, changes: &[(LayoutNodeId, bool)]) {
-        let mut check: HashSet<LayoutNodeId> = HashSet::new();
+        let mut check: NodeSet = HashSet::default();
         for &(id, font_changed) in changes {
             check.insert(id);
             if font_changed {
@@ -3321,7 +3299,7 @@ impl RenderTree {
     /// the per-node lookup helpers (which fetch one property at a
     /// time and would lock each `SharedAnimatedValue` 4 times per
     /// node).
-    pub fn motion_bindings_map(&self) -> &HashMap<LayoutNodeId, crate::motion::MotionBindings> {
+    pub fn motion_bindings_map(&self) -> &NodeMap<crate::motion::MotionBindings> {
         &self.motion_bindings
     }
 

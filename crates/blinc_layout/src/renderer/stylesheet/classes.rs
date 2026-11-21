@@ -20,6 +20,7 @@ use crate::element_style::ElementStyle;
 use crate::tree::LayoutNodeId;
 
 use super::super::RenderTree;
+use crate::tree::NodeSet;
 
 /// Where a rule sits in the cascade: its tier, then its specificity, then its
 /// place in the stylesheet.
@@ -64,7 +65,7 @@ impl RenderTree {
     ///
     /// `within` limits it to the nodes a subtree pass styled: a node outside it keeps what it
     /// has, so a change it is easing in the same update is not applied twice, unseen.
-    pub(crate) fn sync_dynamic_classes(&mut self, within: Option<&HashSet<LayoutNodeId>>) {
+    pub(crate) fn sync_dynamic_classes(&mut self, within: Option<&NodeSet>) {
         let _tree_scope = self.layout_tree.enter_scope();
         let toggles = crate::binding::with_registry(|registry| registry.class_toggles());
         for (node, infos) in toggles {
@@ -149,7 +150,7 @@ impl RenderTree {
         node: LayoutNodeId,
         stylesheet: &crate::css_parser::Stylesheet,
     ) -> Option<crate::css_parser::CssAnimation> {
-        let none: HashSet<LayoutNodeId> = HashSet::new();
+        let none: NodeSet = HashSet::default();
         let rules = stylesheet.complex_rules();
         self.candidate_rules_for(stylesheet, node)
             .into_iter()
@@ -179,7 +180,7 @@ impl RenderTree {
         }
         // Only the nodes an animation rule can reach are asked: those with the class, the
         // attribute or the id it is keyed on. A rule keyed on a type, or on nothing, asks them all.
-        let mut reached: HashSet<LayoutNodeId> = HashSet::new();
+        let mut reached: NodeSet = HashSet::default();
         let mut all = false;
         for &i in &animating {
             match stylesheet.rule_key(i) {
@@ -409,7 +410,7 @@ impl RenderTree {
         node: LayoutNodeId,
         stylesheet: &crate::css_parser::Stylesheet,
     ) -> Vec<usize> {
-        let none: HashSet<LayoutNodeId> = HashSet::new();
+        let none: NodeSet = HashSet::default();
         let rules = stylesheet.complex_rules();
         self.candidate_rules_for(stylesheet, node)
             .into_iter()
@@ -424,7 +425,7 @@ impl RenderTree {
         node: LayoutNodeId,
         rules: &[(usize, &ComplexSelector)],
     ) -> Vec<usize> {
-        let none: HashSet<LayoutNodeId> = HashSet::new();
+        let none: NodeSet = HashSet::default();
         rules
             .iter()
             .filter(|(_, selector)| {

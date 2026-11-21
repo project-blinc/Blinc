@@ -715,9 +715,9 @@ impl RenderTree {
     /// so only the ones that just stopped are applied.
     fn apply_css_driven_props(
         &mut self,
-        written: HashSet<crate::tree::StableNodeId>,
+        written: crate::tree::StableSet,
         transitions: bool,
-    ) -> HashSet<crate::tree::StableNodeId> {
+    ) -> crate::tree::StableSet {
         type Entry = (
             crate::tree::StableNodeId,
             blinc_animation::KeyframeProperties,
@@ -750,8 +750,8 @@ impl RenderTree {
                 Self::apply_keyframe_props_to_render(&mut render_node.props, &props);
             }
         }
-        let mut still_playing = HashSet::new();
-        let mut carried = HashSet::new();
+        let mut still_playing = crate::tree::StableSet::default();
+        let mut carried = crate::tree::StableSet::default();
         for (stable_id, props) in playing {
             let Some(node_id) = self.layout_id(stable_id) else {
                 continue;
@@ -922,11 +922,7 @@ impl RenderTree {
     /// Take away the bindings of CSS animations, or of transitions, that are not carried this
     /// frame: those that have stopped, and those of nodes that were replaced. The node is painted
     /// in full without them.
-    fn release_css_bindings(
-        &mut self,
-        carried: &HashSet<crate::tree::StableNodeId>,
-        transitions: bool,
-    ) {
+    fn release_css_bindings(&mut self, carried: &crate::tree::StableSet, transitions: bool) {
         if self.css_bound.is_empty() {
             return;
         }

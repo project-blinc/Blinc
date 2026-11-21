@@ -47,7 +47,7 @@ use crate::tree::StableNodeId;
 pub struct StateStyleTable {
     /// `#id` base styles. Lookup at apply-time replaces
     /// `stylesheet.get(&element_id)`.
-    base: HashMap<StableNodeId, ElementStyle>,
+    base: crate::tree::StableMap<ElementStyle>,
     /// `#id:state` styles. Lookup at apply-time replaces
     /// `stylesheet.get_with_state(&element_id, state)`.
     by_state: HashMap<(StableNodeId, ElementState), ElementStyle>,
@@ -128,7 +128,7 @@ impl StateStyleTable {
             ElementState::Checked,
         ];
 
-        let mut base: HashMap<StableNodeId, ElementStyle> = HashMap::new();
+        let mut base: crate::tree::StableMap<ElementStyle> = HashMap::default();
         let mut by_state: HashMap<(StableNodeId, ElementState), ElementStyle> = HashMap::new();
 
         for (element_id, stable_id) in elements {

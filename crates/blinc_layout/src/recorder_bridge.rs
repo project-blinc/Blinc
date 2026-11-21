@@ -4,6 +4,7 @@
 //! whatever recorder is installed on [`BlincContextState`], in the types
 //! `blinc_core::recording` defines.
 
+use crate::tree::NodeSet;
 use blinc_core::BlincContextState;
 use blinc_core::recording::{
     ElementSnapshot, FocusChangeEvent, HoverEvent, Key, KeyEvent, Modifiers, MouseEvent,
@@ -270,7 +271,7 @@ pub fn record_snapshot(snapshot: TreeSnapshot) {
 pub fn capture_tree_snapshot(
     tree: &crate::renderer::RenderTree,
     focused_node: Option<crate::tree::LayoutNodeId>,
-    hovered_nodes: &std::collections::HashSet<crate::tree::LayoutNodeId>,
+    hovered_nodes: &NodeSet,
     window_width: u32,
     window_height: u32,
 ) -> TreeSnapshot {
@@ -297,7 +298,7 @@ fn capture_node_recursive(
     node: crate::tree::LayoutNodeId,
     parent: Option<crate::tree::LayoutNodeId>,
     focused_node: Option<crate::tree::LayoutNodeId>,
-    hovered_nodes: &std::collections::HashSet<crate::tree::LayoutNodeId>,
+    hovered_nodes: &NodeSet,
     snapshot: &mut TreeSnapshot,
 ) {
     let node_id_str = format!("{:?}", node);
@@ -403,7 +404,7 @@ pub fn record_frame(
     if !is_recording_snapshots() {
         return;
     }
-    let hovered: std::collections::HashSet<_> = router
+    let hovered: crate::tree::NodeSet = router
         .hovered_nodes()
         .filter_map(|stable| tree.layout_id(stable))
         .collect();

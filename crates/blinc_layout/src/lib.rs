@@ -156,7 +156,9 @@ pub use event_router::{EventRouter, HitTestResult, MouseButton};
 pub use interaction::Interaction;
 pub use interactive::{DirtyTracker, InteractiveContext, NodeState};
 pub use style::LayoutStyle;
-pub use tree::{LayoutNodeId, LayoutTree, TextMeasureContext};
+pub use tree::{
+    LayoutNodeId, LayoutTree, NodeMap, NodeSet, StableMap, StableSet, TextMeasureContext,
+};
 
 // Material system
 pub use element::{

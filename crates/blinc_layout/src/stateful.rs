@@ -72,6 +72,7 @@ use blinc_core::reactive::SignalId;
 
 /// Re-export SharedAnimatedValue from motion module
 pub use crate::motion::SharedAnimatedValue;
+use crate::tree::NodeSet;
 
 /// Shared animated timeline that can be cloned and accessed from multiple places
 pub type SharedAnimatedTimeline = Arc<Mutex<AnimatedTimeline>>;
@@ -1011,7 +1012,7 @@ pub fn animating_statefuls_snapshot() -> Vec<(Vec<String>, Option<LayoutNodeId>)
         .collect()
 }
 
-pub fn has_visible_animating_statefuls(painted: &std::collections::HashSet<LayoutNodeId>) -> bool {
+pub fn has_visible_animating_statefuls(painted: &NodeSet) -> bool {
     let registry = STATEFUL_ANIMATIONS.lock().unwrap();
     registry
         .values()

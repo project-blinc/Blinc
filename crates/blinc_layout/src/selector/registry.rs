@@ -7,6 +7,7 @@ use blinc_core::Bounds;
 
 use crate::element::ElementBounds;
 use crate::tree::LayoutNodeId;
+use crate::tree::NodeMap;
 
 /// Callback type for on_ready notifications registered via query API
 pub type OnReadyCallback = Arc<dyn Fn(ElementBounds) + Send + Sync>;
@@ -20,9 +21,9 @@ pub struct ElementRegistry {
     /// String ID → LayoutNodeId mapping
     ids: RwLock<HashMap<String, LayoutNodeId>>,
     /// Reverse lookup for debugging (LayoutNodeId → String ID)
-    reverse: RwLock<HashMap<LayoutNodeId, String>>,
+    reverse: RwLock<NodeMap<String>>,
     /// Parent relationships for tree traversal
-    parents: RwLock<HashMap<LayoutNodeId, LayoutNodeId>>,
+    parents: RwLock<NodeMap<LayoutNodeId>>,
     /// Pending on_ready callbacks registered via ElementHandle.on_ready()
     /// Keyed by string ID for stable tracking across rebuilds
     pending_on_ready: Mutex<Vec<(String, OnReadyCallback)>>,
@@ -34,15 +35,15 @@ pub struct ElementRegistry {
     bounds_cache: RwLock<HashMap<String, Bounds>>,
     /// CSS classes for each node (for .class selector matching).
     /// Stored as `Arc<str>` so repeated names share one allocation.
-    classes: RwLock<HashMap<LayoutNodeId, Vec<Arc<str>>>>,
+    classes: RwLock<NodeMap<Vec<Arc<str>>>>,
     /// Child index within parent (0-based) for :nth-child/:first-child/:last-child
-    child_indices: RwLock<HashMap<LayoutNodeId, usize>>,
+    child_indices: RwLock<NodeMap<usize>>,
     /// Total sibling count for :last-child/:only-child
-    sibling_counts: RwLock<HashMap<LayoutNodeId, usize>>,
+    sibling_counts: RwLock<NodeMap<usize>>,
     /// Ordered children for each parent (for sibling combinators + / ~ and :empty)
-    children: RwLock<HashMap<LayoutNodeId, Vec<LayoutNodeId>>>,
+    children: RwLock<NodeMap<Vec<LayoutNodeId>>>,
     /// Semantic element type for CSS type selector matching (e.g., "button", "a", "ul")
-    element_types: RwLock<HashMap<LayoutNodeId, &'static str>>,
+    element_types: RwLock<NodeMap<&'static str>>,
 }
 
 impl std::fmt::Debug for ElementRegistry {
@@ -74,16 +75,16 @@ impl ElementRegistry {
         Self {
             tree_scope: std::sync::atomic::AtomicU64::new(0),
             ids: RwLock::new(HashMap::new()),
-            reverse: RwLock::new(HashMap::new()),
-            parents: RwLock::new(HashMap::new()),
+            reverse: RwLock::new(HashMap::default()),
+            parents: RwLock::new(HashMap::default()),
             pending_on_ready: Mutex::new(Vec::new()),
             triggered_on_ready_ids: Mutex::new(std::collections::HashSet::new()),
             bounds_cache: RwLock::new(HashMap::new()),
-            classes: RwLock::new(HashMap::new()),
-            child_indices: RwLock::new(HashMap::new()),
-            sibling_counts: RwLock::new(HashMap::new()),
-            children: RwLock::new(HashMap::new()),
-            element_types: RwLock::new(HashMap::new()),
+            classes: RwLock::new(HashMap::default()),
+            child_indices: RwLock::new(HashMap::default()),
+            sibling_counts: RwLock::new(HashMap::default()),
+            children: RwLock::new(HashMap::default()),
+            element_types: RwLock::new(HashMap::default()),
         }
     }
 

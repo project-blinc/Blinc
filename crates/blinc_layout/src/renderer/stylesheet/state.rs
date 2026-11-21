@@ -33,6 +33,7 @@ use crate::element_style::ElementStyle;
 use crate::tree::LayoutNodeId;
 
 use super::super::RenderTree;
+use crate::tree::NodeSet;
 
 impl RenderTree {
     /// Resolve the base `#id { ... }` style for a node — Phase 5.2 of
@@ -323,8 +324,8 @@ impl RenderTree {
     /// produced; the store is keyed by `StableNodeId` (Phase 5),
     /// so we translate via `layout_to_stable` before the
     /// containment check.
-    pub fn css_has_visible_transitions(&self, painted: &HashSet<LayoutNodeId>) -> bool {
-        let painted_stable: HashSet<crate::tree::StableNodeId> =
+    pub fn css_has_visible_transitions(&self, painted: &NodeSet) -> bool {
+        let painted_stable: crate::tree::StableSet =
             painted.iter().filter_map(|n| self.stable_id(*n)).collect();
         let store = self.css_anim_store.lock().unwrap();
         // Match `has_active_transitions`: only PLAYING transitions

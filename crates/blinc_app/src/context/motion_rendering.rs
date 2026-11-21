@@ -9,6 +9,7 @@ use super::{
     RenderContext, RenderTree, Result, SvgElement, TextElement, Transform3DLayerInfo,
     composite_replay, dispatch_pending_gpu_passes, dispatch_pending_meshes,
 };
+use blinc_layout::NodeMap;
 
 impl RenderContext {
     #[allow(clippy::too_many_arguments)]
@@ -235,10 +236,8 @@ impl RenderContext {
         let mut texts = Vec::new();
         let mut fg_texts = Vec::new();
         let mut motion_subtree_texts: Vec<TextElement> = Vec::new();
-        let mut layer_3d_texts: std::collections::HashMap<
-            LayoutNodeId,
-            (Transform3DLayerInfo, Vec<TextElement>),
-        > = std::collections::HashMap::new();
+        let mut layer_3d_texts: NodeMap<(Transform3DLayerInfo, Vec<TextElement>)> =
+            std::collections::HashMap::default();
         let mut captured = std::collections::HashMap::new();
         if !used_fast_paint {
             self.captured_runs.clear();
@@ -339,8 +338,7 @@ impl RenderContext {
 
         let mut svgs = Vec::new();
         let mut motion_subtree_svgs: Vec<SvgElement> = Vec::new();
-        let mut layer_3d_svgs: std::collections::HashMap<LayoutNodeId, Vec<SvgElement>> =
-            std::collections::HashMap::new();
+        let mut layer_3d_svgs: NodeMap<Vec<SvgElement>> = std::collections::HashMap::default();
         let captured_svgs: std::collections::HashSet<_> = batch
             .cross_stream_groups
             .svg_nodes
@@ -387,8 +385,7 @@ impl RenderContext {
 
         let mut images = Vec::new();
         let mut motion_subtree_images: Vec<ImageElement> = Vec::new();
-        let mut layer_3d_images: std::collections::HashMap<LayoutNodeId, Vec<ImageElement>> =
-            std::collections::HashMap::new();
+        let mut layer_3d_images: NodeMap<Vec<ImageElement>> = std::collections::HashMap::default();
         self.preload_images(&all_images, width as f32, height as f32);
         let captured_images: std::collections::HashSet<_> = batch
             .cross_stream_groups

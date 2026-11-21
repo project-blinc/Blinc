@@ -2,6 +2,7 @@
 use super::super::{DeferredContent, ElementType, RenderTree};
 use crate::element::RenderLayer;
 use crate::tree::LayoutNodeId;
+use crate::tree::NodeSet;
 use std::collections::HashSet;
 
 /// What a plan of the native groups is made from.
@@ -35,7 +36,7 @@ impl RenderTree {
             scope: Scope,
             capabilities: DeferredContent,
             glass_layers: bool,
-            css_opacity: &HashSet<LayoutNodeId>,
+            css_opacity: &NodeSet,
             groups: &mut Vec<(LayoutNodeId, DeferredContent)>,
         ) -> (bool, bool, DeferredContent, bool, bool) {
             let Some(render) = tree.render_nodes.get(&node) else {
@@ -196,7 +197,7 @@ impl RenderTree {
             )
         }
         // Keep glass ownership at settled CSS opacity endpoints.
-        let css_opacity: HashSet<LayoutNodeId> = self
+        let css_opacity: NodeSet = self
             .css_anim_store
             .lock()
             .ok()

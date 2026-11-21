@@ -24,6 +24,7 @@ use taffy::prelude::*;
 use crate::tree::LayoutNodeId;
 
 use super::super::{ElementType, RenderTree};
+use crate::tree::NodeSet;
 
 impl RenderTree {
     /// Apply layout properties from the stylesheet to taffy nodes.
@@ -55,14 +56,13 @@ impl RenderTree {
         if subtree_nodes.is_empty() {
             return;
         }
-        let subtree_set: std::collections::HashSet<LayoutNodeId> =
-            subtree_nodes.into_iter().collect();
+        let subtree_set: NodeSet = subtree_nodes.into_iter().collect();
         self.apply_stylesheet_layout_overrides_filtered(Some(&subtree_set));
     }
 
     pub(super) fn apply_stylesheet_layout_overrides_filtered(
         &mut self,
-        subtree_filter: Option<&std::collections::HashSet<LayoutNodeId>>,
+        subtree_filter: Option<&NodeSet>,
     ) {
         use crate::element_style::{
             SpacingRect, StyleAlign, StyleDisplay, StyleFlexDirection, StyleJustify, StyleOverflow,
@@ -92,7 +92,7 @@ impl RenderTree {
             .map(|(selector, style)| style.has_layout_props() && !selector.has_state())
             .collect();
         if layout_rules.contains(&true) {
-            let no_state = std::collections::HashSet::new();
+            let no_state = crate::tree::NodeSet::default();
             let nodes: Vec<LayoutNodeId> = match subtree_filter {
                 Some(set) => set.iter().copied().collect(),
                 None => self.render_nodes.keys().copied().collect(),
@@ -517,8 +517,7 @@ impl RenderTree {
                         // — :hover / :has() inside selectors should NOT
                         // match here. Pass empty sets / None for the
                         // interaction state.
-                        let empty: std::collections::HashSet<crate::tree::LayoutNodeId> =
-                            std::collections::HashSet::new();
+                        let empty: NodeSet = std::collections::HashSet::default();
                         if !self.compound_matches(last_compound, svg_node, &empty, &empty, None) {
                             false
                         } else if ancestor_segments.len() == 1 {

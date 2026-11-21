@@ -22,6 +22,7 @@ use std::collections::HashSet;
 use crate::tree::LayoutNodeId;
 
 use super::super::RenderTree;
+use crate::tree::NodeSet;
 
 impl RenderTree {
     /// Update persistent element bounds for FLIP tracking.
@@ -114,7 +115,7 @@ impl RenderTree {
                     .and_then(|ts| ts.get("transform"))
                     .or_else(|| {
                         // Check class-based complex selector rules
-                        let empty = std::collections::HashSet::new();
+                        let empty = crate::tree::NodeSet::default();
                         for rule in ss.complex_rules() {
                             if rule.0.has_state() {
                                 continue;
@@ -327,7 +328,7 @@ impl RenderTree {
 
     /// Whether a node still carries the binding of a FLIP slide that has ended. With `painted`,
     /// only a node in it counts.
-    fn flip_release_pending(&self, painted: Option<&HashSet<LayoutNodeId>>) -> bool {
+    fn flip_release_pending(&self, painted: Option<&NodeSet>) -> bool {
         self.flip_bound.iter().any(|(node, element_id)| {
             !self.flip_animations.contains_key(element_id)
                 && painted.is_none_or(|painted| painted.contains(node))
@@ -378,7 +379,7 @@ impl RenderTree {
     /// through the element registry before checking visibility.
     /// Element ids without a current binding are skipped — if the
     /// node is gone, the animation can't be on screen anyway.
-    pub fn has_active_visible_flip_animations(&self, painted: &HashSet<LayoutNodeId>) -> bool {
+    pub fn has_active_visible_flip_animations(&self, painted: &NodeSet) -> bool {
         self.flip_animations.keys().any(|element_id| {
             self.element_registry
                 .get(element_id)

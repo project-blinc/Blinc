@@ -48,6 +48,7 @@ use blinc_core::{Color, Rect, Transform};
 
 use crate::element::{MotionAnimation, MotionKeyframe};
 use crate::tree::LayoutNodeId;
+use crate::tree::{NodeMap, NodeSet};
 
 /// Shared motion state for query API access
 ///
@@ -406,9 +407,9 @@ impl ActiveCssAnimation {
 #[derive(Default)]
 pub struct CssAnimationStore {
     /// Active CSS keyframe animations (from stylesheet `animation:` property)
-    pub animations: HashMap<crate::tree::StableNodeId, ActiveCssAnimation>,
+    pub animations: crate::tree::StableMap<ActiveCssAnimation>,
     /// Active CSS transitions (from stylesheet `transition:` property)
-    pub transitions: HashMap<crate::tree::StableNodeId, ActiveCssAnimation>,
+    pub transitions: crate::tree::StableMap<ActiveCssAnimation>,
 }
 
 impl CssAnimationStore {
@@ -428,10 +429,7 @@ impl CssAnimationStore {
     /// chain die when the user isn't looking at the moving parts;
     /// an animation it left behind carries on from where it was when
     /// frames come again (a step is at most [`MAX_ANIMATION_STEP_MS`]).
-    pub fn has_visible_active(
-        &self,
-        painted: &std::collections::HashSet<crate::tree::StableNodeId>,
-    ) -> bool {
+    pub fn has_visible_active(&self, painted: &crate::tree::StableSet) -> bool {
         // Match `has_active_animations` / `has_active_transitions`:
         // gate on the `is_playing` flag so completed entries kept
         // in the map for same-target restart suppression don't
@@ -457,10 +455,7 @@ impl CssAnimationStore {
     /// mid-cycle, capping to 30 fps would visibly stair-step;
     /// opacity and color cycles elsewhere on the same screen
     /// tolerate the cap fine.
-    pub fn has_visible_vsync_class(
-        &self,
-        painted: &std::collections::HashSet<crate::tree::StableNodeId>,
-    ) -> bool {
+    pub fn has_visible_vsync_class(&self, painted: &crate::tree::StableSet) -> bool {
         // Only those that are playing: a settled entry stays in the store so the same target does
         // not restart it, and its last values would otherwise ask for vsync for as long as its
         // node is on screen.
@@ -720,7 +715,7 @@ pub enum Overlay {
 /// - Viewport for visibility culling
 pub struct RenderState {
     /// Per-node animated properties
-    node_states: HashMap<LayoutNodeId, NodeRenderState>,
+    node_states: NodeMap<NodeRenderState>,
 
     /// Stable-keyed motion animations (for overlays that rebuild each frame)
     /// Key is a stable string ID (e.g., overlay handle ID), value is the motion state
@@ -812,7 +807,7 @@ impl RenderState {
         set_global_scheduler(handle);
 
         Self {
-            node_states: HashMap::new(),
+            node_states: HashMap::default(),
             stable_motions: HashMap::new(),
             stable_motions_used: std::collections::HashSet::new(),
             pending_motion_replays: Vec::new(),
@@ -1457,10 +1452,7 @@ impl RenderState {
     /// Stable-keyed motions (overlays) are NOT filtered: they are
     /// positioned outside the scrolled tree and their node ids are not
     /// in the painted set even when the overlay is plainly visible.
-    pub fn has_active_motions_visible(
-        &self,
-        painted: &std::collections::HashSet<LayoutNodeId>,
-    ) -> bool {
+    pub fn has_active_motions_visible(&self, painted: &NodeSet) -> bool {
         self.node_states
             .iter()
             .any(|(id, s)| painted.contains(id) && s.has_active_motion())
@@ -2311,13 +2303,13 @@ mod motion_visibility_tests {
             "the ungated view still sees it — that is what it is for"
         );
 
-        let nothing_painted: HashSet<LayoutNodeId> = HashSet::new();
+        let nothing_painted: NodeSet = HashSet::default();
         assert!(
             !rs.has_active_motions_visible(&nothing_painted),
             "but a node that was never painted must not keep frames coming"
         );
 
-        let painted: HashSet<LayoutNodeId> = [node].into_iter().collect();
+        let painted: NodeSet = [node].into_iter().collect();
         assert!(
             rs.has_active_motions_visible(&painted),
             "and a painted one still must, or entry animations would not run"

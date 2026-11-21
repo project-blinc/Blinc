@@ -12,6 +12,7 @@ use taffy::Overflow;
 use crate::tree::LayoutNodeId;
 
 use super::super::RenderTree;
+use crate::tree::NodeSet;
 
 impl RenderTree {
     /// Auto-create scroll physics for nodes with `overflow: scroll` set via CSS.
@@ -25,10 +26,7 @@ impl RenderTree {
     }
 
     /// [`Self::auto_create_css_scroll_physics`] over `scope`, or the whole tree for `None`.
-    pub(super) fn auto_create_css_scroll_physics_in(
-        &mut self,
-        scope: Option<&HashSet<LayoutNodeId>>,
-    ) {
+    pub(super) fn auto_create_css_scroll_physics_in(&mut self, scope: Option<&NodeSet>) {
         use crate::scroll::{Scroll, ScrollConfig, ScrollDirection, ScrollPhysics};
 
         /// CSS-created physics, kept by STABLE id so they outlive the

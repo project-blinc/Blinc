@@ -88,6 +88,7 @@ impl RenderTree {
         // animating Statefuls down to those whose node is actually on
         // screen this frame.
         self.painted_node_ids.borrow_mut().clear();
+        self.painted_changes.set(self.painted_changes.get() + 1);
         // Same lifecycle for composite-binding metadata: cleared at
         // the top of every full paint, repopulated by
         // `render_layer_with_motion` for any painted node whose
@@ -465,7 +466,9 @@ impl RenderTree {
                 }
             };
         if intersects_viewport {
-            self.painted_node_ids.borrow_mut().insert(node);
+            if self.painted_node_ids.borrow_mut().insert(node) {
+                self.painted_changes.set(self.painted_changes.get() + 1);
+            }
             // Record the on-screen Y of any node whose motion bindings
             // are mid-flight. Bounds resolve for every DSL node
             // (measured), so if an animating node is being recorded as

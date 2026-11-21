@@ -25,6 +25,7 @@ use std::collections::{HashMap, HashSet};
 use crate::tree::LayoutNodeId;
 
 use super::super::{ElementType, RenderTree};
+use crate::tree::NodeSet;
 
 /// The text properties a child takes from its ancestors when it says
 /// nothing itself.
@@ -179,8 +180,7 @@ impl RenderTree {
                         // sets so :hover / :has() inside don't accidentally
                         // match. `STATE` is reused across all branches so
                         // we don't repeat the empty-set construction.
-                        let empty: std::collections::HashSet<crate::tree::LayoutNodeId> =
-                            std::collections::HashSet::new();
+                        let empty: NodeSet = std::collections::HashSet::default();
                         if !self.compound_matches(last_compound, svg_node, &empty, &empty, None) {
                             false
                         } else if ancestor_segments.len() == 1 {
@@ -284,7 +284,7 @@ impl RenderTree {
         if let Some(root) = self.root {
             self.collect_subtree_ids(root, &mut all_node_ids);
         }
-        let visited: HashSet<LayoutNodeId> = all_node_ids.iter().copied().collect();
+        let visited: NodeSet = all_node_ids.iter().copied().collect();
         all_node_ids.extend(self.render_nodes.keys().filter(|id| !visited.contains(id)));
 
         for node_id in all_node_ids {
@@ -371,7 +371,7 @@ impl RenderTree {
 
             // Build inverted class index for the subtree nodes
             let class_to_nodes = self.element_registry.class_to_nodes_index();
-            let subtree_set: HashSet<LayoutNodeId> = subtree_nodes.iter().copied().collect();
+            let subtree_set: NodeSet = subtree_nodes.iter().copied().collect();
 
             // Eagerly save base_styles for subtree nodes matching classes that
             // also have :hover/:active/:focus state rules. This prevents the
@@ -416,7 +416,7 @@ impl RenderTree {
         }
 
         // Classes that follow a signal take the rules they match now, in this subtree.
-        let styled: HashSet<LayoutNodeId> = subtree_nodes.iter().copied().collect();
+        let styled: NodeSet = subtree_nodes.iter().copied().collect();
         self.sync_dynamic_classes(Some(&styled));
     }
 
@@ -433,7 +433,7 @@ impl RenderTree {
         self.invalidate_mouse_move_pipeline_cache();
         self.apply_base_rules_to_nodes(&stylesheet, &nodes);
         // The replaced taffy styles carry no layout rules from the stylesheet.
-        let replaced: std::collections::HashSet<LayoutNodeId> = nodes.iter().copied().collect();
+        let replaced: NodeSet = nodes.iter().copied().collect();
         self.apply_stylesheet_layout_overrides_filtered(Some(&replaced));
         for &node_id in &nodes {
             let seed = self

@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use blinc_core::owner::Owner;
 
 use crate::tree::LayoutNodeId;
+use crate::tree::NodeMap;
 
 /// The scopes of a node's subtree: the structural build of its children, and the latest refresh
 /// that patched them in place (whose handlers and props replaced the previous refresh's).
@@ -25,7 +26,7 @@ impl NodeOwners {
 /// Per node, what rebuilding its subtree created. Disposed when a later build supersedes it,
 /// when the node is removed, and with the tree.
 #[derive(Default)]
-pub(crate) struct SubtreeOwners(HashMap<LayoutNodeId, NodeOwners>);
+pub(crate) struct SubtreeOwners(NodeMap<NodeOwners>);
 
 impl SubtreeOwners {
     /// `node`'s children were rebuilt by a build in `owner`: what built the previous ones goes.

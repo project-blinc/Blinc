@@ -39,6 +39,7 @@ use blinc_core::events::Event;
 use blinc_core::fsm::{EventId, StateMachine};
 
 use crate::tree::LayoutNodeId;
+use crate::tree::NodeSet;
 
 /// Trait for node state types
 ///
@@ -76,7 +77,7 @@ struct NodeData {
 #[derive(Default)]
 pub struct DirtyTracker {
     /// Set of dirty node IDs
-    dirty: HashSet<LayoutNodeId>,
+    dirty: NodeSet,
     /// Whether the entire tree needs re-layout
     needs_layout: bool,
 }

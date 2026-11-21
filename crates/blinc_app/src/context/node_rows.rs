@@ -22,6 +22,7 @@ use blinc_gpu::{GpuPrimitive, GpuRenderer, PrimitiveBatch};
 
 use super::cached_text::TextBatch;
 use super::{ImageElement, SvgElement};
+use blinc_layout::NodeMap;
 use blinc_layout::motion::MotionBindings;
 use blinc_layout::renderer::CompositeBindingMeta;
 use blinc_layout::tree::LayoutNodeId;
@@ -282,8 +283,8 @@ impl NodeRows {
     /// reordered, or have had text inserted, since they were painted.
     fn plan(
         batch: &PrimitiveBatch,
-        bindings: &HashMap<LayoutNodeId, CompositeBindingMeta>,
-        ordinals: &HashMap<LayoutNodeId, u32>,
+        bindings: &NodeMap<CompositeBindingMeta>,
+        ordinals: &NodeMap<u32>,
         ancestors: &dyn Fn(LayoutNodeId) -> Vec<LayoutNodeId>,
     ) -> Option<Vec<Slot>> {
         if !batch.cross_stream_groups.captures.is_empty()
@@ -320,7 +321,7 @@ impl NodeRows {
         if nodes.len() * 2 > NODE_TABLE_CAPACITY {
             return None;
         }
-        let index: HashMap<LayoutNodeId, u32> = nodes
+        let index: NodeMap<u32> = nodes
             .iter()
             .enumerate()
             .map(|(i, node)| (*node, i as u32))
@@ -374,8 +375,8 @@ impl NodeRows {
     fn describes(
         &self,
         batch: &PrimitiveBatch,
-        bindings: &HashMap<LayoutNodeId, CompositeBindingMeta>,
-        ordinals: &HashMap<LayoutNodeId, u32>,
+        bindings: &NodeMap<CompositeBindingMeta>,
+        ordinals: &NodeMap<u32>,
     ) -> bool {
         self.epoch != 0
             && self.epoch == batch.node_slots_epoch
@@ -392,7 +393,7 @@ impl NodeRows {
         &mut self,
         batch: &mut PrimitiveBatch,
         text: Option<&mut TextBatch>,
-        bindings: &mut HashMap<LayoutNodeId, CompositeBindingMeta>,
+        bindings: &mut NodeMap<CompositeBindingMeta>,
     ) {
         if let Some(text) = text
             && text.node_slots_epoch != 0
@@ -1111,9 +1112,9 @@ impl NodeRows {
         mut text: Option<&mut TextBatch>,
         mut images: Option<&mut Vec<ImageElement>>,
         mut svgs: Option<&mut Vec<SvgElement>>,
-        bindings: &mut HashMap<LayoutNodeId, CompositeBindingMeta>,
-        motion: &HashMap<LayoutNodeId, MotionBindings>,
-        ordinals: &HashMap<LayoutNodeId, u32>,
+        bindings: &mut NodeMap<CompositeBindingMeta>,
+        motion: &NodeMap<MotionBindings>,
+        ordinals: &NodeMap<u32>,
         ancestors: &dyn Fn(LayoutNodeId) -> Vec<LayoutNodeId>,
         loaded: &dyn Fn(&str) -> bool,
         scroll: &dyn Fn(LayoutNodeId) -> Option<(f32, f32)>,
@@ -1284,7 +1285,7 @@ impl NodeRows {
         slots_given: bool,
         batch: &mut PrimitiveBatch,
         text: Option<&mut TextBatch>,
-        bindings: &mut HashMap<LayoutNodeId, CompositeBindingMeta>,
+        bindings: &mut NodeMap<CompositeBindingMeta>,
     ) -> Outcome {
         if slots_given {
             self.release(batch, text, bindings);
@@ -1418,7 +1419,7 @@ mod tests {
 
     /// A tree of `parents`: node n has the ancestors listed for it, nearest first.
     fn tree_of(parents: &[(u64, &[u64])]) -> impl Fn(LayoutNodeId) -> Vec<LayoutNodeId> {
-        let table: HashMap<LayoutNodeId, Vec<LayoutNodeId>> = parents
+        let table: NodeMap<Vec<LayoutNodeId>> = parents
             .iter()
             .map(|(n, up)| (id(*n), up.iter().map(|a| id(*a)).collect()))
             .collect();
@@ -1434,14 +1435,14 @@ mod tests {
         batch
     }
 
-    fn ordinals(pairs: &[(u64, u32)]) -> HashMap<LayoutNodeId, u32> {
+    fn ordinals(pairs: &[(u64, u32)]) -> NodeMap<u32> {
         pairs.iter().map(|(n, o)| (id(*n), *o)).collect()
     }
 
     #[test]
     fn a_node_with_no_primitives_gets_a_slot_under_its_bound_ancestor() {
         // The outer node holds both primitives, the inner one has none and moves only text.
-        let bindings = HashMap::from([(id(1), meta(0..2)), (id(2), meta(0..0))]);
+        let bindings = NodeMap::from_iter([(id(1), meta(0..2)), (id(2), meta(0..0))]);
         let ancestors = tree_of(&[(1, &[]), (2, &[1])]);
         let slots = NodeRows::plan(
             &stamped(&[1, 1]),
@@ -1461,7 +1462,7 @@ mod tests {
         // Inner primitives sit between the outer's, and a primitive of the outer comes after:
         // a range could not say which is which, the stamps can.
         let batch = stamped(&[1, 2, 2, 1]);
-        let bindings = HashMap::from([(id(1), meta(0..4)), (id(2), meta(1..3))]);
+        let bindings = NodeMap::from_iter([(id(1), meta(0..4)), (id(2), meta(1..3))]);
         let ancestors = tree_of(&[(1, &[]), (2, &[1])]);
         let slots = NodeRows::plan(&batch, &bindings, &ordinals(&[(1, 1), (2, 2)]), &ancestors)
             .expect("a plan");
@@ -1509,7 +1510,7 @@ mod tests {
         let config = group(0.5, 0.0);
         let mut bound = meta(0..1);
         bound.layer_config = Some(config.clone());
-        let bindings = HashMap::from([(id(1), bound)]);
+        let bindings = NodeMap::from_iter([(id(1), bound)]);
         let batch = with_groups(stamped(&[1]), &[config]);
         let slots = NodeRows::plan(
             &batch,
@@ -1533,7 +1534,7 @@ mod tests {
 
     #[test]
     fn a_blend_mode_or_a_3d_group_is_declined() {
-        let bindings = HashMap::from([(id(1), meta(0..1))]);
+        let bindings = NodeMap::from_iter([(id(1), meta(0..1))]);
         let ancestors = tree_of(&[(1, &[])]);
         let plan = |config: blinc_core::LayerConfig| {
             let batch = with_groups(stamped(&[1]), &[config]);
@@ -1549,7 +1550,7 @@ mod tests {
     fn a_binding_in_the_static_batch_is_not_the_tables() {
         let mut in_static = meta(0..1);
         in_static.dynamic_batch = false;
-        let bindings = HashMap::from([(id(1), meta(0..1)), (id(2), in_static.clone())]);
+        let bindings = NodeMap::from_iter([(id(1), meta(0..1)), (id(2), in_static.clone())]);
         let slots = NodeRows::plan(
             &stamped(&[1]),
             &bindings,
@@ -1568,7 +1569,7 @@ mod tests {
     #[test]
     fn a_chain_longer_than_the_shaders_follow_is_declined() {
         let nodes: Vec<u64> = (1..=(NODE_CHAIN_DEPTH as u64 + 1)).collect();
-        let bindings: HashMap<_, _> = nodes.iter().map(|n| (id(*n), meta(0..1))).collect();
+        let bindings: NodeMap<_> = nodes.iter().map(|n| (id(*n), meta(0..1))).collect();
         let pairs: Vec<(u64, u32)> = nodes.iter().map(|n| (*n, *n as u32)).collect();
         let tree: Vec<(u64, Vec<u64>)> = nodes
             .iter()
@@ -1578,7 +1579,7 @@ mod tests {
         let ancestors = tree_of(&tree_ref);
         let batch = stamped(&[1]);
         assert!(NodeRows::plan(&batch, &bindings, &ordinals(&pairs), &ancestors).is_none());
-        let shallow: HashMap<_, _> = nodes[..NODE_CHAIN_DEPTH]
+        let shallow: NodeMap<_> = nodes[..NODE_CHAIN_DEPTH]
             .iter()
             .map(|n| (id(*n), meta(0..1)))
             .collect();
@@ -1587,7 +1588,7 @@ mod tests {
 
     #[test]
     fn glyphs_take_the_text_row_of_the_nearest_bound_node() {
-        let bindings = HashMap::from([(id(1), meta(0..2)), (id(2), meta(2..4))]);
+        let bindings = NodeMap::from_iter([(id(1), meta(0..2)), (id(2), meta(2..4))]);
         let ancestors = tree_of(&[(1, &[]), (2, &[]), (3, &[2]), (4, &[1])]);
         let rows = NodeRows {
             slots: NodeRows::plan(
@@ -1616,7 +1617,7 @@ mod tests {
 
     #[test]
     fn glyphs_with_no_bound_owner_are_left_alone() {
-        let bindings = HashMap::from([(id(1), meta(0..2))]);
+        let bindings = NodeMap::from_iter([(id(1), meta(0..2))]);
         let ancestors = tree_of(&[(1, &[]), (5, &[])]);
         let rows = NodeRows {
             slots: NodeRows::plan(

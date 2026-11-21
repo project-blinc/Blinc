@@ -24,7 +24,7 @@
 //! whether a candidate has a live texture (→ emit a blit primitive)
 //! or whether the texture has never been baked / was invalidated (→
 //! recurse and emit normally). The GPU-side
-//! `motion_subtree_textures: HashMap<LayoutNodeId, LayerTexture>` map
+//! `motion_subtree_textures: NodeMap<LayerTexture>` map
 //! (P4.3 lands it on `WindowedContext`, parallel to the existing
 //! `css_composited_textures`) is GPU-only; this metadata side keeps
 //! the policy decisions testable without spinning up a wgpu device.
@@ -40,6 +40,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::element::ElementBounds;
 use crate::tree::LayoutNodeId;
+use crate::tree::{NodeMap, NodeSet};
 
 /// Lifecycle state of a motion-subtree texture bake.
 ///
@@ -117,7 +118,7 @@ impl MotionSubtreeBakeRecord {
 /// after the detection pass populates the live candidate set.
 #[derive(Debug, Default)]
 pub struct MotionSubtreeBakeRegistry {
-    records: HashMap<LayoutNodeId, MotionSubtreeBakeRecord>,
+    records: NodeMap<MotionSubtreeBakeRecord>,
 }
 
 impl MotionSubtreeBakeRegistry {
@@ -220,10 +221,7 @@ impl MotionSubtreeBakeRegistry {
     /// textures back to the [`LayerTextureCache`](https://docs.rs/wgpu)
     /// pool. Returns the demoted node ids so callers (eventually the
     /// `WindowedContext` GPU-release pass) can act on them.
-    pub fn demote_lapsed(
-        &mut self,
-        active_candidates: &HashSet<LayoutNodeId>,
-    ) -> Vec<LayoutNodeId> {
+    pub fn demote_lapsed(&mut self, active_candidates: &NodeSet) -> Vec<LayoutNodeId> {
         let mut demoted = Vec::new();
         self.records.retain(|node, _| {
             if active_candidates.contains(node) {
@@ -357,7 +355,7 @@ mod tests {
         reg.mark_baked(kept);
         reg.mark_baked(dropped);
 
-        let mut active = HashSet::new();
+        let mut active = crate::tree::NodeSet::default();
         active.insert(kept);
 
         let demoted = reg.demote_lapsed(&active);
@@ -378,7 +376,7 @@ mod tests {
         reg.prepare(n1, bounds(0.0, 0.0, 100.0, 50.0), 1);
         reg.prepare(n2, bounds(0.0, 50.0, 100.0, 50.0), 1);
 
-        let demoted = reg.demote_lapsed(&HashSet::new());
+        let demoted = reg.demote_lapsed(&HashSet::default());
         assert_eq!(demoted.len(), 2);
         assert!(reg.is_empty());
     }

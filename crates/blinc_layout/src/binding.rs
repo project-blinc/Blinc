@@ -48,6 +48,7 @@ use crate::element::RenderProps;
 use crate::property::{PropertyId, SideEffects};
 use crate::stateful::{queue_prop_update_partial_beneath, queue_text_update};
 use crate::tree::LayoutNodeId;
+use crate::tree::NodeMap;
 
 /// Reads the current value out of a signal's reactive graph and packages
 /// it in a [`BoundValue`]. Re-invoked on every fire (not cached).
@@ -728,13 +729,13 @@ pub struct PropertyBindingRegistry {
     /// `node_id → list of signal_ids that node subscribed to`.
     /// Used by `unregister_node` to evict in O(per-binding-on-that-node)
     /// time instead of scanning every signal's subscriber list.
-    by_node: HashMap<LayoutNodeId, Vec<SignalId>>,
+    by_node: NodeMap<Vec<SignalId>>,
     /// Parallel reverse index for derived subscriptions — same role
     /// as `by_node` but for the `derived_bindings` map.
-    derived_by_node: HashMap<LayoutNodeId, Vec<DerivedId>>,
+    derived_by_node: NodeMap<Vec<DerivedId>>,
     /// The classes each node has while a source holds. The tree reads this
     /// to know which nodes restyle when a class comes and goes.
-    class_toggles: HashMap<LayoutNodeId, Vec<ClassToggleInfo>>,
+    class_toggles: NodeMap<Vec<ClassToggleInfo>>,
 }
 
 impl PropertyBindingRegistry {
@@ -742,9 +743,9 @@ impl PropertyBindingRegistry {
         Self {
             bindings: HashMap::new(),
             derived_bindings: HashMap::new(),
-            by_node: HashMap::new(),
-            derived_by_node: HashMap::new(),
-            class_toggles: HashMap::new(),
+            by_node: HashMap::default(),
+            derived_by_node: HashMap::default(),
+            class_toggles: HashMap::default(),
         }
     }
 

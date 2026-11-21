@@ -31,6 +31,7 @@ use crate::css_parser::{
 use crate::tree::LayoutNodeId;
 
 use super::super::RenderTree;
+use crate::tree::{NodeMap, NodeSet};
 
 impl RenderTree {
     pub fn has_state_styles(&self, node_id: LayoutNodeId) -> bool {
@@ -63,8 +64,8 @@ impl RenderTree {
         &self,
         compound: &CompoundSelector,
         node_id: LayoutNodeId,
-        hovered_nodes: &HashSet<LayoutNodeId>,
-        pressed_nodes: &HashSet<LayoutNodeId>,
+        hovered_nodes: &NodeSet,
+        pressed_nodes: &NodeSet,
         focused_node: Option<LayoutNodeId>,
     ) -> bool {
         let hovered = hovered_nodes.contains(&node_id);
@@ -279,8 +280,8 @@ impl RenderTree {
         &self,
         selector: &ComplexSelector,
         target_node: LayoutNodeId,
-        hovered_nodes: &HashSet<LayoutNodeId>,
-        pressed_nodes: &HashSet<LayoutNodeId>,
+        hovered_nodes: &NodeSet,
+        pressed_nodes: &NodeSet,
         focused_node: Option<LayoutNodeId>,
     ) -> bool {
         if selector.segments.is_empty() {
@@ -419,12 +420,12 @@ impl RenderTree {
         // subtree rebuild between mouse-moves doesn't fake an
         // unhover); resolve back to live layout ids for the
         // `contains(layout_id)` checks below.
-        let hovered_nodes: HashSet<LayoutNodeId> = router
+        let hovered_nodes: NodeSet = router
             .hovered_nodes()
             .filter_map(|s| self.layout_id(s))
             .filter(|node| router.is_hovered_layout(self, *node))
             .collect();
-        let pressed_nodes: HashSet<LayoutNodeId> = router.active_nodes(self);
+        let pressed_nodes: NodeSet = router.active_nodes(self);
         // Use the router's focused node directly. Previously we walked
         // `element_registry.all_ids()` and checked `router.is_focused()`
         // for each — but that only finds elements with a string `id`.
@@ -447,14 +448,14 @@ impl RenderTree {
 
         // Reset previously state-affected nodes to their base props so that
         // styles from rules that no longer match (e.g. :hover ended) are removed
-        let prev_affected: HashSet<LayoutNodeId> = std::mem::take(&mut self.complex_state_affected);
+        let prev_affected: NodeSet = std::mem::take(&mut self.complex_state_affected);
 
         // Snapshot BEFORE the reset for prev_affected nodes — captures the actual
         // visual state (e.g. hover values after a transition completed).  This way
         // when the same hover state is re-applied, before == after → no spurious
         // re-transition.
-        let mut pre_reset_snapshots: HashMap<LayoutNodeId, blinc_animation::KeyframeProperties> =
-            HashMap::new();
+        let mut pre_reset_snapshots: NodeMap<blinc_animation::KeyframeProperties> =
+            HashMap::default();
         for &node_id in &prev_affected {
             if let Some(kp) = self.snapshot_before_keyframe_properties(node_id) {
                 pre_reset_snapshots.insert(node_id, kp);
@@ -694,8 +695,8 @@ impl RenderTree {
         &self,
         selector: &ComplexSelector,
         holders: &[LayoutNodeId],
-        hovered: &HashSet<LayoutNodeId>,
-        pressed: &HashSet<LayoutNodeId>,
+        hovered: &NodeSet,
+        pressed: &NodeSet,
         focused: Option<LayoutNodeId>,
     ) -> Vec<LayoutNodeId> {
         let segments = &selector.segments;
@@ -797,8 +798,8 @@ impl RenderTree {
         &self,
         node_id: LayoutNodeId,
         stylesheet: &crate::css_parser::Stylesheet,
-        hovered_nodes: &HashSet<LayoutNodeId>,
-        pressed_nodes: &HashSet<LayoutNodeId>,
+        hovered_nodes: &NodeSet,
+        pressed_nodes: &NodeSet,
         focused_node: Option<LayoutNodeId>,
     ) -> Option<crate::css_parser::CssTransitionSet> {
         let by_id = self
@@ -870,12 +871,12 @@ impl RenderTree {
         // subtree rebuild between mouse-moves doesn't fake an
         // unhover); resolve back to live layout ids for the
         // `contains(layout_id)` checks below.
-        let hovered_nodes: HashSet<LayoutNodeId> = router
+        let hovered_nodes: NodeSet = router
             .hovered_nodes()
             .filter_map(|s| self.layout_id(s))
             .filter(|node| router.is_hovered_layout(self, *node))
             .collect();
-        let pressed_nodes: HashSet<LayoutNodeId> = router.active_nodes(self);
+        let pressed_nodes: NodeSet = router.active_nodes(self);
         let focused_node: Option<LayoutNodeId> = router.focused();
 
         let mut any_applied = false;
@@ -944,12 +945,12 @@ impl RenderTree {
         // subtree rebuild between mouse-moves doesn't fake an
         // unhover); resolve back to live layout ids for the
         // `contains(layout_id)` checks below.
-        let hovered_nodes: HashSet<LayoutNodeId> = router
+        let hovered_nodes: NodeSet = router
             .hovered_nodes()
             .filter_map(|s| self.layout_id(s))
             .filter(|node| router.is_hovered_layout(self, *node))
             .collect();
-        let pressed_nodes: HashSet<LayoutNodeId> = router.active_nodes(self);
+        let pressed_nodes: NodeSet = router.active_nodes(self);
         let focused_node: Option<LayoutNodeId> = {
             let mut focused = None;
             for id in self.element_registry.all_ids() {
@@ -1167,7 +1168,7 @@ mod candidate_tests {
             for (selector, _) in stylesheet.complex_rules() {
                 for &holder in &nodes {
                     // What a hit on `holder` makes hover and press: it and what holds it.
-                    let mut chain: HashSet<LayoutNodeId> = tree
+                    let mut chain: NodeSet = tree
                         .element_registry
                         .ancestors(holder)
                         .into_iter()
@@ -1232,7 +1233,7 @@ mod candidate_tests {
             .child(div().class("z b").child(leaf("c")));
         let mut tree = RenderTree::from_element(&ui);
         tree.compute_layout(200.0, 400.0);
-        let none = HashSet::new();
+        let none = crate::tree::NodeSet::default();
         let rules = stylesheet.complex_rules();
         let nodes: Vec<LayoutNodeId> = tree.render_nodes.keys().copied().collect();
         let mut found = 0;

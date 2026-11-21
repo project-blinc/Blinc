@@ -16,7 +16,7 @@ impl RenderTree {
             .filter(|(selector, style)| !selector.has_state() && style.scrollbar_width.is_some())
             .collect();
         rules.sort_by_key(|(selector, style)| Self::rule_order(selector, style));
-        let empty = HashSet::new();
+        let empty = crate::tree::NodeSet::default();
         for (&node, physics) in &self.scroll_physics {
             let mut width = None;
             for (selector, style) in &rules {

@@ -6,6 +6,7 @@ use super::{
     text_clip,
 };
 use blinc_core::Affine2D;
+use blinc_layout::NodeMap;
 
 /// The intersection of two rounded clips (x, y, width, height and corner radii tl, tr, br, bl):
 /// a corner of the result keeps a radius only from a clip whose corner it is, so a sharp clip
@@ -85,7 +86,7 @@ impl RenderContext {
         // Capture promoted-ancestor opacity for separately dispatched text, SVG and image
         // content.
         self.composite_patch_baselines.clear();
-        let composite_layer_opacities: std::collections::HashMap<blinc_layout::LayoutNodeId, f32> = {
+        let composite_layer_opacities: NodeMap<f32> = {
             let promo = tree.composite_promotion();
             let store = tree.css_anim_store();
             if let Ok(guard) = store.lock() {
@@ -118,7 +119,7 @@ impl RenderContext {
                     })
                     .collect()
             } else {
-                std::collections::HashMap::new()
+                std::collections::HashMap::default()
             }
         };
 
@@ -214,7 +215,7 @@ impl RenderContext {
         inside_motion_subtree: bool,
         // Live promoted-ancestor opacity for content dispatched separately from its baked
         // geometry.
-        composite_layer_opacities: &std::collections::HashMap<blinc_layout::LayoutNodeId, f32>,
+        composite_layer_opacities: &NodeMap<f32>,
         // Inherited promoted opacity for images. Text and SVG use their promoted-ancestor
         // dispatch patch.
         inherited_composite_layer_opacity: f32,

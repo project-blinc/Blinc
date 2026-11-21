@@ -14,11 +14,24 @@ new_key_type! {
     pub struct LayoutNodeId;
 }
 
+/// A map keyed by node id. Node ids are small integers, so it hashes them with FxHash
+/// instead of the standard library's SipHash.
+pub type NodeMap<V> = FxHashMap<LayoutNodeId, V>;
+
+/// A set of node ids, hashed as [`NodeMap`] hashes them.
+pub type NodeSet = FxHashSet<LayoutNodeId>;
+
 /// Identity derived from a node's build path and explicit key.
 /// Preserved across rebuilds and keyed reordering within a tree.
 /// Separate trees can produce the same ID; resolve it through its owning `RenderTree`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct StableNodeId(u64);
+
+/// A map keyed by stable node id, hashed with FxHash as [`NodeMap`] is.
+pub type StableMap<V> = FxHashMap<StableNodeId, V>;
+
+/// A set of stable node ids, hashed as [`StableMap`] hashes them.
+pub type StableSet = FxHashSet<StableNodeId>;
 
 impl StableNodeId {
     /// Root of a build pass — used as the seed when minting children

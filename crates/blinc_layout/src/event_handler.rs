@@ -493,11 +493,11 @@ pub struct HandlerRegistry {
     /// Handlers keyed by stable id. The same closure persists across
     /// rebuilds as long as the element's source location +
     /// tree position (and any `.id(...)` widget key) stay the same.
-    nodes: HashMap<crate::tree::StableNodeId, EventHandlers>,
+    nodes: crate::tree::StableMap<EventHandlers>,
     /// Handlers with an unmount handler, taken out by [`Self::remove`] while a subtree is torn
     /// down. A node of the same stable id may be built again by the same pass, which makes it a
     /// survivor; [`Self::take_unmounted`] settles which, once the pass has re-minted its ids.
-    removed: HashMap<crate::tree::StableNodeId, EventHandlers>,
+    removed: crate::tree::StableMap<EventHandlers>,
     /// Cached `has_any_pointer_move_subscriber()` result. Invalidated
     /// (set to `None`) on every mutation; recomputed on first read.
     /// Mouse-move events fire at hundreds of Hz; without the cache
