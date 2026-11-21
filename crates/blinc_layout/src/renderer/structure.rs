@@ -101,7 +101,7 @@ impl Structural for RenderNode {
                 Some(_) => 5,
             },
             material: p.material.is_some(),
-            shadow: !p.shadow.is_empty(),
+            shadow: !p.shadow.is_empty() || !p.inner_shadow.is_empty(),
             border: p.border_width != 0.0,
             border_sides: p.border_sides.has_any(),
             outline: p.outline_width != 0.0,

@@ -153,11 +153,14 @@ impl RenderTree {
             props.tiers.mark(StyleProp::OverflowFade, tier);
             props.overflow_fade = fade;
         }
-        if !style.inner_shadow.is_empty() && !skip(StyleProp::InnerShadow) {
+        // One `box-shadow` declaration writes both lists, so either being set
+        // replaces both: an outer-only value clears an inset from an earlier rule.
+        let sets_box_shadow = style.sets_box_shadow();
+        if sets_box_shadow && !skip(StyleProp::InnerShadow) {
             props.tiers.mark(StyleProp::InnerShadow, tier);
             props.inner_shadow = style.inner_shadow.clone();
         }
-        if !style.shadow.is_empty() && !skip(StyleProp::Shadow) {
+        if sets_box_shadow && !skip(StyleProp::Shadow) {
             props.tiers.mark(StyleProp::Shadow, tier);
             props.shadow = style.shadow.clone();
         }

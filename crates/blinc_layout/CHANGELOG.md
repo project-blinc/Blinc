@@ -52,6 +52,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- Inset `box-shadow` layers paint in the window and headless renderers; only the simple paint walk drew them before. A `box-shadow` that sets only outer layers (or only inset ones) replaces the other kind too, so a `:hover` rule with an outer shadow removes the base rule's inset. Nodes whose only decoration is an inset shadow are no longer treated as transparent wrappers.
 - Text areas reconcile scrolling after row-count, measured-height and wrapping changes, clearing stale offsets when the text fits. Double-click and touch double-tap select words, triple-click selects a logical line, and Shift-click extends the anchor. Dragging extends by the selected unit; touch long-press selects a word and cancels on release or movement.
 - Shared word selection follows Unicode boundaries without splitting combining marks or emoji sequences, while preserving whitespace and punctuation runs.
 - A scroll container holding a `stack()` layer or another scroll container is painted as it scrolls rather than moved by rows, which lost the stack's upper layers and the inner container's content. `RenderTree::scroll_row_blockers` reports them as `stack layer` and `nested scroll`.

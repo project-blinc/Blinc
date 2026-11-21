@@ -46,6 +46,7 @@ impl RenderTree {
                 && p.background.is_none()
                 && p.border_width == 0.0
                 && p.shadow.is_empty()
+                && p.inner_shadow.is_empty()
                 && p.opacity == 1.0
                 && p.motion.is_none()
                 && p.layer_effects.is_empty()

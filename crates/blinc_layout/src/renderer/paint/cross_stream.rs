@@ -123,6 +123,7 @@ impl RenderTree {
                 && props.background.is_none()
                 && props.material.is_none()
                 && props.shadow.is_empty()
+                && props.inner_shadow.is_empty()
                 && props.border_width == 0.0
                 && !props.border_sides.has_any()
                 && props.outline_width == 0.0;

@@ -301,8 +301,14 @@ Corner shape is animatable via transitions and keyframes:
 ```css
 #card { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
 #glow { box-shadow: 0 0 40px rgba(139, 92, 246, 0.7); }
+#well { box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.25); }
+#card { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 0 0 1px #ffffff33; }
 #card { box-shadow: none; }
 ```
+
+An `inset` layer paints inside the padding box, over the background and under the border. A
+`box-shadow` declaration replaces every layer, outer and inset, so a `:hover` rule with only
+outer layers removes an inset set by the base rule.
 
 ### Text Shadow
 

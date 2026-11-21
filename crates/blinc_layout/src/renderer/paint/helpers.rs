@@ -10,8 +10,13 @@
 //!   per-frame multipliers fold into solid / blur brushes by adjusting
 //!   their alpha; gradient and image brushes pass through unchanged
 //!   (TODO in the existing code base).
+//! - `draw_inset_shadows` — a node's inset box shadows, drawn after its
+//!   fill by every paint walk.
 
-use blinc_core::{Brush, Color, CornerRadius, CornerShape, GradientStop};
+use blinc_core::{
+    Brush, ClipShape, Color, CornerRadius, CornerShape, DrawContext, GradientStop, Point, Rect,
+    Shadow, Size,
+};
 use blinc_theme::ShapeTokens;
 
 use super::super::RenderTree;
@@ -198,6 +203,50 @@ pub fn resolve_corner_shape(
         nf(radius.bottom_right),
         nf(radius.bottom_left),
     )
+}
+
+/// Draw a node's inset shadows over its fill, `alpha` scaling their colour.
+///
+/// CSS paints them over the background and under the border. Clipping to the
+/// padding box gives that picture without splitting the merged fill+border
+/// primitive, which keeps corners free of AA fringe. The shadow's geometry
+/// still comes from the border box, so its falloff starts where CSS says; the
+/// clip only keeps it off the border band.
+pub(crate) fn draw_inset_shadows(
+    ctx: &mut dyn DrawContext,
+    shadows: &[Shadow],
+    rect: Rect,
+    radius: CornerRadius,
+    border_width: f32,
+    alpha: f32,
+) {
+    if shadows.is_empty() {
+        return;
+    }
+    let bw = border_width.max(0.0);
+    let pad = Rect {
+        origin: Point::new(rect.origin.x + bw, rect.origin.y + bw),
+        size: Size::new(
+            (rect.size.width - bw * 2.0).max(0.0),
+            (rect.size.height - bw * 2.0).max(0.0),
+        ),
+    };
+    if pad.size.width <= 0.0 || pad.size.height <= 0.0 {
+        return;
+    }
+    let inner_radius = CornerRadius {
+        top_left: (radius.top_left - bw).max(0.0),
+        top_right: (radius.top_right - bw).max(0.0),
+        bottom_right: (radius.bottom_right - bw).max(0.0),
+        bottom_left: (radius.bottom_left - bw).max(0.0),
+    };
+    ctx.push_clip(ClipShape::rounded_rect(pad, inner_radius));
+    for shadow in shadows.iter().rev() {
+        let mut shadow = *shadow;
+        shadow.color.a *= alpha;
+        ctx.draw_inner_shadow(rect, radius, shadow);
+    }
+    ctx.pop_clip();
 }
 
 /// Apply opacity to a brush by modifying its alpha component

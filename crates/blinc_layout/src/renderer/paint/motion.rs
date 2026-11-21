@@ -1527,6 +1527,19 @@ impl RenderTree {
                         bc,
                     );
                 }
+                let inset_alpha = if !has_opacity_layer && motion_opacity < 1.0 {
+                    motion_opacity
+                } else {
+                    1.0
+                };
+                super::helpers::draw_inset_shadows(
+                    ctx,
+                    &render_node.props.inner_shadow,
+                    rect,
+                    radius,
+                    render_node.props.border_width,
+                    inset_alpha,
+                );
             }
 
             // Only glass needs foreground borders (special compositing).

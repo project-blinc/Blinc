@@ -786,8 +786,10 @@ impl RenderProps {
         }
         // node_id is not merged - keep the original
         // Override shadow if set
-        if !other.shadow.is_empty() {
+        // The two shadow lists are one `box-shadow` value: setting either replaces both.
+        if !other.shadow.is_empty() || !other.inner_shadow.is_empty() {
             self.shadow = other.shadow.clone();
+            self.inner_shadow = other.inner_shadow.clone();
         }
         // Override transform if set
         if other.transform.is_some() {

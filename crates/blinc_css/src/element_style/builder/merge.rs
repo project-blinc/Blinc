@@ -22,12 +22,14 @@ impl ElementStyle {
             background: other.background.clone().or_else(|| self.background.clone()),
             corner_radius: other.corner_radius.or(self.corner_radius),
             corner_shape: other.corner_shape.or(self.corner_shape),
-            shadow: if !other.shadow.is_empty() {
+            // `box-shadow` sets both lists at once, so a style that sets either
+            // replaces both: an outer-only value clears an earlier inset.
+            shadow: if other.sets_box_shadow() {
                 other.shadow.clone()
             } else {
                 self.shadow.clone()
             },
-            inner_shadow: if !other.inner_shadow.is_empty() {
+            inner_shadow: if other.sets_box_shadow() {
                 other.inner_shadow.clone()
             } else {
                 self.inner_shadow.clone()
@@ -202,6 +204,12 @@ impl ElementStyle {
         };
         merged.restore_important_colors();
         merged
+    }
+
+    /// Whether this style sets `box-shadow`, whose outer and inset layers
+    /// live in `shadow` and `inner_shadow`.
+    pub fn sets_box_shadow(&self) -> bool {
+        !self.shadow.is_empty() || !self.inner_shadow.is_empty()
     }
 
     /// Check if any visual property is set

@@ -101,6 +101,7 @@ impl RenderTree {
         let paints = if matches!(render.element_type, ElementType::Div) {
             props.background.is_some()
                 || !props.shadow.is_empty()
+                || !props.inner_shadow.is_empty()
                 || (props.border_width > 0.0 && props.border_color.is_some())
         } else {
             any

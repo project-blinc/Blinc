@@ -439,6 +439,14 @@ impl RenderTree {
                         bc,
                     );
                 }
+                super::helpers::draw_inset_shadows(
+                    ctx,
+                    &render_node.props.inner_shadow,
+                    rect,
+                    radius,
+                    render_node.props.border_width,
+                    1.0,
+                );
             }
 
             // Only glass needs foreground borders (special compositing).
