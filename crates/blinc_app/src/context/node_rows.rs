@@ -477,6 +477,11 @@ impl NodeRows {
                 if prim.type_info[2] != 1 {
                     return Err(());
                 }
+                // A rect that holds the clip in force where the topmost row began was itself in
+                // force above every row, so no row moves it; what is tighter is in the shape.
+                if self.holds_top_ambient(s, prim.clip_bounds) {
+                    return Ok(Follow::Stays);
+                }
                 return Ok(match node.ambient_clip {
                     Some(_) => Follow::Cut(depth),
                     None => Follow::Moves(depth),
@@ -486,6 +491,19 @@ impl NodeRows {
             up = node.parent;
         }
         Ok(Follow::Stays)
+    }
+
+    /// Whether `clip` holds the ambient clip of the topmost row in the chain from `slot`.
+    fn holds_top_ambient(&self, slot: u32, clip: [f32; 4]) -> bool {
+        let mut top = slot;
+        while let Some(parent) = self.slots[top as usize].parent {
+            top = parent;
+        }
+        let Some([x, y, w, h]) = self.slots[top as usize].ambient_clip else {
+            return false;
+        };
+        let [cx, cy, cw, ch] = clip;
+        cx <= x + 0.5 && cy <= y + 0.5 && cx + cw >= x + w - 0.5 && cy + ch >= y + h - 0.5
     }
 
     /// Mark the row at `depth` in the chain from `slot`, and every row above it, as moving a clip
@@ -1616,5 +1634,36 @@ mod tests {
         text.owners = vec![run(0..1, id(5))];
         assert!(!rows.give_text_slots(&mut text, &ancestors));
         assert_eq!(text.primitives[0].node_slot(), None);
+    }
+
+    #[test]
+    fn a_clip_rect_from_above_every_row_stays_and_one_cut_below_them_does_not() {
+        let viewport = [72.0, 543.0, 260.0, 234.0];
+        let mut top = slot(REST);
+        top.ambient_clip = Some(viewport);
+        let mut child = slot(REST);
+        child.parent = Some(0);
+        child.ambient_clip = Some(viewport);
+        let rows = NodeRows {
+            slots: vec![top, child],
+            ..NodeRows::default()
+        };
+        let clipped = |[x, y, w, h]: [f32; 4]| {
+            blinc_gpu::GpuPrimitive::rect(100.0, 600.0, 9.0, 10.0).with_clip_rect(x, y, w, h)
+        };
+        // The page's viewport, around the calendar's: the calendar's clip is in the shape.
+        assert!(matches!(
+            rows.clip_from(1, &clipped([0.0, 80.0, 900.0, 820.0])),
+            Ok(Follow::Stays)
+        ));
+        assert!(matches!(
+            rows.clip_from(1, &clipped(viewport)),
+            Ok(Follow::Stays)
+        ));
+        // A rect inside the viewport that no row began under was cut below them.
+        assert!(matches!(
+            rows.clip_from(1, &clipped([80.0, 550.0, 100.0, 100.0])),
+            Ok(Follow::Cut(_))
+        ));
     }
 }
