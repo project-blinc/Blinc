@@ -348,3 +348,61 @@ fn explicit_repaint_survives_queued_translation_writes() {
         assert!(cached.data == ui.snapshot().unwrap().data);
     }
 }
+
+#[test]
+fn translated_text_stays_under_later_translated_content() {
+    if !Headless::available() {
+        return;
+    }
+    let mut ui = Headless::new(160, 80).unwrap();
+    ui.theme(
+        blinc_theme::HybridTheme::bundle(),
+        blinc_theme::ColorScheme::Dark,
+    );
+    let scroll = signal(0.0f32);
+    let caret = signal(0.0f32);
+    ui.mount(move |_| {
+        div().w(160.0).h(80.0).bg(Color::BLACK).child(
+            div()
+                .w(120.0)
+                .h(40.0)
+                .relative()
+                .child(
+                    div()
+                        .absolute()
+                        .left(0.0)
+                        .top(0.0)
+                        .bind_transform_from(scroll, |x| Transform::translate(x, 0.0))
+                        .child(text("WWWW").size(32.0).color(Color::WHITE)),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .left(0.0)
+                        .top(0.0)
+                        .w(40.0)
+                        .h(40.0)
+                        .bg(Color::RED)
+                        .bind_transform_from(caret, |x| Transform::translate(x, 0.0)),
+                ),
+        )
+    });
+    ui.snapshot().unwrap();
+    for step in 1..4 {
+        scroll.set(-(step as f32));
+        caret.set(step as f32);
+        ui.apply_queued_updates();
+        let frames = [ui.snapshot_fast().unwrap(), ui.snapshot().unwrap()];
+        for frame in &frames {
+            for y in 4..36 {
+                for x in step + 4..step + 36 {
+                    let [r, g, b, _] = frame.get_pixel(x, y).unwrap();
+                    assert!(
+                        r > 200 && g < 40 && b < 40,
+                        "text painted over the later box at ({x}, {y}), step {step}"
+                    );
+                }
+            }
+        }
+    }
+}

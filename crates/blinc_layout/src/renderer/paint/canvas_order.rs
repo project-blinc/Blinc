@@ -38,6 +38,23 @@ impl RenderTree {
         })
     }
 
+    /// Whether `node` or a node below it is text, an image or an SVG: content that a bound
+    /// subtree draws in its own pass after the dynamic batch.
+    pub(crate) fn subtree_has_late_content(&self, node: LayoutNodeId) -> bool {
+        self.render_nodes.get(&node).is_some_and(|render| {
+            matches!(
+                render.element_type,
+                ElementType::Text(_)
+                    | ElementType::StyledText(_)
+                    | ElementType::Image(_)
+                    | ElementType::Svg(_)
+            )
+        }) || self
+            .layout_tree
+            .children_iter(node)
+            .any(|child| self.subtree_has_late_content(child))
+    }
+
     /// Whether `node` has an SVG somewhere below it.
     pub(crate) fn subtree_has_svg(&self, node: LayoutNodeId) -> bool {
         self.layout_tree.children_iter(node).any(|child| {

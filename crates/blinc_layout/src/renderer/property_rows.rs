@@ -79,6 +79,11 @@ impl RenderTree {
                 return false;
             }
         }
+        // Text and media under a bound node are drawn after the dynamic batch, which would put
+        // them over later content that overlaps them, such as a caret.
+        if self.subtree_has_late_content(node) && self.later_content_overlaps_any(node) {
+            return false;
+        }
         if let Some(stable) = self.stable_id(node) {
             let Ok(store) = self.css_anim_store.lock() else {
                 return false;
