@@ -856,9 +856,15 @@ impl GpuRenderer {
                     let previous = backdrop
                         .as_ref()
                         .map(|backdrop| outputs.glass_backdrop.replace(backdrop.view.clone()));
-                    let texture =
+                    // A layer's extent changes as it moves past the viewport's edge. Without
+                    // effects or a named output nothing reads past `tight`, so a pooled texture
+                    // at least that size serves, and the blit samples only its `tight` corner.
+                    let texture = if effects.is_empty() && named_id.is_none() {
+                        self.layer_texture_cache.acquire(&self.device, tight, false)
+                    } else {
                         self.layer_texture_cache
-                            .acquire_exact(&self.device, tight, false);
+                            .acquire_exact(&self.device, tight, false)
+                    };
                     // Use the acquired extent as viewport; source pixels stay one-to-one.
                     self.viewport_size = texture.size;
                     self.render_with_clear_simple(&texture.view, &PrimitiveBatch::new(), [0.0; 4]);

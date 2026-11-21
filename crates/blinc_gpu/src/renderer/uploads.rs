@@ -23,17 +23,21 @@
 //! skipped: no shader writes these buffers, so the range still holds them.
 //!
 //! A chunk returns to the belt once the GPU has copied out of it and the device is
-//! polled, which every submit does, so a steady frame allocates nothing. The belt keeps
-//! every chunk it makes, so a write larger than a chunk skips it and goes through
-//! `Queue::write_buffer`, whose staging is freed after use.
+//! polled, which every submit does, so a steady frame allocates nothing. A write larger
+//! than a chunk gets a chunk of its own size, which the belt keeps and reuses, so a large
+//! upload made every frame (the text of a scrolled page) allocates nothing either. The
+//! belt keeps every chunk it makes, so a write beyond [`LARGEST_WRITE`] goes through
+//! `Queue::write_buffer` instead, whose staging is freed after use.
 
 use std::num::NonZeroU64;
 use std::sync::Mutex;
 
 use wgpu::util::StagingBelt;
 
-/// Chunk size of the belt, and the largest write it takes.
-const CHUNK_BYTES: u64 = 256 * 1024;
+/// Chunk size of the belt.
+const CHUNK_BYTES: u64 = 1024 * 1024;
+/// The largest write the belt takes.
+const LARGEST_WRITE: u64 = 8 * 1024 * 1024;
 /// The largest write remembered to skip a repeat of it.
 const REMEMBERED_BYTES: usize = 4096;
 
@@ -182,7 +186,7 @@ impl Uploads {
         let Some(size) = NonZeroU64::new(data.len() as u64) else {
             return;
         };
-        if self.direct || size.get() > CHUNK_BYTES {
+        if self.direct || size.get() > LARGEST_WRITE {
             // The queue's own writes run ahead of every command buffer of a submission, so
             // everything recorded before this write is submitted first.
             self.flush(queue);

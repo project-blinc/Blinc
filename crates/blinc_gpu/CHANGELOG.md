@@ -24,6 +24,8 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - `GpuRenderer::update_time` does nothing: the renderer reads `blinc_core::FrameClock`, which the runners set each frame.
 
 ### Changed
+- An opacity or blend group without effects or a named output renders into a pooled texture at least its size, instead of one of exactly its size. A group sliding past the window's edge changes size every frame, and took two new textures each frame.
+- The staging belt takes writes up to 8 MiB, in 1 MiB chunks; a larger write gets a chunk of its own that the belt keeps. A per-frame upload over 256 KiB (the text of a scrolled page) went through `Queue::write_buffer`, allocating each frame and submitting the frame's work early.
 - Solid fill ownership survives native group rebasing in existing primitive metadata. Retained colour updates use the opacity baked into the fill, keeping group opacity separate without enlarging GPU buffers.
 - A retained node row can request glyph placement on the pixel grid after its full translation chain, on both CPU and GPU paths. The row uses a reserved value and keeps its existing size.
 - A run of primitives in a layered overlay drawn with one sample and no paths is drawn onto its target in one pass, where it was drawn into a cleared window-sized texture and blended over the target in a second pass. The result is the same composite.
