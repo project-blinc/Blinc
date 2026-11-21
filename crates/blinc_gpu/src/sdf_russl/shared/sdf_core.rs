@@ -499,25 +499,6 @@ russl::russl! {
 
                 text_result.a *= clip_alpha;
 
-                // Rect-edge AA from `clip_bounds`. Only apply when the
-                // primitive actually has a rect clip — when `clip_type`
-                // is None the bounds are padding / stale metadata and
-                // this smoothstep would discard every fragment for a
-                // degenerate (zero-width or zero-height) rectangle that
-                // the layout pipeline can produce mid-frame (e.g. a
-                // scroll container whose inner clip hasn't resolved a
-                // dimension yet). `calculate_clip_alpha` above already
-                // returned 1.0 in that case, so this extra edge fade
-                // being 1.0 too matches expectation.
-                if clip_type == 1u32 {
-                    let edge_aa = 1.0;
-                    let clip_edge_alpha = smoothstep(0.0, edge_aa, min(
-                        min(p.x - prim.clip_bounds.x, prim.clip_bounds.x + prim.clip_bounds.z - p.x),
-                        min(p.y - prim.clip_bounds.y, prim.clip_bounds.y + prim.clip_bounds.w - p.y)
-                    ));
-                    text_result.a *= clip_edge_alpha;
-                }
-
                 return text_result;
             }
             _ => {
