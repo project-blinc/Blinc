@@ -21,9 +21,12 @@
 //!   `css_has_visible_transitions` redraw gate.
 //! - [`layout`] — `apply_stylesheet_layout_overrides` (CSS layout
 //!   props → taffy style before `compute_layout`),
-//!   `apply_all_stylesheet_styles` (combined visual + layout fast
-//!   path), and `auto_create_css_scroll_physics` for nodes with
-//!   `overflow: scroll`.
+//!   and `apply_all_stylesheet_styles` (combined visual + layout fast
+//!   path).
+//! - [`scroll_physics`] — `auto_create_css_scroll_physics` for nodes
+//!   with `overflow: scroll`.
+//! - [`layout_scope`] — the layout pass limited to the nodes a frame's
+//!   property and region updates can change the matches of.
 //!
 //! `set_stylesheet` / `set_stylesheet_arc` / `stylesheet()` accessors
 //! stay in `renderer/mod.rs` next to the other small accessors on the
@@ -33,6 +36,8 @@ pub mod apply;
 pub mod base;
 pub mod classes;
 pub mod layout;
+pub(crate) mod layout_scope;
+mod scroll_physics;
 mod scrollbar;
 pub mod selectors;
 pub mod state;

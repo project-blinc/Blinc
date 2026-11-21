@@ -396,10 +396,14 @@ impl LayoutTree {
 
     /// Get the style for a node
     pub fn get_style(&self, id: LayoutNodeId) -> Option<Style> {
+        self.style(id).cloned()
+    }
+
+    /// Borrow the style for a node.
+    pub fn style(&self, id: LayoutNodeId) -> Option<&Style> {
         self.node_map
             .get(id)
             .and_then(|&taffy_node| self.taffy.style(taffy_node).ok())
-            .cloned()
     }
 
     /// Add a child to a parent node

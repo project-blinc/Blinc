@@ -30,6 +30,7 @@ use crate::layout_animation::{LayoutAnimationConfig, LayoutAnimationState};
 use crate::selector::{ElementRegistry, ScrollRef};
 use crate::tree::{LayoutNodeId, LayoutTree, StableNodeId};
 use crate::visual_animation::{AnimatedRenderBounds, VisualAnimation, VisualAnimationConfig};
+use stylesheet::layout_scope::Restyle;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Submodules
@@ -753,6 +754,9 @@ pub struct RenderTree {
     /// leaving row's start queued) holds newer values than the rest of the outer batch.
     property_write_logs: Vec<PropertyWriteLog>,
     property_paint_revision: u64,
+    /// Where property and region updates changed what CSS layout rules may match, since the
+    /// layout pass last ran on them.
+    layout_restyle: Vec<stylesheet::layout_scope::Restyle>,
     /// Dirty tracker for incremental rebuilds
     dirty_tracker: crate::interactive::DirtyTracker,
     /// Per-node state storage (survives across rebuilds if tree is reused)
@@ -1261,6 +1265,7 @@ impl RenderTree {
             handler_registry: crate::event_handler::HandlerRegistry::new(),
             property_write_logs: Vec::new(),
             property_paint_revision: 0,
+            layout_restyle: Vec::new(),
             dirty_tracker: crate::interactive::DirtyTracker::new(),
             node_states: HashMap::new(),
             scroll_offsets: HashMap::new(),
@@ -3552,6 +3557,14 @@ impl RenderTree {
             }
             if let Some((class, on)) = update.class_toggle {
                 self.set_dynamic_class(update.node_id, class, on);
+                // Descendant and sibling selectors read the class from the parent down.
+                let parent = self.layout_tree.ancestors(update.node_id).first().copied();
+                self.note_layout_restyle(match parent {
+                    Some(parent) => Restyle::Subtree(parent),
+                    None => Restyle::Subtree(update.node_id),
+                });
+            } else if update.effects.needs_layout && !region_only {
+                self.note_layout_restyle(Restyle::Node(update.node_id));
             }
             if let Some(content) = update.text_content {
                 self.set_text_content(update.node_id, content);
@@ -3560,6 +3573,7 @@ impl RenderTree {
                 && regions_seen.insert((update.node_id, region))
             {
                 effects = effects.or(self.reconcile_region(update.node_id, region));
+                self.note_layout_restyle(Restyle::Subtree(update.node_id));
             }
         }
         crate::stateful::requeue_partial_updates(foreign);

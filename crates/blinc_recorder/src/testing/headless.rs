@@ -714,7 +714,7 @@ impl Headless {
                     .invalidate_render_cache_tagged("headless_subtree_rebuild");
             }
             if needs_layout {
-                tree.apply_stylesheet_layout_overrides();
+                tree.apply_stylesheet_layout_overrides_scoped(rebuilt);
                 tree.compute_layout(w, h);
                 tree.apply_flip_transitions();
                 tree.update_flip_bounds();

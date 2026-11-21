@@ -327,11 +327,15 @@ pub(super) fn check_rebuild(
         // move bumps the router fingerprint.
         let mut needs_layout = prop_effects.needs_layout;
         let mut had_subtree_rebuild = false;
+        // A stateful subtree rebuild can change matches anywhere; property and region updates
+        // recorded where they changed the tree.
+        let mut layout_whole = false;
         if let Some(ref mut tree) = ws.render_tree {
             let rebuilt =
                 tree.process_pending_subtree_rebuilds_routed(Some(&windowed_ctx.event_router));
             needs_layout |= rebuilt;
             had_subtree_rebuild = rebuilt;
+            layout_whole |= rebuilt;
         }
         // Subtree rebuild only mutates render
         // nodes / base_styles / registry; it
@@ -428,6 +432,7 @@ pub(super) fn check_rebuild(
                 && tree.process_pending_subtree_rebuilds_routed(Some(&windowed_ctx.event_router))
             {
                 needs_layout = true;
+                layout_whole = true;
                 blinc_app.invalidate_render_cache_tagged("post_focus_subtree_rebuild");
             }
         }
@@ -435,7 +440,7 @@ pub(super) fn check_rebuild(
         if needs_layout {
             if let Some(ref mut tree) = ws.render_tree {
                 tracing::debug!("Subtree rebuilds processed, recomputing layout");
-                tree.apply_stylesheet_layout_overrides();
+                tree.apply_stylesheet_layout_overrides_scoped(layout_whole);
                 tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
                 // FLIP: detect position changes and start CSS transitions
                 tree.apply_flip_transitions();
