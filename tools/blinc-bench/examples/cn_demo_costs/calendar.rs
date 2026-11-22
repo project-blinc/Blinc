@@ -3,7 +3,8 @@
 //! `COSTS_CALENDAR=200 COSTS_CALENDAR_PHASE=pull` measures movement without month creation;
 //! `turn` includes month creation and its slide, and `rest` measures the same viewport idle.
 //! Omit the phase for all three. `COSTS_NO_TRACE=1` removes path tracing while profiling.
-//! `COSTS_CALENDAR_SNAP=<prefix>` saves cached and full-paint references separately from timings.
+//! `COSTS_CALENDAR_SNAP=<prefix>` saves cached and full-paint references separately from timings;
+//! with `COSTS_CALENDAR_SNAP_ALL=1`, at every frame of the first turn.
 //! `COSTS_CALENDAR_INDEX=1` selects the right calendar. `COSTS_CALENDAR_FRAMES=12` and
 //! `COSTS_CALENDAR_DT=8` turn months continuously without waiting for their slides to settle.
 //! `COSTS_CALENDAR_TREE=1` counts root builds, structural updates and month-page lifetimes.
@@ -111,6 +112,45 @@ fn calendar_node(ui: &Headless, class: &str) -> Option<blinc_layout::LayoutNodeI
     nodes.get(index).copied()
 }
 
+/// `COSTS_CALENDAR_DROPDOWN=<turns>`: turn that many months, open the year select, and save
+/// its frame with `COSTS_CALENDAR_SNAP`.
+fn open_year_picker(ui: &mut Headless, turns: usize) {
+    for _ in 0..turns {
+        ui.scroll_start();
+        for _ in 0..6 {
+            ui.scroll(-8.0, 0.0);
+            ui.advance(8);
+            let _ = ui.paint_timed(true);
+        }
+        ui.scroll_end();
+        for _ in 0..6 {
+            ui.advance(8);
+            let _ = ui.paint_timed(true);
+        }
+        ui.scroll_momentum_end();
+    }
+    rest(ui);
+    let picker = calendar_node(ui, "cn-calendar-year-picker").expect("year picker");
+    let b = ui
+        .tree()
+        .get_absolute_bounds(picker)
+        .expect("picker bounds");
+    let (x, y) = (b.x + b.width / 2.0, b.y + b.height / 2.0);
+    println!(
+        "caption {:?}, clicking the year picker at ({x:.0}, {y:.0})",
+        caption(ui)
+    );
+    ui.move_to(x, y);
+    ui.mouse_down();
+    ui.advance(16);
+    ui.mouse_up();
+    for _ in 0..40 {
+        ui.advance(16);
+        let _ = ui.paint_timed(true);
+    }
+    capture(ui, "dropdown");
+}
+
 fn caption(ui: &Headless) -> Vec<String> {
     let tree = ui.tree();
     let mut pending: Vec<_> = calendar_node(ui, "cn-calendar-caption")
@@ -154,6 +194,29 @@ pub(super) fn run(ui: &mut Headless, log: PathLog, cycles: usize) {
     );
     rest(ui);
     println!("calendar at {bounds:?}, caption {:?}", caption(ui));
+
+    // `COSTS_CALENDAR_TOAST=1`: show persistent toasts in the corners near the calendar and
+    // save the frame with `COSTS_CALENDAR_SNAP`.
+    if std::env::var_os("COSTS_CALENDAR_TOAST").is_some() {
+        use blinc_layout::widgets::overlay::Corner;
+        for corner in [Corner::BottomLeft, Corner::BottomRight, Corner::TopLeft] {
+            for title in ["First Toast", "Second Toast", "Third Toast"] {
+                blinc_cn::prelude::toast(title)
+                    .description("A toast above the calendar.")
+                    .corner(corner)
+                    .persistent()
+                    .show();
+            }
+        }
+        rest(ui);
+        rest(ui);
+        capture(ui, "toast");
+        return;
+    }
+    if let Ok(turns) = std::env::var("COSTS_CALENDAR_DROPDOWN") {
+        open_year_picker(ui, turns.parse().unwrap_or(0));
+        return;
+    }
 
     if matches!(phase.as_str(), "all" | "rest") {
         let mut samples = Samples::new(ui, log.clone());
@@ -211,6 +274,8 @@ pub(super) fn run(ui: &mut Headless, log: PathLog, cycles: usize) {
                 });
                 if cycle == 0 && frame == 9 {
                     capture(samples.scene.ui, "turn");
+                } else if cycle == 0 && std::env::var_os("COSTS_CALENDAR_SNAP_ALL").is_some() {
+                    capture(samples.scene.ui, &format!("turn{frame}"));
                 }
             }
             samples.scene.ui.scroll_momentum_end();
