@@ -253,11 +253,23 @@ impl ElementRegistry {
     /// interned the per-class allocation here is a single string copy
     /// per unique class name, not per node.
     pub fn class_to_nodes_index(&self) -> HashMap<String, Vec<LayoutNodeId>> {
+        self.class_to_nodes_index_where(|_| true)
+    }
+
+    /// [`Self::class_to_nodes_index`] for the class entries `keep` accepts.
+    pub fn class_to_nodes_index_where(
+        &self,
+        keep: impl Fn(&str) -> bool,
+    ) -> HashMap<String, Vec<LayoutNodeId>> {
         let mut index: HashMap<String, Vec<LayoutNodeId>> = HashMap::new();
         if let Ok(guard) = self.classes.read() {
             for (&node_id, classes) in guard.iter() {
                 for class in classes {
-                    index.entry(class.to_string()).or_default().push(node_id);
+                    if let Some(nodes) = index.get_mut(&**class) {
+                        nodes.push(node_id);
+                    } else if keep(class) {
+                        index.insert(class.to_string(), vec![node_id]);
+                    }
                 }
             }
         }
@@ -542,6 +554,20 @@ impl ElementRegistry {
     }
 
     /// Get all registered IDs (for debugging)
+    /// The registered ids that `keep` accepts, with their nodes.
+    pub fn ids_where(&self, keep: impl Fn(&str) -> bool) -> Vec<(String, LayoutNodeId)> {
+        self.ids
+            .read()
+            .ok()
+            .map(|ids| {
+                ids.iter()
+                    .filter(|(id, _)| keep(id))
+                    .map(|(id, &node)| (id.clone(), node))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     pub fn all_ids(&self) -> Vec<String> {
         self.ids
             .read()

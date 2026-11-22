@@ -594,16 +594,16 @@ impl RenderTree {
     /// Scans all registered element IDs, checks the stylesheet for animation properties,
     /// and starts `ActiveCssAnimation` instances for each matching element.
     pub fn start_all_css_animations(&mut self) {
-        if self.stylesheet.is_none() {
+        let Some(stylesheet) = self.stylesheet.clone() else {
             return;
-        }
+        };
 
-        let registered_ids: Vec<(String, LayoutNodeId)> = self
-            .element_registry
-            .all_ids()
-            .into_iter()
-            .filter_map(|id| self.element_registry.get(&id).map(|node_id| (id, node_id)))
-            .collect();
+        // Only an id whose rule names an animation can start one.
+        let registered_ids = self.element_registry.ids_where(|id| {
+            stylesheet
+                .get(id)
+                .is_some_and(|style| style.animation.is_some())
+        });
 
         for (element_id, node_id) in &registered_ids {
             // Skip if already has an active animation (lock briefly, release before calling start)
@@ -636,7 +636,34 @@ impl RenderTree {
         // that don't also have a matching `#id` rule. Skip nodes that
         // already have an animation (id-based path wins, matching CSS
         // specificity).
-        let class_to_nodes = self.element_registry.class_to_nodes_index();
+        let rules = stylesheet.complex_rules();
+        let mut rule_classes = HashSet::new();
+        let mut rule_attributes = HashSet::new();
+        for (i, (selector, style)) in rules.iter().enumerate() {
+            if style.animation.is_none() || selector.has_state() {
+                continue;
+            }
+            match stylesheet.rule_key(i) {
+                crate::css_parser::RuleKey::Class(class) => {
+                    rule_classes.insert(class);
+                }
+                crate::css_parser::RuleKey::Attribute(name) => {
+                    rule_attributes.insert(name);
+                }
+                _ => {}
+            }
+        }
+        // Only the class entries an animation can be keyed on are indexed: a class rule's class,
+        // and the class or attribute that `start_rule_animations` looks up for a complex rule.
+        let class_to_nodes = self.element_registry.class_to_nodes_index_where(|class| {
+            rule_classes.contains(class)
+                || class
+                    .split_once('=')
+                    .is_some_and(|(name, _)| rule_attributes.contains(name))
+                || stylesheet
+                    .get_class(class)
+                    .is_some_and(|style| style.animation.is_some())
+        });
         for (class, node_ids) in &class_to_nodes {
             // Cheap pre-check: the stylesheet has no class rule for this
             // class name — skip the inner loop entirely.

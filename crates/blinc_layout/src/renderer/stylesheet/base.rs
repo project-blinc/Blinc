@@ -369,10 +369,6 @@ impl RenderTree {
             // Each node takes the rules that match it, in ascending specificity.
             self.apply_base_complex_rules(stylesheet, subtree_nodes);
 
-            // Build inverted class index for the subtree nodes
-            let class_to_nodes = self.element_registry.class_to_nodes_index();
-            let subtree_set: NodeSet = subtree_nodes.iter().copied().collect();
-
             // Eagerly save base_styles for subtree nodes matching classes that
             // also have :hover/:active/:focus state rules. This prevents the
             // lazy save in apply_complex_selector_styles() from capturing
@@ -382,14 +378,16 @@ impl RenderTree {
                 .filter(|(sel, _)| sel.has_state())
                 .filter_map(|(sel, _)| sel.class_name_with_state())
                 .collect();
-            for class_name in &state_class_names {
-                if let Some(node_ids) = class_to_nodes.get(*class_name) {
-                    for &node_id in node_ids {
-                        if subtree_set.contains(&node_id)
-                            && let Some(render_node) = self.render_nodes.get(&node_id)
-                        {
-                            self.base_styles.insert(node_id, render_node.props.clone());
-                        }
+            if !state_class_names.is_empty() {
+                for &node_id in subtree_nodes {
+                    let has_state_class =
+                        self.element_registry
+                            .get_classes(node_id)
+                            .is_some_and(|classes| {
+                                classes.iter().any(|c| state_class_names.contains(&**c))
+                            });
+                    if has_state_class && let Some(render_node) = self.render_nodes.get(&node_id) {
+                        self.base_styles.insert(node_id, render_node.props.clone());
                     }
                 }
             }

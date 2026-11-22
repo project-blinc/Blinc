@@ -939,11 +939,11 @@ fn hash_render_props(props: &RenderProps, hasher: &mut impl Hasher) {
     hash_option_brush(background, hasher);
     hash_corner_radius(border_radius, hasher);
     border_radius_explicit.hash(hasher);
-    hash_debug(corner_shape, hasher);
+    hash_corner_shape(corner_shape, hasher);
     corner_shape_locked.hash(hasher);
     hash_option_color(border_color, hasher);
     hash_f32(*border_width, hasher);
-    hash_debug(border_sides, hasher);
+    hash_border_sides(border_sides, hasher);
     hash_option_color(outline_color, hasher);
     hash_f32(*outline_width, hasher);
     hash_f32(*outline_offset, hasher);
@@ -954,7 +954,7 @@ fn hash_render_props(props: &RenderProps, hasher: &mut impl Hasher) {
     hash_option_transform(transform, hasher);
     hash_f32(*opacity, hasher);
     clips_content.hash(hasher);
-    hash_debug(overflow_fade, hasher);
+    hash_overflow_fade(overflow_fade, hasher);
     motion_stable_id.hash(hasher);
     motion_should_replay.hash(hasher);
     motion_is_suspended.hash(hasher);
@@ -1099,6 +1099,49 @@ fn hash_color(color: &Color, hasher: &mut impl Hasher) {
     hash_f32(color.g, hasher);
     hash_f32(color.b, hasher);
     hash_f32(color.a, hasher);
+}
+
+fn hash_corner_shape(shape: &blinc_core::CornerShape, hasher: &mut impl Hasher) {
+    let blinc_core::CornerShape {
+        top_left,
+        top_right,
+        bottom_right,
+        bottom_left,
+    } = shape;
+    for v in [top_left, top_right, bottom_right, bottom_left] {
+        hash_f32(*v, hasher);
+    }
+}
+
+fn hash_overflow_fade(fade: &blinc_core::OverflowFade, hasher: &mut impl Hasher) {
+    let blinc_core::OverflowFade {
+        top,
+        right,
+        bottom,
+        left,
+    } = fade;
+    for v in [top, right, bottom, left] {
+        hash_f32(*v, hasher);
+    }
+}
+
+fn hash_border_sides(sides: &crate::element::BorderSides, hasher: &mut impl Hasher) {
+    let crate::element::BorderSides {
+        top,
+        right,
+        bottom,
+        left,
+    } = sides;
+    for side in [top, right, bottom, left] {
+        match side {
+            Some(crate::element::BorderSide { width, color }) => {
+                1u8.hash(hasher);
+                hash_f32(*width, hasher);
+                hash_color(color, hasher);
+            }
+            None => 0u8.hash(hasher),
+        }
+    }
 }
 
 fn hash_corner_radius(radius: &CornerRadius, hasher: &mut impl Hasher) {
