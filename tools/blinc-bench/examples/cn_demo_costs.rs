@@ -206,7 +206,12 @@ fn session() -> Option<(Headless, PathLog)> {
     } else {
         MotionPaint::Vector
     };
-    let mut ui = Headless::with_motion_paint(W, height(), paint).ok()?;
+    // `COSTS_SCALE=<density>`: render at that pixel density, as a HiDPI window does.
+    let scale = std::env::var("COSTS_SCALE")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1.0);
+    let mut ui = Headless::with_motion_paint_at(W, height(), scale, paint).ok()?;
     ui.gate_state_styles().gate_animation_apply();
     ui.theme(cn_demo::theme_bundle(), blinc_theme::ColorScheme::Dark);
     if std::env::var("COSTS_CALENDAR_HOVER").as_deref() == Ok("0") {

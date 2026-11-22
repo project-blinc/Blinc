@@ -130,6 +130,14 @@ fn open_year_picker(ui: &mut Headless, turns: usize) {
         ui.scroll_momentum_end();
     }
     rest(ui);
+    // `COSTS_CALENDAR_DROPDOWN_REST=<n>`: rest n times as long first, as a window left alone.
+    let rests: usize = std::env::var("COSTS_CALENDAR_DROPDOWN_REST")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    for _ in 0..rests {
+        rest(ui);
+    }
     let picker = calendar_node(ui, "cn-calendar-year-picker").expect("year picker");
     let b = ui
         .tree()
@@ -140,13 +148,29 @@ fn open_year_picker(ui: &mut Headless, turns: usize) {
         "caption {:?}, clicking the year picker at ({x:.0}, {y:.0})",
         caption(ui)
     );
-    ui.move_to(x, y);
-    ui.mouse_down();
-    ui.advance(16);
-    ui.mouse_up();
-    for _ in 0..40 {
+    // `COSTS_CALENDAR_DROPDOWN_OPENS=<n>`: open it n times, closing it in between.
+    let opens: usize = std::env::var("COSTS_CALENDAR_DROPDOWN_OPENS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1)
+        .max(1);
+    // `COSTS_CALENDAR_DROPDOWN_CLOSE=outside|pick`: close it by a click outside, or on a year,
+    // instead of on the trigger.
+    let close = std::env::var("COSTS_CALENDAR_DROPDOWN_CLOSE").unwrap_or_default();
+    for i in 0..opens * 2 - 1 {
+        let (x, y) = match (i % 2, close.as_str()) {
+            (1, "outside") => (x + 300.0, y - 60.0),
+            (1, "pick") => (x, y + 120.0),
+            _ => (x, y),
+        };
+        ui.move_to(x, y);
+        ui.mouse_down();
         ui.advance(16);
-        let _ = ui.paint_timed(true);
+        ui.mouse_up();
+        for _ in 0..40 {
+            ui.advance(16);
+            let _ = ui.paint_timed(true);
+        }
     }
     capture(ui, "dropdown");
 }
