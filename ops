@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1795313427,"nonce":"5JtZjIMH/tr4K9NOqNQCKSDn4Rg=","added":["bug","area:app"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1795313438,"nonce":"3lr0yF4j/u5ehbyzepO2MBmatFY=","message":"Fixed in b9a7c707f: both tests pass with the GPU tests run (--run-ignored all).","files":null}]}
