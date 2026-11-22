@@ -6,6 +6,36 @@ use crate::shaders::LAYER_COMPOSITE_SHADER;
 use wgpu::util::DeviceExt;
 
 impl GpuRenderer {
+    /// The layer composite's uniform buffer, holding `uniforms`. One buffer serves every
+    /// composite: the write is recorded ahead of the pass that reads it, so the caller
+    /// borrows the encoder after this.
+    fn composite_uniforms(
+        &mut self,
+        uniforms: &crate::primitives::LayerCompositeUniforms,
+    ) -> wgpu::Buffer {
+        let device = &self.device;
+        let buffer = self
+            .buffers
+            .composite_uniforms
+            .get_or_insert_with(|| {
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("Layer Composite Uniforms"),
+                    size: std::mem::size_of::<crate::primitives::LayerCompositeUniforms>() as u64,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                })
+            })
+            .clone();
+        self.uploads.write(
+            &self.device,
+            &self.queue,
+            &buffer,
+            0,
+            bytemuck::bytes_of(uniforms),
+        );
+        buffer
+    }
+
     /// Blit a tight texture of straight colour to the target at the correct position
     #[allow(clippy::too_many_arguments)]
     pub fn blit_tight_texture_to_target(
@@ -199,13 +229,7 @@ impl GpuRenderer {
             _padding: [0; 3],
         };
 
-        let uniform_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Tight Blit Uniforms Buffer"),
-                contents: bytemuck::cast_slice(&[uniforms]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        let uniform_buffer = self.composite_uniforms(&uniforms);
 
         let is_blend = blend_mode != blinc_core::BlendMode::Normal;
 
@@ -431,13 +455,7 @@ impl GpuRenderer {
             _padding: [0; 3],
         };
 
-        let uniform_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Blit Uniforms Buffer"),
-                contents: bytemuck::cast_slice(&[uniforms]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        let uniform_buffer = self.composite_uniforms(&uniforms);
 
         let bind_group = if let Some(ref snapshot) = dest_snapshot {
             self.create_layer_composite_bind_group_with_dest(
@@ -561,13 +579,7 @@ impl GpuRenderer {
             uniforms.clip_type = 1;
         }
 
-        let uniform_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Region Blit Uniforms Buffer"),
-                contents: bytemuck::cast_slice(&[uniforms]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        let uniform_buffer = self.composite_uniforms(&uniforms);
 
         let bind_group = self.create_layer_composite_bind_group(
             &uniform_buffer,

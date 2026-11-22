@@ -163,6 +163,7 @@ impl GpuRenderer {
             path_vertices: None,
             path_indices: None,
             blur_uniforms_pool: None,
+            composite_uniforms: None,
             drop_shadow_uniforms: None,
             glow_uniforms: None,
             color_matrix_uniforms: None,

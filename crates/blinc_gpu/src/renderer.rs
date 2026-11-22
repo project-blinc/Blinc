@@ -231,6 +231,8 @@ struct Buffers {
     path_indices: Option<wgpu::Buffer>,
     /// Pre-allocated uniform buffers for multi-pass blur (one per pass, max 8) — lazily created
     blur_uniforms_pool: Option<Vec<wgpu::Buffer>>,
+    /// Uniform buffer of the layer composite blits, written before each; lazily created
+    composite_uniforms: Option<wgpu::Buffer>,
     /// Cached uniform buffer for drop shadow effect — lazily created
     drop_shadow_uniforms: Option<wgpu::Buffer>,
     /// Cached uniform buffer for glow effect — lazily created
