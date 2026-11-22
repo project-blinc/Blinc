@@ -78,46 +78,81 @@ impl RenderContext {
 
     /// Draw the dynamic owner with the motion content that is not in the foreground layer in
     /// paint order: each run of the batch's primitives on one paint layer, then the motion
-    /// images, text and SVGs of that layer, then the batch's foreground primitives. A toast or a
-    /// menu is on a higher layer or in the foreground, so text below it stays below it.
+    /// images, text and SVGs of that layer, then the dynamic batch's foreground.
+    /// `static_foreground` (the foreground of the static batch) goes in at its own layer: above
+    /// bound content and its text on the layers up to it, below overlays, which take layers above
+    /// what they cover. A batch that cannot be drawn in parts keeps the static foreground below it.
     pub(super) fn dispatch_dynamic_batch_and_motion(
         &mut self,
         tree: &blinc_layout::RenderTree,
         target_view: &wgpu::TextureView,
+        static_foreground: impl FnOnce(&mut Self),
     ) {
         let layers = self
             .cached_dynamic_batch
             .as_ref()
-            .and_then(|batch| self.dynamic_batch_layers(batch));
-        let Some(layers) = layers else {
-            self.dispatch_dynamic_batch_around(target_view, |this| {
-                this.dispatch_motion_subtree_overlay_pools(
-                    tree,
-                    target_view,
-                    MotionBand::Below,
-                    ALL_Z,
-                );
-            });
-            return;
+            .map_or(Layers::One(0), |batch| self.dynamic_batch_layers(batch));
+        let foreground_z = self
+            .cached_bg_batch
+            .as_ref()
+            .and_then(|b| b.foreground_primitives.iter().map(|p| p.z_layer()).max())
+            .unwrap_or(0);
+        let pools = |this: &mut Self, z: std::ops::RangeInclusive<u32>| {
+            if z.start() <= z.end() {
+                this.dispatch_motion_subtree_overlay_pools(tree, target_view, MotionBand::Below, z);
+            }
+        };
+        let layers = match layers {
+            Layers::Many(layers) => layers,
+            Layers::One(z) if z <= foreground_z => {
+                self.dispatch_dynamic_batch_around(target_view, |this| {
+                    pools(this, ALL_Z);
+                    static_foreground(this);
+                });
+                return;
+            }
+            Layers::One(_) => {
+                pools(self, 0..=foreground_z);
+                static_foreground(self);
+                self.dispatch_dynamic_batch_around(target_view, |this| {
+                    pools(this, foreground_z.saturating_add(1)..=u32::MAX);
+                });
+                return;
+            }
+            Layers::Undivided => {
+                static_foreground(self);
+                self.dispatch_dynamic_batch_around(target_view, |this| pools(this, ALL_Z));
+                return;
+            }
         };
         self.rebind_glyph_atlas_for_overlay();
         let moved = self.resolve_dynamic_batch();
+        let mut static_foreground = Some(static_foreground);
+        // The motion content drawn so far is of the layers below this one.
+        let mut next_z = 0u32;
+        let mut foreground_now = |this: &mut Self, next_z: &mut u32| {
+            if let Some(draw) = static_foreground.take() {
+                pools(this, *next_z..=foreground_z);
+                *next_z = (*next_z).max(foreground_z.saturating_add(1));
+                draw(this);
+            }
+        };
+        if layers[0].1 > foreground_z {
+            foreground_now(self, &mut next_z);
+        }
         for (i, (range, _)) in layers.iter().enumerate() {
             self.rebind_glyph_atlas_for_overlay();
             if let Some(batch) = self.cached_dynamic_batch.as_ref() {
                 self.renderer
                     .render_overlay_part(target_view, batch, range.clone());
             }
-            // The first layer's motion content also takes what is below it, the last's what is
-            // above it.
-            let low = if i == 0 { 0 } else { layers[i].1 };
+            // Each layer's motion content runs up to the next layer, the last's to the top.
             let high = layers.get(i + 1).map_or(u32::MAX, |next| next.1 - 1);
-            self.dispatch_motion_subtree_overlay_pools(
-                tree,
-                target_view,
-                MotionBand::Below,
-                low..=high,
-            );
+            if layers.get(i + 1).is_none_or(|next| next.1 > foreground_z) {
+                foreground_now(self, &mut next_z);
+            }
+            pools(self, next_z..=high);
+            next_z = high.saturating_add(1);
         }
         self.dispatch_dynamic_foreground(target_view);
         self.restore_dynamic_batch(moved);
@@ -125,28 +160,27 @@ impl RenderContext {
 
     /// The runs of the dynamic batch's primitives on one paint layer, with that layer, when
     /// there is more than one and the batch can be drawn in those parts.
-    fn dynamic_batch_layers(
-        &self,
-        batch: &PrimitiveBatch,
-    ) -> Option<Vec<(std::ops::Range<usize>, u32)>> {
+    fn dynamic_batch_layers(&self, batch: &PrimitiveBatch) -> Layers {
         let mut layers: Vec<(std::ops::Range<usize>, u32)> = Vec::new();
         for (i, p) in batch.primitives.iter().enumerate() {
             let z = p.z_layer();
             match layers.last_mut() {
                 Some((range, layer)) if *layer == z => range.end = i + 1,
                 // Layers that come back down are not drawn in parts.
-                Some((_, layer)) if *layer > z => return None,
+                Some((_, layer)) if *layer > z => return Layers::Undivided,
                 _ => layers.push((i..i + 1, z)),
             }
         }
         if layers.len() < 2 {
-            return None;
+            return Layers::One(layers.first().map_or(0, |(_, z)| *z));
         }
-        layers.first_mut()?.0.start = 0;
+        layers[0].0.start = 0;
         let cuts: Vec<usize> = layers[1..].iter().map(|(range, _)| range.start).collect();
-        self.renderer
-            .overlay_divides_at(batch, &cuts)
-            .then_some(layers)
+        if self.renderer.overlay_divides_at(batch, &cuts) {
+            Layers::Many(layers)
+        } else {
+            Layers::Undivided
+        }
     }
 
     fn dispatch_dynamic_batch_around(
@@ -309,4 +343,14 @@ impl RenderContext {
             self.renderer.render_overlay(target, &overlay_batch);
         }
     }
+}
+
+/// How the dynamic batch divides by paint layer.
+enum Layers {
+    /// All on this one layer, or none.
+    One(u32),
+    /// The runs of primitives on each layer, and the layer.
+    Many(Vec<(std::ops::Range<usize>, u32)>),
+    /// On several layers, but not drawable in those parts.
+    Undivided,
 }

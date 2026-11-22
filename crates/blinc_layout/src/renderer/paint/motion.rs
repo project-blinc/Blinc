@@ -949,7 +949,11 @@ impl RenderTree {
 
         // Increment z_layer for Stack children for proper interleaved rendering
         // This ensures primitives AND text in each Stack layer render together
-        let is_stack_layer = render_node.props.is_stack_layer;
+        // An overlay root is a layer above what it covers: its subtree draws above static
+        // foreground and above the motion content of the layers below. Unlike a stack layer, the
+        // content after it keeps the layer it had.
+        let z_before_overlay = render_node.props.is_overlay_root.then(|| ctx.z_layer());
+        let is_stack_layer = render_node.props.is_stack_layer || render_node.props.is_overlay_root;
         if is_stack_layer {
             let current_z = ctx.z_layer();
             ctx.set_z_layer(current_z + 1);
@@ -2849,6 +2853,9 @@ impl RenderTree {
         // Restore z_layer after this subtree
         if has_z_index {
             ctx.set_z_layer(saved_z_layer);
+        }
+        if let Some(z) = z_before_overlay {
+            ctx.set_z_layer(z);
         }
 
         // Pop position transform

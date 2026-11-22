@@ -520,12 +520,21 @@ impl RenderContext {
             "cached_bg_batch_set",
         );
         self.cached_bg_batch = Some(batch.clone());
-        if self.in_compositor_inner_call {
+        // The foreground goes above the motion content drawn after the dynamic batch, so it is
+        // drawn there: by the compositor outside its cache paint, here after the dynamic batch.
+        // Grouped glass reads a backdrop only the frame content prepares, and stays with it. An
+        // overlay tree's content is all above its static foreground, which stays first.
+        let defer_foreground = !self.in_compositor_inner_call
+            && !self.overlay_frame_active
+            && !batch.foreground_batch().has_grouped_glass();
+        if self.in_compositor_inner_call || defer_foreground {
             batch.foreground_primitives.clear();
             batch.foreground_paths = Default::default();
             batch.foreground_layer_commands.clear();
             batch.foreground_dynamic_images.clear();
         }
+        let no_glyphs = cached_text::TextBatch::default();
+        let no_decorations = std::collections::HashMap::new();
 
         self.render_frame_content(
             tree,
@@ -538,8 +547,16 @@ impl RenderContext {
                 images: &images,
                 svgs: &svgs,
                 glyphs_by_layer: &glyphs_by_layer,
-                fg_glyphs: &fg_glyphs,
-                fg_decorations_by_layer: &fg_decorations_by_layer,
+                fg_glyphs: if defer_foreground {
+                    &no_glyphs
+                } else {
+                    &fg_glyphs
+                },
+                fg_decorations_by_layer: if defer_foreground {
+                    &no_decorations
+                } else {
+                    &fg_decorations_by_layer
+                },
             },
         );
 
@@ -571,7 +588,14 @@ impl RenderContext {
         if !self.in_compositor_inner_call {
             self.composite_css_layers_overlay(tree, target, LayerScope::Main);
             self.composite_motion_layers_overlay(tree, target, LayerScope::Main);
-            self.dispatch_dynamic_batch_and_motion(tree, target);
+            self.dispatch_dynamic_batch_and_motion(tree, target, |this| {
+                if defer_foreground {
+                    this.render_foreground_overlay(target, &[]);
+                    for &z in fg_decorations_by_layer.keys() {
+                        this.render_text_decorations_for_layer(target, &fg_decorations_by_layer, z);
+                    }
+                }
+            });
             // Restore static auxiliary rows before subsequent text and SVG dispatch.
             self.renderer.update_aux_data_for_batch(&batch);
             self.draw_scroll_row_scrollbars(tree, target);

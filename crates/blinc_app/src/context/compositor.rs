@@ -358,12 +358,12 @@ impl RenderContext {
                     self.renderer
                         .render_unordered_dynamic_images(target_view, &overlay.dynamic_images);
                 }
-                // Draw foreground above canvas content and below global overlays.
-                self.render_foreground_overlay(target_view, &[&overlay]);
                 // Layers of the main tree sit below the overlay content the dynamic batch holds.
                 self.composite_css_layers_overlay(tree, target_view, LayerScope::Main);
                 self.composite_motion_layers_overlay(tree, target_view, LayerScope::Main);
-                self.dispatch_dynamic_batch_and_motion(tree, target_view);
+                self.dispatch_dynamic_batch_and_motion(tree, target_view, |this| {
+                    this.render_foreground_overlay(target_view, &[&overlay])
+                });
                 self.draw_scroll_row_scrollbars(tree, target_view);
                 // Overlay-subtree canvases (e.g. caret blink inside a
                 // focused cn::input) dispatch HERE so they land above
@@ -623,12 +623,12 @@ impl RenderContext {
                     self.renderer
                         .render_unordered_dynamic_images(target_view, &overlay.dynamic_images);
                 }
-                // Draw foreground above canvas content and below global overlays.
-                self.render_foreground_overlay(target_view, &[&overlay]);
                 // Layers of the main tree sit below the overlay content the dynamic batch holds.
                 self.composite_css_layers_overlay(tree, target_view, LayerScope::Main);
                 self.composite_motion_layers_overlay(tree, target_view, LayerScope::Main);
-                self.dispatch_dynamic_batch_and_motion(tree, target_view);
+                self.dispatch_dynamic_batch_and_motion(tree, target_view, |this| {
+                    this.render_foreground_overlay(target_view, &[&overlay])
+                });
                 self.draw_scroll_row_scrollbars(tree, target_view);
                 self.dispatch_overlay_canvas_overlay(target_view, &overlay_subtree_canvases);
                 // Composite promoted backgrounds before their text and SVG.
@@ -798,12 +798,12 @@ impl RenderContext {
             self.renderer
                 .render_unordered_dynamic_images(target_view, &overlay.dynamic_images);
         }
-        // Draw foreground above canvas content and below global overlays.
-        self.render_foreground_overlay(target_view, &[&overlay]);
         // Layers of the main tree sit below the overlay content the dynamic batch holds.
         self.composite_css_layers_overlay(tree, target_view, LayerScope::Main);
         self.composite_motion_layers_overlay(tree, target_view, LayerScope::Main);
-        self.dispatch_dynamic_batch_and_motion(tree, target_view);
+        self.dispatch_dynamic_batch_and_motion(tree, target_view, |this| {
+            this.render_foreground_overlay(target_view, &[&overlay])
+        });
         self.draw_scroll_row_scrollbars(tree, target_view);
         self.dispatch_overlay_canvas_overlay(target_view, &overlay_subtree_canvases);
         // Draw foreground motion text and SVG after their dynamic geometry.

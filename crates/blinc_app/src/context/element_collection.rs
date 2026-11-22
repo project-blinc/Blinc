@@ -400,9 +400,14 @@ impl RenderContext {
         let has_layout_animation = tree.is_layout_animating(node);
 
         // Check if this is a Stack layer - if so, increment z_layer for proper z-ordering
+        // An overlay root takes a layer of its own for its subtree, as the paint walker gives it.
+        let z_before_overlay = tree
+            .get_render_node(node)
+            .is_some_and(|n| n.props.is_overlay_root)
+            .then_some(*z_layer);
         let is_stack_layer = tree
             .get_render_node(node)
-            .map(|n| n.props.is_stack_layer)
+            .map(|n| n.props.is_stack_layer || n.props.is_overlay_root)
             .unwrap_or(false);
         if is_stack_layer {
             *z_layer += 1;
@@ -714,6 +719,9 @@ impl RenderContext {
         // Restore z_layer after this subtree
         if node_z_index > 0 {
             *z_layer = saved_z_layer;
+        }
+        if let Some(z) = z_before_overlay {
+            *z_layer = z;
         }
     }
 }

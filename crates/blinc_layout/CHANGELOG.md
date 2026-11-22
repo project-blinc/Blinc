@@ -14,6 +14,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 
 ### Changed
+- The paint walker gives an overlay root's subtree a paint layer above the one it was painted on, as a stack layer does; unlike a stack layer, the content after it keeps its layer. Overlay content then draws above static foreground and above the motion content it covers.
 - The element hash that decides whether a node changed reads `CornerShape`, `OverflowFade` and `BorderSides` field by field instead of hashing their `Debug` text.
 - Starting CSS animations after a structural update indexes only the ids and classes that an animation rule can be keyed on, instead of copying every id and class in the tree. Saving the base styles of nodes with state rules after a subtree update reads the subtree's own classes instead of an index of the whole tree. `ElementRegistry::class_to_nodes_index_where` and `ids_where` take a filter.
 - Maps and sets keyed by `LayoutNodeId` or `StableNodeId` use FxHash instead of SipHash, through the new `NodeMap`, `NodeSet`, `StableMap` and `StableSet` aliases. Accessors that return such maps, such as `RenderTree::motion_bindings_map`, now return the aliased types.
