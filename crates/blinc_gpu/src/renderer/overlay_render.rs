@@ -462,6 +462,29 @@ impl GpuRenderer {
         target: &wgpu::TextureView,
         primitives: &[GpuPrimitive],
     ) {
+        self.draw_primitives_overlay(target, primitives, wgpu::LoadOp::Load);
+    }
+
+    /// [`Self::render_primitives_overlay`] into a target it first clears to transparent, in the
+    /// same pass. Draws nothing, not even the clear, when `primitives` is empty.
+    pub(super) fn render_primitives_overlay_cleared(
+        &mut self,
+        target: &wgpu::TextureView,
+        primitives: &[GpuPrimitive],
+    ) {
+        self.draw_primitives_overlay(
+            target,
+            primitives,
+            wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+        );
+    }
+
+    fn draw_primitives_overlay(
+        &mut self,
+        target: &wgpu::TextureView,
+        primitives: &[GpuPrimitive],
+        load: wgpu::LoadOp<wgpu::Color>,
+    ) {
         if primitives.is_empty() {
             return;
         }
@@ -482,7 +505,6 @@ impl GpuRenderer {
         // Create command encoder
         let mut encoder = self.uploads.lend(&self.device);
 
-        // Begin render pass (load existing content)
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Blinc Layer Primitives Pass"),
@@ -491,7 +513,7 @@ impl GpuRenderer {
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
+                        load,
                         store: wgpu::StoreOp::Store,
                     },
                 })],

@@ -6,7 +6,7 @@ use crate::shaders::LAYER_COMPOSITE_SHADER;
 use wgpu::util::DeviceExt;
 
 impl GpuRenderer {
-    /// Blit a tight texture to the target at the correct position
+    /// Blit a tight texture of straight colour to the target at the correct position
     #[allow(clippy::too_many_arguments)]
     pub fn blit_tight_texture_to_target(
         &mut self,
@@ -20,6 +20,35 @@ impl GpuRenderer {
         clip: Option<([f32; 4], [f32; 4])>, // (clip_bounds, clip_radius)
         transform_3d: Option<blinc_core::Transform3DParams>,
         rotate_z_rad: f32,
+    ) {
+        self.blit_tight(
+            source,
+            source_size,
+            target,
+            (dest_pos, dest_size),
+            opacity,
+            blend_mode,
+            clip,
+            transform_3d,
+            rotate_z_rad,
+            false,
+        );
+    }
+
+    /// [`Self::blit_tight_texture_to_target`] for a source of straight or premultiplied colour.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn blit_tight(
+        &mut self,
+        source: &wgpu::TextureView,
+        source_size: (u32, u32),
+        target: &wgpu::TextureView,
+        (dest_pos, dest_size): ((f32, f32), (f32, f32)),
+        opacity: f32,
+        blend_mode: blinc_core::BlendMode,
+        clip: Option<([f32; 4], [f32; 4])>,
+        transform_3d: Option<blinc_core::Transform3DParams>,
+        rotate_z_rad: f32,
+        premultiplied: bool,
     ) {
         use crate::primitives::LayerCompositeUniforms;
 
@@ -166,6 +195,8 @@ impl GpuRenderer {
             cos_ry,
             sin_rz,
             cos_rz,
+            premultiplied: premultiplied as u32,
+            _padding: [0; 3],
         };
 
         let uniform_buffer = self
@@ -396,6 +427,8 @@ impl GpuRenderer {
             cos_ry: 1.0,
             sin_rz: 0.0,
             cos_rz: 1.0,
+            premultiplied: 0,
+            _padding: [0; 3],
         };
 
         let uniform_buffer = self
@@ -518,6 +551,8 @@ impl GpuRenderer {
             cos_ry: 1.0,
             sin_rz: 0.0,
             cos_rz: 1.0,
+            premultiplied: 0,
+            _padding: [0; 3],
         };
 
         if let Some((bounds, radii)) = clip {

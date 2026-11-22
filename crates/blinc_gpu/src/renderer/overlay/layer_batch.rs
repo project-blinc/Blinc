@@ -1,9 +1,8 @@
 //! Plain opacity groups drawn through one atlas.
 //!
-//! A group with no effect, blend or transform costs the group-at-a-time path a clear, a draw, an
-//! alpha pass and a blit, each its own render pass and submission. Consecutive groups of that kind
-//! are drawn into cells of one texture in one pass, straightened once, and composited in one pass,
-//! in the order they were pushed. A group qualifies when its content is a run of plain primitives
+//! A group with no effect, blend or transform costs the group-at-a-time path a draw and a
+//! composite, each its own render pass. Consecutive groups of that kind are drawn into cells of
+//! one texture in one pass and composited in one pass, in the order they were pushed. A group qualifies when its content is a run of plain primitives
 //! lying entirely inside the viewport, so no cell receives another's pixels.
 
 use super::{
@@ -176,28 +175,20 @@ impl GpuRenderer {
             });
         }
         self.viewport_size = texture.size;
-        self.render_with_clear_simple(&texture.view, &PrimitiveBatch::new(), [0.0; 4]);
-        self.render_overlay_msaa_flat(&texture.view, &content, samples);
+        if samples <= 1 && !content.primitives.is_empty() {
+            self.update_aux_data_buffer(&content);
+            self.render_primitives_overlay_cleared(&texture.view, &content.primitives);
+        } else {
+            self.render_with_clear_simple(&texture.view, &PrimitiveBatch::new(), [0.0; 4]);
+            self.render_overlay_msaa_flat(&texture.view, &content, samples);
+        }
         self.viewport_size = viewport;
-        let straight = self
-            .layer_texture_cache
-            .acquire_exact(&self.device, texture.size, false);
-        self.ensure_overlay_alpha();
-        self.overlay_alpha.as_ref().unwrap().straighten(
-            &self.device,
-            &|commands| self.uploads.submit(&self.queue, [commands]),
-            &self.bind_group_layouts.composite,
-            &self.path_image_sampler,
-            &texture,
-            &straight,
-        );
-        self.composite_cells(target, &straight, &cells);
-        self.layer_texture_cache.release(straight);
+        self.composite_cells(target, &texture, &cells);
         self.layer_texture_cache.release(texture);
     }
 
-    /// Composites every cell of `atlas` onto `target` in one pass, in order, each confined to the
-    /// part of it that is inside the viewport and its clip.
+    /// Composites every cell of `atlas`, premultiplied colour, onto `target` in one pass, in
+    /// order, each confined to the part of it that is inside the viewport and its clip.
     fn composite_cells(
         &self,
         target: &wgpu::TextureView,
@@ -272,6 +263,8 @@ impl GpuRenderer {
                 cos_ry: 1.0,
                 sin_rz: 0.0,
                 cos_rz: 1.0,
+                premultiplied: 1,
+                _padding: [0; 3],
             };
             bytes.extend_from_slice(bytemuck::bytes_of(&uniforms));
             bytes.resize(draws.len() * stride + stride, 0);

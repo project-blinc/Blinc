@@ -29,6 +29,8 @@ russl::russl! {
         // whose cached texture rotates each frame without being baked again.
         sin_rz: f32,
         cos_rz: f32,
+        // 1 when the layer texture holds premultiplied colour, 0 when it holds straight colour.
+        premultiplied: u32,
     }
 
     #[group(0)] #[binding(0)] static UNIFORMS: Uniform<LayerUniforms>;
@@ -291,14 +293,15 @@ russl::russl! {
         // Level 0: the flow is no longer uniform after the discard above.
         let src = LAYER_TEXTURE.sample_level(LAYER_SAMPLER, input.uv, 0.0);
 
-        let mut src_alpha = src.w * UNIFORMS.opacity;
+        let mut coverage = UNIFORMS.opacity;
 
         // An anti-aliased clip edge.
         if UNIFORMS.clip_type == 1u32 {
             let dist = sd_rounded_rect_clip(input.frag_pos, UNIFORMS.clip_bounds, UNIFORMS.clip_radius);
             let clip_alpha = 1.0 - smoothstep(-0.5, 0.5, dist);
-            src_alpha *= clip_alpha;
+            coverage *= clip_alpha;
         }
+        let src_alpha = src.w * coverage;
 
         // Fully transparent pixels draw nothing.
         if src_alpha < 0.001 {
@@ -323,6 +326,9 @@ russl::russl! {
         }
 
         // Normal blend: premultiplied for hardware blending.
+        if UNIFORMS.premultiplied == 1u32 {
+            return src * coverage;
+        }
         return Vec4::new(src.xyz * src_alpha, src_alpha);
     }
 }

@@ -702,6 +702,32 @@ impl GpuRenderer {
         );
     }
 
+    /// Draws `items` into `target` after clearing it to transparent, in the first run's pass
+    /// when that run is plain primitives drawn at one sample.
+    fn draw_overlay_nodes_cleared(
+        &mut self,
+        target: &wgpu::TextureView,
+        batch: &PrimitiveBatch,
+        items: &[Node],
+        origin: [f32; 2],
+        samples: u32,
+        outputs: &mut named::Outputs,
+    ) {
+        if samples <= 1
+            && let Some(Node::Run(start, end)) = items.first()
+        {
+            let run = translated(batch, *start, *end, origin);
+            if run.paths.vertices.is_empty() && !run.primitives.is_empty() {
+                self.update_aux_data_buffer(&run);
+                self.render_primitives_overlay_cleared(target, &run.primitives);
+                self.draw_overlay_nodes(target, batch, &items[1..], origin, samples, outputs);
+                return;
+            }
+        }
+        self.render_with_clear_simple(target, &PrimitiveBatch::new(), [0.0; 4]);
+        self.draw_overlay_nodes(target, batch, items, origin, samples, outputs);
+    }
+
     fn draw_overlay_nodes(
         &mut self,
         target: &wgpu::TextureView,
@@ -867,8 +893,14 @@ impl GpuRenderer {
                     };
                     // Use the acquired extent as viewport; source pixels stay one-to-one.
                     self.viewport_size = texture.size;
-                    self.render_with_clear_simple(&texture.view, &PrimitiveBatch::new(), [0.0; 4]);
-                    self.draw_overlay_nodes(&texture.view, batch, children, min, samples, outputs);
+                    self.draw_overlay_nodes_cleared(
+                        &texture.view,
+                        batch,
+                        children,
+                        min,
+                        samples,
+                        outputs,
+                    );
                     if let Some(previous) = previous {
                         outputs.glass_backdrop = previous;
                     }
@@ -876,43 +908,61 @@ impl GpuRenderer {
                         self.layer_texture_cache.release(backdrop);
                     }
                     self.viewport_size = size;
-                    let straight =
-                        self.layer_texture_cache
-                            .acquire_exact(&self.device, texture.size, false);
-                    self.ensure_overlay_alpha();
-                    self.overlay_alpha.as_ref().unwrap().straighten(
-                        &self.device,
-                        &|commands| self.uploads.submit(&self.queue, [commands]),
-                        &self.bind_group_layouts.composite,
-                        &self.path_image_sampler,
-                        &texture,
-                        &straight,
-                    );
-                    let effected: Option<LayerTexture> = (!effects.is_empty())
-                        .then(|| self.apply_layer_effects(&straight, &effects));
-                    let source = effected.as_ref().unwrap_or(&straight);
+                    // The drawn texture holds premultiplied colour, which the composite takes
+                    // as it is. Effects and named outputs read straight colour.
+                    let premultiplied = effects.is_empty() && named_id.is_none();
+                    let straight = (!premultiplied).then(|| {
+                        let straight = self.layer_texture_cache.acquire_exact(
+                            &self.device,
+                            texture.size,
+                            false,
+                        );
+                        self.ensure_overlay_alpha();
+                        self.overlay_alpha.as_ref().unwrap().straighten(
+                            &self.device,
+                            &|commands| self.uploads.submit(&self.queue, [commands]),
+                            &self.bind_group_layouts.composite,
+                            &self.path_image_sampler,
+                            &texture,
+                            &straight,
+                        );
+                        straight
+                    });
+                    let effected: Option<LayerTexture> = straight
+                        .as_ref()
+                        .filter(|_| !effects.is_empty())
+                        .map(|straight| self.apply_layer_effects(straight, &effects));
+                    let source = effected.as_ref().or(straight.as_ref()).unwrap_or(&texture);
                     let clip = common_clip(children, batch).map(|(mut bounds, radius)| {
                         bounds[0] -= origin[0];
                         bounds[1] -= origin[1];
                         (bounds, radius)
                     });
-                    self.blit_tight_texture_to_target(
+                    self.blit_tight(
                         &source.view,
                         source.size,
                         target,
-                        (min[0] - origin[0], min[1] - origin[1]),
-                        (tight.0 as f32, tight.1 as f32),
+                        (
+                            (min[0] - origin[0], min[1] - origin[1]),
+                            (tight.0 as f32, tight.1 as f32),
+                        ),
                         config.opacity,
                         config.blend_mode,
                         clip,
                         config.transform_3d,
                         0.0,
+                        premultiplied,
                     );
-                    let output = if let Some(effected) = effected {
-                        self.layer_texture_cache.release(straight);
-                        effected
-                    } else {
-                        straight
+                    let output = match effected {
+                        Some(effected) => {
+                            self.layer_texture_cache.release(straight.unwrap());
+                            Some(effected)
+                        }
+                        None => straight,
+                    };
+                    let Some(output) = output else {
+                        self.layer_texture_cache.release(texture);
+                        continue;
                     };
                     if let Some(id) = named_id {
                         let local_origin = config.position.map_or(origin, |p| [p.x, p.y]);

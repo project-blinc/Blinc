@@ -77,7 +77,9 @@ pub struct CompositeUniforms {
 /// - sin_rz: f32 (4 bytes) - sin(rotate-z angle), used by the flat
 ///   composite path for in-plane rotation (motion-bound bake-and-blit)
 /// - cos_rz: f32 (4 bytes) - cos(rotate-z angle)
-///   Total: 112 bytes
+/// - premultiplied: u32 (4 bytes) - 1 when the layer texture holds premultiplied colour
+/// - padding: 12 bytes, to the shader struct's 16-byte alignment
+///   Total: 128 bytes
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LayerCompositeUniforms {
@@ -114,6 +116,9 @@ pub struct LayerCompositeUniforms {
     pub sin_rz: f32,
     /// cos(rotate-z angle) — see [`Self::sin_rz`].
     pub cos_rz: f32,
+    /// 1 when the layer texture holds premultiplied colour, 0 when it holds straight colour.
+    pub premultiplied: u32,
+    pub _padding: [u32; 3],
 }
 
 impl LayerCompositeUniforms {
@@ -142,6 +147,8 @@ impl LayerCompositeUniforms {
             cos_ry: 1.0,
             sin_rz: 0.0,
             cos_rz: 1.0,
+            premultiplied: 0,
+            _padding: [0; 3],
         }
     }
 
@@ -169,6 +176,8 @@ impl LayerCompositeUniforms {
             cos_ry: 1.0,
             sin_rz: 0.0,
             cos_rz: 1.0,
+            premultiplied: 0,
+            _padding: [0; 3],
         }
     }
 
