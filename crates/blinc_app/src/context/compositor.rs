@@ -1,5 +1,5 @@
 //! Compose cached content and independently dispatched frame streams.
-use super::composite_replay::LayerScope;
+use super::composite_replay::{ALL_Z, LayerScope, MotionBand};
 use super::{
     CssDeltaResult, ImageElement, RenderContext, RenderTree, Result, aabb_intersects_any,
     damage_scissor_from_union, damage_union, dispatch_pending_gpu_passes, dispatch_pending_meshes,
@@ -363,7 +363,7 @@ impl RenderContext {
                 // Layers of the main tree sit below the overlay content the dynamic batch holds.
                 self.composite_css_layers_overlay(tree, target_view, LayerScope::Main);
                 self.composite_motion_layers_overlay(tree, target_view, LayerScope::Main);
-                self.dispatch_dynamic_batch_overlay(target_view);
+                self.dispatch_dynamic_batch_and_motion(tree, target_view);
                 self.draw_scroll_row_scrollbars(tree, target_view);
                 // Overlay-subtree canvases (e.g. caret blink inside a
                 // focused cn::input) dispatch HERE so they land above
@@ -374,8 +374,13 @@ impl RenderContext {
                 self.composite_css_layers_overlay(tree, target_view, LayerScope::Overlay);
                 // Replay promoted motion textures.
                 self.composite_motion_layers_overlay(tree, target_view, LayerScope::Overlay);
-                // Draw motion text and SVG above dynamic geometry and promoted textures.
-                self.dispatch_motion_subtree_overlay_pools(tree, target_view);
+                // Draw foreground motion text and SVG above dynamic geometry and promoted textures.
+                self.dispatch_motion_subtree_overlay_pools(
+                    tree,
+                    target_view,
+                    MotionBand::Foreground,
+                    ALL_Z,
+                );
                 if !overlay.meshes.is_empty() {
                     dispatch_pending_meshes(
                         &mut self.renderer,
@@ -623,15 +628,20 @@ impl RenderContext {
                 // Layers of the main tree sit below the overlay content the dynamic batch holds.
                 self.composite_css_layers_overlay(tree, target_view, LayerScope::Main);
                 self.composite_motion_layers_overlay(tree, target_view, LayerScope::Main);
-                self.dispatch_dynamic_batch_overlay(target_view);
+                self.dispatch_dynamic_batch_and_motion(tree, target_view);
                 self.draw_scroll_row_scrollbars(tree, target_view);
                 self.dispatch_overlay_canvas_overlay(target_view, &overlay_subtree_canvases);
                 // Composite promoted backgrounds before their text and SVG.
                 self.composite_css_layers_overlay(tree, target_view, LayerScope::Overlay);
                 // Replay promoted motion textures.
                 self.composite_motion_layers_overlay(tree, target_view, LayerScope::Overlay);
-                // Draw motion text and SVG above dynamic geometry and promoted textures.
-                self.dispatch_motion_subtree_overlay_pools(tree, target_view);
+                // Draw foreground motion text and SVG above dynamic geometry and promoted textures.
+                self.dispatch_motion_subtree_overlay_pools(
+                    tree,
+                    target_view,
+                    MotionBand::Foreground,
+                    ALL_Z,
+                );
                 if !overlay.meshes.is_empty() {
                     dispatch_pending_meshes(
                         &mut self.renderer,
@@ -793,11 +803,16 @@ impl RenderContext {
         // Layers of the main tree sit below the overlay content the dynamic batch holds.
         self.composite_css_layers_overlay(tree, target_view, LayerScope::Main);
         self.composite_motion_layers_overlay(tree, target_view, LayerScope::Main);
-        self.dispatch_dynamic_batch_overlay(target_view);
+        self.dispatch_dynamic_batch_and_motion(tree, target_view);
         self.draw_scroll_row_scrollbars(tree, target_view);
         self.dispatch_overlay_canvas_overlay(target_view, &overlay_subtree_canvases);
-        // Draw motion text and SVG after their dynamic geometry.
-        self.dispatch_motion_subtree_overlay_pools(tree, target_view);
+        // Draw foreground motion text and SVG after their dynamic geometry.
+        self.dispatch_motion_subtree_overlay_pools(
+            tree,
+            target_view,
+            MotionBand::Foreground,
+            ALL_Z,
+        );
         // Composited CSS layers (slow path's composite site) — same
         // overlay step the fast paths do, so the texture for a
         // freshly-promoted region gets visible content on the very

@@ -462,6 +462,7 @@ impl RenderContext {
                         transform_3d_layer: inside_3d_layer.clone(),
                         in_motion_subtree: inside_motion_subtree,
                         z_layer: *z_layer,
+                        is_foreground: children_inside_foreground,
                         composite_ancestor: nearest_composite_ancestor,
                         row: None,
                         clip_from: None,
@@ -623,6 +624,7 @@ impl RenderContext {
                         mask_info,
                         transform_3d_layer: inside_3d_layer.clone(),
                         in_motion_subtree: inside_motion_subtree,
+                        is_foreground: children_inside_foreground,
                         row: None,
                         clip_from: None,
                     });
@@ -736,6 +738,7 @@ impl RenderContext {
                             },
                             transform_3d_layer: inside_3d_layer.clone(),
                             in_motion_subtree: inside_motion_subtree,
+                            is_foreground: children_inside_foreground,
                             row: None,
                             clip_from: None,
                         });

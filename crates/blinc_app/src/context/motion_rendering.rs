@@ -1,6 +1,6 @@
 //! Coordinate collection and ordered dispatch with optional entry/exit animation state.
 use super::cached_text;
-use super::composite_replay::LayerScope;
+use super::composite_replay::{ALL_Z, LayerScope, MotionBand};
 use super::frame_dispatch::FrameContent;
 use super::frame_text::{self, PreparedFrameText};
 use super::node_rows;
@@ -571,25 +571,9 @@ impl RenderContext {
         if !self.in_compositor_inner_call {
             self.composite_css_layers_overlay(tree, target, LayerScope::Main);
             self.composite_motion_layers_overlay(tree, target, LayerScope::Main);
-            let moved = self.resolve_dynamic_batch();
-            if let Some(ref dynamic_batch) = self.cached_dynamic_batch {
-                if !dynamic_batch.primitives.is_empty()
-                    || dynamic_batch.has_paths()
-                    || dynamic_batch.has_ordered_draws()
-                {
-                    if dynamic_batch.requires_ordered_rendering() {
-                        self.renderer.render_overlay_msaa(target, dynamic_batch, 1);
-                    } else {
-                        self.renderer.render_overlay(target, dynamic_batch);
-                    }
-                    // Restore static auxiliary rows before subsequent text and SVG
-                    // dispatch.
-                    self.renderer.update_aux_data_for_batch(&batch);
-                }
-                self.renderer.render_foreground(target, dynamic_batch);
-                self.renderer.update_aux_data_for_batch(&batch);
-            }
-            self.restore_dynamic_batch(moved);
+            self.dispatch_dynamic_batch_and_motion(tree, target);
+            // Restore static auxiliary rows before subsequent text and SVG dispatch.
+            self.renderer.update_aux_data_for_batch(&batch);
             self.draw_scroll_row_scrollbars(tree, target);
         }
 
@@ -598,8 +582,11 @@ impl RenderContext {
         // each frame. Where motion is not baked to textures (the node table, or vectors) that copy
         // would stay at the pose of this paint while the other moves.
         let motion_is_vectors = self.rows_mode();
+        if self.in_compositor_inner_call && !motion_is_vectors {
+            self.dispatch_motion_subtree_overlay_pools(tree, target, MotionBand::Below, ALL_Z);
+        }
         if !(self.in_compositor_inner_call && motion_is_vectors) {
-            self.dispatch_motion_subtree_overlay_pools(tree, target);
+            self.dispatch_motion_subtree_overlay_pools(tree, target, MotionBand::Foreground, ALL_Z);
         }
 
         // Draw promoted backgrounds before separately dispatched motion text and SVG.

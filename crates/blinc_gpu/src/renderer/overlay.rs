@@ -11,6 +11,7 @@ mod glass_backdrop;
 mod gpu_pass;
 mod layer_batch;
 mod named;
+mod split;
 pub(super) use alpha::AlphaPass;
 
 #[cfg(test)]

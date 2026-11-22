@@ -1,4 +1,5 @@
 //! Dispatch foreground, dynamic and motion overlay streams.
+use super::composite_replay::{ALL_Z, MotionBand};
 use super::{
     Brush, CanvasOverlay, Color, CornerRadius, DrawCommand, GpuPaintContext, Overlay,
     PrimitiveBatch, Rect, RenderContext, Stroke,
@@ -72,21 +73,119 @@ impl RenderContext {
 
     /// Draw the dynamic owner in a separate pass with its own auxiliary rows.
     pub(super) fn dispatch_dynamic_batch_overlay(&mut self, target_view: &wgpu::TextureView) {
+        self.dispatch_dynamic_batch_around(target_view, |_| {});
+    }
+
+    /// Draw the dynamic owner with the motion content that is not in the foreground layer in
+    /// paint order: each run of the batch's primitives on one paint layer, then the motion
+    /// images, text and SVGs of that layer, then the batch's foreground primitives. A toast or a
+    /// menu is on a higher layer or in the foreground, so text below it stays below it.
+    pub(super) fn dispatch_dynamic_batch_and_motion(
+        &mut self,
+        tree: &blinc_layout::RenderTree,
+        target_view: &wgpu::TextureView,
+    ) {
+        let layers = self
+            .cached_dynamic_batch
+            .as_ref()
+            .and_then(|batch| self.dynamic_batch_layers(batch));
+        let Some(layers) = layers else {
+            self.dispatch_dynamic_batch_around(target_view, |this| {
+                this.dispatch_motion_subtree_overlay_pools(
+                    tree,
+                    target_view,
+                    MotionBand::Below,
+                    ALL_Z,
+                );
+            });
+            return;
+        };
         self.rebind_glyph_atlas_for_overlay();
         let moved = self.resolve_dynamic_batch();
-        if let Some(batch) = self.cached_dynamic_batch.as_ref() {
-            if !batch.primitives.is_empty() || batch.has_paths() || batch.has_ordered_draws() {
-                if batch.requires_ordered_rendering() {
-                    // Keep paths and group commands together. One sample retains
-                    // SDF coverage across opacity/effect boundaries.
-                    self.renderer.render_overlay_msaa(target_view, batch, 1);
-                } else {
-                    self.renderer.render_overlay(target_view, batch);
-                }
+        for (i, (range, _)) in layers.iter().enumerate() {
+            self.rebind_glyph_atlas_for_overlay();
+            if let Some(batch) = self.cached_dynamic_batch.as_ref() {
+                self.renderer
+                    .render_overlay_part(target_view, batch, range.clone());
             }
+            // The first layer's motion content also takes what is below it, the last's what is
+            // above it.
+            let low = if i == 0 { 0 } else { layers[i].1 };
+            let high = layers.get(i + 1).map_or(u32::MAX, |next| next.1 - 1);
+            self.dispatch_motion_subtree_overlay_pools(
+                tree,
+                target_view,
+                MotionBand::Below,
+                low..=high,
+            );
+        }
+        self.dispatch_dynamic_foreground(target_view);
+        self.restore_dynamic_batch(moved);
+    }
+
+    /// The runs of the dynamic batch's primitives on one paint layer, with that layer, when
+    /// there is more than one and the batch can be drawn in those parts.
+    fn dynamic_batch_layers(
+        &self,
+        batch: &PrimitiveBatch,
+    ) -> Option<Vec<(std::ops::Range<usize>, u32)>> {
+        let mut layers: Vec<(std::ops::Range<usize>, u32)> = Vec::new();
+        for (i, p) in batch.primitives.iter().enumerate() {
+            let z = p.z_layer();
+            match layers.last_mut() {
+                Some((range, layer)) if *layer == z => range.end = i + 1,
+                // Layers that come back down are not drawn in parts.
+                Some((_, layer)) if *layer > z => return None,
+                _ => layers.push((i..i + 1, z)),
+            }
+        }
+        if layers.len() < 2 {
+            return None;
+        }
+        layers.first_mut()?.0.start = 0;
+        let cuts: Vec<usize> = layers[1..].iter().map(|(range, _)| range.start).collect();
+        self.renderer
+            .overlay_divides_at(batch, &cuts)
+            .then_some(layers)
+    }
+
+    fn dispatch_dynamic_batch_around(
+        &mut self,
+        target_view: &wgpu::TextureView,
+        between: impl FnOnce(&mut Self),
+    ) {
+        self.rebind_glyph_atlas_for_overlay();
+        let moved = self.resolve_dynamic_batch();
+        if let Some(batch) = self.cached_dynamic_batch.as_ref()
+            && (!batch.primitives.is_empty() || batch.has_paths() || batch.has_ordered_draws())
+        {
+            if batch.requires_ordered_rendering() {
+                // Keep paths and group commands together. One sample retains
+                // SDF coverage across opacity/effect boundaries.
+                self.renderer.render_overlay_msaa(target_view, batch, 1);
+            } else {
+                self.renderer.render_overlay(target_view, batch);
+            }
+        }
+        between(self);
+        self.dispatch_dynamic_foreground(target_view);
+        self.restore_dynamic_batch(moved);
+    }
+
+    /// The dynamic batch's foreground primitives.
+    fn dispatch_dynamic_foreground(&mut self, target_view: &wgpu::TextureView) {
+        if let Some(batch) = self.cached_dynamic_batch.as_ref()
+            && batch.has_foreground_content()
+        {
+            // What was drawn before bound its own glyph atlas and auxiliary rows.
+            if let (Some(atlas), Some(color_atlas)) =
+                (self.text_ctx.atlas_view(), self.text_ctx.color_atlas_view())
+            {
+                self.renderer.set_glyph_atlas(atlas, color_atlas);
+            }
+            self.renderer.update_aux_data_for_batch(batch);
             self.renderer.render_foreground(target_view, batch);
         }
-        self.restore_dynamic_batch(moved);
     }
 
     /// Draw the scrollbars of the scroll containers on rows, which are not in the batch: their

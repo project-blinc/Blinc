@@ -20,6 +20,23 @@ impl LayerScope {
     }
 }
 
+/// Which motion content a pass draws: what sits below the dynamic batch's foreground
+/// primitives, or what is in the foreground layer and draws above them.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum MotionBand {
+    Below,
+    Foreground,
+}
+
+impl MotionBand {
+    fn holds(self, foreground: bool) -> bool {
+        (self == Self::Foreground) == foreground
+    }
+}
+
+/// Every paint layer.
+pub(super) const ALL_Z: std::ops::RangeInclusive<u32> = 0..=u32::MAX;
+
 impl RenderContext {
     /// Fingerprint intrinsic subtree content and group operations for bake reuse.
     pub(super) fn hash_composite_scratch(batch: &blinc_gpu::primitives::PrimitiveBatch) -> u64 {
@@ -150,16 +167,23 @@ impl RenderContext {
         }
     }
 
-    /// Render motion text and SVG after their owning backgrounds.
+    /// Render the motion images, text and SVGs of `band` whose paint layer is in `z` after
+    /// their owning backgrounds.
     pub(super) fn dispatch_motion_subtree_overlay_pools(
         &mut self,
         tree: &blinc_layout::RenderTree,
         target_view: &wgpu::TextureView,
+        band: MotionBand,
+        z: std::ops::RangeInclusive<u32>,
     ) {
         // IMAGES: above the card's background, below its text. The compositor's cache paint
         // does not draw them: the static layer would keep a copy at the painted pose.
         if !self.in_compositor_inner_call
-            && let Some(images) = self.cached_motion_subtree_images.clone()
+            && let Some(mut images) = self.cached_motion_subtree_images.clone()
+            && {
+                images.retain(|i| band.holds(i.is_foreground) && z.contains(&i.z_index));
+                !images.is_empty()
+            }
         {
             let (width, height) = self.renderer.viewport_size();
             let images = self.node_rows.place_images(&images, tree.scale_factor());
@@ -172,8 +196,29 @@ impl RenderContext {
             );
         }
         // TEXT — alpha + blit-anchored center remap.
+        // Primitives no run owns are taken as below the foreground, at paint layer 0.
+        let unowned = band == MotionBand::Below && z.contains(&0);
+        let others: Vec<std::ops::Range<usize>> = self
+            .cached_motion_subtree_text_prims
+            .as_ref()
+            .map(|text| {
+                text.owners
+                    .iter()
+                    .filter(|run| {
+                        text.elements.get(run.element).is_some_and(|e| {
+                            !(band.holds(e.is_foreground) && z.contains(&e.z_index))
+                        })
+                    })
+                    .map(|run| run.range.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let owned = |text: &cached_text::TextBatch| {
+            text.owners.iter().map(|r| r.range.len()).sum::<usize>()
+        };
         if let Some(mut text) = self.cached_motion_subtree_text_prims.clone()
             && !text.is_empty()
+            && (unowned || owned(&text) > others.iter().map(|r| r.len()).sum::<usize>())
         {
             if !self.motion_subtree_text_patch.is_empty() {
                 let dpi = tree.scale_factor().max(1.0);
@@ -226,12 +271,37 @@ impl RenderContext {
                 *std::sync::Arc::make_mut(&mut text.aux_data) = aux;
                 text.primitives = self.node_rows.resolve_primitives(&text.primitives);
             }
+            if !others.is_empty() || !unowned {
+                let mut keep = vec![unowned; text.primitives.len()];
+                for run in &text.owners {
+                    for k in keep.get_mut(run.range.clone()).into_iter().flatten() {
+                        *k = true;
+                    }
+                }
+                for range in &others {
+                    for k in keep.get_mut(range.clone()).into_iter().flatten() {
+                        *k = false;
+                    }
+                }
+                let mut at = 0;
+                text.primitives.retain(|_| {
+                    at += 1;
+                    keep[at - 1]
+                });
+                // Glyphs that are not primitives have no owner run either.
+                if !unowned {
+                    text.glyphs.clear();
+                }
+            }
             self.render_text(target_view, &text);
         }
         // SVG — alpha only (icons are small; the settle repaint lands
         // the exact final position when the animation completes).
         if let Some(mut svgs) = self.cached_motion_subtree_svgs.clone()
-            && !svgs.is_empty()
+            && {
+                svgs.retain(|s| band.holds(s.is_foreground) && z.contains(&s.z_layer));
+                !svgs.is_empty()
+            }
         {
             if svgs.iter().any(|s| s.composite_ancestor.is_some())
                 && let Ok(store) = tree.css_anim_store().lock()

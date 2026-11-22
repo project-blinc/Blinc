@@ -537,6 +537,9 @@ struct ImageElement {
     /// Whether the image is inside a motion container, and so is drawn after the dynamic batch
     /// that its card's background is in.
     in_motion_subtree: bool,
+    /// Whether the image is in the foreground layer, which draws above the dynamic batch's
+    /// ordinary primitives.
+    is_foreground: bool,
     /// The row of the node table that moves this image, set when the table has taken it.
     row: Option<u32>,
     /// From which row of its chain the image's clip moves with the rows.
@@ -589,6 +592,9 @@ struct SvgElement {
     in_motion_subtree: bool,
     /// Paint layer used to order SVGs alongside primitives and text.
     z_layer: u32,
+    /// Whether the SVG is in the foreground layer, which draws above the dynamic batch's
+    /// ordinary primitives.
+    is_foreground: bool,
     /// Nearest composite-promoted ancestor — same live-patch contract
     /// as `TextElement.composite_ancestor`: the composite animation's
     /// opacity is excluded from `motion_opacity` at collect and

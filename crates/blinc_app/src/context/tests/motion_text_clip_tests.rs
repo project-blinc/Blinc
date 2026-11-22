@@ -184,7 +184,12 @@ fn motion_text_clip_replay_restores_rebased_rows_and_damage_scissor() {
             c.renderer.clear_target(&view, wgpu::Color::BLUE);
             c.renderer.update_aux_data_slice(&vec![[0.0; 4]; 4096]);
             c.renderer.set_pending_scissor((35, 0, W - 35, H));
-            c.dispatch_motion_subtree_overlay_pools(&t, &view);
+            c.dispatch_motion_subtree_overlay_pools(
+                &t,
+                &view,
+                super::super::composite_replay::MotionBand::Below,
+                super::super::composite_replay::ALL_Z,
+            );
             c.renderer.clear_pending_scissor();
             assert!(Arc::ptr_eq(
                 &owned.aux_data,
