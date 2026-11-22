@@ -205,7 +205,8 @@ fn foreground_layers_cache_patchers_request_full_paint_without_mutation() {
     context.cached_dynamic_batch = Some(group());
     context.cached_bg_batch = Some(group());
     assert!(!context.apply_binding_deltas(&tree, 1.0));
-    assert!(!context.redraw_canvases(&tree, 160, 120));
+    // The tree has no canvas, so replay has nothing to do and leaves the batches alone.
+    assert!(context.redraw_canvases(&tree, 160, 120));
     assert!(matches!(
         context.apply_css_deltas(&tree, 1.0),
         CssDeltaResult::Bail

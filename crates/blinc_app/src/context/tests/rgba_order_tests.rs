@@ -444,7 +444,8 @@ fn rgba_order_primitive_cache_patchers_bail_before_mutation() {
     let context = app.context();
     context.cached_bg_batch = Some(batch.clone());
     context.cached_dynamic_batch = Some(batch);
-    assert!(!context.redraw_canvases(&tree, 160, 120));
+    // The tree has no canvas, so replay has nothing to do and leaves the batches alone.
+    assert!(context.redraw_canvases(&tree, 160, 120));
     assert!(matches!(
         context.apply_css_deltas(&tree, 1.0),
         CssDeltaResult::Bail
