@@ -2,11 +2,11 @@
   "animated": true,
   "artifacts_sha256": {
     "poster.png": "3792b17b764b6c23094fc2c0c8c9ab778473317704d9973269962304b29cc282",
-    "preview.gif": "fa2b47e306087afd84d9e53b2ceb7b60f81862e8f6a8902c967a3ebf39a3308b"
+    "preview.gif": "c68fade37e1ec024c05081a88e0750757c4813e2cd73679b2a43ef7b863720ad"
   },
   "cursor": "none",
   "delay_ms": 60,
-  "fixture_sha256": "26e447bc630984086717d387665e2435ab06d13f32b2b919c0dfaced15fb765b",
+  "fixture_sha256": "3863d1b8f3712f44241a32d1d4c4dbf524473f737d344dd18e49e4bab1c8bdb8",
   "frames": 48,
   "logical_height": 320,
   "logical_width": 560,
