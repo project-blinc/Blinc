@@ -118,9 +118,13 @@ card()
 
 ### Card with Form
 
+`.w_full().max_w(350.0)` makes a card 350 px wide where there is room and
+narrower in a smaller container; `.w(350.0)` keeps it at 350 px.
+
 ```rust
 card()
-    .w(350.0)
+    .w_full()
+    .max_w(350.0)
     .child(card_header()
         .child(card_title("Login"))
         .child(card_description("Enter your credentials")))

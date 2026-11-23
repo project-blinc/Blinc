@@ -1073,6 +1073,8 @@ pub const CN_STYLES: &str = concat!(
 .cn-progress {
     background: var(--cn-progress-track, var(--border));
     border-radius: var(--radius-full);
+    /* A set width gives way to a narrower container. */
+    max-width: 100%;
 }
 .cn-progress-bar {
     background: var(--cn-progress-bar, var(--primary));
@@ -1092,7 +1094,8 @@ pub const CN_STYLES: &str = concat!(
    ============================================================================ */
 
 /* A plot drawn on a canvas, with its labels, tooltip and legend as parts. */
-.cn-chart { gap: 12px; }
+/* A set width gives way to a narrower container; the plot draws at the width it gets. */
+.cn-chart { gap: 12px; max-width: 100%; }
 .cn-chart-axis { font-size: var(--text-xs); color: var(--text-tertiary); }
 .cn-chart-axis[data-hidden] { opacity: 0; }
 .cn-chart-legend {
@@ -1333,6 +1336,9 @@ pub const CN_STYLES: &str = concat!(
 .cn-breadcrumb {
     gap: var(--space-2);
     color: var(--text-secondary);
+    /* A trail longer than its container wraps onto the next line. */
+    flex-wrap: wrap;
+    max-width: 100%;
 }
 .cn-breadcrumb-item { color: var(--text-secondary); }
 .cn-breadcrumb-item[data-link]:hover { color: var(--text-primary); }
@@ -1348,8 +1354,12 @@ pub const CN_STYLES: &str = concat!(
 
 .cn-pagination {
     gap: var(--space-1);
+    /* Narrower than its buttons, the row wraps them rather than squeezing them. */
+    flex-wrap: wrap;
+    max-width: 100%;
 }
 .cn-pagination-btn {
+    flex-shrink: 0;
     border: 1px solid var(--border);
     border-radius: var(--radius-default);
     cursor: pointer;
@@ -1381,6 +1391,9 @@ pub const CN_STYLES: &str = concat!(
 
 .cn-nav-menu {
     gap: var(--space-1);
+    /* Narrower than its links, the bar wraps them rather than running past its container. */
+    flex-wrap: wrap;
+    max-width: 100%;
 }
 .cn-nav-link {
     padding: var(--space-2) var(--space-3);
@@ -1600,6 +1613,9 @@ pub const CN_STYLES: &str = concat!(
     border-radius: var(--radius-md);
     padding: var(--space-1);
     gap: var(--space-1);
+    /* Narrower than its triggers, the bar wraps them rather than running past its container. */
+    flex-wrap: wrap;
+    max-width: 100%;
 }
 .cn-menubar-trigger {
     padding: var(--space-1-5) var(--space-3);

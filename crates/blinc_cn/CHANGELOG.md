@@ -12,6 +12,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - A collapsible, `collapsible_section`, accordion section and tree group builds its content the first time it opens, and keeps it: closing folds it without tearing it down. A section never opened builds nothing. `collapsible_section` takes its content as `Fn` rather than `FnOnce`.
 
 ### Added
+- `Card::max_w` sets the largest width a card may take, so `.w_full().max_w(350.0)` is 350 px wide where there is room and narrower where there is not.
 - `TabsBuilder::closable` gives each trigger a close button, shown on the active trigger and while another is hovered, that reports the tab without selecting it.
 - `SidebarBuilder::toggle_item` adds an item that is active while a bool, signal or computed holds, for an item that opens a panel rather than navigating; pressing it leaves the selection alone.
 - Tooltips close when their trigger is pressed, and by themselves 5 seconds after opening; `TooltipBuilder::auto_hide_ms` changes the wait. A tooltip whose trigger a click hides no longer stays on screen.
@@ -24,6 +25,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - Typography has a dedicated guide covering all helpers, reactive content, inline composition and CSS class hooks; the gallery embeds that guide.
 
 ### Fixed
+- In a container narrower than they are, the menubar, navigation menu, breadcrumb and pagination wrap onto more lines instead of running past its edge, and pagination buttons keep their size instead of being squeezed. A progress bar or chart with a set width shrinks to such a container; the chart draws at the width it gets.
 - The pill behind the active tab takes no pointer input, so the desktop runner hovers what is drawn over it, such as a closable tab's close button, however the pointer arrives.
 - A tooltip opens on the side of its trigger that has room in the window, instead of being clamped back over the trigger, and takes no pointer input, so its trigger keeps the hover and the click and leaving it closes the tooltip.
 - Widgets inside a resizable panel keep their handlers when rows change elsewhere: each panel has its id from the first build, so its descendants' stable ids do not change.

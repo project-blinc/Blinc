@@ -72,6 +72,12 @@ impl Card {
         self
     }
 
+    /// Set the largest width it may take, in pixels
+    pub fn max_w(mut self, width: f32) -> Self {
+        self.inner = self.inner.max_w(width);
+        self
+    }
+
     /// Set padding on all sides
     pub fn p(mut self, padding: f32) -> Self {
         self.inner = self.inner.p(padding);
