@@ -23,7 +23,7 @@ impl RenderContext {
         // the rows cannot draw is patched below as before.
         match self.try_node_rows(tree, scale, false) {
             Some(Outcome::Applied { active }) => {
-                tracing::info!(target: "blinc_app::node_rows", outcome = "applied", "node_rows");
+                tracing::trace!(target: "blinc_app::node_rows", outcome = "applied", "node_rows");
                 self.last_binding_damage_rects.clear();
                 tree.set_visible_anim_active(active);
                 tree.note_scroll_rows_applied();
@@ -35,7 +35,7 @@ impl RenderContext {
                 return !(active && self.motion_overlay_unmovable(tree));
             }
             Some(Outcome::Declined) => {
-                tracing::info!(target: "blinc_app::node_rows", outcome = "declined", "node_rows");
+                tracing::trace!(target: "blinc_app::node_rows", outcome = "declined", "node_rows");
             }
             None => {}
         }
