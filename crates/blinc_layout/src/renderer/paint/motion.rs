@@ -100,6 +100,7 @@ impl RenderTree {
         self.binding_ordinals.borrow_mut().clear();
         self.clear_scroll_rows_record();
         self.clear_held_scrollbars();
+        self.z_raises.set(0);
         self.bound_svg.set(false);
         self.painted_unpromoted_binding.set(false);
         // Phase 4b: per-CSS-animated-node paint metadata. Same
@@ -955,6 +956,12 @@ impl RenderTree {
         // content after it keeps the layer it had.
         let z_before_overlay = render_node.props.is_overlay_root.then(|| ctx.z_layer());
         let is_stack_layer = render_node.props.is_stack_layer || render_node.props.is_overlay_root;
+        // Content raised above this node's layer draws above its scrollbar, which a held
+        // scrollbar would not: count the raises so the scrollbar site can tell.
+        let z_raises_before = self.z_raises.get();
+        if is_stack_layer || render_node.props.z_index > 0 {
+            self.z_raises.set(z_raises_before + 1);
+        }
         if is_stack_layer {
             let current_z = ctx.z_layer();
             ctx.set_z_layer(current_z + 1);
@@ -2216,7 +2223,8 @@ impl RenderTree {
         {
             let info = p.scrollbar_render_info();
             drop(p);
-            if !self.hold_scrollbar(&*ctx, node, (bounds.width, bounds.height))
+            let raised_inside = self.z_raises.get() != z_raises_before;
+            if (raised_inside || !self.hold_scrollbar(&*ctx, node, (bounds.width, bounds.height)))
                 && info.opacity > 0.01
             {
                 self.render_scrollbar(ctx, bounds.width, bounds.height, &info);

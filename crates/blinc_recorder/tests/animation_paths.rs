@@ -4287,13 +4287,18 @@ fn how_much_memory_css_animated_cards_hold() {
 
 /// A scroll container kept off rows by a sticky header, scrolled once, whose auto-hiding
 /// scrollbar then fades out a step at a time. The fade is set on the physics directly: its timer
-/// runs on the wall clock.
-fn fading_scrollbar_scene() -> Scene {
+/// runs on the wall clock. `raised` puts a panel with a z-index over the track, as an open
+/// dropdown inside the page does, which must stay above the scrollbar.
+fn fading_scrollbar_scene(raised: bool) -> Scene {
     let steps = 12;
     let physics: Arc<Mutex<Option<blinc_layout::widgets::SharedScrollPhysics>>> =
         Arc::new(Mutex::new(None));
     Scene {
-        name: "a scrollbar fades over still content",
+        name: if raised {
+            "a scrollbar fades under a raised panel"
+        } else {
+            "a scrollbar fades over still content"
+        },
         steps,
         step_ms: 16,
         build: Box::new(move |ui| {
@@ -4317,6 +4322,18 @@ fn fading_scrollbar_scene() -> Scene {
                             .rounded(6.0)
                             .bg(Color::rgb(0.25, 0.45, 0.7))
                             .child(text(format!("Row {i}")).size(13.0).color(Color::WHITE)),
+                    );
+                }
+                if raised {
+                    list = list.child(
+                        div()
+                            .absolute()
+                            .top(340.0)
+                            .right(-20.0)
+                            .w(80.0)
+                            .h(90.0)
+                            .bg(Color::rgb(0.8, 0.3, 0.3))
+                            .z_index(5),
                     );
                 }
                 let container = scroll()
@@ -4352,7 +4369,7 @@ fn fading_scrollbar_scene() -> Scene {
 /// the frames after the scroll take the fast path, and they show what a full paint shows.
 #[test]
 fn a_fading_scrollbar_over_still_content_takes_the_fast_path() {
-    let scene = fading_scrollbar_scene();
+    let scene = fading_scrollbar_scene(false);
     let (Some(full), Some((rows, paths))) =
         (run(&scene, Path::Full), run_logged(&scene, Path::Rows))
     else {
@@ -4378,4 +4395,20 @@ fn a_fading_scrollbar_over_still_content_takes_the_fast_path() {
         paths[2..].iter().all(|p| p != "full"),
         "a frame of the fade was a full paint: {paths:?}"
     );
+}
+
+/// A panel raised above the page by a z-index stays above the page's scrollbar while it fades,
+/// as it does with scroll rows off. The vector frames are full paints with scroll rows on, so a
+/// held scrollbar would be drawn there over the panel. (The rows path is not compared: nothing
+/// tells the harness that a scrollbar in the batch changed, where the window repaints for it.)
+#[test]
+fn a_raised_panel_stays_above_a_fading_scrollbar() {
+    let scene = fading_scrollbar_scene(true);
+    let (Some(full), Some(vector)) = (run(&scene, Path::Full), run(&scene, Path::Vector)) else {
+        return;
+    };
+    for (i, (a, b)) in full.iter().zip(&vector).enumerate() {
+        let d = difference(a, b, LEVELS);
+        assert_eq!(d.differing, 0, "step {i} differs by {} px", d.differing);
+    }
 }

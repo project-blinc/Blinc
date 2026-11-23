@@ -3,9 +3,10 @@
 //! An auto-hiding scrollbar changes its opacity while the content under it stays still. Painted
 //! into the batch, every frame of its fade would be a full paint. The walker instead records
 //! where such a scrollbar is (its transform and the clip in force) and leaves it out, and the
-//! renderer draws it from the physics each frame, as it does for containers on rows. Only a
-//! container nothing above it can move is held: no scroll container, bound node, animation or
-//! overlay above it, and no overlay open, which would have to cover it.
+//! renderer draws it from the physics each frame, as it does for containers on rows. It is drawn
+//! after the content, so only a container nothing above it can move and nothing inside it can
+//! cover is held: no scroll container, bound node, animation or overlay above it, nothing under
+//! it raised to a higher layer (a z-index, a stack layer), and no overlay open.
 
 use super::RenderTree;
 use crate::tree::LayoutNodeId;

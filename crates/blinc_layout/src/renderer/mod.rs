@@ -799,6 +799,9 @@ pub struct RenderTree {
     /// The scroll containers whose scrollbar the last paint left out of the batch, to be drawn
     /// each frame; see `held_scrollbars`.
     held_scrollbars: RefCell<NodeMap<held_scrollbars::HeldScrollbar>>,
+    /// How many nodes the walk in progress has raised above the layer they were in (a z-index,
+    /// a stack layer, an overlay root).
+    z_raises: Cell<u64>,
     /// Indexes over the children of containers with very many; see `child_index`.
     child_indexes: RefCell<child_index::ChildIndexes>,
     /// Answers about subtrees kept while the tree's revisions stay; see `subtree_cache`.
@@ -1290,6 +1293,7 @@ impl RenderTree {
             scroll_rows: Cell::new(false),
             scroll_row_nodes: RefCell::new(HashMap::default()),
             held_scrollbars: RefCell::new(HashMap::default()),
+            z_raises: Cell::new(0),
             child_indexes: RefCell::new(HashMap::default()),
             subtree_cache: RefCell::new(subtree_cache::SubtreeCache::default()),
             node_scan: RefCell::new(None),
