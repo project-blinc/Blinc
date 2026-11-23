@@ -6,8 +6,9 @@
 //! same rules again; leaving it out changes nothing.
 //!
 //! What an update can change the matches of:
-//! - a region's rows coming and going: the container's subtree (sibling combinators,
-//!   `:last-child`) and, with `:has` rules, its ancestors;
+//! - a region's rows coming and going: the container and its rows (sibling combinators,
+//!   `:last-child`), the rows' subtrees when a rule reads an ancestor's position among its
+//!   siblings, and, with `:has` rules, the container's ancestors;
 //! - a class or attribute toggled on a node: its parent's subtree (descendant and sibling
 //!   combinators reach the node's descendants and later siblings) and, with `:has` rules,
 //!   the parent's ancestors;
@@ -31,6 +32,10 @@ pub(crate) enum Restyle {
     Node(LayoutNodeId),
     /// The node and everything under it.
     Subtree(LayoutNodeId),
+    /// A region's container, whose rows came, went or moved: the container and its children,
+    /// and everything under them when a layout rule reads an ancestor's position among its
+    /// siblings. The rows built new have had the pass on their subtrees already.
+    Rows(LayoutNodeId),
 }
 
 impl RenderTree {
@@ -53,6 +58,7 @@ impl RenderTree {
             return;
         }
         let ancestors = rules.iter().any(|(s, _)| has_in_subject(s));
+        let positional = stylesheet.layout_reads_ancestor_position();
         // Many updates name one root: the rows of a grid toggling classes all name the grid.
         let roots: HashSet<Restyle> = recorded.into_iter().collect();
         let mut nodes = crate::tree::NodeSet::default();
@@ -64,6 +70,17 @@ impl RenderTree {
                     node
                 }
                 Restyle::Subtree(node) => {
+                    subtree.clear();
+                    self.collect_subtree_ids(node, &mut subtree);
+                    nodes.extend(subtree.iter().copied());
+                    node
+                }
+                Restyle::Rows(node) if !positional => {
+                    nodes.insert(node);
+                    nodes.extend(self.layout_tree.children(node));
+                    node
+                }
+                Restyle::Rows(node) => {
                     subtree.clear();
                     self.collect_subtree_ids(node, &mut subtree);
                     nodes.extend(subtree.iter().copied());

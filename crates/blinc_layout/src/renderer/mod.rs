@@ -3495,7 +3495,7 @@ impl RenderTree {
                 && regions_seen.insert((update.node_id, region))
             {
                 effects = effects.or(self.reconcile_region(update.node_id, region));
-                self.note_layout_restyle(Restyle::Subtree(update.node_id));
+                self.note_layout_restyle(Restyle::Rows(update.node_id));
             }
         }
         crate::stateful::requeue_partial_updates(foreign);

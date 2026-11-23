@@ -69,6 +69,9 @@ struct RuleIndex {
     universal: Vec<u32>,
     /// Per rule: whether it sets a layout property and needs no interaction state.
     stateless_layout: Vec<bool>,
+    /// Whether a stateless layout rule reads where one of its subject's ancestors sits among
+    /// its siblings.
+    layout_reads_ancestor_position: bool,
 }
 
 /// What a rule's subject needs of an element, as far as the index is concerned.
@@ -122,6 +125,10 @@ impl RuleIndex {
             .iter()
             .map(|(selector, style)| style.has_layout_props() && !selector.has_state())
             .collect();
+        index.layout_reads_ancestor_position = rules
+            .iter()
+            .zip(&index.stateless_layout)
+            .any(|((selector, _), layout)| *layout && reads_ancestor_position(selector));
         for (i, (selector, _)) in rules.iter().enumerate() {
             let i = i as u32;
             match RuleKey::of(selector) {
@@ -144,6 +151,36 @@ impl RuleIndex {
         }
         index
     }
+}
+
+/// Whether `selector` reads where an ancestor of its subject sits among its siblings: a compound
+/// before the subject with a structural pseudo-class (or a `:not`, `:is` or `:has`, which may
+/// hold one), or a sibling combinator between two compounds before the subject.
+fn reads_ancestor_position(selector: &ComplexSelector) -> bool {
+    let n = selector.segments.len();
+    selector
+        .segments
+        .iter()
+        .enumerate()
+        .any(|(i, (compound, combinator))| {
+            let before_subject = i + 1 < n;
+            let positional = compound.parts.iter().any(|part| {
+                matches!(
+                    part,
+                    SelectorPart::PseudoClass(_)
+                        | SelectorPart::Not(_)
+                        | SelectorPart::Is(_)
+                        | SelectorPart::Has(_)
+                )
+            });
+            // The combinator after compound `i` joins it to compound `i + 1`.
+            let sibling_between_ancestors = i + 2 < n
+                && matches!(
+                    combinator,
+                    Some(Combinator::AdjacentSibling | Combinator::GeneralSibling)
+                );
+            (before_subject && positional) || sibling_between_ancestors
+        })
 }
 
 impl Stylesheet {
@@ -533,6 +570,16 @@ impl Stylesheet {
     /// Get all complex selector rules
     pub fn complex_rules(&self) -> &[(ComplexSelector, ElementStyle)] {
         &self.complex_rules
+    }
+
+    /// Whether a stateless layout rule reads where an ancestor of its subject sits among its
+    /// siblings, as `.row:last-child .cell` or `.a + .b .c` do. Without one, moving a node among
+    /// its siblings changes the layout rules that match it, not those that match below it.
+    pub fn layout_reads_ancestor_position(&self) -> bool {
+        self.rule_index
+            .0
+            .get_or_init(|| RuleIndex::of(&self.complex_rules))
+            .layout_reads_ancestor_position
     }
 
     /// For each of [`Self::complex_rules`], whether it sets a layout property and needs no
