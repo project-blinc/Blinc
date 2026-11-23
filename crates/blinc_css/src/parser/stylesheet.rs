@@ -67,6 +67,8 @@ struct RuleIndex {
     by_attribute: HashMap<String, Vec<u32>>,
     by_type: HashMap<String, Vec<u32>>,
     universal: Vec<u32>,
+    /// Per rule: whether it sets a layout property and needs no interaction state.
+    stateless_layout: Vec<bool>,
 }
 
 /// What a rule's subject needs of an element, as far as the index is concerned.
@@ -116,6 +118,10 @@ impl RuleKey<'_> {
 impl RuleIndex {
     fn of(rules: &[(ComplexSelector, ElementStyle)]) -> Self {
         let mut index = RuleIndex::default();
+        index.stateless_layout = rules
+            .iter()
+            .map(|(selector, style)| style.has_layout_props() && !selector.has_state())
+            .collect();
         for (i, (selector, _)) in rules.iter().enumerate() {
             let i = i as u32;
             match RuleKey::of(selector) {
@@ -527,6 +533,16 @@ impl Stylesheet {
     /// Get all complex selector rules
     pub fn complex_rules(&self) -> &[(ComplexSelector, ElementStyle)] {
         &self.complex_rules
+    }
+
+    /// For each of [`Self::complex_rules`], whether it sets a layout property and needs no
+    /// interaction state: the rules a layout pass matches. Worked out once per set of rules.
+    pub fn stateless_layout_rules(&self) -> &[bool] {
+        &self
+            .rule_index
+            .0
+            .get_or_init(|| RuleIndex::of(&self.complex_rules))
+            .stateless_layout
     }
 
     /// What the rule at `index` of [`Self::complex_rules`] needs of the elements it matches, by

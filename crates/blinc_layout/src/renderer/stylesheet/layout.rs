@@ -87,10 +87,7 @@ impl RenderTree {
         // Complex rules: class, type, and combinator selectors. A node takes the rules that match
         // it, in ascending specificity.
         let complex_rules = stylesheet.complex_rules();
-        let layout_rules: Vec<bool> = complex_rules
-            .iter()
-            .map(|(selector, style)| style.has_layout_props() && !selector.has_state())
-            .collect();
+        let layout_rules = stylesheet.stateless_layout_rules();
         if layout_rules.contains(&true) {
             let no_state = crate::tree::NodeSet::default();
             let nodes: Vec<LayoutNodeId> = match subtree_filter {

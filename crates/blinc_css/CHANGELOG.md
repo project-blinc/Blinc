@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- `Stylesheet::stateless_layout_rules()` says, for each complex rule, whether it sets a layout property and needs no interaction state. It is worked out with the rule index, once per set of rules.
 - `RuleKey` and `Stylesheet::rule_key(index)`: what a complex rule's subject needs of the elements it matches (an id, a class, an attribute name, a type, or nothing), the key the rule is indexed under.
 - `Stylesheet::candidate_rules(id, classes, element_type)` lists, in the order they were written, the complex rules that can match an element with that id, those classes (an entry `name=value` is also the attribute `name`) and that type. Each rule is filed under the most selective thing its subject compound needs (an id, a class, an attribute name or a type; a subject that needs none is in every element's candidates), and the index is made on first use and dropped when stylesheets are merged.
 - Declaration-level `!important` support for background, text and uniform border colours, with component-layer precedence, specificity and source order. Unsupported importance properties report an error.
