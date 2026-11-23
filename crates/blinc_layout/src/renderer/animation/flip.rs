@@ -63,15 +63,20 @@ impl RenderTree {
         // Collect elements that moved: compare previous bounds with current absolute bounds
         let mut moved: Vec<(String, f32, f32, crate::tree::LayoutNodeId)> = Vec::new();
 
-        for (node_id, render_node) in &self.render_nodes {
-            let Some(element_id) = self.element_registry.get_id(*node_id) else {
+        // The elements snapshotted before the rebuild, found by id: the others have no bounds to
+        // move from.
+        for (element_id, old_bounds) in &self.flip_previous_bounds {
+            let Some(node_id) = self.element_registry.get(element_id) else {
+                continue;
+            };
+            let Some(render_node) = self.render_nodes.get(&node_id) else {
                 continue;
             };
             // Skip elements that already have a transform set by the app (e.g. the dragged item).
             // FLIP should only animate elements whose position changed passively due to reflow,
             // not elements being actively positioned via Transform::translate(). An identity
             // transform positions nothing, and a running slide's own offset is not the app's.
-            if !self.flip_animations.contains_key(&element_id)
+            if !self.flip_animations.contains_key(element_id)
                 && render_node
                     .props
                     .transform
@@ -81,10 +86,7 @@ impl RenderTree {
                 continue;
             }
 
-            let Some(old_bounds) = self.flip_previous_bounds.get(&element_id) else {
-                continue;
-            };
-            let Some(new_bounds) = self.layout_tree.get_absolute_bounds(*node_id) else {
+            let Some(new_bounds) = self.layout_tree.get_absolute_bounds(node_id) else {
                 continue;
             };
 
@@ -96,7 +98,7 @@ impl RenderTree {
             }
 
             tracing::trace!("FLIP: '{}' moved: delta=({:.1},{:.1})", element_id, dx, dy);
-            moved.push((element_id, dx, dy, *node_id));
+            moved.push((element_id.clone(), dx, dy, node_id));
         }
 
         if moved.is_empty() {

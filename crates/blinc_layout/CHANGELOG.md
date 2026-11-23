@@ -14,6 +14,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 
 ### Changed
+- FLIP transitions after a rebuild look up the elements snapshotted before it by id, instead of walking every render node for one with an id.
 - `LayoutTree::compute_layout` returns at once when the root and available space are those of the last layout and no node was marked dirty since, the case where taffy would answer from its cache. The epoch stays, so geometry cached against it stays valid.
 - The CSS layout pass reads which rules are stateless layout rules from the stylesheet instead of testing every rule on each pass.
 - `RenderTree::get_visual_render_bounds` computes a node's bounds when asked, from its ancestors' layout and visual animations, and returns them by value. A layout no longer walks every node to store bounds that rendering never read. `RenderTreeDebugStats::animated_bounds_count` is removed, and the motion debug panel drops its bar.
