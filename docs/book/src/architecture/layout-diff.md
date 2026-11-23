@@ -6,16 +6,16 @@ Blinc separates layout computation from visual rendering, enabling incremental u
 
 ### Taffy Integration
 
-Blinc uses [Taffy](https://github.com/DioxusLabs/taffy) for flexbox layout computation. Taffy is a high-performance layout engine that implements the CSS Flexbox specification.
+Blinc uses [Taffy](https://github.com/DioxusLabs/taffy) for flexbox, grid and block layout. Taffy's algorithms run over Blinc's own node storage, `LayoutTree`, through Taffy's tree traits. Each node holds its style, its children, its layout and Taffy's layout cache, and a `LayoutNodeId` is the node's key, with no second id to map.
 
-```rust
-// LayoutTree wraps Taffy
-struct LayoutTree {
-    taffy: TaffyTree,
-    node_map: HashMap<LayoutNodeId, TaffyNodeId>,
-    reverse_map: HashMap<TaffyNodeId, LayoutNodeId>,
-}
-```
+`LayoutTree` lays out again only the part of the tree that an edit can reach. During layout, each node keeps a log of the queries its parent asked it, with the answers it gave. A query asks for a size under given constraints, or for a full layout. After an edit, the changed node is asked its logged queries again, and its subtree is laid out again in the process. If every answer is the same, the parent's layout cannot change, so layout stops at that node and only its subtree is rounded to pixels. If an answer differs, the parent is asked again in the same way, one level up. Only an edit whose answers change all the way up lays the tree out from the root.
+
+A text change inside a box with a fixed size stops at the box. A month added to a clipped carousel stops at the carousel. A change that moves its siblings, such as a label that grows inside an auto-sized row, goes up as far as the sizes change.
+
+Two environment switches control this:
+
+- `BLINC_LAYOUT_BOUNDARIES=0` lays the tree out from the root after every edit, as Taffy's own tree does. It is safe to run with, but slower.
+- `BLINC_LAYOUT_CHECK=1` lays the tree out from scratch after every layout, and panics when any node's layout differs from the incremental result. It is for tests, and is much slower.
 
 ### Layout Properties vs Visual Properties
 
@@ -36,7 +36,7 @@ This separation allows visual-only updates without layout recomputation.
 
 ```rust
 struct RenderTree {
-    layout_tree: LayoutTree,           // Taffy wrapper
+    layout_tree: LayoutTree,           // nodes, styles and layouts
     render_props: HashMap<NodeId, RenderProps>,  // Visual properties
     dirty_nodes: HashSet<NodeId>,      // Nodes needing update
     scroll_state: HashMap<NodeId, ScrollState>,
@@ -316,3 +316,4 @@ fn process_pending_updates(&mut self) {
 - Layout only recomputes when structure/dimensions change
 - Visual-only changes skip layout entirely
 - Taffy caches intermediate results
+- An edit lays out again only the subtree whose answers to its parent change, as described in [Taffy Integration](#taffy-integration)
