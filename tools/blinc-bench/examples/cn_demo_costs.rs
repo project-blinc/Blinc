@@ -295,6 +295,10 @@ fn main() {
         .is_none()
         .then(|| tracing::subscriber::set_default(log.clone()));
     ui.settle();
+    // `on_ready` callbacks run on a thread after a wall-clock delay. Let them land, and settle
+    // what they start, before anything is measured.
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    ui.settle();
     rest(&mut ui);
 
     if let Some(cycles) = std::env::var("COSTS_CALENDAR")
