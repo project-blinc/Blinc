@@ -99,6 +99,7 @@ impl RenderTree {
         self.binding_clip_bounds.borrow_mut().clear();
         self.binding_ordinals.borrow_mut().clear();
         self.clear_scroll_rows_record();
+        self.clear_held_scrollbars();
         self.bound_svg.set(false);
         self.painted_unpromoted_binding.set(false);
         // Phase 4b: per-CSS-animated-node paint metadata. Same
@@ -2214,7 +2215,10 @@ impl RenderTree {
             && let Ok(p) = physics.try_lock()
         {
             let info = p.scrollbar_render_info();
-            if info.opacity > 0.01 {
+            drop(p);
+            if !self.hold_scrollbar(&*ctx, node, (bounds.width, bounds.height))
+                && info.opacity > 0.01
+            {
                 self.render_scrollbar(ctx, bounds.width, bounds.height, &info);
             }
         }

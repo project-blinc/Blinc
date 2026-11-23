@@ -222,8 +222,9 @@ impl RenderContext {
         }
     }
 
-    /// Draw the scrollbars of the scroll containers on rows, which are not in the batch: their
-    /// place and fade come from the physics, and change with every scroll.
+    /// Draw the scrollbars that are not in the batch: those of the scroll containers on rows,
+    /// whose place and fade come from the physics and change with every scroll, and the held
+    /// ones that fade by themselves.
     pub(super) fn draw_scroll_row_scrollbars(
         &mut self,
         tree: &blinc_layout::RenderTree,
@@ -234,6 +235,8 @@ impl RenderContext {
         }
         let (width, height) = self.renderer.viewport_size();
         let mut ctx = GpuPaintContext::new(width as f32, height as f32);
+        // Held scrollbars carry the walker's screen-space transform, scale included.
+        tree.draw_held_scrollbars(&mut ctx);
         let scale = tree.scale_factor();
         {
             use blinc_core::DrawContext;

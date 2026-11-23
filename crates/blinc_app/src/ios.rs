@@ -482,6 +482,11 @@ impl IOSRenderContext {
         // Without this, no events come in while the finger is still
         // and the timer never gets polled.
         let long_press_pending = blinc_layout::widgets::text_input::is_long_press_armed();
+        // A shown scrollbar starts its fade on a frame.
+        let scrollbar_fade_due = self
+            .render_tree
+            .as_ref()
+            .is_some_and(|tree| tree.scrollbar_fade_due());
 
         dirty
             || wake_requested
@@ -491,6 +496,7 @@ impl IOSRenderContext {
             || has_pending_rebuilds
             || css_animating
             || long_press_pending
+            || scrollbar_fade_due
     }
     /// Update the window size
     ///

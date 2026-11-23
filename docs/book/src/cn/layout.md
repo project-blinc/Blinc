@@ -122,7 +122,8 @@ scroll_area().horizontal().w(320.0).h(120.0).child(
 ```
 
 `.scrollbar(ScrollbarVisibility::Always)` keeps the bars visible;
-`Auto` is the default. Scrollbar thumb and track colours currently use
+`Auto` is the default: the bars show while the content scrolls and fade
+out 1.5 s after the last scroll. Scrollbar thumb and track colours currently use
 `.thumb_color(..)` and `.track_color(..)` rather than CSS `scrollbar-color`.
 
 ## Collapsible

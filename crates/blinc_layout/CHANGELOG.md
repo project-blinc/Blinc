@@ -14,6 +14,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 
 ### Changed
+- A scroll container's auto-hiding scrollbar is drawn each frame apart from the batch when nothing above the container can move it and no overlay is open, so its fade over still content takes the fast path instead of a full paint per frame.
 - A motion-bound subtree with an SVG below it keeps its groups dynamic, as one with only boxes and text does; only an image below it keeps them static. Moving a calendar page with SVG day markers updates rows instead of repainting the tree.
 - The paint walker gives an overlay root's subtree a paint layer above the one it was painted on, as a stack layer does; unlike a stack layer, the content after it keeps its layer. Overlay content then draws above static foreground and above the motion content it covers.
 - The element hash that decides whether a node changed reads `CornerShape`, `OverflowFade` and `BorderSides` field by field instead of hashing their `Debug` text.
@@ -63,6 +64,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- An auto-hiding scrollbar fades on time when nothing else draws: the hide timer counts the whole time since the last scroll tick, not at most a tenth of a second per tick. `RenderTree::scrollbar_wake_in` says when the next fade is due and `RenderTree::scrollbar_fade_due` whether it is due now, for runners that sleep or poll.
 - A reactive translation over text, an image or an SVG keeps full-paint invalidation when later content overlaps it. Retaining it drew that content after the dynamic batch, over later siblings such as a text input's caret.
 - Inset `box-shadow` layers paint in the window and headless renderers; only the simple paint walk drew them before. A `box-shadow` that sets only outer layers (or only inset ones) replaces the other kind too, so a `:hover` rule with an outer shadow removes the base rule's inset. Nodes whose only decoration is an inset shadow are no longer treated as transparent wrappers.
 - Text areas reconcile scrolling after row-count, measured-height and wrapping changes, clearing stale offsets when the text fits. Double-click and touch double-tap select words, triple-click selects a logical line, and Shift-click extends the anchor. Dragging extends by the selected unit; touch long-press selects a word and cancels on release or movement.

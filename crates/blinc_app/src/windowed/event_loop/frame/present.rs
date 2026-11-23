@@ -768,6 +768,11 @@ pub(super) fn render_and_schedule(
     ws.parked_at = (!any_redraw_signal && !keep_alive).then(std::time::Instant::now);
     if ws.parked_at.is_some() {
         wake_proxy_for_pacing.wake_at(crate::windowed::IDLE_RELEASE);
+        // A shown scrollbar starts its fade on a frame: draw one when it is due.
+        if let Some(delay) = ws.render_tree.as_ref().and_then(|t| t.scrollbar_wake_in()) {
+            frame_dirty.store(true, Ordering::Release);
+            wake_proxy_for_pacing.wake_at(delay);
+        }
     }
     t_phase5 = phase5_start.elapsed();
     let t_total = frame_start.elapsed();

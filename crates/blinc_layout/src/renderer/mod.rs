@@ -54,6 +54,7 @@ mod css_backgrounds;
 mod cull;
 mod cursor;
 mod events;
+mod held_scrollbars;
 mod keyboard_nav;
 mod owners;
 mod paint;
@@ -795,6 +796,9 @@ pub struct RenderTree {
     /// content was painted and how far its offset may move from the one it was painted at before
     /// the content has to be painted again.
     scroll_row_nodes: RefCell<NodeMap<(f32, f32)>>,
+    /// The scroll containers whose scrollbar the last paint left out of the batch, to be drawn
+    /// each frame; see `held_scrollbars`.
+    held_scrollbars: RefCell<NodeMap<held_scrollbars::HeldScrollbar>>,
     /// Indexes over the children of containers with very many; see `child_index`.
     child_indexes: RefCell<child_index::ChildIndexes>,
     /// Answers about subtrees kept while the tree's revisions stay; see `subtree_cache`.
@@ -1285,6 +1289,7 @@ impl RenderTree {
             paint_scroll: Cell::new((0.0, 0.0)),
             scroll_rows: Cell::new(false),
             scroll_row_nodes: RefCell::new(HashMap::default()),
+            held_scrollbars: RefCell::new(HashMap::default()),
             child_indexes: RefCell::new(HashMap::default()),
             subtree_cache: RefCell::new(subtree_cache::SubtreeCache::default()),
             node_scan: RefCell::new(None),

@@ -1235,7 +1235,9 @@ impl RenderTree {
         };
         self.last_scroll_tick_us = Some(now_us);
 
-        // Clamp dt to prevent huge jumps if app was paused
+        // Clamp dt to prevent huge jumps if app was paused. The scrollbar's hide timer takes the
+        // whole gap: a window that drew nothing for a while was idle for all of it.
+        let idle_secs = dt_secs;
         let dt_secs = dt_secs.min(0.1);
 
         // Collect node_ids to iterate (avoid borrow conflicts)
@@ -1263,10 +1265,11 @@ impl RenderTree {
                 off_rows_animating |= !on_rows;
             }
 
-            // Tick scrollbar animations (opacity fade in/out)
-            if physics.tick_scrollbar(dt_secs) {
+            // Tick scrollbar animations (opacity fade in/out). A held scrollbar is drawn each
+            // frame apart from the batch, so its fade is no change to the paint.
+            if physics.tick_scrollbar(idle_secs) {
                 any_animating = true;
-                off_rows_animating |= !on_rows;
+                off_rows_animating |= !on_rows && !self.scrollbar_held(node_id);
             }
 
             // Sync ScrollRef state with current physics (for scrollbar position updates)

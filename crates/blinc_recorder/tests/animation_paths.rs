@@ -4284,3 +4284,98 @@ fn how_much_memory_css_animated_cards_hold() {
         (peak - before) / 1024
     );
 }
+
+/// A scroll container kept off rows by a sticky header, scrolled once, whose auto-hiding
+/// scrollbar then fades out a step at a time. The fade is set on the physics directly: its timer
+/// runs on the wall clock.
+fn fading_scrollbar_scene() -> Scene {
+    let steps = 12;
+    let physics: Arc<Mutex<Option<blinc_layout::widgets::SharedScrollPhysics>>> =
+        Arc::new(Mutex::new(None));
+    Scene {
+        name: "a scrollbar fades over still content",
+        steps,
+        step_ms: 16,
+        build: Box::new(move |ui| {
+            let reference = blinc_layout::selector::ScrollRef::new();
+            let bound = reference.clone();
+            let held = Arc::clone(&physics);
+            ui.mount(move |_| {
+                let mut list = div().flex_col().gap(2.0).w(W as f32 - 20.0).p(2.0);
+                list = list.child(
+                    div()
+                        .w(W as f32 - 28.0)
+                        .h(24.0)
+                        .bg(Color::rgb(0.3, 0.3, 0.35))
+                        .sticky(0.0),
+                );
+                for i in 0..60 {
+                    list = list.child(
+                        div()
+                            .w(W as f32 - 28.0)
+                            .h(28.0)
+                            .rounded(6.0)
+                            .bg(Color::rgb(0.25, 0.45, 0.7))
+                            .child(text(format!("Row {i}")).size(13.0).color(Color::WHITE)),
+                    );
+                }
+                let container = scroll()
+                    .bind(&bound)
+                    .scrollbar_visibility(ScrollbarVisibility::Auto)
+                    .w(W as f32)
+                    .h(H as f32)
+                    .child(list);
+                *held.lock().unwrap() = Some(container.physics());
+                div()
+                    .w(W as f32)
+                    .h(H as f32)
+                    .bg(Color::rgb(0.09, 0.1, 0.13))
+                    .child(container)
+            });
+            let physics = Arc::clone(&physics);
+            Box::new(move |ui, step| {
+                if step == 0 {
+                    reference.set_scroll_offset(0.0, 300.0);
+                    ui.settle_scroll();
+                }
+                if let Some(p) = physics.lock().unwrap().as_ref() {
+                    let mut p = p.lock().unwrap();
+                    p.scrollbar_state = blinc_layout::widgets::ScrollbarState::FadingOut;
+                    p.scrollbar_opacity = 1.0 - step as f32 / steps as f32;
+                }
+            })
+        }),
+    }
+}
+
+/// A scrollbar fading over content that does not move is drawn each frame apart from the batch:
+/// the frames after the scroll take the fast path, and they show what a full paint shows.
+#[test]
+fn a_fading_scrollbar_over_still_content_takes_the_fast_path() {
+    let scene = fading_scrollbar_scene();
+    let (Some(full), Some((rows, paths))) =
+        (run(&scene, Path::Full), run_logged(&scene, Path::Rows))
+    else {
+        return;
+    };
+    // A column through the track, at whatever density the frames were drawn.
+    let track = |frame: &CapturedFrame| -> Vec<[i32; 3]> {
+        let density = (frame.width / W) as usize;
+        (0..frame.height as usize)
+            .map(|y| pixel(frame, frame.width as usize - 7 * density, y))
+            .collect()
+    };
+    assert_ne!(
+        track(&full[1]),
+        track(full.last().unwrap()),
+        "the scrollbar did not fade"
+    );
+    for (i, (a, b)) in full.iter().zip(&rows).enumerate() {
+        let d = difference(a, b, LEVELS);
+        assert_eq!(d.differing, 0, "step {i} differs by {} px", d.differing);
+    }
+    assert!(
+        paths[2..].iter().all(|p| p != "full"),
+        "a frame of the fade was a full paint: {paths:?}"
+    );
+}

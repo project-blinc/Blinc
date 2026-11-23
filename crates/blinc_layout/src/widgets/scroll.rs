@@ -30,6 +30,8 @@
 //! - **FSM-based state**: Clear state machine for Idle, Scrolling, Decelerating, Bouncing
 //! - **Inherits Div**: Full access to all Div methods for layout control
 
+mod hide;
+
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex, Weak};
 
