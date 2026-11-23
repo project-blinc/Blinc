@@ -25,6 +25,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - `GpuRenderer::update_time` does nothing: the renderer reads `blinc_core::FrameClock`, which the runners set each frame.
 
 ### Changed
+- `BLINC_DEBUG_FILL_RECT`, `BLINC_MULTISTOP_VERTEX` and `BLINC_FILL_RULE_EVENODD` are read once per process instead of on each rect, gradient or path, so changing them while the app runs has no effect.
 - The layer composite blits write their uniforms into one buffer the renderer keeps, ahead of each blit's pass, instead of creating a buffer for each blit.
 - An opacity or blend group without effects or a named output is composited from the premultiplied colour it was drawn in, and its texture is cleared by the pass that draws its first run of primitives. It took four render passes (a clear, the draw, a conversion to straight colour and the composite) and now takes two. Opacity groups drawn through one atlas skip the same two passes. `LayerCompositeUniforms` gains `premultiplied`, 1 when the source holds premultiplied colour, and padding to 128 bytes, so a struct literal needs both fields.
 - A glyph drawn as an SDF primitive is clipped once at a rect clip's edge. The text branch faded the edge a second time, so text touching its clip (an input's first letter at its content box) lost half of its first pixel column.

@@ -159,7 +159,9 @@ impl RenderContext {
             );
         }
         // Damage replay is opt-in because complex cached content may require full repaint.
-        let damage_rect_enabled = std::env::var("BLINC_DAMAGE_RECT").as_deref() == Ok("1");
+        static DAMAGE_RECT: std::sync::LazyLock<bool> =
+            std::sync::LazyLock::new(|| std::env::var("BLINC_DAMAGE_RECT").as_deref() == Ok("1"));
+        let damage_rect_enabled = *DAMAGE_RECT;
         let damage_rect_eligible =
             damage_rect_enabled && bindings_animating && !other_animations_active;
         if !damage_rect_eligible && other_animations_active {

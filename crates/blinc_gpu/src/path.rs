@@ -985,7 +985,10 @@ pub fn tessellate_fill_with_tolerance(
     // authored self-intersecting shapes (e.g. Dark Mode Button's
     // `Crease`) whose non-zero interior doesn't match the reference
     // render's expected crescent/ring silhouette.
-    if std::env::var("BLINC_FILL_RULE_EVENODD").ok().as_deref() == Some("1") {
+    static EVEN_ODD: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        std::env::var("BLINC_FILL_RULE_EVENODD").ok().as_deref() == Some("1")
+    });
+    if *EVEN_ODD {
         options = options.with_fill_rule(lyon::tessellation::FillRule::EvenOdd);
     }
 

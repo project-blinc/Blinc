@@ -4,6 +4,9 @@ All notable changes to `blinc_theme` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- `BLINC_DEBUG_COLOR_TOKEN` is read once per process instead of on each colour lookup.
+
 ### Removed
 - `themes::platform::ios::IOSTheme` and `themes::platform::android::AndroidTheme`. They only wrapped `BlincTheme` with a TODO. `platform_theme_bundle()` now returns `ExpressiveTheme::bundle()` on iOS and Android, Blinc's own theme; the old themes were `BlincTheme` (Hybrid) underneath.
 

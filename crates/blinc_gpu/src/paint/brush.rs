@@ -190,7 +190,10 @@ impl GpuPaintContext<'_> {
         // this gate, the default 2-stop `mix(first, last, t)`
         // fallback keeps rendering order identical to the
         // known-working baseline.
-        if std::env::var("BLINC_MULTISTOP_VERTEX").ok().as_deref() != Some("1") {
+        static MULTISTOP: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+            std::env::var("BLINC_MULTISTOP_VERTEX").ok().as_deref() == Some("1")
+        });
+        if !*MULTISTOP {
             return None;
         }
         let sample = |p: [f32; 2]| -> blinc_core::Color {

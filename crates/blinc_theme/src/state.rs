@@ -387,7 +387,10 @@ impl ThemeState {
         // Pair this with `BLINC_DEBUG_FILL_RECT=1` so the same hash
         // appearing on a buggy widget can be traced back to the
         // theme token that produced its colour.
-        if matches!(std::env::var("BLINC_DEBUG_COLOR_TOKEN").as_deref(), Ok("1")) {
+        static DEBUG_COLOR_TOKEN: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+            matches!(std::env::var("BLINC_DEBUG_COLOR_TOKEN").as_deref(), Ok("1"))
+        });
+        if *DEBUG_COLOR_TOKEN {
             use std::sync::{Mutex, OnceLock};
             // (token, r_bits, g_bits, b_bits, a_bits)
             type SeenKey = (ColorToken, u32, u32, u32, u32);

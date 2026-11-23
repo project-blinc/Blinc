@@ -6,6 +6,14 @@ use crate::primitives::{
 };
 use blinc_core::{Brush, Color, CornerRadius, DrawContext, Rect, Shadow, Stroke};
 
+/// `BLINC_DEBUG_FILL_RECT=1` logs and outlines each distinct filled or stroked rect. Debug only.
+fn debug_fill_rect() -> bool {
+    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        matches!(std::env::var("BLINC_DEBUG_FILL_RECT").as_deref(), Ok("1"))
+    });
+    *ON
+}
+
 impl GpuPaintContext<'_> {
     pub(super) fn fill_rect_impl(&mut self, rect: Rect, corner_radius: CornerRadius, brush: Brush) {
         // Diagnostic for the recurring bg-split-in-half artefact.
@@ -20,7 +28,7 @@ impl GpuPaintContext<'_> {
         // time so we can see whether the active clip stack is
         // truncating the primitive to half-height in the affected
         // (canvas-underneath) configurations.
-        if matches!(std::env::var("BLINC_DEBUG_FILL_RECT").as_deref(), Ok("1")) {
+        if debug_fill_rect() {
             use std::sync::{Mutex, OnceLock};
             static SEEN: OnceLock<Mutex<std::collections::HashSet<u64>>> = OnceLock::new();
             let seen = SEEN.get_or_init(|| Mutex::new(std::collections::HashSet::new()));
@@ -376,7 +384,7 @@ impl GpuPaintContext<'_> {
         // colours, immediately surfacing the bug visually.
         // Self-recursion is safe because `stroke_rect` doesn't call
         // back into `fill_rect`.
-        if matches!(std::env::var("BLINC_DEBUG_FILL_RECT").as_deref(), Ok("1"))
+        if debug_fill_rect()
             && !matches!(&brush, Brush::Blur(_) | Brush::Image(_) | Brush::Glass(_))
         {
             use std::hash::{Hash, Hasher};
@@ -670,7 +678,7 @@ impl GpuPaintContext<'_> {
         // half symptom catches the focused outline too, so the dump
         // has to see both fills and strokes to triangulate which
         // ancestor clip is truncating the visible rect.
-        if matches!(std::env::var("BLINC_DEBUG_FILL_RECT").as_deref(), Ok("1")) {
+        if debug_fill_rect() {
             use std::sync::{Mutex, OnceLock};
             static SEEN: OnceLock<Mutex<std::collections::HashSet<u64>>> = OnceLock::new();
             let seen = SEEN.get_or_init(|| Mutex::new(std::collections::HashSet::new()));
