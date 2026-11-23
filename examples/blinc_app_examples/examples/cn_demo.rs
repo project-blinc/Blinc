@@ -97,7 +97,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                 .child(
                     div()
                         .w_full()
-                        .p(theme.spacing().space_3)
+                        .p(page_padding(ctx.width))
                         .flex_col()
                         .gap(theme.spacing().space_8)
                         // Accordion at top for layout animation testing
@@ -530,7 +530,7 @@ fn header(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
         .h(80.0)
         .bg(surface)
         .border_bottom(1.5, border)
-        .px(theme.spacing().space_3)
+        .px(page_padding(ctx.width))
         .flex_row()
         .items_center()
         .justify_between()
@@ -557,6 +557,17 @@ fn header(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
     //     //         ThemeState::get().toggle_scheme();
     //     //     }),
     // )
+}
+
+/// The page's side padding, in 4 px units: narrower on a narrow window, where the content
+/// needs the room.
+fn page_padding(width: f32) -> f32 {
+    let spacing = ThemeState::get().spacing();
+    if width < 640.0 {
+        spacing.space_1
+    } else {
+        spacing.space_3
+    }
 }
 
 /// Section title helper
@@ -643,7 +654,8 @@ fn css_overrides_section() -> impl ElementBuilder + use<> {
         .child(
             cn::card()
                 .id("css-demo-card")
-                .w(350.0)
+                .w_full()
+                .max_w(350.0)
                 .child(cn::card_header().title("Card with CSS border override"))
                 .child(
                     cn::card_content().child(
@@ -697,6 +709,7 @@ fn buttons_section(_ctx: &WindowedContext) -> impl ElementBuilder + use<> {
         .child(
             div()
                 .flex_row()
+                .flex_wrap()
                 .items_center()
                 .gap(12.0)
                 // Icon-only at default size (font_size + 2 = 16)
@@ -921,7 +934,8 @@ fn form_inputs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                     div()
                         .flex_col()
                         .flex_wrap()
-                        .w(300.0)
+                        .w_full()
+                        .max_w(300.0)
                         .h_fit()
                         .gap_px(16.0)
                         .child(
@@ -947,14 +961,18 @@ fn form_inputs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                     div()
                         .flex_col()
                         .flex_wrap()
+                        .w_full()
+                        .max_w(340.0)
                         .h_fit()
                         .gap_px(4.0)
                         .child(
-                            cn::textarea(&bio_state)
-                                .label("Bio")
-                                .placeholder("Tell us about yourself...")
-                                .rows(4)
-                                .w(300.0),
+                            div().w_full().max_w(300.0).child(
+                                cn::textarea(&bio_state)
+                                    .label("Bio")
+                                    .placeholder("Tell us about yourself...")
+                                    .rows(4)
+                                    .w_full(),
+                            ),
                         )
                         .child(cn::label("Labels can be standalone")) // Column 3: Number inputs. Each label+field pair is a
                         // tight vertical group (gap 4) — matches the rhythm
@@ -999,22 +1017,27 @@ fn form_inputs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                         .gap_px(4.0)
                                         .child(cn::label("Sizes: small, medium, large"))
                                         .child(
-                                            div().flex_row().items_center().gap_px(8.0).children(
-                                                [
-                                                    InputSize::Small,
-                                                    InputSize::Medium,
-                                                    InputSize::Large,
-                                                ]
-                                                .into_iter()
-                                                .zip(sized)
-                                                .map(|(size, value)| {
-                                                    cn::number_input(value)
-                                                        .min(0.0)
-                                                        .max(9.0)
-                                                        .precision(0)
-                                                        .size(size)
-                                                }),
-                                            ),
+                                            div()
+                                                .flex_row()
+                                                .flex_wrap()
+                                                .items_center()
+                                                .gap_px(8.0)
+                                                .children(
+                                                    [
+                                                        InputSize::Small,
+                                                        InputSize::Medium,
+                                                        InputSize::Large,
+                                                    ]
+                                                    .into_iter()
+                                                    .zip(sized)
+                                                    .map(|(size, value)| {
+                                                        cn::number_input(value)
+                                                            .min(0.0)
+                                                            .max(9.0)
+                                                            .precision(0)
+                                                            .size(size)
+                                                    }),
+                                                ),
                                         ),
                                 ),
                         ),
@@ -1173,6 +1196,7 @@ fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                             .child(
                                 div()
                                     .flex_row()
+                                    .flex_wrap()
                                     .gap(8.0)
                                     .child(cn::toggle(small_toggle).label("Default"))
                                     .child(cn::toggle(medium_toggle).label("Default"))
@@ -1198,6 +1222,7 @@ fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                             .child(
                                 div()
                                     .flex_row()
+                                    .flex_wrap()
                                     .gap(8.0)
                                     .items_center()
                                     .child(
@@ -1222,6 +1247,7 @@ fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                             .child(
                                 div()
                                     .flex_row()
+                                    .flex_wrap()
                                     .gap(8.0)
                                     .child(
                                         cn::toggle(disabled_on)
@@ -1287,11 +1313,12 @@ fn slider_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             .child(
                 div()
                     .h_fit()
-                    .w(300.0)
+                    .w_full()
+                    .max_w(300.0)
                     .child(cn::slider(volume).label("Volume").show_value()),
             )
             .child(
-                div().h_fit().w(300.0).child(
+                div().h_fit().w_full().max_w(300.0).child(
                     cn::slider(brightness)
                         .label("Brightness")
                         .min(0.0)
@@ -1303,14 +1330,17 @@ fn slider_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             .child(
                 div()
                     .h_fit()
-                    .w(300.0)
+                    .w_full()
+                    .max_w(300.0)
+                    .flex_col()
+                    .gap(4.0)
                     .child(cn::slider(small).size(SliderSize::Small))
                     .child(cn::slider(large).size(SliderSize::Large)),
             )
             // The switch disables the slider in place.
             .child(cn::switch(locked).label("Locked"))
             .child(
-                div().h_fit().w(300.0).child(
+                div().h_fit().w_full().max_w(300.0).child(
                     cn::slider(disabled_slider)
                         .label("Disabled")
                         .disabled(locked),
@@ -1557,6 +1587,7 @@ fn combobox_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
     section_container().child(section_title("Combobox")).child(
         div()
             .flex_row()
+            .flex_wrap()
             .overflow_visible()
             .items_start() // Prevent height stretching
             .gap(4.0)
@@ -2297,6 +2328,7 @@ fn progress_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                     .child(
                         div()
                             .flex_row()
+                            .flex_wrap()
                             .gap(16.0)
                             .items_center()
                             .child(cn::progress(25.0).w(200.0))
@@ -2305,6 +2337,7 @@ fn progress_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                     .child(
                         div()
                             .flex_row()
+                            .flex_wrap()
                             .gap(16.0)
                             .items_center()
                             .child(cn::progress(50.0).w(200.0).size(ProgressSize::Small))
@@ -2313,6 +2346,7 @@ fn progress_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                     .child(
                         div()
                             .flex_row()
+                            .flex_wrap()
                             .gap(16.0)
                             .items_center()
                             .child(cn::progress(75.0).w(200.0).size(ProgressSize::Large))
@@ -2322,7 +2356,7 @@ fn progress_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             // A bound value: the buttons set it and the bar eases there.
             .child(
                 div()
-                    .w_fit()
+                    .w_full()
                     .flex_col()
                     .gap(12.0)
                     .child(cn::label("Bound Progress"))
@@ -2338,7 +2372,7 @@ fn progress_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             )
             .child(
                 div()
-                    .w_fit()
+                    .w_full()
                     .flex_col()
                     .gap(12.0)
                     .child(cn::label("Indeterminate"))
@@ -2374,7 +2408,8 @@ fn tabs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             // Simple tabs
             .child(
                 div()
-                    .w(500.0)
+                    .w_full()
+                    .max_w(500.0)
                     .h(300.0)
                     .flex_col()
                     .gap(8.0)
@@ -2432,6 +2467,7 @@ fn tabs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             .child(
                 div()
                     .flex_row()
+                    .flex_wrap()
                     .gap(24.0)
                     .child(
                         div()
@@ -2779,9 +2815,9 @@ fn sidebar_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
 
                                 div()
                                     .bg(theme.color(ColorToken::Background))
-                                    .p(24.0)
+                                    .p_px(24.0)
                                     .flex_col()
-                                    .gap(24.0)
+                                    .gap_px(24.0)
                                     .child(
                                         text("Icon Size Comparison")
                                             .size(t_lg())
@@ -2791,6 +2827,7 @@ fn sidebar_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                     .child(
                                         div()
                                             .flex_row()
+                                            .flex_wrap()
                                             .justify_between()
                                             .gap(2.0)
                                             .items_end()
@@ -3247,6 +3284,7 @@ fn hover_card_section() -> impl ElementBuilder + use<> {
                                     .child(
                                         div()
                                             .flex_row()
+                                            .flex_wrap()
                                             .gap(6.0)
                                             .items_center()
                                             .child(
@@ -3281,10 +3319,12 @@ fn hover_card_section() -> impl ElementBuilder + use<> {
                                     .child(
                                         div()
                                             .flex_row()
+                                            .flex_wrap()
                                             .gap(16.0)
                                             .child(
                                                 div()
                                                     .flex_row()
+                                                    .flex_wrap()
                                                     .gap(4.0)
                                                     .child(text("128").size(t_sm()).medium().color(text_primary))
                                                     .child(text("Following").size(t_sm()).color(text_tertiary)),
@@ -3292,6 +3332,7 @@ fn hover_card_section() -> impl ElementBuilder + use<> {
                                             .child(
                                                 div()
                                                     .flex_row()
+                                                    .flex_wrap()
                                                     .gap(4.0)
                                                     .child(text("2.4k").size(t_sm()).medium().color(text_primary))
                                                     .child(text("Followers").size(t_sm()).color(text_tertiary)),
@@ -3314,6 +3355,7 @@ fn hover_card_section() -> impl ElementBuilder + use<> {
                         .child(
                             div()
                                 .flex_row()
+                                .flex_wrap()
                                 .gap(24.0)
                                 .child(
                                     cn::hover_card(move || {
@@ -3584,6 +3626,7 @@ fn tooltip_section() -> impl ElementBuilder + use<> {
                     .child(
                         div()
                             .flex_row()
+                            .flex_wrap()
                             .gap(16.0)
                             .child(
                                 cn::tooltip(|| {
@@ -3630,6 +3673,7 @@ fn tooltip_section() -> impl ElementBuilder + use<> {
                     .child(
                         div()
                             .flex_row()
+                            .flex_wrap()
                             .gap(16.0)
                             .child(
                                 cn::tooltip(|| {
@@ -3787,6 +3831,7 @@ fn misc_section() -> impl ElementBuilder + use<> {
                 .child(
                     div()
                         .flex_row()
+                        .flex_wrap()
                         .items_center()
                         .gap(12.0)
                         .child(
@@ -3804,6 +3849,7 @@ fn misc_section() -> impl ElementBuilder + use<> {
                 .child(
                     div()
                         .flex_row()
+                        .flex_wrap()
                         .gap(16.0)
                         .child(cn::label("Small Label").size(LabelSize::Small))
                         .child(cn::label("Medium Label").size(LabelSize::Medium))
@@ -3823,6 +3869,7 @@ fn tree_view_section() -> impl ElementBuilder + use<> {
     section_container().child(section_title("Tree View")).child(
         div()
             .flex_row()
+            .flex_wrap()
             .gap(24.0)
             .child(
                 // File explorer style tree
@@ -4051,10 +4098,12 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             .child(
                 div()
                     .flex_row()
+                    .flex_wrap()
                     .gap(24.0)
                     .child(
                         div()
                             .flex_col()
+                            .max_w_full()
                             .gap(8.0)
                             .child(
                                 text("Bar Chart - Vertical")
@@ -4077,6 +4126,7 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                     .child(
                         div()
                             .flex_col()
+                            .max_w_full()
                             .gap(8.0)
                             .child(
                                 text("Bar Chart - Horizontal")
@@ -4101,10 +4151,12 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             .child(
                 div()
                     .flex_row()
+                    .flex_wrap()
                     .gap(24.0)
                     .child(
                         div()
-                            .w(280.0)
+                            .w_full()
+                            .max_w(280.0)
                             .flex_col()
                             .gap(8.0)
                             .child(text("Pie Chart").size(t_xs()).color(text_secondary))
@@ -4120,7 +4172,8 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                     )
                     .child(
                         div()
-                            .w(280.0)
+                            .w_full()
+                            .max_w(280.0)
                             .flex_col()
                             .gap(8.0)
                             .child(
@@ -4242,7 +4295,7 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                             .color(text_secondary),
                     )
                     .child(
-                        div().w(400.0).child(
+                        div().w_full().max_w(400.0).child(
                             cn::histogram(generate_diff_data())
                                 .height(160.0)
                                 .bins(30)
@@ -4261,7 +4314,7 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                             .color(text_secondary),
                     )
                     .child(
-                        div().w(450.0).child(
+                        div().w_full().max_w(450.0).child(
                             cn::comparison_bar_chart()
                                 .height(200.0)
                                 .item("Render", 12.5, 14.2)
@@ -4312,6 +4365,7 @@ fn icon_gallery_section() -> impl ElementBuilder + use<> {
                         .child(
                             div()
                                 .flex_row()
+                                .flex_wrap()
                                 .items_center()
                                 .gap(16.0)
                                 .child(
@@ -4365,6 +4419,7 @@ fn icon_gallery_section() -> impl ElementBuilder + use<> {
                         .child(
                             div()
                                 .flex_row()
+                                .flex_wrap()
                                 .items_center()
                                 .gap(12.0)
                                 .child(cn::icon(icons::HEART).size(IconSize::Large))
@@ -4758,6 +4813,7 @@ fn avatar_section() -> impl ElementBuilder + use<> {
                     .child(
                         div()
                             .flex_row()
+                            .flex_wrap()
                             .gap_px(16.0)
                             .items_end()
                             .child(
@@ -4816,6 +4872,7 @@ fn avatar_section() -> impl ElementBuilder + use<> {
                     .child(
                         div()
                             .flex_row()
+                            .flex_wrap()
                             .gap_px(16.0)
                             .items_center()
                             .child(
@@ -4850,6 +4907,7 @@ fn avatar_section() -> impl ElementBuilder + use<> {
                     .child(
                         div()
                             .flex_row()
+                            .flex_wrap()
                             .gap_px(12.0)
                             .items_center()
                             .child(cn::avatar().fallback("JD").lg())
@@ -4877,6 +4935,7 @@ fn avatar_section() -> impl ElementBuilder + use<> {
                     .child(
                         div()
                             .flex_row()
+                            .flex_wrap()
                             .gap_px(16.0)
                             .items_center()
                             .child(
@@ -4951,6 +5010,7 @@ fn avatar_section() -> impl ElementBuilder + use<> {
                             .child(
                                 div()
                                     .flex_row()
+                                    .flex_wrap()
                                     .gap_px(4.0)
                                     .child(text("With max:").size(t_xs()).color(text_secondary))
                                     .child(
