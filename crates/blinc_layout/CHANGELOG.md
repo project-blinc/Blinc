@@ -14,6 +14,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 
 ### Changed
+- `LayoutTree::compute_layout` returns at once when the root and available space are those of the last layout and no node was marked dirty since, the case where taffy would answer from its cache. The epoch stays, so geometry cached against it stays valid.
 - `RenderTree::get_visual_render_bounds` computes a node's bounds when asked, from its ancestors' layout and visual animations, and returns them by value. A layout no longer walks every node to store bounds that rendering never read. `RenderTreeDebugStats::animated_bounds_count` is removed, and the motion debug panel drops its bar.
 - A node's tree and topology hashes are built from its own hash and its children's hashes, so collecting a subtree hashes each node once instead of once per ancestor. `DivHash::compute_element_tree` and `compute_topology_tree` give values of the new form.
 - A scroll container's auto-hiding scrollbar is drawn each frame apart from the batch when nothing above the container can move it and no overlay is open, so its fade over still content takes the fast path instead of a full paint per frame.

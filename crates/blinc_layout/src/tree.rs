@@ -304,9 +304,12 @@ pub struct LayoutTree {
     /// First baselines worked out from a text node's measure context, for
     /// nodes whose builder reported none. Dropped when the context changes.
     derived_baseline: FxHashMap<NodeId, f32>,
-    /// Moves on every change to the tree or its styles, and on every layout. Geometry derived
-    /// from the tree is valid for as long as it is the one it was derived at.
+    /// Moves on every change to the tree or its styles, and on every layout that computes.
+    /// Geometry derived from the tree is valid for as long as it is the one it was derived at.
     epoch: u64,
+    /// The root and space of the last layout, which a layout with neither changed and no node
+    /// marked dirty since would only give again.
+    laid_out: Option<(NodeId, Size<AvailableSpace>)>,
 }
 
 impl LayoutTree {
@@ -320,6 +323,7 @@ impl LayoutTree {
             text_baseline: FxHashMap::default(),
             derived_baseline: FxHashMap::default(),
             epoch: 0,
+            laid_out: None,
         }
     }
 
@@ -430,13 +434,28 @@ impl LayoutTree {
     }
 
     /// Compute layout for a tree rooted at the given node
+    ///
+    /// With the same root and space as the last layout and no node marked dirty since, taffy
+    /// would answer from its cache and round to the same positions, so nothing runs and the
+    /// epoch stays.
     pub fn compute_layout(&mut self, root: LayoutNodeId, available_space: Size<AvailableSpace>) {
-        self.epoch = self.epoch.wrapping_add(1);
         self.resolve_incidental_align_self(root);
+        let Some(&taffy_node) = self.node_map.get(root) else {
+            self.epoch = self.epoch.wrapping_add(1);
+            self.laid_out = None;
+            return;
+        };
+        if self.laid_out == Some((taffy_node, available_space))
+            && self.taffy.dirty(taffy_node) == Ok(false)
+        {
+            return;
+        }
+        self.epoch = self.epoch.wrapping_add(1);
+        self.laid_out = Some((taffy_node, available_space));
         let text_baseline = &self.text_baseline;
         let reverse_map = &self.reverse_map;
         let derived_baseline = &mut self.derived_baseline;
-        if let Some(&taffy_node) = self.node_map.get(root) {
+        {
             let _ = self.taffy.compute_layout_with_measure(
                 taffy_node,
                 available_space,
