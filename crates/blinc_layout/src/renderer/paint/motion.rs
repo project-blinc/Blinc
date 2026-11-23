@@ -522,8 +522,8 @@ impl RenderTree {
             ctx.set_motion_node_ordinal(ordinal)
         });
         // Nested dynamic groups keep their shared paint order. A new scope retains its static
-        // anchor when later content overlaps it or media needs a separate dispatch.
-        let bound_media = motion_bindings_ref.is_some() && self.subtree_has_media(node);
+        // anchor when later content overlaps it or an image needs a separate dispatch.
+        let bound_image = motion_bindings_ref.is_some() && self.subtree_has_image(node);
         if motion_bindings_ref.is_some() && self.subtree_has_svg(node) {
             self.bound_svg.set(true);
         }
@@ -531,7 +531,7 @@ impl RenderTree {
             let was = ctx.set_moving_groups_dynamic(false);
             if was
                 && (motion_bindings_ref.is_some() || shared_motion_scope)
-                && !bound_media
+                && !bound_image
                 && (inherited_dynamic || !self.later_content_overlaps_any(node))
             {
                 ctx.set_moving_groups_dynamic(true);

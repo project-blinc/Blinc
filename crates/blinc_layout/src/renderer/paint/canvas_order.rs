@@ -25,16 +25,14 @@ impl RenderTree {
         self.later_content_overlaps_with(node, true)
     }
 
-    /// Whether `node` has an image or an SVG somewhere below it, content that is drawn apart
-    /// from the primitive batch and takes a group's opacity in a pass of its own.
-    pub(crate) fn subtree_has_media(&self, node: LayoutNodeId) -> bool {
+    /// Whether `node` has an image somewhere below it, content that is drawn apart from the
+    /// primitive batch and takes a group's opacity in a pass of its own.
+    pub(crate) fn subtree_has_image(&self, node: LayoutNodeId) -> bool {
         self.layout_tree.children_iter(node).any(|child| {
-            self.render_nodes.get(&child).is_some_and(|render| {
-                matches!(
-                    render.element_type,
-                    ElementType::Image(_) | ElementType::Svg(_)
-                )
-            }) || self.subtree_has_media(child)
+            self.render_nodes
+                .get(&child)
+                .is_some_and(|render| matches!(render.element_type, ElementType::Image(_)))
+                || self.subtree_has_image(child)
         })
     }
 
