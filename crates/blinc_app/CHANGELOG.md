@@ -12,6 +12,9 @@ All notable changes to `blinc_app` will be documented in this file.
 - iOS accessibility snapshot/action FFI connects GPU-rendered controls to native UIKit accessibility elements and text-field editing. The host scales content and input coordinates with Dynamic Type.
 - The registered iOS Rust builder uses the complete UI build path, including queued core styles, overlays and build-scope cleanup.
 
+### Added
+- The desktop runner has a measurement hook, off unless set: `BLINC_BENCH_WHEEL=<.class|#id>` wheels the page until the first match is in view, waits for it to settle, then feeds horizontal swipes over its centre through the normal input path at 60 steps a second, and exits after `BLINC_BENCH_WHEEL_TURNS` swipes (40 by default). Two builds run under `/usr/bin/time -l` with the same script can be compared by instruction count.
+
 ### Changed
 - `BLINC_DAMAGE_RECT` is read once per process instead of on each frame.
 - Browser frames reuse retained paint for eligible motion and scroll rows instead of walking the tree on every frame. Property, subtree, focus, stylesheet and layout changes invalidate the cache; unsupported content keeps the full-paint path. Unchanged pointer and focus state skips the stylesheet state pass. HTML canvas and worker runners share this path without allocating a static-layer texture.

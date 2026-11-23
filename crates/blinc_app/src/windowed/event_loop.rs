@@ -19,6 +19,7 @@ use blinc_platform_desktop::DesktopPlatform;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+mod bench;
 mod frame;
 mod input;
 mod lifecycle;
@@ -514,11 +515,31 @@ where
             Event::Window(..) => self.on_window_event(event, window),
             Event::Input(..) => self.on_input(event, window),
             Event::Frame(wid) => {
+                if bench::on() && self.primary_wid == Some(wid) {
+                    self.feed_bench_script(wid, window);
+                }
                 self.refresh_hover(wid, window);
                 self.on_frame(event, window)
             }
             _ => ControlFlow::Continue,
         }
+    }
+
+    /// Feed the scripted input that is due, and wake the loop when the next step is.
+    fn feed_bench_script(
+        &mut self,
+        wid: blinc_platform::WindowId,
+        window: &blinc_platform_desktop::DesktopWindow,
+    ) {
+        let Some(tree) = self.ws.render_tree.as_ref() else {
+            window.request_redraw();
+            return;
+        };
+        let (events, wait) = bench::next(tree, window.logical_size(), window.scale_factor() as f32);
+        for event in events {
+            self.on_input(Event::Input(wid, event), window);
+        }
+        self.wake_proxy_for_pacing.wake_at(wait);
     }
 
     /// When a scroll offset or the layout has moved what is under a still pointer, run the move
