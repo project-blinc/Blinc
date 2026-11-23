@@ -1649,12 +1649,12 @@ impl RenderTree {
     /// `handler_registry.register(stable, fresh_handlers)`. Only
     /// genuinely-removed nodes lose their entry.
     pub(crate) fn sweep_stale_handlers(&mut self) {
-        let valid: crate::tree::StableSet = self.stable_to_layout.keys().copied().collect();
         // A node that did not survive the build is unmounted: its `on_unmount` handlers run,
         // after the registry no longer holds it. They get its stable id and no live node.
+        let live = &self.stable_to_layout;
         let unmounted = self
             .handler_registry
-            .take_unmounted(|stable| valid.contains(&stable));
+            .take_unmounted(|stable| live.contains_key(&stable));
         for (stable, handlers) in unmounted {
             let mut ctx = crate::event_handler::EventContext::new(
                 blinc_core::events::event_types::UNMOUNT,
@@ -1675,10 +1675,14 @@ impl RenderTree {
     /// see the comment there for why eager drain caused the
     /// cn-context-menu submenu-hover opacity flicker.
     pub(crate) fn sweep_stale_css_animations(&mut self) {
-        let valid: crate::tree::StableSet = self.stable_to_layout.keys().copied().collect();
+        let live = &self.stable_to_layout;
         if let Ok(mut store) = self.css_anim_store.lock() {
-            store.animations.retain(|stable, _| valid.contains(stable));
-            store.transitions.retain(|stable, _| valid.contains(stable));
+            store
+                .animations
+                .retain(|stable, _| live.contains_key(stable));
+            store
+                .transitions
+                .retain(|stable, _| live.contains_key(stable));
         }
     }
 
@@ -1695,14 +1699,12 @@ impl RenderTree {
     /// require a non-empty key, so no companion pass is needed
     /// there.
     pub(crate) fn auto_fill_animation_stable_keys(&mut self) {
-        // Clone the resolution map so we can mutate configs without a
-        // double borrow.
-        let layout_to_stable_snapshot = self.layout_to_stable.clone();
+        let layout_to_stable = &self.layout_to_stable;
         for (node_id, config) in self.layout_animation_configs.iter_mut() {
             if config.stable_key.is_some() {
                 continue;
             }
-            if let Some(stable) = layout_to_stable_snapshot.get(node_id) {
+            if let Some(stable) = layout_to_stable.get(node_id) {
                 config.stable_key = Some(format!("auto:{}", stable.to_raw()));
             }
         }

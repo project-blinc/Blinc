@@ -14,6 +14,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 
 ### Changed
+- The sweeps of stale handlers and CSS animations after a rebuild test each entry against the live stable-id map instead of copying all its keys into a set first, and filling in layout animation keys no longer clones the node-to-stable map.
 - After a region's rows come, go or move, the scoped CSS layout pass matches the container and its rows, and the rows' subtrees only when a layout rule reads an ancestor's position among its siblings. Rows built new have had the pass on their subtrees during the reconcile. A calendar month turn no longer matches every node of the month leaving.
 - FLIP transitions after a rebuild look up the elements snapshotted before it by id, instead of walking every render node for one with an id.
 - `LayoutTree::compute_layout` returns at once when the root and available space are those of the last layout and no node was marked dirty since, the case where taffy would answer from its cache. The epoch stays, so geometry cached against it stays valid.
