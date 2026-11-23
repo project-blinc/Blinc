@@ -123,7 +123,7 @@ impl RenderTree {
         &mut self,
         element: &E,
         node_id: LayoutNodeId,
-    ) {
+    ) -> (DivHash, DivHash) {
         let mut props = element.render_props();
         props.node_id = Some(node_id);
 
@@ -158,11 +158,8 @@ impl RenderTree {
         );
 
         // Store per-node hashes for incremental update detection
+        // The tree hashes are stored once the children have returned theirs.
         let own_hash = DivHash::compute_element(element);
-        let tree_hash = DivHash::compute_element_tree(element);
-        let topology_hash = DivHash::compute_topology_tree(element);
-        self.node_hashes
-            .insert(node_id, (own_hash, tree_hash, topology_hash));
 
         // Register event handlers if present
         if let Some(handlers) = element.event_handlers() {
@@ -258,6 +255,7 @@ impl RenderTree {
         }
 
         let total_children = child_node_ids.len();
+        let mut child_hashes = Vec::with_capacity(child_builders.len());
 
         // Match children by index (they were built in order)
         for (index, (child_builder, &child_node_id)) in
@@ -268,8 +266,10 @@ impl RenderTree {
                 .register_parent(child_node_id, node_id);
             self.element_registry
                 .register_child_index(child_node_id, index, total_children);
-            self.collect_render_props_boxed(child_builder.as_ref(), child_node_id);
+            child_hashes
+                .push(self.collect_render_props_boxed(child_builder.as_ref(), child_node_id));
         }
+        self.store_node_hashes(node_id, element, own_hash, child_hashes)
     }
 
     /// Collect render props from a boxed element builder
@@ -277,7 +277,7 @@ impl RenderTree {
         &mut self,
         element: &dyn ElementBuilder,
         node_id: LayoutNodeId,
-    ) {
+    ) -> (DivHash, DivHash) {
         // Debug: See all element types being collected
         let eid = element.element_type_id();
         // eprintln!("collect_render_props_boxed: node={:?}, type_id={:?}", node_id, eid);
@@ -406,11 +406,8 @@ impl RenderTree {
         );
 
         // Store per-node hashes for incremental update detection
+        // The tree hashes are stored once the children have returned theirs.
         let own_hash = DivHash::compute_element(element);
-        let tree_hash = DivHash::compute_element_tree(element);
-        let topology_hash = DivHash::compute_topology_tree(element);
-        self.node_hashes
-            .insert(node_id, (own_hash, tree_hash, topology_hash));
 
         // Register event handlers if present
         if let Some(handlers) = element.event_handlers() {
@@ -506,6 +503,7 @@ impl RenderTree {
         }
 
         let total_children = child_node_ids.len();
+        let mut child_hashes = Vec::with_capacity(child_builders.len());
 
         // Check if this is a Motion container
         let is_motion = element.element_type_id() == ElementTypeId::Motion;
@@ -558,7 +556,7 @@ impl RenderTree {
                 let child_stable_id = motion_stable_id
                     .as_ref()
                     .map(|key| format!("{}:child:{}", key, index));
-                self.collect_render_props_boxed_with_motion(
+                child_hashes.push(self.collect_render_props_boxed_with_motion(
                     child_builder.as_ref(),
                     child_node_id,
                     Some(motion_config),
@@ -567,11 +565,13 @@ impl RenderTree {
                     motion_is_suspended,
                     motion_is_exiting,
                     motion_on_ready_callback.clone(),
-                );
+                ));
                 continue;
             }
-            self.collect_render_props_boxed(child_builder.as_ref(), child_node_id);
+            child_hashes
+                .push(self.collect_render_props_boxed(child_builder.as_ref(), child_node_id));
         }
+        self.store_node_hashes(node_id, element, own_hash, child_hashes)
     }
 
     /// Collect render props with motion animation config from parent
@@ -588,7 +588,7 @@ impl RenderTree {
         motion_on_ready_callback: Option<
             std::sync::Arc<dyn Fn(crate::element::ElementBounds) + Send + Sync>,
         >,
-    ) {
+    ) -> (DivHash, DivHash) {
         let mut props = element.render_props();
         props.node_id = Some(node_id);
 
@@ -723,11 +723,8 @@ impl RenderTree {
         );
 
         // Store per-node hashes for incremental update detection
+        // The tree hashes are stored once the children have returned theirs.
         let own_hash = DivHash::compute_element(element);
-        let tree_hash = DivHash::compute_element_tree(element);
-        let topology_hash = DivHash::compute_topology_tree(element);
-        self.node_hashes
-            .insert(node_id, (own_hash, tree_hash, topology_hash));
 
         // Register event handlers if present
         if let Some(handlers) = element.event_handlers() {
@@ -803,6 +800,7 @@ impl RenderTree {
         let child_node_ids = self.layout_tree.children(node_id);
         let child_builders = element.children_builders();
         let total_children = child_node_ids.len();
+        let mut child_hashes = Vec::with_capacity(child_builders.len());
 
         for (index, (child_builder, &child_node_id)) in
             child_builders.iter().zip(child_node_ids.iter()).enumerate()
@@ -811,7 +809,34 @@ impl RenderTree {
                 .register_parent(child_node_id, node_id);
             self.element_registry
                 .register_child_index(child_node_id, index, total_children);
-            self.collect_render_props_boxed(child_builder.as_ref(), child_node_id);
+            child_hashes
+                .push(self.collect_render_props_boxed(child_builder.as_ref(), child_node_id));
         }
+        self.store_node_hashes(node_id, element, own_hash, child_hashes)
+    }
+
+    /// Stores the hashes of `node_id`, built by `element`, and returns its tree and topology
+    /// hashes. `children` holds what the collected children returned, in order; builder
+    /// children past them, which the layout tree has no node for, are hashed here. The
+    /// result equals [`DivHash::compute_element_tree`] and [`DivHash::compute_topology_tree`]
+    /// of `element`, with each subtree hashed once.
+    fn store_node_hashes(
+        &mut self,
+        node_id: LayoutNodeId,
+        element: &dyn ElementBuilder,
+        own_hash: DivHash,
+        mut children: Vec<(DivHash, DivHash)>,
+    ) -> (DivHash, DivHash) {
+        for child in element.children_builders().iter().skip(children.len()) {
+            children.push((
+                DivHash::compute_element_tree(child.as_ref()),
+                DivHash::compute_topology_tree(child.as_ref()),
+            ));
+        }
+        let tree_hash = DivHash::tree_of(own_hash, children.iter().map(|c| c.0.0));
+        let topology_hash = DivHash::topology_of(element, children.iter().map(|c| c.1.0));
+        self.node_hashes
+            .insert(node_id, (own_hash, tree_hash, topology_hash));
+        (tree_hash, topology_hash)
     }
 }

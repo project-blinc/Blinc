@@ -30,3 +30,6 @@ pub mod entry;
 pub mod regions;
 pub mod subtree;
 pub mod text;
+
+#[cfg(test)]
+mod hash_tests;

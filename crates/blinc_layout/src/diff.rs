@@ -74,10 +74,29 @@ impl DivHash {
         DivHash(hasher.finish())
     }
 
-    /// Compute tree hash for a boxed ElementBuilder.
+    /// Compute tree hash for a boxed ElementBuilder: its own hash and its children's tree
+    /// hashes, so a subtree's hash is computed once however deep it sits.
     pub fn compute_element_tree(element: &dyn ElementBuilder) -> Self {
+        let children: Vec<DivHash> = element
+            .children_builders()
+            .iter()
+            .map(|child| Self::compute_element_tree(child.as_ref()))
+            .collect();
+        Self::tree_of(
+            Self::compute_element(element),
+            children.into_iter().map(|c| c.0),
+        )
+    }
+
+    /// The tree hash of an element with hash `own` whose children have the tree hashes
+    /// `children`, in order.
+    pub(crate) fn tree_of(own: DivHash, children: impl ExactSizeIterator<Item = u64>) -> Self {
         let mut hasher = DefaultHasher::new();
-        hash_element_tree(element, &mut hasher);
+        own.0.hash(&mut hasher);
+        children.len().hash(&mut hasher);
+        for child in children {
+            child.hash(&mut hasher);
+        }
         DivHash(hasher.finish())
     }
 
@@ -113,8 +132,26 @@ impl DivHash {
     /// reconstructs the entire Stateful subtree because the layout
     /// dimensions flow through the structural hash.
     pub fn compute_topology_tree(element: &dyn ElementBuilder) -> Self {
+        let children: Vec<DivHash> = element
+            .children_builders()
+            .iter()
+            .map(|child| Self::compute_topology_tree(child.as_ref()))
+            .collect();
+        Self::topology_of(element, children.into_iter().map(|c| c.0))
+    }
+
+    /// The topology hash of `element` whose children have the topology hashes `children`,
+    /// in order.
+    pub(crate) fn topology_of(
+        element: &dyn ElementBuilder,
+        children: impl ExactSizeIterator<Item = u64>,
+    ) -> Self {
         let mut hasher = DefaultHasher::new();
         hash_element_topology(element, &mut hasher);
+        children.len().hash(&mut hasher);
+        for child in children {
+            child.hash(&mut hasher);
+        }
         DivHash(hasher.finish())
     }
 }
@@ -686,7 +723,7 @@ fn hash_div_tree(div: &Div, hasher: &mut impl Hasher) {
     // Hash children count and each child
     div.children.len().hash(hasher);
     for child in &div.children {
-        hash_element_tree(child.as_ref(), hasher);
+        DivHash::compute_element_tree(child.as_ref()).0.hash(hasher);
     }
 }
 
@@ -743,18 +780,6 @@ fn hash_element(element: &dyn ElementBuilder, hasher: &mut impl Hasher) {
     }
 }
 
-/// Hash an ElementBuilder including its entire subtree.
-fn hash_element_tree(element: &dyn ElementBuilder, hasher: &mut impl Hasher) {
-    hash_element(element, hasher);
-
-    // Hash children
-    let children = element.children_builders();
-    children.len().hash(hasher);
-    for child in children {
-        hash_element_tree(child.as_ref(), hasher);
-    }
-}
-
 /// Hash an ElementBuilder's structural properties (excluding visual-only props).
 ///
 /// Includes: element type, layout style, element ID, text content, SVG/image source,
@@ -802,12 +827,12 @@ fn hash_element_structural(element: &dyn ElementBuilder, hasher: &mut impl Hashe
     }
 }
 
-/// Like [`hash_element_structural`] but skips `hash_style` so that
-/// animated layout dimensions don't bump the hash. Element identity,
-/// element type, text / SVG / image content, and the child tree's
-/// own topology still participate, so anything that would actually
-/// require rebuilding nodes (a child added, a text content change,
-/// a new element_id) still trips the hash.
+/// The element's own part of [`DivHash::compute_topology_tree`]: like
+/// [`hash_element_structural`] without its children, and skipping `hash_style` so that
+/// animated layout dimensions don't bump the hash. Element identity, element type and
+/// text / SVG / image content participate; the children's topology hashes are added by
+/// [`DivHash::topology_of`], so anything that would actually require rebuilding nodes
+/// (a child added, a text content change, a new element_id) still trips the hash.
 fn hash_element_topology(element: &dyn ElementBuilder, hasher: &mut impl Hasher) {
     std::mem::discriminant(&element.element_type_id()).hash(hasher);
 
@@ -829,12 +854,6 @@ fn hash_element_topology(element: &dyn ElementBuilder, hasher: &mut impl Hasher)
 
     if let Some(image_info) = element.image_render_info() {
         image_info.source.hash(hasher);
-    }
-
-    let children = element.children_builders();
-    children.len().hash(hasher);
-    for child in children {
-        hash_element_topology(child.as_ref(), hasher);
     }
 }
 

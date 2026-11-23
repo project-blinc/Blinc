@@ -15,6 +15,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ### Changed
 - `RenderTree::get_visual_render_bounds` computes a node's bounds when asked, from its ancestors' layout and visual animations, and returns them by value. A layout no longer walks every node to store bounds that rendering never read. `RenderTreeDebugStats::animated_bounds_count` is removed, and the motion debug panel drops its bar.
+- A node's tree and topology hashes are built from its own hash and its children's hashes, so collecting a subtree hashes each node once instead of once per ancestor. `DivHash::compute_element_tree` and `compute_topology_tree` give values of the new form.
 - A scroll container's auto-hiding scrollbar is drawn each frame apart from the batch when nothing above the container can move it and no overlay is open, so its fade over still content takes the fast path instead of a full paint per frame.
 - A motion-bound subtree with an SVG below it keeps its groups dynamic, as one with only boxes and text does; only an image below it keeps them static. Moving a calendar page with SVG day markers updates rows instead of repainting the tree.
 - The paint walker gives an overlay root's subtree a paint layer above the one it was painted on, as a stack layer does; unlike a stack layer, the content after it keeps its layer. Overlay content then draws above static foreground and above the motion content it covers.
