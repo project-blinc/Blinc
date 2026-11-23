@@ -14,6 +14,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 
 ### Changed
+- `RenderTree::get_visual_render_bounds` computes a node's bounds when asked, from its ancestors' layout and visual animations, and returns them by value. A layout no longer walks every node to store bounds that rendering never read. `RenderTreeDebugStats::animated_bounds_count` is removed, and the motion debug panel drops its bar.
 - A scroll container's auto-hiding scrollbar is drawn each frame apart from the batch when nothing above the container can move it and no overlay is open, so its fade over still content takes the fast path instead of a full paint per frame.
 - A motion-bound subtree with an SVG below it keeps its groups dynamic, as one with only boxes and text does; only an image below it keeps them static. Moving a calendar page with SVG day markers updates rows instead of repainting the tree.
 - The paint walker gives an overlay root's subtree a paint layer above the one it was painted on, as a stack layer does; unlike a stack layer, the content after it keeps its layer. Overlay content then draws above static foreground and above the motion content it covers.

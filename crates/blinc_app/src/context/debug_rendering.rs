@@ -68,9 +68,7 @@ impl RenderContext {
         );
 
         // Status indicator - green if any animations active
-        let has_active = stats.visual_animation_count > 0
-            || stats.layout_animation_count > 0
-            || stats.animated_bounds_count > 0;
+        let has_active = stats.visual_animation_count > 0 || stats.layout_animation_count > 0;
 
         let (r, g, b, a) = if has_active {
             (0.2, 0.9, 0.3, 1.0) // Green when animating
@@ -105,16 +103,6 @@ impl RenderContext {
             debug_primitives.push(
                 GpuPrimitive::rect(bar_x, panel_y + 50.0, bar_width * layout_ratio, bar_height)
                     .with_color(0.9, 0.2, 0.8, 0.9)
-                    .with_corner_radius(3.0),
-            );
-        }
-
-        // Animated bounds bar (yellow)
-        let bounds_ratio = (stats.animated_bounds_count as f32).min(50.0) / 50.0;
-        if bounds_ratio > 0.0 {
-            debug_primitives.push(
-                GpuPrimitive::rect(bar_x, panel_y + 65.0, bar_width * bounds_ratio, bar_height)
-                    .with_color(0.95, 0.85, 0.2, 0.9)
                     .with_corner_radius(3.0),
             );
         }

@@ -1162,9 +1162,6 @@ pub struct RenderTree {
     /// Previous visual bounds by stable key (what was rendered last frame)
     /// Used to detect bounds changes and initiate FLIP animations
     previous_visual_bounds: HashMap<String, ElementBounds>,
-    /// Pre-computed animated render bounds for this frame
-    /// Calculated after layout, used during rendering
-    animated_render_bounds: NodeMap<AnimatedRenderBounds>,
 
     // ========================================================================
     // CSS Animation/Transition System (shared with AnimationScheduler thread)
@@ -1375,7 +1372,6 @@ impl RenderTree {
             visual_animation_last_node: HashMap::new(),
             visual_animations: HashMap::new(),
             previous_visual_bounds: HashMap::new(),
-            animated_render_bounds: HashMap::default(),
             // CSS animation/transition system (shared with scheduler thread)
             css_anim_store: Arc::new(Mutex::new(crate::render_state::CssAnimationStore::new())),
             hover_css_animations: HashSet::default(),
@@ -2723,10 +2719,6 @@ impl RenderTree {
             // This runs AFTER layout is complete and does NOT modify taffy.
             // It detects bounds changes and creates FLIP-style animations.
             self.update_visual_animations();
-
-            // Pre-compute animated render bounds for all nodes
-            // This propagates parent animation offsets to children.
-            self.compute_animated_render_bounds();
         }
     }
 

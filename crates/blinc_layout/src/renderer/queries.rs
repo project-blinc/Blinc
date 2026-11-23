@@ -48,7 +48,6 @@ impl RenderTree {
             visual_animation_count: self.visual_animations.len(),
             visual_animation_config_count: self.visual_animation_configs.len(),
             layout_animation_count: self.layout_animations_by_key.len(),
-            animated_bounds_count: self.animated_render_bounds.len(),
             render_node_count: self.render_nodes.len(),
             scroll_physics_count: self.scroll_physics.len(),
         }

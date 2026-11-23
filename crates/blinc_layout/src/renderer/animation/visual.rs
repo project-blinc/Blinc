@@ -309,141 +309,72 @@ impl RenderTree {
         });
     }
 
-    /// Compute animated render bounds for all nodes
+    /// The bounds `node_id` is drawn at while visual (FLIP) animations play: its layout position
+    /// plus the offsets of its own animation and of every animated ancestor, and its layout size
+    /// plus its own animation's size change. Positions are absolute and from layout alone, without
+    /// scroll offsets. A node with an animation of its own clips to the rect its config names.
     ///
-    /// This is the hierarchical computation phase:
-    /// 1. Start from root with identity bounds
-    /// 2. For each node, calculate its animated bounds accounting for:
-    ///    - Own animation state (if any)
-    ///    - Parent's animated offset (inherited)
-    /// 3. Store pre-computed bounds for use during rendering
-    ///
-    /// Called after update_visual_animations().
-    pub(crate) fn compute_animated_render_bounds(&mut self) {
-        // Clear previous computation
-        self.animated_render_bounds.clear();
-
-        // Without a node that animates its visual bounds, what would be stored is the layout
-        // bounds of every node, which is what `get_absolute_bounds` says.
+    /// `None` when no node animates its visual bounds, or the node is not laid out under the root.
+    /// Computed on request: rendering does not read it.
+    pub fn get_visual_render_bounds(&self, node_id: LayoutNodeId) -> Option<AnimatedRenderBounds> {
         if self.visual_animation_configs.is_empty() && self.visual_animations.is_empty() {
-            return;
+            return None;
         }
-
-        // Get root node
-        let Some(root_id) = self.root else {
-            return;
+        let mut path = self.layout_tree.ancestors(node_id);
+        path.reverse();
+        if path.first().copied().unwrap_or(node_id) != self.root? {
+            return None;
+        }
+        path.push(node_id);
+        let key_of = |node: LayoutNodeId| {
+            self.visual_animation_key_to_node
+                .iter()
+                .find(|(_, n)| **n == node)
+                .map(|(key, _)| key)
         };
-
-        // The key each animated node goes by, once, so a node is looked up and not searched for.
-        let key_of: NodeMap<String> = self
-            .visual_animation_key_to_node
-            .iter()
-            .map(|(key, node)| (*node, key.clone()))
-            .collect();
-
-        // Start recursive computation from root
-        self.compute_bounds_recursive(
-            root_id, 0.0, 0.0, // Parent offset starts at screen origin
-            &key_of,
-        );
-    }
-
-    /// Recursively compute animated render bounds for a subtree
-    fn compute_bounds_recursive(
-        &mut self,
-        node_id: LayoutNodeId,
-        parent_x: f32,
-        parent_y: f32,
-        key_of: &NodeMap<String>,
-    ) {
-        // Get layout bounds relative to parent (from taffy)
-        let Some(layout_bounds) = self.layout_tree.get_bounds(node_id, (0.0, 0.0)) else {
-            return;
-        };
-
-        // Check if this node has an active visual animation
-        // Find the key for this node (reverse lookup - O(n) but typically few animated nodes)
-        let stable_key = key_of.get(&node_id);
-        let animation = stable_key.and_then(|k| self.visual_animations.get(k));
-        let config = stable_key.and_then(|k| self.visual_animation_configs.get(k));
-
-        // Calculate this node's animated bounds
-        let animated_bounds = if let Some(anim) = animation {
-            // Node has active animation - apply visual offset
-            let dx = anim.offset.get_x();
-            let dy = anim.offset.get_y();
-            let dw = anim.size_delta.get_width();
-            let dh = anim.size_delta.get_height();
-
-            // Position: layout + parent offset + animation offset
-            let x = parent_x + layout_bounds.x + dx;
-            let y = parent_y + layout_bounds.y + dy;
-
-            // Size: layout + animation delta
-            let width = layout_bounds.width + dw;
-            let height = layout_bounds.height + dh;
-
-            // Determine clip rect based on animation direction and config
-            let clip_rect = if let Some(cfg) = config {
-                use crate::visual_animation::ClipBehavior;
-                match cfg.clip_behavior {
-                    ClipBehavior::ClipToAnimated => {
-                        // Clip to animated (current) bounds
-                        Some(Rect::new(0.0, 0.0, width.max(0.0), height.max(0.0)))
-                    }
-                    ClipBehavior::ClipToLayout => {
-                        // Clip to layout (target) bounds
-                        Some(Rect::new(
-                            0.0,
-                            0.0,
-                            layout_bounds.width,
-                            layout_bounds.height,
-                        ))
-                    }
-                    ClipBehavior::NoClip => None,
-                }
-            } else {
-                // Default: clip to animated bounds
-                Some(Rect::new(0.0, 0.0, width.max(0.0), height.max(0.0)))
-            };
-
-            AnimatedRenderBounds {
+        let (mut x, mut y) = (0.0, 0.0);
+        let mut own = None;
+        for node in path {
+            let layout = self.layout_tree.get_bounds(node, (0.0, 0.0))?;
+            let key = key_of(node);
+            let animation = key.and_then(|k| self.visual_animations.get(k));
+            let (dx, dy) = animation.map_or((0.0, 0.0), |a| (a.offset.get_x(), a.offset.get_y()));
+            x += layout.x + dx;
+            y += layout.y + dy;
+            own = Some((layout, key, animation));
+        }
+        let (layout, key, animation) = own?;
+        let Some(anim) = animation else {
+            return Some(AnimatedRenderBounds {
                 x,
                 y,
-                width,
-                height,
-                clip_rect,
-            }
-        } else {
-            // No animation - use layout bounds + parent offset
-            AnimatedRenderBounds {
-                x: parent_x + layout_bounds.x,
-                y: parent_y + layout_bounds.y,
-                width: layout_bounds.width,
-                height: layout_bounds.height,
+                width: layout.width,
+                height: layout.height,
                 clip_rect: None,
+            });
+        };
+        let width = layout.width + anim.size_delta.get_width();
+        let height = layout.height + anim.size_delta.get_height();
+        use crate::visual_animation::ClipBehavior;
+        let clip_rect = match key
+            .and_then(|k| self.visual_animation_configs.get(k))
+            .map(|cfg| &cfg.clip_behavior)
+        {
+            Some(ClipBehavior::ClipToLayout) => {
+                Some(Rect::new(0.0, 0.0, layout.width, layout.height))
+            }
+            Some(ClipBehavior::NoClip) => None,
+            Some(ClipBehavior::ClipToAnimated) | None => {
+                Some(Rect::new(0.0, 0.0, width.max(0.0), height.max(0.0)))
             }
         };
-
-        // Store computed bounds
-        let child_parent_x = animated_bounds.x;
-        let child_parent_y = animated_bounds.y;
-        self.animated_render_bounds.insert(node_id, animated_bounds);
-
-        // Recursively compute for children
-        // Children use THIS node's animated position as their parent offset
-        let children = self.layout_tree.children(node_id);
-        for child_id in children {
-            self.compute_bounds_recursive(child_id, child_parent_x, child_parent_y, key_of);
-        }
-    }
-
-    /// Get visual animated render bounds for a node
-    ///
-    /// Returns pre-computed animated bounds if available, otherwise None.
-    /// Use this during rendering to get hierarchically-correct animated positions.
-    pub fn get_visual_render_bounds(&self, node_id: LayoutNodeId) -> Option<&AnimatedRenderBounds> {
-        self.animated_render_bounds.get(&node_id)
+        Some(AnimatedRenderBounds {
+            x,
+            y,
+            width,
+            height,
+            clip_rect,
+        })
     }
 
     /// Check if any visual animations are currently active

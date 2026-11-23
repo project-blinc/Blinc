@@ -53,8 +53,6 @@ pub struct RenderTreeDebugStats {
     pub visual_animation_config_count: usize,
     /// Number of active layout animations
     pub layout_animation_count: usize,
-    /// Number of pre-computed animated bounds
-    pub animated_bounds_count: usize,
     /// Total number of render nodes
     pub render_node_count: usize,
     /// Number of scroll physics instances

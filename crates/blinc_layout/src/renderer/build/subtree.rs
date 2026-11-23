@@ -246,7 +246,6 @@ impl RenderTree {
         self.base_taffy_styles.remove(&node_id);
         self.node_hashes.remove(&node_id);
         self.layout_bounds_storages.remove(&node_id);
-        self.animated_render_bounds.remove(&node_id);
         self.motion_bindings.remove(&node_id);
         self.property_translation_nodes.remove(&node_id);
         self.binding_clip_bounds.borrow_mut().remove(&node_id);
