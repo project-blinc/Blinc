@@ -578,8 +578,14 @@ russl::russl! {
                 let inner_aa = aa_width;
                 let border_blend = smoothstep(-inner_aa, inner_aa, -inner_sdf);
 
-                // Only apply border color where we're inside the shape
-                fill_color = mix(fill_color, prim.border_color, border_blend * step(0.001, fill_alpha));
+                // Composite the border over the fill by the border's own alpha, as the rect shader
+                // does, so a translucent border tints the fill instead of replacing its colour.
+                let border_a = prim.border_color.a * border_blend * step(0.001, fill_alpha);
+                let out_a = border_a + fill_color.a * (1.0 - border_a);
+                let premult_rgb = prim.border_color.rgb * border_a
+                    + fill_color.rgb * fill_color.a * (1.0 - border_a);
+                let new_rgb = if out_a < 0.0001 { Vec3::splat(0.0) } else { premult_rgb / max(out_a, 0.0001) };
+                fill_color = Vec4::new(new_rgb, out_a);
             }
         }
 
