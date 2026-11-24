@@ -131,14 +131,14 @@ fn editable_code_section(state: &SharedCodeEditorState) -> Div {
                         // cn::popover / overlay should leave this
                         // off (default) — see search_enabled doc.
                         .search_enabled(true)
+                        .minimap(true)
                         .font_size(13.0)
                         .w_full()
                         .h(300.0)
                         .on_change(|new_content| {
                             tracing::info!("Content changed ({} chars)", new_content.len());
                         }),
-                )
-                .child(code_minimap(state)),
+                ),
         )
 }
 

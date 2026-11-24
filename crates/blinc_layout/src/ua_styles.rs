@@ -237,9 +237,9 @@ pub const UA_STYLES: &str = concat!(
 .blinc-code-lens-warning { color: var(--warning); }
 .blinc-code-lens-info { color: var(--info); }
 .blinc-code-lens-hint { color: var(--text-tertiary); }
+/* The minimap's bars and slider are drawn by a canvas; it reads --blinc-code-minimap-line and
+   --blinc-code-minimap-slider, which default to --text-primary at 40% and 8%. */
 .blinc-code-minimap { border-left: 1px solid var(--border); }
-.blinc-code-minimap-slider { background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
-.blinc-code-minimap-line { background: color-mix(in srgb, var(--text-primary) 40%, transparent); }
 
 /* The code editor's find and replace bar. */
 .blinc-find {

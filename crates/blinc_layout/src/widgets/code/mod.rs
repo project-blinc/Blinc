@@ -71,6 +71,8 @@ mod bound;
 mod diagnostics;
 mod hscroll;
 mod ime;
+mod minimap;
+pub use minimap::code_minimap;
 mod search;
 
 pub use diagnostics::{CodeDiagnostic, DiagnosticSeverity, set_code_diagnostics};
@@ -241,6 +243,8 @@ pub struct CodeEditorData {
     pub editor_bounds: (f32, f32, f32, f32), // (x, y, width, height)
     /// Signal ID for search state changes (repaints the find bar)
     pub search_signal_id: Option<blinc_core::reactive::SignalId>,
+    /// Whether the press that started the current drag was on the docked minimap.
+    minimap_drag: bool,
     /// The editor's own refresh handle, so the find bar can redraw it.
     pub(crate) editor_stateful:
         Option<crate::stateful::SharedState<crate::stateful::TextFieldState>>,
@@ -324,6 +328,7 @@ pub fn code_editor_state(content: impl Into<String>) -> SharedCodeEditorState {
         search_overlay_handle: None,
         editor_bounds: (0.0, 0.0, 800.0, 300.0),
         search_signal_id: None,
+        minimap_drag: false,
         editor_stateful: None,
         diagnostics: Vec::new(),
         h_scroll: Arc::new(Mutex::new(ScrollPhysics::default())),
@@ -1195,15 +1200,6 @@ impl CodeEditorData {
         self.selection_start = None;
     }
 
-    /// Get styled content without cache mutation (for minimap etc.)
-    fn get_styled_content_readonly(&self) -> StyledText {
-        if let Some(ref highlighter) = self.highlighter {
-            highlighter.highlight(&self.value())
-        } else {
-            StyledText::plain(&self.value(), self.config.plain_ink())
-        }
-    }
-
     /// Total content height in pixels (includes padding)
     pub fn content_height(&self) -> f32 {
         let line_height = self.config.font_size * self.config.line_height;
@@ -1597,6 +1593,15 @@ impl CodeEditor {
                         ctx.bounds_height,
                     );
 
+                    // A press on the docked minimap scrolls instead of placing the caret.
+                    d.minimap_drag =
+                        d.config.minimap && click_x >= ctx.bounds_width - d.config.minimap_width;
+                    if d.minimap_drag {
+                        drop(d);
+                        minimap::scroll_to(&data_for_click, click_y, ctx.bounds_height);
+                        return;
+                    }
+
                     // Focus via FSM
                     {
                         let mut shared = shared_for_click.lock().unwrap();
@@ -1785,6 +1790,11 @@ impl CodeEditor {
                     Ok(d) => d,
                     Err(_) => return,
                 };
+                if d.minimap_drag {
+                    drop(d);
+                    minimap::scroll_to(&data_for_drag, ctx.local_y, ctx.bounds_height);
+                    return;
+                }
                 if !d.focused {
                     return;
                 }
@@ -2291,7 +2301,9 @@ impl CodeEditor {
         self
     }
 
-    /// Show minimap on the right side
+    /// Dock a minimap at the editor's right edge: a bar for each visible line and a slider for
+    /// the part in view, which follow scrolling and edits. A press or a drag on it scrolls the
+    /// editor. The code area is narrowed by `minimap_width` to make room for it.
     pub fn minimap(self, enabled: bool) -> Self {
         self.state.lock().unwrap().config.minimap = enabled;
         self
@@ -2556,93 +2568,6 @@ fn build_styled_line(
     line_div
 }
 
-/// Build a minimap — a scaled-down overview of all code lines
-/// Build a minimap widget from code editor state.
-/// This should be placed as a sibling OUTSIDE the code_editor, not inside it.
-pub fn code_minimap(state: &SharedCodeEditorState) -> Div {
-    let data = state.lock().unwrap();
-    let line_height_px = data.config.font_size * data.config.line_height;
-    build_minimap(&data, line_height_px)
-}
-
-fn build_minimap(data: &CodeEditorData, line_height_px: f32) -> Div {
-    let config = &data.config;
-    let minimap_line_h = 2.0_f32; // Each line is 2px tall in minimap
-    let visible_lines = data.visible_lines();
-    let total_h = visible_lines.len() as f32 * minimap_line_h;
-
-    let mut minimap = div()
-        .class("blinc-code-minimap")
-        .flex_col()
-        .w(config.minimap_width)
-        .padding_y_px(4.0)
-        .padding_x_px(2.0);
-
-    // Viewport indicator
-    let viewport_h = data.viewport_height;
-    let content_h = data.content_height();
-    let scroll_offset = data
-        .scroll_physics
-        .lock()
-        .map(|p| -p.offset_y)
-        .unwrap_or(0.0);
-    let viewport_ratio = if content_h > 0.0 {
-        viewport_h / content_h
-    } else {
-        1.0
-    };
-    let indicator_h = (total_h * viewport_ratio).max(8.0);
-    let indicator_top = if content_h > viewport_h {
-        (scroll_offset / (content_h - viewport_h)) * (total_h - indicator_h)
-    } else {
-        0.0
-    };
-
-    // Build minimap content with viewport indicator
-    let mut content = div().flex_col().relative().w_full();
-
-    // Viewport indicator (absolute positioned)
-    content = content.child(
-        div()
-            .absolute()
-            .left(0.0)
-            .top(indicator_top + 4.0)
-            .w_full()
-            .h(indicator_h)
-            .class("blinc-code-minimap-slider")
-            .rounded(1.0),
-    );
-
-    // Render each visible line as a thin colored bar
-    let styled = data.get_styled_content_readonly();
-    let inherit = data.highlighter.is_none() && config.text_color.is_none();
-    for &line_idx in &visible_lines {
-        if line_idx >= styled.lines.len() {
-            break;
-        }
-        let styled_line = &styled.lines[line_idx];
-        let line_text = &styled_line.text;
-        let char_count = line_text.chars().count();
-
-        // Line width proportional to content length (capped)
-        let width_ratio = (char_count as f32 / 80.0).min(1.0);
-        let bar_w = (config.minimap_width - 4.0) * width_ratio;
-
-        // The first span's colour, or the `.blinc-code-minimap-line` rule's
-        let mut bar = div()
-            .class("blinc-code-minimap-line")
-            .h(minimap_line_h)
-            .w(bar_w)
-            .rounded(0.5);
-        if let Some(span) = styled_line.spans.first().filter(|_| !inherit) {
-            bar = bar.bg(span.color.with_alpha(0.8));
-        }
-        content = content.child(bar);
-    }
-
-    minimap.child(content)
-}
-
 /// Build indentation guides as absolutely-positioned vertical lines.
 /// Each guide spans only the block of consecutive lines at that indent level.
 /// Find the matching bracket pair when cursor is adjacent to a bracket.
@@ -2826,10 +2751,14 @@ fn build_editor_content(
 
     // The Stateful container uses overflow_y_scroll, so its direct child
     // must grow taller than the viewport for scrolling to work.
-    // Use a single flex_row: [gutter | code_area | minimap]
-    let mut container = div().flex_row().w_full();
-
+    // Use a single flex_row: [gutter | code_area | minimap spacer], the minimap fixed over it.
+    // The row is as tall as its lines: the code area sits in a horizontal scroll, which does not
+    // pass its height up, so without a gutter nothing else would make the row overflow.
     let pad = config.padding;
+    let mut container = div()
+        .flex_row()
+        .w_full()
+        .min_h(visible_lines.len() as f32 * line_height_px + 2.0 * pad);
     let mut code_area = div().flex_col().flex_grow().relative();
 
     // Current line highlight (subtle background behind active line)
@@ -3089,7 +3018,7 @@ fn build_editor_content(
         code_area = code_area.child(cursor_canvas);
     }
 
-    // Build layout: [gutter | code_area] (scrollable) + minimap (fixed overlay)
+    // Build layout: [gutter | code_area] (scrollable), then the minimap when it is on.
     // overflow_y_scroll on the Stateful parent handles scrolling
     if config.line_numbers || config.code_folding {
         let fold_regions = data.detect_fold_regions();
@@ -3112,6 +3041,12 @@ fn build_editor_content(
             .flex_grow()
             .child(code_area.class("blinc-code-area").min_w(content_w)),
     );
+    if let Some(state) = shared_state.filter(|_| config.minimap) {
+        // The minimap is fixed over the editor's right edge; the spacer keeps text from under it.
+        container = container
+            .child(div().w(config.minimap_width).flex_shrink_0())
+            .child(minimap::docked(state, config.minimap_width));
+    }
     container
 }
 

@@ -117,7 +117,7 @@ default stylesheet's rules, so it follows the theme:
 | `blinc-code-guide` | an indent guide | `--border` at 55% |
 | `blinc-code-bracket` | a matching bracket | `--primary` at 15%, with a border |
 | `blinc-code-find-match` | a search match, `data-active` for the current one | `--warning` at 25%, 50% when current |
-| `blinc-code-minimap`, `-slider`, `-line` | the minimap, its viewport, a plain line | `--border` edge, `--text-primary` tints |
+| `blinc-code-minimap` | the minimap; its bars and slider are drawn, coloured by `--blinc-code-minimap-line` and `--blinc-code-minimap-slider` | `--border` edge, `--text-primary` at 40% and 8% |
 
 The caret is drawn in `--blinc-code-caret`, the accent when unset, and code is
 set in `--blinc-code-font-family`, the generic monospace face when unset. The
@@ -220,3 +220,13 @@ code_editor(&state)
     .code_folding(true)        // Enable fold/unfold
     .minimap(true)             // Show minimap sidebar
 ```
+
+## Minimap
+
+`.minimap(true)` docks a minimap at the editor's right edge, `minimap_width` wide (60 px by
+default). It draws a bar for each visible line and a slider over the part of the text in view.
+Both follow scrolling and edits. A press on the minimap puts the line under the pointer in the
+middle of the editor, and a drag keeps doing so.
+
+To place the minimap yourself, for example beside the editor in a row, use `code_minimap(&state)`
+instead. It draws and scrolls the same way.

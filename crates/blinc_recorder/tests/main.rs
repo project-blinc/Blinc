@@ -47,6 +47,7 @@ mod cn_tooltip_pointer;
 mod code_block_hscroll;
 mod code_editor_diagnostics;
 mod code_editor_hscroll;
+mod code_editor_minimap;
 mod code_editor_on_change;
 mod code_editor_selection_drag;
 mod headless_button;
