@@ -92,6 +92,11 @@ If a full-workspace build still thrashes or OOMs on a constrained box
   heaviest single step on low-RAM machines.
 - **Reclaim SSD** with `CARGO_INCREMENTAL=0` (smaller `target/`, slower
   warm rebuilds), and `cargo clean` between large feature switches.
+- **Sweep stale build output.** Cargo keeps a crate's old build folder when
+  its features, profile configuration or toolchain change. `scripts/sweep_target.py`
+  runs the Cargo commands you name and lists every folder they no longer use.
+  Add `--delete` to remove them. Run it with no commands to sweep against
+  `cargo test --workspace --no-run`.
 
 ## Platform Support
 
