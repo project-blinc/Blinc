@@ -107,10 +107,18 @@ cursor appears in every state), and the diff should show only that.
 ## Running tests
 
 ```sh
-cargo nextest run --workspace --all-features \
-  --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
-cargo test --doc --workspace --all-features \
-  --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
+DSL_EXCLUDES="--exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro --exclude blinc_runtime"
+cargo nextest run --workspace --all-features $DSL_EXCLUDES
+cargo test --doc --workspace --all-features $DSL_EXCLUDES
+```
+
+The DSL crates and `blinc_runtime` build the Zyntax compiler and are outside the release, so the
+workspace commands leave them out. The DSL workflow checks and lints them when their sources
+change, once a week, and on request:
+
+```sh
+cargo clippy -p blinc_dsl_core -p blinc_cn_dsl -p blinc_dsl_macro -p blinc_runtime \
+  --all-targets --all-features -- -W clippy::all -A clippy::type_complexity -A dead_code
 ```
 
 Use **nextest**. It runs each test in its own process, and Blinc keeps process-wide state: the
@@ -152,11 +160,11 @@ and process-wide state live in crates other than the one you edited:
 
 ```sh
 cargo fmt --all -- --check
-cargo clippy --workspace --all-features --all-targets -- -W clippy::all -A clippy::type_complexity -A dead_code
+cargo clippy --workspace --all-features --all-targets $DSL_EXCLUDES -- -W clippy::all -A clippy::type_complexity -A dead_code
 cargo check -p blinc_app --target wasm32-unknown-unknown --features web --no-default-features
-cargo nextest run --no-fail-fast --workspace --all-features --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
-cargo test --doc --workspace --all-features --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
-RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
+cargo nextest run --no-fail-fast --workspace --all-features $DSL_EXCLUDES
+cargo test --doc --workspace --all-features $DSL_EXCLUDES
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features $DSL_EXCLUDES
 cargo check -p blinc_gpu --target x86_64-pc-windows-msvc
 cargo check -p blinc_app --no-default-features --target aarch64-apple-ios --features ios
 ```

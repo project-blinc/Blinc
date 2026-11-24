@@ -13,6 +13,9 @@ env:
   # Reduce disk usage on GitHub-hosted runners (debug info + incremental artifacts can be large).
   CARGO_INCREMENTAL: 0
   RUSTFLAGS: "-C debuginfo=0"
+  # The DSL crates and their runtime build the Zyntax compiler; they are outside the release and
+  # checked by dsl.yml instead.
+  DSL_EXCLUDES: --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro --exclude blinc_runtime
 
 jobs:
   guard:
@@ -76,7 +79,7 @@ jobs:
       # `cn::sidebar` signature change broke `cn_demo` and CI stayed
       # green, because nothing here ever compiled it.
       - name: Run cargo check
-        run: cargo check --workspace --all-features --all-targets
+        run: cargo check --workspace --all-features --all-targets $DSL_EXCLUDES
 
       - name: Check facade-only consumer
         env:
@@ -188,7 +191,7 @@ jobs:
 
       - name: Run tests (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum cargo nextest run --no-fail-fast --workspace --all-features --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
+        run: xvfb-run --auto-servernum cargo nextest run --no-fail-fast --workspace --all-features $DSL_EXCLUDES
         env:
           # Use software rendering for headless GPU tests
           MESA_GL_VERSION_OVERRIDE: "4.5"
@@ -196,11 +199,13 @@ jobs:
 
       - name: Run tests (non-Linux)
         if: runner.os != 'Linux'
-        run: cargo nextest run --no-fail-fast --workspace --all-features --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
+        # bash on Windows too, so $DSL_EXCLUDES expands.
+        shell: bash
+        run: cargo nextest run --no-fail-fast --workspace --all-features $DSL_EXCLUDES
 
       - name: Run doctests (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum cargo test --doc --no-fail-fast --workspace --all-features --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
+        run: xvfb-run --auto-servernum cargo test --doc --no-fail-fast --workspace --all-features $DSL_EXCLUDES
         env:
           # Use software rendering for headless GPU tests
           MESA_GL_VERSION_OVERRIDE: "4.5"
@@ -208,7 +213,9 @@ jobs:
 
       - name: Run doctests (non-Linux)
         if: runner.os != 'Linux'
-        run: cargo test --doc --no-fail-fast --workspace --all-features --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
+        # bash on Windows too, so $DSL_EXCLUDES expands.
+        shell: bash
+        run: cargo test --doc --no-fail-fast --workspace --all-features $DSL_EXCLUDES
 
   hlsl-dxc-check:
     name: HLSL DXC Shader Check
@@ -316,7 +323,7 @@ jobs:
             ${{ runner.os }}-cargo-clippy-
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-features --all-targets -- -W clippy::all -A clippy::type_complexity -A dead_code
+        run: cargo clippy --workspace --all-features --all-targets $DSL_EXCLUDES -- -W clippy::all -A clippy::type_complexity -A dead_code
 
   wasm32-check:
     name: Wasm32 Check
@@ -485,7 +492,7 @@ jobs:
             ${{ runner.os }}-cargo-docs-
 
       - name: Build documentation
-        run: cargo doc --workspace --no-deps --all-features
+        run: cargo doc --workspace --no-deps --all-features $DSL_EXCLUDES
         env:
           RUSTDOCFLAGS: -D warnings
 

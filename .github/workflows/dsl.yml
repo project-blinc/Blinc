@@ -1,0 +1,85 @@
+name: DSL
+
+# The DSL crates and their runtime build the Zyntax compiler, which the other workflows leave
+# out (their DSL_EXCLUDES). This checks them on its own: when their sources change, once a week,
+# so a change elsewhere that breaks them is still found, and on request.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/blinc_dsl_core/**'
+      - 'crates/blinc_cn_dsl/**'
+      - 'crates/blinc_dsl_macro/**'
+      - 'crates/blinc_runtime/**'
+      - '.github/workflows/dsl.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'crates/blinc_dsl_core/**'
+      - 'crates/blinc_cn_dsl/**'
+      - 'crates/blinc_dsl_macro/**'
+      - 'crates/blinc_runtime/**'
+      - '.github/workflows/dsl.yml'
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: "-C debuginfo=0"
+  DSL_PACKAGES: -p blinc_dsl_core -p blinc_cn_dsl -p blinc_dsl_macro -p blinc_runtime
+
+jobs:
+  dsl:
+    name: Check and lint the DSL crates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Strip local-dev [patch] block (CI-only)
+        shell: bash
+        run: bash scripts/ci-strip-local-patch.sh
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libgl1-mesa-dev \
+            libegl1-mesa-dev \
+            libvulkan-dev \
+            libfontconfig1-dev \
+            fonts-dejavu-core \
+            libglib2.0-dev \
+            libatk1.0-dev \
+            libgtk-3-dev \
+            libdbus-1-dev \
+            libxdo-dev \
+            libasound2-dev
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-dsl-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-dsl-
+
+      - name: Check
+        run: cargo check $DSL_PACKAGES --all-targets --all-features
+
+      - name: Clippy
+        run: cargo clippy $DSL_PACKAGES --all-targets --all-features -- -W clippy::all -A clippy::type_complexity -A dead_code

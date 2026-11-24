@@ -23,6 +23,9 @@ env:
   # Reduce disk usage on GitHub-hosted runners (debug info + incremental artifacts can be large).
   CARGO_INCREMENTAL: 0
   RUSTFLAGS: "-C debuginfo=0"
+  # The DSL crates and their runtime build the Zyntax compiler; they are outside the release and
+  # checked by dsl.yml instead.
+  DSL_EXCLUDES: --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro --exclude blinc_runtime
 
 jobs:
   build-android:
@@ -174,7 +177,7 @@ jobs:
             ${{ runner.os }}-cargo-android-check-
 
       - name: Check workspace builds on host
-        run: cargo check --workspace
+        run: cargo check --workspace $DSL_EXCLUDES
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@v2
@@ -182,7 +185,7 @@ jobs:
           tool: cargo-nextest
 
       - name: Run tests
-        run: xvfb-run --auto-servernum cargo nextest run --no-fail-fast --workspace --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
+        run: xvfb-run --auto-servernum cargo nextest run --no-fail-fast --workspace $DSL_EXCLUDES
         env:
           MESA_GL_VERSION_OVERRIDE: "4.5"
           LIBGL_ALWAYS_SOFTWARE: "1"
