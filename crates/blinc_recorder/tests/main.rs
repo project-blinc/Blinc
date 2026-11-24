@@ -60,6 +60,7 @@ mod menubar_hover_scroll;
 mod overlay_css_active;
 mod overlay_owners;
 mod plain_shader_parity;
+mod scroll_momentum;
 mod scroll_paint_stale;
 mod scroll_perf;
 mod style_pass_cost;

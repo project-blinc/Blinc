@@ -73,6 +73,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- The momentum after a trackpad scroll stays with the scroll container the fingers scrolled. Before, moving the pointer off an inner scroll, such as a code editor, while it glided handed the rest of the glide to the container under the pointer.
 - Dragging a scroll container's scrollbar thumb repaints on every move. The window does not repaint for a drag event by itself, and the thumb's drag handler moved the offset without asking for a frame, so the thumb and content moved only when something else drew.
 - A press or a drag on a code editor's scrollbar scrolls it without placing the caret or selecting text.
 - `code_editor(..).minimap(true)` docks a minimap at the editor's right edge. Before, the flag was stored and nothing read it. The minimap's bars and slider are drawn by a canvas from the editor's lines and scroll physics each time it is painted, so the slider follows a scroll and the bars follow an edit without a rebuild. A press or a drag on it scrolls the editor. `code_minimap(&state)`, placed by the caller, draws and scrolls the same way. The `.blinc-code-minimap-slider` and `.blinc-code-minimap-line` rules are gone; the colours come from `--blinc-code-minimap-slider` and `--blinc-code-minimap-line`.

@@ -279,8 +279,11 @@ impl RenderTree {
         // windowed.rs, which starved normal scroll containers too.
         let text_input_focused = crate::widgets::text_input::has_focused_text_input();
 
-        // A gesture that a handler took stays with it.
-        let latched = self.latched_scroll_target();
+        // A gesture that a handler took stays with it, and its momentum with the container that
+        // took its last scroll.
+        let latched = self
+            .latched_scroll_target()
+            .or_else(|| self.momentum_scroll_target());
         let mut target: Option<LayoutNodeId> = latched;
         let unlatched: &[LayoutNodeId] = if latched.is_some() { &[] } else { &chain };
         for &node_id in unlatched {
@@ -317,6 +320,7 @@ impl RenderTree {
             return (delta_x, delta_y);
         };
         self.latch_scroll_target(node_id);
+        self.note_scroll_target(node_id);
 
         let has_scroll_physics = self.get_scroll_direction(node_id).is_some();
         let direction = self
@@ -412,8 +416,11 @@ impl RenderTree {
         // Mirror its focus rule too — while a text input is focused,
         // route only to physics containers, not bare SCROLL handlers.
         let text_input_focused = crate::widgets::text_input::has_focused_text_input();
-        // A gesture that a handler took stays with it.
-        let latched = self.latched_scroll_target();
+        // A gesture that a handler took stays with it, and its momentum with the container that
+        // took its last scroll.
+        let latched = self
+            .latched_scroll_target()
+            .or_else(|| self.momentum_scroll_target());
         let mut target: Option<LayoutNodeId> = latched;
         let unlatched: &[LayoutNodeId] = if latched.is_some() { &[] } else { &chain };
         for &node_id in unlatched {
@@ -450,6 +457,7 @@ impl RenderTree {
             return (delta_x, delta_y);
         };
         self.latch_scroll_target(node_id);
+        self.note_scroll_target(node_id);
 
         let has_scroll_physics = self.get_scroll_direction(node_id).is_some();
         let direction = self

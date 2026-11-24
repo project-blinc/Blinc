@@ -149,7 +149,13 @@ fn image_gallery() -> impl ElementBuilder {
 
 ## Nested Scrolling
 
-Scroll containers handle nested scrolling automatically. Inner scrolls consume events when they can scroll; outer scrolls take over at boundaries.
+A scroll goes to the innermost container under the pointer that scrolls along the scroll's axis.
+A horizontal scroll inside a vertical one therefore passes vertical scrolls to its parent. An
+inner container at its edge does not hand the scroll to its parent: to scroll the parent, move
+the pointer off the inner container.
+
+The momentum after a trackpad gesture stays with the container the fingers scrolled, even when
+the pointer moves off it while the content glides.
 
 ```rust
 fn nested_scroll_example() -> impl ElementBuilder {

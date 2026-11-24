@@ -5,8 +5,11 @@
 //! after them stops. Its scrolls carry its number and whether they are
 //! momentum. A gesture that a scroll handler with no physics of its own
 //! takes stays with that handler, wherever the pointer goes, so a swipe
-//! started on one element never drives another. Wheels report no phases, so
-//! their scrolls are one long gesture that latches nothing.
+//! started on one element never drives another. The momentum after the
+//! fingers lift goes to the container that took their last scroll, so moving
+//! the pointer off an inner scroll while it glides does not hand the glide to
+//! its parent. Wheels report no phases, so their scrolls are one long gesture
+//! that latches nothing.
 
 use std::sync::Mutex;
 
@@ -40,6 +43,8 @@ pub(crate) struct ScrollGesture {
     momentum: bool,
     lifted_at: Option<Instant>,
     latch: Option<LayoutNodeId>,
+    /// The container that took the last scroll before the fingers lifted.
+    owner: Option<LayoutNodeId>,
 }
 
 pub(crate) type SharedScrollGesture = Mutex<ScrollGesture>;
@@ -76,12 +81,14 @@ impl RenderTree {
         g.momentum = false;
         g.lifted_at = None;
         g.latch = None;
+        g.owner = None;
     }
 
     fn over(g: &mut ScrollGesture) {
         g.momentum = false;
         g.lifted_at = None;
         g.latch = None;
+        g.owner = None;
     }
 
     /// The gesture's number and whether its scrolls are momentum now.
@@ -101,6 +108,28 @@ impl RenderTree {
         self.scroll_gesture_now();
         let latch = self.scroll_gesture.lock().unwrap().latch?;
         self.render_nodes.contains_key(&latch).then_some(latch)
+    }
+
+    /// Where the gesture's momentum goes: the container that took its last
+    /// scroll before the fingers lifted, while it is in the tree.
+    pub(crate) fn momentum_scroll_target(&self) -> Option<LayoutNodeId> {
+        let (_, momentum) = self.scroll_gesture_now();
+        let owner = self
+            .scroll_gesture
+            .lock()
+            .unwrap()
+            .owner
+            .filter(|_| momentum)?;
+        self.render_nodes.contains_key(&owner).then_some(owner)
+    }
+
+    /// Note that `node` took a scroll of the gesture under way; before the
+    /// fingers lift, it becomes where the momentum goes.
+    pub(crate) fn note_scroll_target(&self, node: LayoutNodeId) {
+        let mut g = self.scroll_gesture.lock().unwrap();
+        if g.id > 0 && !g.momentum {
+            g.owner = Some(node);
+        }
     }
 
     /// Give the gesture under way to `node`, a scroll handler with no physics
