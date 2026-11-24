@@ -3863,8 +3863,6 @@
         ".blinc-code-fold",
         ".blinc-code-gutter",
         ".blinc-code-minimap",
-        ".blinc-code-minimap-slider",
-        ".blinc-code-minimap-line",
         ".blinc-code-guide",
         ".blinc-code-active-line",
         ".blinc-code-selection",
@@ -3873,7 +3871,7 @@
         ".blinc-code-fold-hint"
       ],
       "keyboard": "Informational content; no activation or Tab stop is required.",
-      "tokens": "--blinc-code-caret, --accent",
+      "tokens": "--blinc-code-caret, --blinc-code-minimap-line, --blinc-code-minimap-slider, --accent",
       "notes": "Present highlighted source without an editable field. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
       "recipe": "code-block.css"
     },
@@ -3936,8 +3934,6 @@
         ".blinc-code-fold",
         ".blinc-code-gutter",
         ".blinc-code-minimap",
-        ".blinc-code-minimap-slider",
-        ".blinc-code-minimap-line",
         ".blinc-code-guide",
         ".blinc-code-active-line",
         ".blinc-code-selection",
@@ -3946,7 +3942,7 @@
         ".blinc-code-fold-hint"
       ],
       "keyboard": "Click to focus. Type and select text; arrow keys navigate, Enter inserts a line, Tab indents, and Cmd/Ctrl+F opens search. Standard selection, clipboard and undo shortcuts apply.",
-      "tokens": "--blinc-code-caret, --accent",
+      "tokens": "--blinc-code-caret, --blinc-code-minimap-line, --blinc-code-minimap-slider, --accent",
       "notes": "Edit source with syntax highlighting, line numbers, search and selection. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
       "recipe": "code-editor.css",
       "recording": {
