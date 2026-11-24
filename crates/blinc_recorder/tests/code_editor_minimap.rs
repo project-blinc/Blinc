@@ -153,3 +153,31 @@ fn an_editor_without_line_numbers_scrolls() {
         "{scrolled} of {max}"
     );
 }
+
+#[test]
+fn dragging_the_scrollbar_scrolls_without_moving_the_caret() {
+    let state = code_editor_state(source(200));
+    let Some(mut ui) = session(&state, false) else {
+        return;
+    };
+    // Show the scrollbar, then press on its thumb at the editor's right edge and drag it down.
+    ui.move_to(W / 2.0, H / 2.0);
+    ui.advance(300);
+    ui.move_to(W - 4.0, 12.0);
+    ui.advance(300);
+    ui.mouse_down();
+    let mut offsets = Vec::new();
+    for i in 1..=10 {
+        ui.move_to(W - 4.0, 12.0 + i as f32 * 10.0);
+        ui.advance(16);
+        offsets.push(offset(&state).0);
+    }
+    ui.mouse_up();
+    assert!(
+        offsets.windows(2).all(|w| w[1] > w[0]),
+        "each move scrolls further: {offsets:?}"
+    );
+    let d = state.lock().unwrap();
+    assert_eq!(d.cursor.line, 0, "the drag did not place the caret");
+    assert!(d.selection_start.is_none(), "nor select");
+}

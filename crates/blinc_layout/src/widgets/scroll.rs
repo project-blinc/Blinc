@@ -1991,13 +1991,18 @@ impl Scroll {
             }
         });
 
-        // Handle drag events for scrollbar dragging
+        // Handle drag events for scrollbar dragging. The window does not repaint for a drag
+        // event by itself, so a move of the thumb asks for the frame that shows it.
         handlers.on_drag({
             let physics = Arc::clone(&physics);
             move |ctx| {
                 let mut p = physics.lock().unwrap();
                 if p.scrollbar_state == ScrollbarState::Dragging {
+                    let before = (p.offset_x, p.offset_y);
                     p.on_scrollbar_pointer_move(ctx.local_x, ctx.local_y);
+                    if (p.offset_x, p.offset_y) != before {
+                        crate::stateful::request_redraw();
+                    }
                 }
             }
         });
@@ -3268,6 +3273,48 @@ mod tests {
         // Thumb should move down as we scroll
         assert!(thumb_y_at_middle > thumb_y_at_top);
         assert!(thumb_y_at_bottom > thumb_y_at_middle);
+    }
+
+    #[test]
+    fn a_thumb_drag_that_moves_asks_for_a_frame() {
+        use crate::event_handler::EventContext;
+        use blinc_core::events::event_types;
+        let physics = Arc::new(Mutex::new(ScrollPhysics::default()));
+        let (x, y) = {
+            let mut p = physics.lock().unwrap();
+            p.viewport_width = 300.0;
+            p.viewport_height = 400.0;
+            p.content_height = 4000.0;
+            let (thumb_h, thumb_y) = p.thumb_dimensions_y();
+            let bar = &p.config.scrollbar;
+            (
+                p.viewport_width - bar.edge_padding - bar.width() / 2.0,
+                thumb_y + thumb_h / 2.0,
+            )
+        };
+        let handlers = Scroll::create_internal_handlers(Arc::clone(&physics));
+        let node = {
+            let mut keys: slotmap::SlotMap<LayoutNodeId, ()> = slotmap::SlotMap::with_key();
+            keys.insert(())
+        };
+        let event = |kind, y: f32| {
+            let mut ctx = EventContext::new(kind, node);
+            ctx.local_x = x;
+            ctx.local_y = y;
+            ctx
+        };
+        handlers.dispatch(&event(event_types::POINTER_DOWN, y));
+        assert_eq!(
+            physics.lock().unwrap().scrollbar_state,
+            ScrollbarState::Dragging
+        );
+        crate::stateful::take_needs_redraw();
+        handlers.dispatch(&event(event_types::DRAG, y + 40.0));
+        assert!(physics.lock().unwrap().offset_y < 0.0);
+        assert!(
+            crate::stateful::take_needs_redraw(),
+            "the moved thumb asks for a frame"
+        );
     }
 
     #[test]

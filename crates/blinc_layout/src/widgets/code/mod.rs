@@ -245,6 +245,9 @@ pub struct CodeEditorData {
     pub search_signal_id: Option<blinc_core::reactive::SignalId>,
     /// Whether the press that started the current drag was on the docked minimap.
     minimap_drag: bool,
+    /// Whether the press that started the current drag was on the vertical scrollbar, which the
+    /// scroll container's own handlers drive.
+    scrollbar_drag: bool,
     /// The editor's own refresh handle, so the find bar can redraw it.
     pub(crate) editor_stateful:
         Option<crate::stateful::SharedState<crate::stateful::TextFieldState>>,
@@ -329,6 +332,7 @@ pub fn code_editor_state(content: impl Into<String>) -> SharedCodeEditorState {
         editor_bounds: (0.0, 0.0, 800.0, 300.0),
         search_signal_id: None,
         minimap_drag: false,
+        scrollbar_drag: false,
         editor_stateful: None,
         diagnostics: Vec::new(),
         h_scroll: Arc::new(Mutex::new(ScrollPhysics::default())),
@@ -1593,7 +1597,16 @@ impl CodeEditor {
                         ctx.bounds_height,
                     );
 
-                    // A press on the docked minimap scrolls instead of placing the caret.
+                    // A press on the scrollbar is the scroll container's; one on the docked
+                    // minimap scrolls. Neither places the caret.
+                    d.scrollbar_drag = d.scroll_physics.lock().is_ok_and(|p| {
+                        p.hit_test_scrollbar(click_x, click_y)
+                            != crate::widgets::scroll::ScrollbarHitResult::None
+                    });
+                    if d.scrollbar_drag {
+                        d.minimap_drag = false;
+                        return;
+                    }
                     d.minimap_drag =
                         d.config.minimap && click_x >= ctx.bounds_width - d.config.minimap_width;
                     if d.minimap_drag {
@@ -1790,6 +1803,9 @@ impl CodeEditor {
                     Ok(d) => d,
                     Err(_) => return,
                 };
+                if d.scrollbar_drag {
+                    return;
+                }
                 if d.minimap_drag {
                     drop(d);
                     minimap::scroll_to(&data_for_drag, ctx.local_y, ctx.bounds_height);
