@@ -5,7 +5,7 @@
 //! `StyledLine`s for its inline content (>1 line only after a soft break).
 //!
 //! Inline marks (bold, italic, underline, strikethrough, color, link, code)
-//! live on the `TextSpan`s inside each line — see [`crate::styled_text`].
+//! live on the `TextSpan`s inside each line — see [`blinc_layout::styled_text`].
 //!
 //! Numbered list ordinals are *not* stored on the block; the renderer counts
 //! contiguous `NumberedItem`s with the same `indent` so splitting and merging
@@ -15,8 +15,8 @@
 //! cursor positions are simple `(block, line, col)` triples and undo can
 //! snapshot the whole document cheaply.
 
-use crate::styled_text::{StyledLine, TextSpan};
 use blinc_core::Color;
+use blinc_layout::styled_text::{StyledLine, TextSpan};
 
 use super::cursor::DocPosition;
 

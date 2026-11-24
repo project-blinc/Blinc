@@ -7,11 +7,11 @@
 //! cargo run -p blinc_app_examples --features cn --example rte_capture -- out.png
 
 use blinc_app::{BlincApp, BlincConfig};
-use blinc_core::Color;
-use blinc_layout::prelude::*;
-use blinc_layout::widgets::rich_text_editor::{
+use blinc_cn::components::rich_text_editor::{
     document::RichDocument, editor::rich_text_editor, render::RichTextTheme, state::rich_text_state,
 };
+use blinc_core::Color;
+use blinc_layout::prelude::*;
 use blinc_theme::{ColorScheme, ThemeState};
 
 const W: u32 = 820;

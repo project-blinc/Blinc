@@ -2282,6 +2282,29 @@ pub const CN_STYLES: &str = concat!(
 .cn-date-picker-clear:hover { background: var(--surface-overlay); color: var(--text-primary); }
 .cn-date-picker-clear:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .cn-date-picker-clear:disabled { opacity: 0.5; cursor: not-allowed; background: transparent; }
+
+/* The rich text editor. Text without a colour of its own takes the
+   document's; the caret is drawn in `--blinc-rich-text-caret`, the text
+   colour when unset. */
+.blinc-rich-text { color: var(--text-primary); }
+.blinc-rich-text-marker { color: var(--text-tertiary); }
+.blinc-rich-text-quote-bar { background: var(--border-secondary); }
+.blinc-rich-text-divider { background: var(--border); }
+.blinc-rich-text-code { color: var(--warning); }
+.blinc-rich-text-selection { background: var(--selection); }
+.blinc-rte-toolbar {
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+    border-color: var(--border);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+}
+.blinc-rte-separator { background: var(--border); }
+.blinc-rte-button:hover, .blinc-rte-pill:hover { background: var(--border); }
+.blinc-rte-pill { background: var(--surface-overlay); }
+.blinc-rte-swatch { border-color: var(--border-secondary); }
+.blinc-rte-swatch--default { background: var(--text-primary); }
+.blinc-rte-link-input { background: var(--surface); border-color: var(--border-secondary); }
+.blinc-rte-link-placeholder { color: var(--text-tertiary); }
 "#,
     "\n}\n"
 );

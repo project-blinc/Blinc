@@ -41,7 +41,6 @@ mod region;
 mod region_layout_scope;
 mod region_leave;
 mod region_styles;
-mod rich_text_editor_in_place;
 mod rich_text_link_geometry;
 mod rich_text_wrap;
 mod scroll_axis_routing;

@@ -4,6 +4,12 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ## [Unreleased]
 
+### Removed
+- The rich text editor moved to `blinc_cn` as `blinc_cn::components::rich_text_editor`, so that its toolbar can use the cn components. Its CSS rules moved to `CN_STYLES`.
+
+### Added
+- `ime::ImeSession`, `ime::char_offset`, `ime::utf16_offset`, `ime::valid_edit`, `EventContext::command_modifier` and `ua_styles::stylesheet_color` are public, for editable widgets outside this crate.
+
 - Elements can register roles, child traversal, live-region defaults and advertised actions through `AccessibilitySemantics`. Custom roles use a generic platform fallback. Registered value/action providers and metadata updates survive incremental rendering.
 - Accessibility snapshots preserve container descendants, parent IDs, menu checkbox/radio variants, live-region properties and non-editable focus. Assistive focus uses the shared scope and event routing.
 

@@ -30,6 +30,7 @@ mod cn_pickers;
 mod cn_progress;
 mod cn_progress_clip;
 mod cn_radio_snapshots;
+mod cn_rich_text_editor;
 mod cn_select_snapshots;
 mod cn_selected_styles;
 mod cn_shadow_tokens;

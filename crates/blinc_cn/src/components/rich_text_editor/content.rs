@@ -6,9 +6,9 @@ use std::sync::Arc;
 use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_core::{Brush, Color, CornerRadius, DrawContext, Rect, Signal};
 
-use crate::canvas::{Canvas, CanvasBounds, canvas};
-use crate::div::{Div, div};
-use crate::widgets::cursor::SharedCursorState;
+use blinc_layout::canvas::{Canvas, CanvasBounds, canvas};
+use blinc_layout::div::{Div, div};
+use blinc_layout::widgets::cursor::SharedCursorState;
 
 use super::cursor::Selection;
 use super::render::{RichTextTheme, compute_line_geometry, render_block};
@@ -230,7 +230,7 @@ fn cursor_overlay_canvas(
         };
 
         let color = color.unwrap_or_else(|| {
-            crate::ua_styles::stylesheet_color(
+            blinc_layout::ua_styles::stylesheet_color(
                 "var(--blinc-rich-text-caret, var(--text-primary))",
                 blinc_theme::ColorToken::TextPrimary,
             )

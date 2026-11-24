@@ -27,6 +27,8 @@ mod radio_selected_class;
 mod radio_states;
 mod reactive_node_in_place;
 mod resizable_in_place;
+mod rich_text_editor_ime;
+mod rich_text_editor_in_place;
 mod select_in_place;
 mod select_value_colour;
 mod sidebar_in_place;

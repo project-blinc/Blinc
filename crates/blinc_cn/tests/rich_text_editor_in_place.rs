@@ -4,16 +4,16 @@
 
 use std::sync::Arc;
 
+use blinc_cn::components::rich_text_editor::editor::rich_text_editor;
+use blinc_cn::components::rich_text_editor::{
+    DocPosition, RichDocument, RichTextState, RichTextTheme, Selection, rich_text_state,
+};
 use blinc_core::Color;
 use blinc_core::events::event_types;
 use blinc_layout::LayoutNodeId;
 use blinc_layout::div::{Div, ElementBuilder};
 use blinc_layout::event_handler::EventContext;
 use blinc_layout::renderer::{ElementType, RenderTree};
-use blinc_layout::widgets::rich_text_editor::editor::rich_text_editor;
-use blinc_layout::widgets::rich_text_editor::{
-    DocPosition, RichDocument, RichTextState, RichTextTheme, Selection, rich_text_state,
-};
 use std::sync::Mutex;
 
 /// Focus statics, the pending-update queue and the reactive graph are

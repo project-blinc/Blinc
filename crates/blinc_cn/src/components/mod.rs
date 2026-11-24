@@ -47,6 +47,7 @@ pub mod popover;
 pub mod progress;
 pub mod radio;
 pub mod resizable;
+pub mod rich_text_editor;
 pub mod scroll_area;
 pub mod select;
 pub mod separator;

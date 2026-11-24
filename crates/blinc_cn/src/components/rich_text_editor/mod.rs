@@ -1,6 +1,6 @@
 //! Rich text editor — WYSIWYG styled-prose editing.
 //!
-//! Composes on top of [`crate::styled_text`] (`StyledLine` / `TextSpan`) for
+//! Composes on top of [`blinc_layout::styled_text`] (`StyledLine` / `TextSpan`) for
 //! its inline content representation, the existing `Stateful` FSM for focus
 //! state, and the same clipboard helpers used by `code_editor`.
 //!

@@ -173,30 +173,6 @@ fn code_candidates_form_one_undo_group() {
 }
 
 #[test]
-fn rich_text_candidates_preserve_the_surrounding_document() {
-    let _guard = init();
-    use blinc_layout::widgets::rich_text_editor::*;
-    let document = RichDocument::from_blocks(vec![
-        Block::paragraph("Hello 🦊", blinc_core::Color::WHITE),
-        Block::paragraph("Next", blinc_core::Color::WHITE),
-    ]);
-    let data = rich_text_state(document);
-    let widget = rich_text_editor(&data, RichTextTheme::default(), 400.0);
-    let mut tree = RenderTree::from_element(&div().w(400.0).h(300.0).child(widget));
-    tree.compute_layout(400.0, 300.0);
-    data.lock().unwrap().set_focus(true);
-    edit(&tree, "Hello 🦊ni\nNext", [10, 10], Some([8, 10]));
-    edit(&tree, "Hello 🦊你\nNext", [9, 9], None);
-    let mut d = data.lock().unwrap();
-    assert_eq!(d.document.blocks.len(), 2);
-    assert_eq!(d.document.plain_text(), "Hello 🦊你\nNext");
-    assert!(d.undo());
-    assert_eq!(d.document.plain_text(), "Hello 🦊\nNext");
-    assert!(!d.undo());
-    d.set_focus(false);
-}
-
-#[test]
 fn blur_commits_once_and_allows_a_reentrant_change_callback() {
     let _guard = init();
     let data = text_input_data();
@@ -338,45 +314,6 @@ fn clicking_within_the_field_commits_before_moving_the_caret() {
     assert_eq!(d.value, "seedni");
     assert!(d.undo());
     assert_eq!(d.value, "seed");
-}
-
-#[test]
-fn rich_text_link_drafts_have_their_own_native_session() {
-    let _guard = init();
-    use blinc_layout::widgets::rich_text_editor::*;
-    let data = rich_text_state(RichDocument::from_blocks(vec![Block::paragraph(
-        "Link",
-        blinc_core::Color::WHITE,
-    )]));
-    let mut tree =
-        RenderTree::from_element(&rich_text_editor(&data, RichTextTheme::default(), 400.0));
-    tree.compute_layout(400.0, 300.0);
-    data.lock().unwrap().set_focus(true);
-    let document = tree.ime_snapshot().unwrap();
-    data.lock().unwrap().picker = PickerState::Link {
-        draft: "https://".into(),
-    };
-    let draft = tree.ime_snapshot().unwrap();
-    assert!(!draft.content.multiline);
-    assert_ne!(draft.content.edit.session, document.content.edit.session);
-    edit(&tree, "https://ni", [10, 10], Some([8, 10]));
-    edit(&tree, "https://你", [9, 9], None);
-    assert_eq!(data.lock().unwrap().document.plain_text(), "Link");
-    tree.broadcast_key_event(
-        blinc_core::events::event_types::KEY_DOWN,
-        13,
-        false,
-        false,
-        false,
-        false,
-    );
-    assert!(matches!(data.lock().unwrap().picker, PickerState::None));
-    assert_eq!(tree.ime_snapshot().unwrap().content.edit.text, "Link");
-    assert_ne!(
-        tree.ime_snapshot().unwrap().content.edit.session,
-        draft.content.edit.session
-    );
-    data.lock().unwrap().set_focus(false);
 }
 
 #[test]

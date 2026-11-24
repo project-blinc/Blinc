@@ -180,8 +180,9 @@ impl EventContext {
         self.default_prevented.get()
     }
 
-    /// Ctrl shortcuts exclude AltGr's Ctrl+Alt text entry.
-    pub(crate) fn command_modifier(&self) -> bool {
+    /// Whether the shortcut modifier is held: Cmd on macOS, Ctrl elsewhere. Ctrl shortcuts exclude
+    /// AltGr's Ctrl+Alt text entry.
+    pub fn command_modifier(&self) -> bool {
         self.meta || (self.ctrl && !self.alt)
     }
 

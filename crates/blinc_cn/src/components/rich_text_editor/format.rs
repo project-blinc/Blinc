@@ -14,7 +14,7 @@
 
 use blinc_core::Color;
 
-use crate::styled_text::{StyledLine, TextSpan};
+use blinc_layout::styled_text::{StyledLine, TextSpan};
 
 use super::cursor::{DocPosition, Selection};
 use super::document::{RichDocument, char_to_byte};
@@ -383,7 +383,7 @@ fn spans_format_match(a: &TextSpan, b: &TextSpan) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::widgets::rich_text_editor::document::Block;
+    use crate::components::rich_text_editor::document::Block;
     use blinc_core::Color;
 
     fn doc_one_para(text: &str) -> RichDocument {

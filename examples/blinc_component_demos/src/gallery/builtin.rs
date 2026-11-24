@@ -33,9 +33,9 @@ pub fn code_editor_demo(values: &DemoState, _: (f32, f32)) -> Div {
 pub fn rich_text_editor_demo(values: &DemoState, viewport: (f32, f32)) -> Div {
     div()
         .class("demo-wide")
-        .child(blinc_layout::widgets::rich_text_editor::rich_text_editor(
+        .child(blinc_cn::components::rich_text_editor::rich_text_editor(
             &values.document,
-            blinc_layout::widgets::rich_text_editor::RichTextTheme::default(),
+            blinc_cn::components::rich_text_editor::RichTextTheme::default(),
             (viewport.0 - 80.0).clamp(1.0, 380.0),
         ))
 }

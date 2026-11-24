@@ -12,7 +12,7 @@
 //! "click bold while everything is bold → unbold" pattern from
 //! inline marks.
 
-use crate::styled_text::StyledLine;
+use blinc_layout::styled_text::StyledLine;
 
 use super::cursor::{DocPosition, Selection};
 use super::document::{Block, BlockKind, RichDocument, char_to_byte};

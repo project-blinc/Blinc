@@ -11,9 +11,9 @@ use web_time::Instant;
 
 use blinc_animation::{TickCallbackId, try_get_scheduler};
 
-use crate::div::FontWeight;
-use crate::styled_text::StyledLine;
-use crate::widgets::cursor::{SharedCursorState, cursor_state};
+use blinc_layout::div::FontWeight;
+use blinc_layout::styled_text::StyledLine;
+use blinc_layout::widgets::cursor::{SharedCursorState, cursor_state};
 
 use super::cursor::{ActiveFormat, DocPosition, Selection};
 use super::document::RichDocument;
@@ -41,7 +41,7 @@ pub struct RunGeometry {
     /// Pixel width of the run at its declared font.
     pub width: f32,
     /// Font family used to render and measure this run.
-    pub font_family: crate::div::FontFamily,
+    pub font_family: blinc_layout::div::FontFamily,
     /// Font size in px.
     pub font_size: f32,
     /// Font weight.
@@ -151,8 +151,8 @@ pub struct RichTextData {
     pub active_format: ActiveFormat,
     /// Focus flag — set on first mouse-down inside the editor.
     pub focused: bool,
-    pub(super) ime: crate::ime::ImeSession<UndoEntry>,
-    pub(super) link_ime: crate::ime::ImeSession<String>,
+    pub(super) ime: blinc_layout::ime::ImeSession<UndoEntry>,
+    pub(super) link_ime: blinc_layout::ime::ImeSession<String>,
     pub(super) link_ime_selection: Option<[usize; 2]>,
     /// Visual line geometry index, kept current by the editor as the
     /// document changes.
@@ -348,7 +348,7 @@ impl RichTextData {
         }
         self.set_cursor_visible(focused);
         if focused {
-            crate::widgets::text_input::increment_focus_count();
+            blinc_layout::widgets::text_input::increment_focus_count();
             if self.tick_callback_id.is_none()
                 && let Some(scheduler) = try_get_scheduler()
             {
@@ -357,8 +357,8 @@ impl RichTextData {
                 self.tick_callback_id = scheduler.register_tick_callback(|_dt| {});
             }
         } else {
-            crate::widgets::text_input::decrement_focus_count();
-            crate::widgets::text_input::clear_focused_editable_node();
+            blinc_layout::widgets::text_input::decrement_focus_count();
+            blinc_layout::widgets::text_input::clear_focused_editable_node();
             if let Some(id) = self.tick_callback_id.take()
                 && let Some(scheduler) = try_get_scheduler()
             {
@@ -640,16 +640,16 @@ pub(crate) fn measure_width(
     font_size: f32,
     weight: FontWeight,
     italic: bool,
-    font_family: Option<&crate::div::FontFamily>,
+    font_family: Option<&blinc_layout::div::FontFamily>,
 ) -> f32 {
-    let mut options = crate::text_measure::TextLayoutOptions::new();
+    let mut options = blinc_layout::text_measure::TextLayoutOptions::new();
     options.font_weight = weight.weight();
     options.italic = italic;
     if let Some(family) = font_family {
         options.font_name = family.name.clone();
         options.generic_font = family.generic;
     }
-    crate::text_measure::measure_text_with_options(text, font_size, &options).width
+    blinc_layout::text_measure::measure_text_with_options(text, font_size, &options).width
 }
 
 /// Find the character column inside `text` whose left edge is closest to
@@ -662,7 +662,7 @@ pub(crate) fn column_at_x(
     font_size: f32,
     weight: FontWeight,
     italic: bool,
-    font_family: Option<&crate::div::FontFamily>,
+    font_family: Option<&blinc_layout::div::FontFamily>,
 ) -> usize {
     if target_x <= 0.0 || text.is_empty() {
         return 0;
@@ -714,7 +714,7 @@ pub(crate) fn synth_line(text: &str, color: blinc_core::Color) -> StyledLine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::widgets::rich_text_editor::document::Block;
+    use crate::components::rich_text_editor::document::Block;
     use blinc_core::Color;
 
     fn make_run(text: &str, source_col: usize, x_in_line: f32) -> RunGeometry {
@@ -724,7 +724,7 @@ mod tests {
             text: text.to_string(),
             x_in_line,
             width,
-            font_family: crate::div::FontFamily::default(),
+            font_family: blinc_layout::div::FontFamily::default(),
             font_size: 14.0,
             weight: FontWeight::Normal,
             italic: false,

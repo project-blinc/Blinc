@@ -202,6 +202,10 @@ name = "notch_border_capture"
 required-features = ["cn"]
 
 [[example]]
+name = "rich_text_editor_demo"
+required-features = ["cn"]
+
+[[example]]
 name = "rte_capture"
 required-features = ["cn"]
 

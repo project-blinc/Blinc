@@ -16,9 +16,9 @@
 //! byte range and rebased so `start` is `0`-relative. A span that straddles
 //! a wrap point becomes two spans, one on each line.
 
-use crate::div::FontWeight;
-use crate::styled_text::{StyledLine, TextSpan};
-use crate::text_measure::{TextLayoutOptions, measure_text_with_options};
+use blinc_layout::div::FontWeight;
+use blinc_layout::styled_text::{StyledLine, TextSpan};
+use blinc_layout::text_measure::{TextLayoutOptions, measure_text_with_options};
 
 /// One visual line produced by [`wrap_styled_line`].
 ///

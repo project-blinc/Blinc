@@ -12,7 +12,7 @@
 //! marks) or create a new run with the supplied `ActiveFormat`. Deletions
 //! shrink or merge adjacent spans as needed.
 
-use crate::styled_text::{StyledLine, TextSpan};
+use blinc_layout::styled_text::{StyledLine, TextSpan};
 
 use super::cursor::{ActiveFormat, DocPosition, Selection};
 use super::document::{Block, BlockKind, RichDocument, char_to_byte};

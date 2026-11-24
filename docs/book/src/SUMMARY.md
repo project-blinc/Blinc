@@ -11,6 +11,7 @@
 # Migrating
 
 - [From 0.5 to 0.6](./migration/0.5-to-0.6.md)
+- [From 0.6 to 0.7](./migration/0.6-to-0.7.md)
 
 # Mobile Development
 
@@ -115,6 +116,7 @@
 - [Dialog](./cn/dialog.md)
 - [Form Components](./cn/form.md)
 - [Date, Time and Colour Pickers](./cn/pickers.md)
+- [Rich Text Editor](./cn/rich-text-editor.md)
 - [Navigation](./cn/navigation.md)
 - [Feedback](./cn/feedback.md)
 - [Layout](./cn/layout.md)
@@ -125,7 +127,6 @@
 - [Buttons & Inputs](./widgets/inputs.md)
 - [Text & Rich Text](./widgets/text.md)
 - [Code Editor](./widgets/code-editor.md)
-- [Rich Text Editor](./widgets/rich-text-editor.md)
 - [Scroll Containers](./widgets/scroll.md)
 - [Virtualized List](./widgets/virtual-list.md)
 - [Canvas Drawing](./widgets/canvas.md)

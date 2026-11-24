@@ -297,36 +297,13 @@ pub const UA_STYLES: &str = concat!(
 .blinc-media-seek-rail { background: var(--surface-elevated); }
 .blinc-media-seek-fill { background: var(--primary); }
 .blinc-media-live-badge { background: var(--error); color: #ffffff; }
-
-/* The rich text editor. Text without a colour of its own takes the
-   document's; the caret is drawn in `--blinc-rich-text-caret`, the text
-   colour when unset. */
-.blinc-rich-text { color: var(--text-primary); }
-.blinc-rich-text-marker { color: var(--text-tertiary); }
-.blinc-rich-text-quote-bar { background: var(--border-secondary); }
-.blinc-rich-text-divider { background: var(--border); }
-.blinc-rich-text-code { color: var(--warning); }
-.blinc-rich-text-selection { background: var(--selection); }
-.blinc-rte-toolbar {
-    background: var(--surface-elevated);
-    color: var(--text-primary);
-    border-color: var(--border);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
-}
-.blinc-rte-separator { background: var(--border); }
-.blinc-rte-button:hover, .blinc-rte-pill:hover { background: var(--border); }
-.blinc-rte-pill { background: var(--surface-overlay); }
-.blinc-rte-swatch { border-color: var(--border-secondary); }
-.blinc-rte-swatch--default { background: var(--text-primary); }
-.blinc-rte-link-input { background: var(--surface); border-color: var(--border-secondary); }
-.blinc-rte-link-placeholder { color: var(--text-tertiary); }
 "#,
     "}\n"
 );
 
 /// The colour the active stylesheet gives `css` (`var(--name, ..)` or a
 /// literal), for drawing code; the theme's `fallback` without a stylesheet.
-pub(crate) fn stylesheet_color(css: &str, fallback: blinc_theme::ColorToken) -> blinc_core::Color {
+pub fn stylesheet_color(css: &str, fallback: blinc_theme::ColorToken) -> blinc_core::Color {
     crate::css_parser::active_stylesheet()
         .and_then(|sheet| sheet.resolve_color(css))
         .or_else(|| blinc_theme::ThemeState::try_get().map(|theme| theme.color(fallback)))

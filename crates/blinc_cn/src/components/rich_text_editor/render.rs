@@ -15,10 +15,10 @@
 //! palettes.
 
 use super::document::{Block, BlockKind, RichDocument};
-use crate::div::{Div, FontWeight, div};
-use crate::rich_text::{RichText, rich_text_styled};
-use crate::styled_text::StyledText;
 use blinc_core::Color;
+use blinc_layout::div::{Div, FontWeight, div};
+use blinc_layout::rich_text::{RichText, rich_text_styled};
+use blinc_layout::styled_text::StyledText;
 
 /// Visual configuration for the rich text renderer.
 ///
@@ -331,8 +331,8 @@ fn absolute_positioned_line(
 
     // Multiple runs OR a code-only run — use a relative container with
     // absolute children at the precomputed x positions.
-    let body_font = crate::div::FontFamily::default();
-    let code_font = crate::div::FontFamily::monospace();
+    let body_font = blinc_layout::div::FontFamily::default();
+    let code_font = blinc_layout::div::FontFamily::monospace();
 
     // Put every run on one baseline. Each is otherwise centred in its own
     // box by half-leading, so the monospace of an inline code run draws
@@ -430,11 +430,11 @@ fn absolute_positioned_line(
 /// Build a `StyledLine` containing just the text and rebased spans for
 /// byte range `[start, end)` of `source`.
 fn slice_styled_line(
-    source: &crate::styled_text::StyledLine,
+    source: &blinc_layout::styled_text::StyledLine,
     start: usize,
     end: usize,
-) -> crate::styled_text::StyledLine {
-    use crate::styled_text::{StyledLine, TextSpan};
+) -> blinc_layout::styled_text::StyledLine {
+    use blinc_layout::styled_text::{StyledLine, TextSpan};
     let text = source.text[start..end].to_string();
     let mut spans = Vec::new();
     for span in &source.spans {
@@ -540,7 +540,7 @@ fn quote_div(block: &Block, theme: &RichTextTheme, indent_px: f32, inner_width: 
 /// on the right character even when a line mixes proportional and
 /// monospace text.
 fn render_line_row(
-    line: &crate::styled_text::StyledLine,
+    line: &blinc_layout::styled_text::StyledLine,
     theme: &RichTextTheme,
     font_size: f32,
     weight: FontWeight,
@@ -584,16 +584,16 @@ fn run_baseline(
     line_height: f32,
     weight: FontWeight,
     italic: bool,
-    family: &crate::div::FontFamily,
+    family: &blinc_layout::div::FontFamily,
 ) -> f32 {
-    let mut options = crate::text_measure::TextLayoutOptions::new();
+    let mut options = blinc_layout::text_measure::TextLayoutOptions::new();
     options.font_weight = weight.weight();
     options.italic = italic;
     options.line_height = line_height;
     options.font_name = family.name.clone();
     options.generic_font = family.generic;
     // The string only selects the face; the metrics are the face's.
-    let m = crate::text_measure::measure_text_with_options("Hxq", font_size, &options);
+    let m = blinc_layout::text_measure::measure_text_with_options("Hxq", font_size, &options);
     let line_box = m.height / m.line_count.max(1) as f32;
     let half_leading = (line_box - (m.ascender - m.descender)) / 2.0;
     half_leading + m.ascender
@@ -604,7 +604,7 @@ fn run_baseline(
 /// pixel width matches the geometry's `RunGeometry.width` exactly. Its
 /// colour is the `.blinc-rich-text-code` rule's, from the run's wrapper.
 fn make_code_run(
-    line: &crate::styled_text::StyledLine,
+    line: &blinc_layout::styled_text::StyledLine,
     theme: &RichTextTheme,
     font_size: f32,
     _weight: FontWeight,
@@ -627,15 +627,15 @@ fn make_code_run(
 
 /// One slice of a line, either a normal styled run or a code run.
 struct LineSegment {
-    line: crate::styled_text::StyledLine,
+    line: blinc_layout::styled_text::StyledLine,
     is_code: bool,
 }
 
 /// Walk a `StyledLine`'s spans and split its text at every transition
 /// between "any code" and "no code" coverage. Each segment's spans are
 /// rebased so `start` is `0`-relative.
-fn split_line_by_code(line: &crate::styled_text::StyledLine) -> Vec<LineSegment> {
-    use crate::styled_text::{StyledLine, TextSpan};
+fn split_line_by_code(line: &blinc_layout::styled_text::StyledLine) -> Vec<LineSegment> {
+    use blinc_layout::styled_text::{StyledLine, TextSpan};
 
     let len = line.text.len();
     if len == 0 {
@@ -695,12 +695,12 @@ fn split_line_by_code(line: &crate::styled_text::StyledLine) -> Vec<LineSegment>
 /// Build a `LineSegment` covering byte range `[start, end)` of `source`
 /// with the given code flag.
 fn slice_segment(
-    source: &crate::styled_text::StyledLine,
+    source: &blinc_layout::styled_text::StyledLine,
     start: usize,
     end: usize,
     is_code: bool,
 ) -> LineSegment {
-    use crate::styled_text::{StyledLine, TextSpan};
+    use blinc_layout::styled_text::{StyledLine, TextSpan};
 
     let text = source.text[start..end].to_string();
     let mut spans = Vec::new();
@@ -737,7 +737,7 @@ fn slice_segment(
 /// `.blinc-rich-text` colour, or the theme's text colour when it sets one:
 /// a span's colour is the only one that wins over an inherited rule.
 fn make_rich_text(
-    line: &crate::styled_text::StyledLine,
+    line: &blinc_layout::styled_text::StyledLine,
     theme: &RichTextTheme,
     font_size: f32,
     weight: FontWeight,
@@ -765,7 +765,7 @@ pub use super::geometry::compute_line_geometry;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::styled_text::TextSpan;
+    use blinc_layout::styled_text::TextSpan;
 
     fn sample_doc() -> RichDocument {
         let mut p = Block::paragraph("Hello, world", Color::WHITE);

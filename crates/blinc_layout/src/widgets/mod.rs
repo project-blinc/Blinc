@@ -59,7 +59,6 @@ pub mod overlay;
 pub(crate) mod overlay_focus;
 pub mod overlay_stack;
 pub mod radio;
-pub mod rich_text_editor;
 pub mod scroll;
 pub mod table;
 pub mod text_area;

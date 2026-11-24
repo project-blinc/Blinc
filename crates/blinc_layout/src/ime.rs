@@ -47,8 +47,11 @@ pub struct ImeSnapshot {
     pub bounds: crate::element::ElementBounds,
 }
 
+/// The input-method state of one editable widget: the session and sequence numbers that match
+/// the platform's edits to the right field, and the text being composed. `T` is what the widget
+/// keeps to restore when a composition is cancelled.
 #[derive(Clone, Debug)]
-pub(crate) struct ImeSession<T> {
+pub struct ImeSession<T> {
     pub original: Option<T>,
     pub composing: Option<[usize; 2]>,
     session: u64,
@@ -71,11 +74,13 @@ impl<T> Default for ImeSession<T> {
 }
 
 impl<T> ImeSession<T> {
+    /// The widget lost focus; a later focus starts a new session.
     pub fn blur(&mut self) {
         self.focused = false;
         self.preedit = None;
     }
 
+    /// The edit to report to the platform for the widget's `text` and `selection` now.
     pub fn snapshot(&mut self, focused: bool, text: String, selection: [usize; 2]) -> ImeEdit {
         static NEXT: AtomicU64 = AtomicU64::new(1);
         if focused
@@ -103,6 +108,7 @@ impl<T> ImeSession<T> {
         }
     }
 
+    /// Whether `edit` belongs to this session and is newer than the last one taken.
     pub fn receive(&mut self, edit: &ImeEdit) -> bool {
         if !self.focused || edit.session != self.session || edit.sequence <= self.sequence {
             return false;
@@ -115,7 +121,8 @@ impl<T> ImeSession<T> {
     }
 }
 
-pub(crate) fn char_offset(text: &str, utf16: usize) -> Option<usize> {
+/// The character offset at the UTF-16 offset `utf16` of `text`, if it falls on a character boundary.
+pub fn char_offset(text: &str, utf16: usize) -> Option<usize> {
     let mut units = 0;
     for (index, ch) in text.chars().enumerate() {
         if units == utf16 {
@@ -126,11 +133,13 @@ pub(crate) fn char_offset(text: &str, utf16: usize) -> Option<usize> {
     (units == utf16).then_some(text.chars().count())
 }
 
-pub(crate) fn utf16_offset(text: &str, chars: usize) -> usize {
+/// The UTF-16 offset of the first `chars` characters of `text`.
+pub fn utf16_offset(text: &str, chars: usize) -> usize {
     text.chars().take(chars).map(char::len_utf16).sum()
 }
 
-pub(crate) fn valid_edit(edit: &ImeEdit) -> bool {
+/// Whether every offset of `edit` falls on a character boundary of its text.
+pub fn valid_edit(edit: &ImeEdit) -> bool {
     edit.selection
         .iter()
         .all(|offset| char_offset(&edit.text, *offset).is_some())

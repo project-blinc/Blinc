@@ -26,7 +26,7 @@
 use blinc_core::Color;
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
-use crate::styled_text::{StyledLine, TextSpan};
+use blinc_layout::styled_text::{StyledLine, TextSpan};
 
 use super::document::{Block, BlockKind, RichDocument};
 
@@ -41,7 +41,7 @@ impl RichDocument {
     ///
     /// # Example
     /// ```ignore
-    /// use blinc_layout::widgets::rich_text_editor::RichDocument;
+    /// use blinc_cn::components::rich_text_editor::RichDocument;
     /// use blinc_core::Color;
     ///
     /// let doc = RichDocument::from_markdown(

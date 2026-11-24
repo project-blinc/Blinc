@@ -20,7 +20,7 @@ use std::sync::Arc;
 use blinc_core::Signal;
 use blinc_core::context_state::BlincContextState;
 
-use crate::div::{Div, div};
+use blinc_layout::div::{Div, div};
 
 use super::block_ops::{indent_blocks, outdent_blocks, toggle_block_kind};
 use super::content::{content, ensure_geometry};
@@ -103,10 +103,10 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
             // `set_focus(false)`, which both clears the local
             // `focused` flag AND decrements the global focus count
             // (the global hook lives inside `RichTextEditorState::set_focus`).
-            crate::widgets::text_input::bump_focus_tap_generation();
+            blinc_layout::widgets::text_input::bump_focus_tap_generation();
             let blur_state = Arc::clone(&state_for_click);
             let blur_version = version_for_click;
-            crate::widgets::text_input::set_focused_editable_node(
+            blinc_layout::widgets::text_input::set_focused_editable_node(
                 ctx.node_id,
                 Some(Box::new(move || {
                     if let Ok(mut data) = blur_state.lock() {
@@ -139,7 +139,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                 .unwrap_or(false);
             data.last_click_time = Some(now);
 
-            let touch = crate::widgets::text_input::is_touch_input();
+            let touch = blinc_layout::widgets::text_input::is_touch_input();
 
             if let Some(pos) = data.position_from_click(ctx.local_x, ctx.local_y) {
                 if is_double {
@@ -151,7 +151,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                         .and_then(|b| b.lines.get(pos.line))
                     {
                         let (start_col, end_col) =
-                            crate::widgets::text_edit::word_at_position(&line.text, pos.col);
+                            blinc_layout::widgets::text_edit::word_at_position(&line.text, pos.col);
                         data.cursor = super::cursor::DocPosition::new(pos.block, pos.line, end_col);
                         data.selection = Some(super::cursor::Selection {
                             anchor: super::cursor::DocPosition::new(pos.block, pos.line, start_col),
@@ -159,9 +159,9 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                         });
                         data.reset_cursor_blink();
                         if touch {
-                            crate::widgets::text_edit::haptic_impact_light();
-                            use crate::widgets::text_edit::edit_menu_actions;
-                            crate::widgets::text_edit::show_edit_menu(
+                            blinc_layout::widgets::text_edit::haptic_impact_light();
+                            use blinc_layout::widgets::text_edit::edit_menu_actions;
+                            blinc_layout::widgets::text_edit::show_edit_menu(
                                 ctx.bounds_x + ctx.local_x,
                                 ctx.bounds_y + ctx.local_y,
                                 ctx.bounds_x + ctx.local_x,
@@ -184,12 +184,12 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                     // selects the word under the press position so
                     // long-press matches the double-tap UX above.
                     data.move_cursor(pos, false);
-                    crate::widgets::text_edit::haptic_selection();
-                    crate::widgets::text_edit::hide_edit_menu();
+                    blinc_layout::widgets::text_edit::haptic_selection();
+                    blinc_layout::widgets::text_edit::hide_edit_menu();
                     let captured_pos = pos;
                     let state_for_long_press = Arc::clone(&state_for_click);
                     let version_for_long_press = version_for_click;
-                    crate::widgets::text_input::arm_long_press_timer(
+                    blinc_layout::widgets::text_input::arm_long_press_timer(
                         ctx.bounds_x + ctx.local_x,
                         ctx.bounds_y + ctx.local_y,
                         24.0,
@@ -212,7 +212,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                                     return;
                                 };
                                 let (start_col, end_col) =
-                                    crate::widgets::text_edit::word_at_position(
+                                    blinc_layout::widgets::text_edit::word_at_position(
                                         &line_text,
                                         captured_pos.col,
                                     );
@@ -261,15 +261,18 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
             // Touch drag = move cursor (no selection extension), with
             // a subtle haptic per character boundary.
             // Mouse drag = extend selection from anchor to pointer.
-            let touch = crate::widgets::text_input::is_touch_input();
+            let touch = blinc_layout::widgets::text_input::is_touch_input();
             if let Some(pos) = data.position_from_click(ctx.local_x, ctx.local_y) {
                 if touch {
                     // Drift-cancel any armed long-press so a real
                     // cursor drag doesn't also fire the paste menu.
-                    crate::widgets::text_input::check_long_press_drift(ctx.mouse_x, ctx.mouse_y);
+                    blinc_layout::widgets::text_input::check_long_press_drift(
+                        ctx.mouse_x,
+                        ctx.mouse_y,
+                    );
                     if data.cursor != pos {
                         data.move_cursor(pos, false);
-                        crate::widgets::text_edit::haptic_selection();
+                        blinc_layout::widgets::text_edit::haptic_selection();
                     }
                 } else {
                     data.move_cursor(pos, true);
@@ -440,7 +443,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                             let (s, e) = sel.ordered();
                             let plain = data.document.plain_text_range(s, e);
                             if !plain.is_empty() {
-                                crate::widgets::text_edit::clipboard_write(&plain);
+                                blinc_layout::widgets::text_edit::clipboard_write(&plain);
                             }
                         }
                         // Copy never mutates the document, so we don't
@@ -454,7 +457,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                             let (s, e) = sel.ordered();
                             let plain = data.document.plain_text_range(s, e);
                             if !plain.is_empty() {
-                                crate::widgets::text_edit::clipboard_write(&plain);
+                                blinc_layout::widgets::text_edit::clipboard_write(&plain);
                             }
                             data.push_undo();
                             data.selection = None;
@@ -467,7 +470,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                     // clipboard text. Newlines in the clipboard become
                     // soft breaks via `insert_text`.
                     86 => {
-                        if let Some(text) = crate::widgets::text_edit::clipboard_read()
+                        if let Some(text) = blinc_layout::widgets::text_edit::clipboard_read()
                             && !text.is_empty()
                         {
                             data.push_undo();

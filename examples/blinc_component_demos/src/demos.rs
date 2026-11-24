@@ -30,7 +30,7 @@ pub struct DemoState {
     pub code: blinc_layout::widgets::code::SharedCodeEditorState,
     pub audio: std::rc::Rc<std::cell::OnceCell<std::rc::Rc<blinc_media::AudioPlayer>>>,
     pub video: std::rc::Rc<std::cell::OnceCell<std::rc::Rc<blinc_media::VideoPlayer>>>,
-    pub document: blinc_layout::widgets::rich_text_editor::RichTextState,
+    pub document: blinc_cn::components::rich_text_editor::RichTextState,
 }
 
 impl Default for DemoState {
@@ -55,8 +55,8 @@ impl Default for DemoState {
             ),
             audio: Default::default(),
             video: Default::default(),
-            document: blinc_layout::widgets::rich_text_editor::rich_text_state(
-                blinc_layout::widgets::rich_text_editor::RichDocument::from_markdown(
+            document: blinc_cn::components::rich_text_editor::rich_text_state(
+                blinc_cn::components::rich_text_editor::RichDocument::from_markdown(
                     "## Project notes\n\nBuild interfaces that feel natural.",
                     blinc_core::Color::TRANSPARENT,
                 ),

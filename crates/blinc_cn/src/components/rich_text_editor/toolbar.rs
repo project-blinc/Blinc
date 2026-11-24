@@ -25,8 +25,8 @@ use std::sync::Arc;
 
 use blinc_core::{Color, Signal};
 
-use crate::div::{Div, FontWeight, div};
-use crate::widgets::rich_text_editor::cursor::ActiveFormat;
+use crate::components::rich_text_editor::cursor::ActiveFormat;
+use blinc_layout::div::{Div, FontWeight, div};
 
 use super::format::{Mark, apply_mark_to_selection};
 use super::render::RichTextTheme;
@@ -272,7 +272,7 @@ fn heading_picker_row(state: &RichTextState, version: &Signal<u32>) -> Div {
                 .rounded(4.0)
                 .cursor_pointer()
                 .child(
-                    crate::text::text(label)
+                    blinc_layout::text::text(label)
                         .size(font_size)
                         .weight(weight)
                         .no_cursor(),
@@ -405,9 +405,9 @@ fn mark_button(
     // Keep the label passive so the parent button's pointer cursor
     // wins on hover. This only affects cursor style; hit-testing and
     // rendering are unchanged.
-    let mut t = crate::text::text(label).size(13.0).no_cursor();
+    let mut t = blinc_layout::text::text(label).size(13.0).no_cursor();
     if style.bold {
-        t = t.weight(crate::div::FontWeight::Bold);
+        t = t.weight(blinc_layout::div::FontWeight::Bold);
     }
     if style.italic {
         t = t.italic();
@@ -466,7 +466,7 @@ fn picker_button(
         .justify_center()
         .rounded(4.0)
         .cursor_pointer()
-        .child(crate::text::text(label).size(13.0).no_cursor())
+        .child(blinc_layout::text::text(label).size(13.0).no_cursor())
         .on_mouse_down(move |_| {
             if let Ok(mut data) = state_for_click.lock() {
                 // See mark_button for the rationale.
@@ -643,7 +643,7 @@ fn link_prompt_row(
     // outer mouse_down handler doesn't collapse the underlying
     // selection (which would close the prompt mid-edit).
     let state_for_input = Arc::clone(state);
-    let input_click = move |_: &crate::event_handler::EventContext| {
+    let input_click = move |_: &blinc_layout::event_handler::EventContext| {
         if let Ok(mut data) = state_for_input.lock() {
             data.suppress_next_outer_click = true;
         }
@@ -665,7 +665,7 @@ fn link_prompt_row(
                 .border_width(1.0)
                 .cursor_text()
                 .child({
-                    let t = crate::text::text(placeholder)
+                    let t = blinc_layout::text::text(placeholder)
                         .size(12.0)
                         .no_cursor()
                         .no_wrap();
@@ -740,7 +740,12 @@ fn prompt_button(
         .justify_center()
         .rounded(4.0)
         .cursor_pointer()
-        .child(crate::text::text(label).size(11.0).no_cursor().no_wrap())
+        .child(
+            blinc_layout::text::text(label)
+                .size(11.0)
+                .no_cursor()
+                .no_wrap(),
+        )
         .on_mouse_down(move |_| {
             if let Ok(mut data) = state.lock() {
                 data.suppress_next_outer_click = true;

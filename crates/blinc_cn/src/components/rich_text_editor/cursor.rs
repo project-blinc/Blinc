@@ -205,7 +205,7 @@ pub fn block_is_editable(block: &Block) -> bool {
 mod tests {
     use super::super::document::{Block, BlockKind, RichDocument};
     use super::*;
-    use crate::styled_text::{StyledLine, TextSpan};
+    use blinc_layout::styled_text::{StyledLine, TextSpan};
 
     fn doc_with(blocks: Vec<Block>) -> RichDocument {
         RichDocument::from_blocks(blocks)

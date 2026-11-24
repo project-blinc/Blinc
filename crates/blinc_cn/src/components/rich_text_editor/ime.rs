@@ -1,5 +1,5 @@
 use super::*;
-use crate::ime::{ImeBinding, ImeContent, char_offset, utf16_offset};
+use blinc_layout::ime::{ImeBinding, ImeContent, char_offset, utf16_offset};
 use std::sync::Arc;
 
 fn position(doc: &RichDocument, mut offset: usize) -> DocPosition {
@@ -101,7 +101,7 @@ pub(super) fn binding(
                     if !d.link_ime.receive(edit) {
                         return false;
                     }
-                    if crate::ime::valid_edit(edit) && !edit.text.contains(['\n', '\r']) {
+                    if blinc_layout::ime::valid_edit(edit) && !edit.text.contains(['\n', '\r']) {
                         d.picker = PickerState::Link {
                             draft: edit.text.clone(),
                         };
@@ -110,13 +110,13 @@ pub(super) fn binding(
                     }
                     drop(d);
                     version.update(|n| n.wrapping_add(1));
-                    crate::stateful::request_redraw();
+                    blinc_layout::stateful::request_redraw();
                     return true;
                 }
                 if !d.focused || !d.ime.receive(edit) {
                     return false;
                 }
-                if !crate::ime::valid_edit(edit) {
+                if !blinc_layout::ime::valid_edit(edit) {
                     return true;
                 }
                 if d.ime.original.is_none() {
@@ -180,7 +180,7 @@ pub(super) fn binding(
                 d.reset_cursor_blink();
             }
             version.update(|n| n.wrapping_add(1));
-            crate::stateful::request_redraw();
+            blinc_layout::stateful::request_redraw();
             true
         }),
     }

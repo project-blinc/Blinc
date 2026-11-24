@@ -4,7 +4,7 @@ The built-in editor stores a structured document and supports selection, formatt
 
 ```rust
 use blinc::layout::prelude::*;
-use blinc::layout::widgets::rich_text_editor::{
+use blinc::cn::components::rich_text_editor::{
     RichDocument, RichTextTheme, rich_text_editor, rich_text_state,
 };
 use blinc::core::Color;

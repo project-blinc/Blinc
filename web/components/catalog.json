@@ -3955,8 +3955,8 @@
     {
       "slug": "rich-text-editor",
       "title": "Rich Text Editor",
-      "library": "layout",
-      "module": "layout::widgets::rich_text_editor::editor",
+      "library": "cn",
+      "module": "cn::rich_text_editor",
       "category": "Editors",
       "tags": [
         "editors",
@@ -3966,12 +3966,12 @@
       "since": null,
       "maturity": "stable",
       "description": "Write formatted prose with headings, emphasis and a selection toolbar.",
-      "doc": "docs/book/src/widgets/rich-text-editor.md",
+      "doc": "docs/book/src/cn/rich-text-editor.md",
       "doc_section": null,
       "entry": "rich_text_editor_demo",
       "source": "examples/blinc_component_demos/src/gallery/builtin.rs",
       "implementation": [
-        "crates/blinc_layout/src/widgets/rich_text_editor/editor.rs",
+        "crates/blinc_cn/src/components/rich_text_editor/editor.rs",
         "examples/blinc_component_demos/src/gallery/builtin.rs"
       ],
       "viewport": {
@@ -4774,9 +4774,6 @@
       ],
       "radio": [
         "radio-group"
-      ],
-      "rich_text_editor": [
-        "rich-text-editor"
       ],
       "scroll": [
         "scroll-area"

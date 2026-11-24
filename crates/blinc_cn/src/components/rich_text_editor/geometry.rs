@@ -5,7 +5,7 @@ use super::cursor::DocPosition;
 use super::document::{Block, BlockKind, RichDocument};
 use super::render::RichTextTheme;
 use super::state::LineGeometry;
-use crate::div::FontWeight;
+use blinc_layout::div::FontWeight;
 
 /// Compute the line-geometry index for `doc` at the given `content_width`,
 /// matching the layout that [`render_document`](super::render::render_document) produces. Walks every
@@ -171,8 +171,8 @@ fn build_runs_for_visual_line(
     let line = &visual.line;
     let text = &line.text;
     let len = text.len();
-    let body_font = crate::div::FontFamily::default();
-    let code_font = crate::div::FontFamily::monospace();
+    let body_font = blinc_layout::div::FontFamily::default();
+    let code_font = blinc_layout::div::FontFamily::monospace();
 
     // Empty visual line — emit one zero-width run so the cursor has a
     // valid landing spot.
@@ -265,8 +265,8 @@ fn push_run(
     body_font_size: f32,
     weight: FontWeight,
     italic: bool,
-    body_font: &crate::div::FontFamily,
-    code_font: &crate::div::FontFamily,
+    body_font: &blinc_layout::div::FontFamily,
+    code_font: &blinc_layout::div::FontFamily,
 ) {
     if text.is_empty() {
         return;
