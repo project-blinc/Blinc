@@ -2292,19 +2292,18 @@ pub const CN_STYLES: &str = concat!(
 .blinc-rich-text-divider { background: var(--border); }
 .blinc-rich-text-code { color: var(--warning); }
 .blinc-rich-text-selection { background: var(--selection); }
-.blinc-rte-toolbar {
-    background: var(--surface-elevated);
+.blinc-rte-fixed-toolbar {
+    background: var(--surface);
     color: var(--text-primary);
-    border-color: var(--border);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+    border-bottom: 1px solid var(--border);
 }
 .blinc-rte-separator { background: var(--border); }
-.blinc-rte-button:hover, .blinc-rte-pill:hover { background: var(--border); }
-.blinc-rte-pill { background: var(--surface-overlay); }
-.blinc-rte-swatch { border-color: var(--border-secondary); }
-.blinc-rte-swatch--default { background: var(--text-primary); }
-.blinc-rte-link-input { background: var(--surface); border-color: var(--border-secondary); }
-.blinc-rte-link-placeholder { color: var(--text-tertiary); }
+/* A mark that is on under the cursor. */
+.blinc-rte-button--active { background: var(--surface-overlay); }
+/* The colour control is the cn colour picker reduced to its swatch. */
+.blinc-rte-color { border-width: 0; padding: 0 6px; background: transparent; }
+.blinc-rte-color .cn-color-picker-value { display: none; }
+.blinc-rte-color .cn-color-picker-swatch { width: 18px; height: 18px; border-radius: var(--radius-full); }
 "#,
     "\n}\n"
 );

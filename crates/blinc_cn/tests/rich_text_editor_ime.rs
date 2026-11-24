@@ -1,5 +1,4 @@
-//! The rich text editor's input-method edits: candidates replace text within its document, and
-//! the link draft has a native session of its own.
+//! The rich text editor's input-method edits: candidates replace text within its document.
 
 use blinc_cn::components::rich_text_editor::*;
 use blinc_layout::{div::div, ime::ImeEdit, renderer::RenderTree, widgets::text_input::*};
@@ -59,42 +58,4 @@ fn rich_text_candidates_preserve_the_surrounding_document() {
     assert_eq!(d.document.plain_text(), "Hello 🦊\nNext");
     assert!(!d.undo());
     d.set_focus(false);
-}
-
-#[test]
-fn rich_text_link_drafts_have_their_own_native_session() {
-    let _guard = init();
-    let data = rich_text_state(RichDocument::from_blocks(vec![Block::paragraph(
-        "Link",
-        blinc_core::Color::WHITE,
-    )]));
-    let mut tree =
-        RenderTree::from_element(&rich_text_editor(&data, RichTextTheme::default(), 400.0));
-    tree.compute_layout(400.0, 300.0);
-    data.lock().unwrap().set_focus(true);
-    let document = tree.ime_snapshot().unwrap();
-    data.lock().unwrap().picker = PickerState::Link {
-        draft: "https://".into(),
-    };
-    let draft = tree.ime_snapshot().unwrap();
-    assert!(!draft.content.multiline);
-    assert_ne!(draft.content.edit.session, document.content.edit.session);
-    edit(&tree, "https://ni", [10, 10], Some([8, 10]));
-    edit(&tree, "https://你", [9, 9], None);
-    assert_eq!(data.lock().unwrap().document.plain_text(), "Link");
-    tree.broadcast_key_event(
-        blinc_core::events::event_types::KEY_DOWN,
-        13,
-        false,
-        false,
-        false,
-        false,
-    );
-    assert!(matches!(data.lock().unwrap().picker, PickerState::None));
-    assert_eq!(tree.ime_snapshot().unwrap().content.edit.text, "Link");
-    assert_ne!(
-        tree.ime_snapshot().unwrap().content.edit.session,
-        draft.content.edit.session
-    );
-    data.lock().unwrap().set_focus(false);
 }

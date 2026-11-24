@@ -117,20 +117,11 @@ pub struct UndoEntry {
 /// showing.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum PickerState {
-    /// No picker open. The toolbar shows its mark buttons.
+    /// No picker open.
     #[default]
     None,
-    /// Color picker open. Buttons are a small palette of preset colors.
-    Color,
-    /// Link prompt open. A text field accumulates the URL until Enter
-    /// confirms or Esc cancels.
-    Link {
-        /// Current draft URL — committed on Enter, discarded on Esc.
-        draft: String,
-    },
-    /// Heading picker open. Buttons select a heading level (or
-    /// "paragraph" to clear) for the current block.
-    Heading,
+    /// The link field is open under the toolbar's buttons.
+    Link,
 }
 
 /// Editor data that survives across UI rebuilds.
@@ -152,8 +143,6 @@ pub struct RichTextData {
     /// Focus flag — set on first mouse-down inside the editor.
     pub focused: bool,
     pub(super) ime: blinc_layout::ime::ImeSession<UndoEntry>,
-    pub(super) link_ime: blinc_layout::ime::ImeSession<String>,
-    pub(super) link_ime_selection: Option<[usize; 2]>,
     /// Visual line geometry index, kept current by the editor as the
     /// document changes.
     pub line_index: Vec<LineGeometry>,
@@ -177,6 +166,10 @@ pub struct RichTextData {
     /// selection toolbar. Mutually exclusive — opening one closes the
     /// other.
     pub picker: PickerState,
+    /// How far below the editor's top the text starts: the fixed toolbar's height, or zero.
+    pub(super) content_top: f32,
+    /// The link field's text, kept while the toolbar is rebuilt around it.
+    pub link_input: blinc_layout::widgets::text_input::SharedTextInputData,
     /// Timestamp of the most recent mouse-down (used for double-click
     /// detection in the editor's click handler).
     pub last_click_time: Option<Instant>,
@@ -231,14 +224,16 @@ impl RichTextData {
             active_format: ActiveFormat::default(),
             focused: false,
             ime: Default::default(),
-            link_ime: Default::default(),
-            link_ime_selection: None,
             line_index: Vec::new(),
             geometry_stamp: None,
             cursor_state: cursor_state(),
             tick_callback_id: None,
             editor_bounds: (0.0, 0.0, 0.0, 0.0),
             picker: PickerState::None,
+            content_top: 0.0,
+            link_input: Arc::new(Mutex::new(
+                blinc_layout::widgets::text_input::TextInputData::with_placeholder("https://"),
+            )),
             last_click_time: None,
             toolbar_rect: None,
             suppress_next_outer_click: false,
@@ -343,8 +338,6 @@ impl RichTextData {
         if !focused {
             self.finish_ime();
             self.ime.blur();
-            self.link_ime.blur();
-            self.link_ime.composing = None;
         }
         self.set_cursor_visible(focused);
         if focused {

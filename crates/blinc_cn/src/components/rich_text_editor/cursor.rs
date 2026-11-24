@@ -130,14 +130,15 @@ impl ActiveFormat {
         let Some(line) = block.lines.get(pos.line) else {
             return Self::default();
         };
-        // Use the span ending right at (or covering) the cursor position so
-        // that typing at a boundary inherits the *previous* run's marks
-        // (matches every other rich editor's behaviour).
+        // The span ending at or covering the cursor, so that typing at a
+        // boundary takes the previous run's marks; at the start of a line,
+        // the first span.
         let byte = super::document::char_to_byte(&line.text, pos.col);
         let span = line
             .spans
             .iter()
-            .find(|s| s.start <= byte && byte < s.end)
+            .find(|s| s.start < byte && byte <= s.end)
+            .or_else(|| line.spans.iter().find(|s| s.start <= byte && byte < s.end))
             .or_else(|| line.spans.iter().rev().find(|s| s.end <= byte));
         match span {
             Some(s) => Self {

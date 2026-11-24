@@ -12,8 +12,8 @@ use blinc_layout::widgets::cursor::SharedCursorState;
 
 use super::cursor::Selection;
 use super::render::{RichTextTheme, compute_line_geometry, render_block};
-use super::state::{RichTextData, RichTextState};
-use super::toolbar::selection_toolbar;
+use super::state::{PickerState, RichTextData, RichTextState};
+use super::toolbar::{ToolbarPlacement, fixed_height, fixed_toolbar, selection_toolbar, signature};
 
 /// Bring the line index up to date with the document, once per version.
 ///
@@ -60,7 +60,7 @@ struct Span {
 #[derive(Clone)]
 struct ToolbarKey {
     bounds: [u32; 4],
-    picker: String,
+    look: String,
 }
 
 /// A zero-size anchor at the editor's origin that hosts a region of
@@ -126,7 +126,12 @@ pub(super) fn content(
             ensure_geometry(&state, &theme, content_width, g.get(signal).unwrap_or(0));
             let data = state.lock().unwrap();
             match data.selection {
-                Some(sel) if data.focused && !sel.is_empty() => selection_spans(&data, sel),
+                // Also while a toolbar field has the focus, so the text it acts on stays marked.
+                Some(sel)
+                    if (data.focused || data.picker != PickerState::None) && !sel.is_empty() =>
+                {
+                    selection_spans(&data, sel)
+                }
                 _ => Vec::new(),
             }
         })
@@ -171,7 +176,7 @@ pub(super) fn content(
             };
             vec![ToolbarKey {
                 bounds: [x.to_bits(), y.to_bits(), w.to_bits(), h.to_bits()],
-                picker: format!("{:?}", data.picker),
+                look: signature(&data),
             }]
         })
     };
@@ -179,23 +184,49 @@ pub(super) fn content(
         let (state, version, theme) = (Arc::clone(state), *version, theme.clone());
         anchor().for_each(
             &toolbars,
-            |key| (key.bounds, key.picker.clone()),
+            |key| (key.bounds, key.look.clone()),
             move |_| selection_toolbar(&state, &version, &theme).unwrap_or_else(div),
         )
     };
 
-    // The `blinc-rich-text-editor` class is the canonical CSS hook for
-    // stylesheet overrides (background, padding, font). Relative, so the
-    // cursor, highlight and toolbar are placed against the content rect.
-    div()
+    // Relative, so the cursor, highlight and floating toolbar are placed against the text.
+    let body = div()
         .w_full()
         .relative()
         .cursor_text()
-        .class("blinc-rich-text-editor")
         .child(document)
         .child(selection)
         .child(cursor)
-        .child(toolbar)
+        .child(toolbar);
+    // The `blinc-rich-text-editor` class is the canonical CSS hook for stylesheet overrides
+    // (background, padding, font).
+    if theme.toolbar != ToolbarPlacement::Fixed {
+        return body.class("blinc-rich-text-editor");
+    }
+    let looks = {
+        let state = Arc::clone(state);
+        computed(move |g: &ReactiveGraph| {
+            g.get(signal);
+            let mut data = state.lock().unwrap();
+            // Clicks on the text are measured below the toolbar.
+            data.content_top = fixed_height(&data);
+            vec![signature(&data)]
+        })
+    };
+    let fixed = {
+        let (state, version) = (Arc::clone(state), *version);
+        div().w_full().for_each(
+            &looks,
+            |look| look.clone(),
+            move |_| fixed_toolbar(&state, &version),
+        )
+    };
+    div()
+        .w_full()
+        .flex_col()
+        .class("blinc-rich-text-editor")
+        .child(fixed)
+        .child(body)
 }
 
 /// Canvas overlay that draws a blinking cursor at the current document

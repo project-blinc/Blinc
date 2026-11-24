@@ -209,22 +209,33 @@ fn the_rich_text_toolbar_and_a_fixed_palette() {
     });
     ui.leave().settle();
 
+    // The toolbar is a notch filled with the elevated surface, its peak toward the selection.
     let toolbar = one(&ui, "blinc-rte-toolbar");
-    assert!(close(
-        background(&ui, toolbar),
-        theme.color(ColorToken::SurfaceElevated)
-    ));
+    let b = ui.tree().get_absolute_bounds(toolbar).unwrap();
+    let fill = ui
+        .snapshot()
+        .unwrap()
+        .get_pixel((b.x + 4.0) as u32, (b.y + b.height * 0.6) as u32)
+        .unwrap();
+    let want = theme.color(ColorToken::SurfaceElevated);
+    assert!(
+        close(
+            Some(Color::rgb(
+                fill[0] as f32 / 255.0,
+                fill[1] as f32 / 255.0,
+                fill[2] as f32 / 255.0
+            )),
+            want
+        ),
+        "toolbar fill {fill:?}"
+    );
     assert!(close(
         background(&ui, one(&ui, "blinc-rich-text-selection")),
         theme.color(ColorToken::Selection)
     ));
-    let button = one(&ui, "blinc-rte-button");
-    let ((got, bg), want) = (ink(&mut ui, button, false), token(ColorToken::TextPrimary));
-    assert!(drawn_in(got, want, bg), "toolbar label {got:?} over {bg:?}");
-    assert!(close(
-        background(&ui, one(&ui, "blinc-rte-swatch--default")),
-        theme.color(ColorToken::TextPrimary)
-    ));
+    // Five marks, link and close, and the colour picker's swatch beside them.
+    assert_eq!(all(&ui, "blinc-rte-button").len(), 7);
+    assert_eq!(all(&ui, "blinc-rte-color").len(), 1);
 
     // The dark palette's near-white text, on the light theme.
     let documents = all(&ui, "blinc-rich-text");
@@ -234,4 +245,161 @@ fn the_rich_text_toolbar_and_a_fixed_palette() {
         "fixed palette text {brightest:?}"
     );
     ui.assert_snapshot("layout_rich_text_rules");
+}
+
+/// A press on a node, at its centre.
+fn press(ui: &mut Headless, node: LayoutNodeId) {
+    let b = ui.tree().get_absolute_bounds(node).unwrap();
+    ui.move_to(b.x + b.width / 2.0, b.y + b.height / 2.0);
+    ui.mouse_down();
+    ui.mouse_up();
+    ui.settle();
+}
+
+/// An editor over "Select this text", with "Select" selected.
+fn selected_editor(
+    placement: blinc_cn::components::rich_text_editor::ToolbarPlacement,
+) -> Option<(
+    Headless,
+    blinc_cn::components::rich_text_editor::RichTextState,
+)> {
+    use blinc_cn::components::rich_text_editor::{
+        DocPosition, RichDocument, RichTextTheme, Selection, rich_text_editor, rich_text_state,
+    };
+    let mut ui = session(ColorScheme::Light)?;
+    let state = rich_text_state(RichDocument::from_markdown(
+        "Select this text",
+        Color::TRANSPARENT,
+    ));
+    {
+        let mut d = state.lock().unwrap();
+        d.set_focus(true);
+        d.selection = Some(Selection {
+            anchor: DocPosition::new(0, 0, 0),
+            head: DocPosition::new(0, 0, 6),
+        });
+        d.cursor = DocPosition::new(0, 0, 6);
+    }
+    let editor = state.clone();
+    ui.mount(move |_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(12.0))
+            // Room above the selection for the floating toolbar (4 px units).
+            .pt(20.0)
+            .child(rich_text_editor(
+                &editor,
+                RichTextTheme::default().toolbar(placement),
+                380.0,
+            ))
+    });
+    ui.settle();
+    Some((ui, state))
+}
+
+fn first_span(
+    state: &blinc_cn::components::rich_text_editor::RichTextState,
+) -> blinc_layout::styled_text::TextSpan {
+    state.lock().unwrap().document.blocks[0].lines[0].spans[0].clone()
+}
+
+#[test]
+fn the_floating_toolbar_bolds_the_selection_and_shows_the_mark_on() {
+    use blinc_cn::components::rich_text_editor::ToolbarPlacement;
+    let Some((mut ui, state)) = selected_editor(ToolbarPlacement::Floating) else {
+        return;
+    };
+    let bold = all(&ui, "blinc-rte-button")[0];
+    press(&mut ui, bold);
+    let span = first_span(&state);
+    assert!(span.bold && span.end == 6, "{span:?}");
+    assert_eq!(
+        all(&ui, "blinc-rte-button--active").len(),
+        1,
+        "Bold shows on"
+    );
+    // The press kept the selection, so the toolbar is still there.
+    assert!(
+        state
+            .lock()
+            .unwrap()
+            .selection
+            .is_some_and(|s| !s.is_empty())
+    );
+}
+
+#[test]
+fn the_link_field_links_the_selection_on_enter() {
+    use blinc_cn::components::rich_text_editor::{PickerState, ToolbarPlacement};
+    let Some((mut ui, state)) = selected_editor(ToolbarPlacement::Floating) else {
+        return;
+    };
+    // Bold, italic, underline, strikethrough, code, then link.
+    let link = all(&ui, "blinc-rte-button")[5];
+    press(&mut ui, link);
+    assert_eq!(state.lock().unwrap().picker, PickerState::Link);
+    assert_eq!(all(&ui, "blinc-rte-link").len(), 1);
+    ui.advance(16);
+    ui.type_text("https://blinc.rs");
+    ui.key(13);
+    ui.settle();
+    let span = first_span(&state);
+    assert_eq!(
+        span.link_url.as_deref(),
+        Some("https://blinc.rs"),
+        "{span:?}"
+    );
+    assert_eq!(state.lock().unwrap().picker, PickerState::None);
+}
+
+#[test]
+fn the_close_button_collapses_the_selection() {
+    use blinc_cn::components::rich_text_editor::ToolbarPlacement;
+    let Some((mut ui, state)) = selected_editor(ToolbarPlacement::Floating) else {
+        return;
+    };
+    let close = *all(&ui, "blinc-rte-button").last().unwrap();
+    press(&mut ui, close);
+    assert!(state.lock().unwrap().selection.is_none());
+    assert!(all(&ui, "blinc-rte-toolbar").is_empty());
+}
+
+#[test]
+fn the_fixed_toolbar_sits_above_the_text_and_marks_what_is_typed_next() {
+    use blinc_cn::components::rich_text_editor::{DocPosition, ToolbarPlacement};
+    let Some((mut ui, state)) = selected_editor(ToolbarPlacement::Fixed) else {
+        return;
+    };
+    assert!(
+        all(&ui, "blinc-rte-toolbar").is_empty(),
+        "no floating toolbar"
+    );
+    let bar = one(&ui, "blinc-rte-fixed-toolbar");
+    let text = one(&ui, "blinc-rich-text");
+    let (bb, tb) = (
+        ui.tree().get_absolute_bounds(bar).unwrap(),
+        ui.tree().get_absolute_bounds(text).unwrap(),
+    );
+    assert!(
+        bb.y + bb.height <= tb.y + 0.5,
+        "toolbar {bb:?} above text {tb:?}"
+    );
+    assert_eq!(all(&ui, "blinc-rte-heading").len(), 1);
+
+    // A click on the text, below the toolbar, puts the caret where it lands.
+    ui.move_to(tb.x + 2.0, tb.y + 6.0);
+    ui.mouse_down();
+    ui.mouse_up();
+    ui.settle();
+    assert_eq!(state.lock().unwrap().cursor, DocPosition::new(0, 0, 0));
+
+    // Bold with a collapsed caret marks what is typed next, and the editor keeps the focus.
+    let bold = all(&ui, "blinc-rte-button")[0];
+    press(&mut ui, bold);
+    assert!(state.lock().unwrap().focused);
+    ui.type_text("x");
+    ui.settle();
+    let span = first_span(&state);
+    assert!(span.bold && span.end == 1, "{span:?}");
 }

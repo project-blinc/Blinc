@@ -51,9 +51,17 @@ pub struct RichTextTheme {
     /// Line height multiplier (1.0 = font_size, 1.5 = font_size * 1.5).
     /// Used both for spacing between visual lines and for cursor height.
     pub line_height: f32,
+    /// Where the formatting toolbar sits: floating over the selection, or fixed above the text.
+    pub toolbar: super::toolbar::ToolbarPlacement,
 }
 
 impl RichTextTheme {
+    /// Place the formatting toolbar: over the selection (the default), or above the text.
+    pub fn toolbar(mut self, placement: super::toolbar::ToolbarPlacement) -> Self {
+        self.toolbar = placement;
+        self
+    }
+
     /// A fixed palette for a dark UI, whatever the theme.
     pub fn dark() -> Self {
         Self {
@@ -97,6 +105,7 @@ impl Default for RichTextTheme {
             quote_border_width: 3.0,
             bullet_column_width: 18.0,
             line_height: 1.45,
+            toolbar: Default::default(),
         }
     }
 }

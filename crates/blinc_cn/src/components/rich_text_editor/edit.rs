@@ -385,50 +385,72 @@ fn rewrite_spans_after_insert(
     added_bytes: usize,
     fmt: &ActiveFormat,
 ) {
-    // Find the span that contains `byte`. If found, EXTEND it (so the
-    // typed text inherits its marks). If at a boundary, prefer the
-    // span that ends at `byte` so end-of-run typing continues with
-    // that run's marks.
-    let mut covered = false;
-    for span in line.spans.iter_mut() {
-        if span.start <= byte && byte < span.end {
-            // Inside this span — grow its end and shift everything later.
+    // The inserted text carries `fmt`. It joins the run ending at `byte`, or the run it lands in,
+    // when that run has the same format; otherwise it becomes a run of its own, splitting the run
+    // it lands in.
+    let ending = line
+        .spans
+        .iter()
+        .position(|s| s.end == byte && s.start < byte && format_matches(s, fmt));
+    let inside = line
+        .spans
+        .iter()
+        .position(|s| s.start <= byte && byte < s.end);
+    let grow = ending.or(inside.filter(|&i| format_matches(&line.spans[i], fmt)));
+
+    // Without a run to join, the run the text lands in is split below instead of shifted.
+    let split = if grow.is_some() { None } else { inside };
+    for (i, span) in line.spans.iter_mut().enumerate() {
+        if Some(i) == grow {
             span.end += added_bytes;
-            covered = true;
-        } else if span.end == byte && format_matches(span, fmt) {
-            // Boundary at the trailing edge — extend if the format matches.
-            span.end += added_bytes;
-            covered = true;
-        } else if span.start >= byte {
-            // Span lives entirely after the insert point — shift right.
+        } else if span.start >= byte && Some(i) != split {
             span.start += added_bytes;
             span.end += added_bytes;
         }
     }
-    if !covered {
-        // No span absorbed the insertion — emit a new run with the
-        // active format.
-        let new_span = TextSpan {
-            start: byte,
-            end: byte + added_bytes,
-            // Transparent: the text takes the editor's text colour.
-            color: fmt.color.unwrap_or(blinc_core::Color::TRANSPARENT),
-            bold: fmt.bold,
-            italic: fmt.italic,
-            underline: fmt.underline,
-            strikethrough: fmt.strikethrough,
-            code: fmt.code,
-            link_url: fmt.link.clone(),
-            token_type: None,
-        };
-        // Insert in sorted order.
-        let pos = line
+    if grow.is_some() {
+        return;
+    }
+
+    let mut run = TextSpan {
+        start: byte,
+        end: byte + added_bytes,
+        // Transparent: the text takes the editor's text colour.
+        color: fmt.color.unwrap_or(blinc_core::Color::TRANSPARENT),
+        bold: fmt.bold,
+        italic: fmt.italic,
+        underline: fmt.underline,
+        strikethrough: fmt.strikethrough,
+        code: fmt.code,
+        link_url: fmt.link.clone(),
+        token_type: None,
+    };
+    let at = match inside {
+        Some(i) => {
+            let host = &mut line.spans[i];
+            if fmt.color.is_none() {
+                run.color = host.color;
+            }
+            // The part of the host after the insertion, shifted past it.
+            let mut tail = host.clone();
+            tail.start = byte + added_bytes;
+            tail.end = host.end + added_bytes;
+            host.end = byte;
+            if host.start == host.end {
+                line.spans[i] = tail;
+                i
+            } else {
+                line.spans.insert(i + 1, tail);
+                i + 1
+            }
+        }
+        None => line
             .spans
             .iter()
             .position(|s| s.start > byte)
-            .unwrap_or(line.spans.len());
-        line.spans.insert(pos, new_span);
-    }
+            .unwrap_or(line.spans.len()),
+    };
+    line.spans.insert(at, run);
 }
 
 /// After removing `removed_bytes` starting at `byte`, shrink and shift
@@ -680,5 +702,53 @@ mod tests {
         let spans = &d.blocks[0].lines[0].spans;
         // The original span should still be there, plus a new bold one.
         assert!(spans.iter().any(|s| s.bold && s.end == 3));
+    }
+
+    #[test]
+    fn insert_with_a_different_format_splits_the_run_it_lands_in() {
+        let mut d = doc(vec![Block::paragraph("hello", Color::WHITE)]);
+        let fmt = ActiveFormat {
+            bold: true,
+            ..Default::default()
+        };
+        insert_text(&mut d, DocPosition::new(0, 0, 0), "x", &fmt);
+        insert_text(&mut d, DocPosition::new(0, 0, 3), "y", &fmt);
+        let spans: Vec<_> = d.blocks[0].lines[0]
+            .spans
+            .iter()
+            .map(|s| (s.start, s.end, s.bold))
+            .collect();
+        assert_eq!(d.blocks[0].lines[0].text, "xheyllo");
+        assert_eq!(
+            spans,
+            vec![(0, 1, true), (1, 3, false), (3, 4, true), (4, 7, false)]
+        );
+        assert!(
+            d.blocks[0].lines[0]
+                .spans
+                .iter()
+                .all(|s| s.color == Color::WHITE)
+        );
+    }
+
+    #[test]
+    fn insert_at_a_boundary_joins_the_run_before_and_shifts_the_next() {
+        let mut p = Block::paragraph("ab", Color::WHITE);
+        p.lines[0].spans = vec![
+            TextSpan::new(0, 1, Color::WHITE, true),
+            TextSpan::new(1, 2, Color::WHITE, false),
+        ];
+        let mut d = doc(vec![p]);
+        let fmt = ActiveFormat {
+            bold: true,
+            ..Default::default()
+        };
+        insert_text(&mut d, DocPosition::new(0, 0, 1), "x", &fmt);
+        let spans: Vec<_> = d.blocks[0].lines[0]
+            .spans
+            .iter()
+            .map(|s| (s.start, s.end, s.bold))
+            .collect();
+        assert_eq!(spans, vec![(0, 2, true), (2, 3, false)]);
     }
 }

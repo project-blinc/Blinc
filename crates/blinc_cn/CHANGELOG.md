@@ -6,6 +6,8 @@ All notable changes to `blinc_cn` will be documented in this file.
 
 - The rich text editor is a cn component, `blinc_cn::components::rich_text_editor`, moved from `blinc_layout` with its tests. Its CSS rules are part of `CN_STYLES`.
 
+- The rich text editor's toolbar is built from cn components: icon buttons with tooltips, the cn colour picker, and a link field with a cn input. `RichTextTheme::toolbar` takes a `ToolbarPlacement`: `Floating`, the default, shows it over the selection as a notch pointing at it, with a close button; `Fixed` shows it above the text with a menu for the block's kind; `Hidden` shows none. `PickerState` has `None` and `Link` only.
+
 - Dialog, alert-dialog, popover, tooltip and toast builders register their own accessibility descriptions. Dialog names follow their titles. Toasts expose polite status updates or assertive error alerts, and their dismiss control accepts assistive actions.
 
 - Dialog builders accept `.initial_focus(id)` to choose the starting control. Unavailable targets use the marked control or the normal fallback.
@@ -27,6 +29,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - Typography has a dedicated guide covering all helpers, reactive content, inline composition and CSS class hooks; the gallery embeds that guide.
 
 ### Fixed
+- In the rich text editor, a mark turned on with a collapsed cursor applies to the text typed next, and a caret at the boundary of two runs takes the marks of the run before it.
 - In a container narrower than they are, the menubar, navigation menu, breadcrumb and pagination wrap onto more lines instead of running past its edge, and pagination buttons keep their size instead of being squeezed. A progress bar or chart with a set width shrinks to such a container; the chart draws at the width it gets.
 - The pill behind the active tab takes no pointer input, so the desktop runner hovers what is drawn over it, such as a closable tab's close button, however the pointer arrives.
 - A tooltip opens on the side of its trigger that has room in the window, instead of being clamped back over the trigger, and takes no pointer input, so its trigger keeps the hover and the click and leaving it closes the tooltip.

@@ -109,6 +109,15 @@ impl Scene {
         }
     }
 
+    /// How many floating toolbars are on the page.
+    fn toolbars(&self) -> usize {
+        let registry = self.tree.element_registry();
+        self.nodes()
+            .into_iter()
+            .filter(|&n| registry.has_class(n, "blinc-rte-toolbar"))
+            .count()
+    }
+
     /// The text on the page, in tree order. Prose is a styled text.
     fn texts(&self) -> String {
         self.nodes()
@@ -236,7 +245,7 @@ fn the_selection_and_toolbar_follow_in_place() {
     let y = s.line_y(0);
     s.click(5.0, y);
     assert_eq!(s.highlights(), 0);
-    assert!(!s.texts().contains("B|"), "a toolbar with no selection");
+    assert_eq!(s.toolbars(), 0, "a toolbar with no selection");
 
     {
         let mut d = s.state.lock().unwrap();
@@ -248,11 +257,7 @@ fn the_selection_and_toolbar_follow_in_place() {
     s.bump();
     s.frame();
     assert!(s.highlights() > 0, "the selection is not highlighted");
-    assert!(
-        s.texts().contains('B'),
-        "the toolbar did not appear: {}",
-        s.texts()
-    );
+    assert_eq!(s.toolbars(), 1, "the toolbar did not appear");
 
     s.state.lock().unwrap().selection = None;
     s.bump();

@@ -54,5 +54,5 @@ pub use render::{RichTextTheme, compute_line_geometry, render_document};
 pub use state::{
     LineGeometry, PickerState, RichTextData, RichTextState, RunGeometry, UndoEntry, rich_text_state,
 };
-pub use toolbar::selection_toolbar;
+pub use toolbar::{ToolbarPlacement, selection_toolbar};
 pub use wrap::{WrappedLine, wrap_styled_line};

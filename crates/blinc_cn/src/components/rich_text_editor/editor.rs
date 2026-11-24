@@ -78,6 +78,13 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                 data.finish_ime();
                 data.ime.blur();
             }
+            // A press in the toolbar's link field leaves the focus with the field.
+            if data.suppress_next_outer_click
+                && data.link_input.lock().is_ok_and(|f| f.visual.is_focused())
+            {
+                data.suppress_next_outer_click = false;
+                return;
+            }
             data.set_focus(true);
             data.editor_bounds = (
                 ctx.bounds_x,
@@ -141,7 +148,8 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
 
             let touch = blinc_layout::widgets::text_input::is_touch_input();
 
-            if let Some(pos) = data.position_from_click(ctx.local_x, ctx.local_y) {
+            if let Some(pos) = data.position_from_click(ctx.local_x, ctx.local_y - data.content_top)
+            {
                 if is_double {
                     // Double-click — select the word under the cursor.
                     if let Some(line) = data
@@ -262,7 +270,8 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
             // a subtle haptic per character boundary.
             // Mouse drag = extend selection from anchor to pointer.
             let touch = blinc_layout::widgets::text_input::is_touch_input();
-            if let Some(pos) = data.position_from_click(ctx.local_x, ctx.local_y) {
+            if let Some(pos) = data.position_from_click(ctx.local_x, ctx.local_y - data.content_top)
+            {
                 if touch {
                     // Drift-cancel any armed long-press so a real
                     // cursor drag doesn't also fire the paste menu.
@@ -306,14 +315,6 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
             if !data.focused {
                 return;
             }
-            // If the link prompt is open, route the keystroke into the
-            // URL draft instead of inserting into the document.
-            if let super::state::PickerState::Link { ref mut draft } = data.picker {
-                draft.push(ch);
-                drop(data);
-                version_for_text.set(version_for_text.get().wrapping_add(1));
-                return;
-            }
             // If there's a selection, replace it first.
             let mut pos = data.cursor;
             if let Some(sel) = data.selection.take() {
@@ -334,51 +335,6 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
             }
             if !data.focused {
                 return;
-            }
-
-            // Link-prompt key handling — Backspace edits the draft,
-            // Enter commits, Esc cancels. Other keys fall through so
-            // arrow keys still navigate the document underneath.
-            if matches!(data.picker, super::state::PickerState::Link { .. }) {
-                match ctx.key_code {
-                    8 => {
-                        // Backspace — pop the last character from the draft
-                        if let super::state::PickerState::Link { ref mut draft } = data.picker {
-                            draft.pop();
-                            drop(data);
-                            version_for_key.set(version_for_key.get().wrapping_add(1));
-                            return;
-                        }
-                    }
-                    13 => {
-                        // Enter — commit the link
-                        if let super::state::PickerState::Link { draft } = data.picker.clone() {
-                            if !draft.is_empty()
-                                && let Some(sel) = data.selection
-                                && !sel.is_empty()
-                            {
-                                data.push_undo();
-                                super::format::apply_mark_to_selection(
-                                    &mut data.document,
-                                    sel,
-                                    super::format::Mark::Link(Some(draft)),
-                                );
-                            }
-                            data.picker = super::state::PickerState::None;
-                            drop(data);
-                            version_for_key.set(version_for_key.get().wrapping_add(1));
-                            return;
-                        }
-                    }
-                    27 => {
-                        // Esc — cancel the prompt
-                        data.picker = super::state::PickerState::None;
-                        drop(data);
-                        version_for_key.set(version_for_key.get().wrapping_add(1));
-                        return;
-                    }
-                    _ => {}
-                }
             }
 
             let mod_key = ctx.command_modifier();

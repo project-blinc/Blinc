@@ -57,26 +57,6 @@ pub(super) fn binding(
                 d.ime.blur();
                 return None;
             }
-            if let PickerState::Link { draft } = d.picker.clone() {
-                d.finish_ime();
-                d.ime.blur();
-                let length = draft.encode_utf16().count();
-                let selection = d
-                    .link_ime_selection
-                    .unwrap_or([length, length])
-                    .map(|n| n.min(length));
-                return Some(ImeContent {
-                    edit: d.link_ime.snapshot(true, draft, selection),
-                    focused: true,
-                    disabled: false,
-                    secure: false,
-                    multiline: false,
-                    autocorrect: false,
-                });
-            }
-            d.link_ime.blur();
-            d.link_ime.composing = None;
-            d.link_ime_selection = None;
             let text = d.document.plain_text();
             let selection = [
                 utf16_offset(
@@ -97,22 +77,6 @@ pub(super) fn binding(
         edit: Arc::new(move |edit| {
             {
                 let mut d = target.lock().unwrap();
-                if d.focused && matches!(d.picker, PickerState::Link { .. }) {
-                    if !d.link_ime.receive(edit) {
-                        return false;
-                    }
-                    if blinc_layout::ime::valid_edit(edit) && !edit.text.contains(['\n', '\r']) {
-                        d.picker = PickerState::Link {
-                            draft: edit.text.clone(),
-                        };
-                        d.link_ime_selection = Some(edit.selection);
-                        d.link_ime.composing = edit.composing.filter(|[a, b]| a < b);
-                    }
-                    drop(d);
-                    version.update(|n| n.wrapping_add(1));
-                    blinc_layout::stateful::request_redraw();
-                    return true;
-                }
                 if !d.focused || !d.ime.receive(edit) {
                     return false;
                 }
