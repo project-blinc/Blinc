@@ -14,6 +14,11 @@ test from flaking.
 | Image golden | `Headless::assert_snapshot` | A frame against a recorded picture |
 | Text golden | `blinc_cn` tests | A dump of a widget's render props in each state |
 
+In `blinc_recorder`, `blinc_layout` and `blinc_cn`, the tests under `tests/` link into one
+binary. Each file is a module of `tests/integration/main.rs`. To add a file, put it in
+`tests/integration/` and add a `mod` line for it to `main.rs`. A file under `tests/` itself
+becomes a binary of its own, with a full copy of everything it links.
+
 Prefer the cheapest kind that can fail for the right reason. A colour a rule should give is an
 assertion on a render prop. A transition's last frame is a headless run. A picture is for what
 cannot be said as a value.
@@ -133,7 +138,7 @@ to see every failure at once.
 A suspected flake is checked by running it many times under load:
 
 ```sh
-cargo nextest run -p blinc_recorder --features headless --test cn_textarea_snapshots \
+cargo nextest run -p blinc_recorder --features headless -E 'test(cn_textarea_snapshots::)' \
   --no-fail-fast --stress-count 300
 ```
 

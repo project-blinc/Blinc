@@ -1,0 +1,46 @@
+//! The integration tests, one module per file, linked into one binary.
+
+mod common;
+
+mod accordion_in_place;
+mod badge_label_color;
+mod badge_reactive_label;
+mod breadcrumb_states;
+mod button_disabled_binding;
+mod button_label_resize;
+mod button_states;
+mod button_transition;
+mod checkbox_activation;
+mod checkbox_checked_class;
+mod checkbox_states;
+mod collapsible_in_place;
+mod combobox_in_place;
+mod dropdown_trigger_in_place;
+mod input_otp_in_place;
+mod label_click_toggles;
+mod navigation_menu_in_place;
+mod number_input_in_place;
+mod pagination_in_place;
+mod popover_trigger_in_place;
+mod radio_selected_class;
+mod radio_states;
+mod reactive_node_in_place;
+mod resizable_in_place;
+mod select_in_place;
+mod select_value_colour;
+mod sidebar_in_place;
+mod slider_accessibility;
+mod slider_binding;
+mod static_widgets_reactive;
+mod switch_animation;
+mod tabs_active_class;
+mod tabs_content;
+mod tabs_content_in_place;
+mod tabs_exit;
+mod tabs_states;
+mod text_props_in_place;
+mod textarea_height;
+mod theming_precedence;
+mod toggle_attributes;
+mod tooltip_enter;
+mod tree_in_place;
