@@ -84,9 +84,6 @@ pulldown-cmark = "0.10"
 # HTML entity decoding
 html-escape = "0.2"
 
-# CSS parser combinators
-nom = "7"
-
 # `web_time::Instant` — drop-in replacement for `std::time::Instant`
 # that works on `wasm32-unknown-unknown` via `performance.now()`. On
 # native targets it's a `pub use std::time::Instant` re-export with

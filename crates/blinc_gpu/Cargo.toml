@@ -72,7 +72,6 @@ winit = { workspace = true, optional = true }
 raw-window-handle.workspace = true
 
 # Data structures
-slotmap.workspace = true
 smallvec.workspace = true
 lru.workspace = true
 

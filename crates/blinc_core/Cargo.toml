@@ -25,9 +25,6 @@ rustc-hash.workspace = true
 # Recording data model (serialisable)
 serde.workspace = true
 
-# Errors
-thiserror.workspace = true
-
 # Logging
 tracing.workspace = true
 

@@ -22,7 +22,6 @@ blinc_core = { path = "../blinc_core", version = "0.6.0" }
 
 # Data structures
 slotmap.workspace = true
-smallvec.workspace = true
 
 # Logging
 tracing.workspace = true

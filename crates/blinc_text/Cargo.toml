@@ -28,10 +28,6 @@ fontdb = { workspace = true }
 swash = "0.1"
 tiny-skia = { version = "0.11.4", default-features = false, features = ["std", "simd"] }
 
-# Unicode handling
-unicode-bidi = { workspace = true }
-unicode-linebreak = { workspace = true }
-
 # HTML entity decoding
 html-escape = "0.2"
 

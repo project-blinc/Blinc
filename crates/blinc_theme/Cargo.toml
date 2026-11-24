@@ -16,8 +16,6 @@ blinc_animation = { path = "../blinc_animation", version = "0.6.0" }
 
 # Utilities
 tracing = { workspace = true }
-serde = { workspace = true }
-toml = { workspace = true }
 
 # Data structures
 rustc-hash = { workspace = true }
