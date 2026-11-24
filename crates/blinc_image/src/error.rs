@@ -37,6 +37,13 @@ pub enum ImageError {
     Io(#[from] std::io::Error),
 }
 
+#[cfg(any(
+    feature = "gif",
+    feature = "webp",
+    feature = "bmp",
+    feature = "tiff",
+    feature = "avif"
+))]
 impl From<image::ImageError> for ImageError {
     fn from(err: image::ImageError) -> Self {
         ImageError::Decode(err.to_string())

@@ -12,14 +12,17 @@ categories = ["gui", "multimedia::images"]
 
 [dependencies]
 # Image decoding. Per-format decoders are gated by the cargo features
-# below — by default only PNG + JPEG are pulled in (most UI apps need
-# nothing else, and avoiding the rest saves ~30 transitive crates on
-# Linux). Apps that need GIF/WebP/BMP/TIFF/AVIF turn on the matching
-# feature; apps that want every built-in format use `all-formats`.
-# Apps that need a different decoder entirely (zune-image, libvips, a
-# headless stub for tests) build with `default-features = false` and
-# register a custom `ImageDecoder` via `DecoderRegistry`.
-image = { version = "0.25", default-features = false }
+# below. The default PNG and JPEG decoders use the `png` and `zune-jpeg`
+# crates; GIF/WebP/BMP/TIFF/AVIF turn on `image` with the matching codec,
+# and `all-formats` turns on every built-in format. Apps that need a
+# different decoder entirely (zune-image, libvips, a headless stub for
+# tests) build with `default-features = false` and register a custom
+# `ImageDecoder` via `DecoderRegistry`.
+image = { version = "0.25", default-features = false, optional = true }
+# The PNG and JPEG decoders, at the versions `image` uses, so turning on an `image` format adds no copy.
+png = { version = "0.18.1", optional = true }
+zune-jpeg = { version = "0.5.15", optional = true }
+zune-core = { version = "0.5.3", optional = true }
 
 # Async/networking for URL loading
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"], optional = true }
@@ -51,18 +54,22 @@ network = ["reqwest", "tokio"]
 platform = ["blinc_platform"]
 emoji = ["blinc_text"]
 
-# Per-format built-in decoders. Each enables the matching feature on
-# the upstream `image` crate and compiles in a `BuiltinDecoder`
-# implementation that gets registered with the default
-# `DecoderRegistry`. Off by default unless listed in `default` above.
-png = ["image/png"]
-jpeg = ["image/jpeg"]
-gif = ["image/gif"]
-webp = ["image/webp"]
-bmp = ["image/bmp"]
-tiff = ["image/tiff"]
-avif = ["image/avif"]
+# Per-format built-in decoders, each registered with the default
+# `DecoderRegistry`. PNG and JPEG decode with their own crates; the
+# others turn on the matching format of the upstream `image` crate.
+# Off by default unless listed in `default` above.
+png = ["dep:png"]
+jpeg = ["dep:zune-jpeg", "dep:zune-core"]
+gif = ["dep:image", "image/gif"]
+webp = ["dep:image", "image/webp"]
+bmp = ["dep:image", "image/bmp"]
+tiff = ["dep:image", "image/tiff"]
+avif = ["dep:image", "image/avif"]
 
 # Umbrella that matches the pre-split set of built-in formats —
 # enables every format that previously shipped with `default`.
 all-formats = ["png", "jpeg", "gif", "webp", "bmp"]
+
+[dev-dependencies]
+# The reference the built-in PNG and JPEG decoders are checked against.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

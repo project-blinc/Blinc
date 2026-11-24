@@ -4,6 +4,9 @@ All notable changes to `blinc_image` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- `PngDecoder` and `JpegDecoder` decode with the `png` and `zune-jpeg` crates directly, with the transformations and RGBA conversion of the `image` crate, so their pixels are unchanged. `image` is now an optional dependency that only `gif`, `webp`, `bmp`, `tiff` and `avif` turn on. A default build no longer compiles `image`, `moxcms`, `pxfm` or `byteorder-lite`. `detect_format` checks the signatures of `image::guess_format` in the same order.
+
 ## [0.6.0] - 2026-11-04
 
 ### Added

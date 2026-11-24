@@ -37,7 +37,7 @@ blinc_image = { version = "0.6", features = ["all-formats"] }
 blinc_image = { version = "0.6", default-features = false, features = ["platform"] }
 ```
 
-Per-format features: `png`, `jpeg`, `gif`, `webp`, `bmp`, `tiff`, `avif`. Each pulls only the matching codec into the `image` crate, so a PNG-only app drops ~30 transitive crates compared to the all-formats umbrella.
+Per-format features: `png`, `jpeg`, `gif`, `webp`, `bmp`, `tiff`, `avif`. `png` and `jpeg` decode with the `png` and `zune-jpeg` crates directly. The others turn on the matching codec of the `image` crate, so a build with only the default formats does not compile `image`.
 
 ### Custom decoder
 
