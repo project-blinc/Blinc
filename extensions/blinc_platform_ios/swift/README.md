@@ -13,10 +13,10 @@ This directory contains Swift files for integrating Blinc into iOS applications.
 
 ```bash
 # Build for iOS simulator (arm64)
-cargo build --release --target aarch64-apple-ios-sim -p blinc_app --features ios
+cargo rustc --release --target aarch64-apple-ios-sim -p blinc_app --features ios --crate-type staticlib
 
 # Build for iOS device (arm64)
-cargo build --release --target aarch64-apple-ios -p blinc_app --features ios
+cargo rustc --release --target aarch64-apple-ios -p blinc_app --features ios --crate-type staticlib
 ```
 
 ### 2. Add to Xcode project

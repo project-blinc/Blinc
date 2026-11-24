@@ -214,9 +214,11 @@ lto = "thin"
 codegen-units = 1
 strip = true
 
+# For profilers: line tables give file, line and inlined frames at a fraction of full DWARF's
+# size.
 [profile.release-debug]
 inherits = "release"
-debug = true
+debug = "line-tables-only"
 strip = false
 
 # Optimized for small binary size (mobile platforms)

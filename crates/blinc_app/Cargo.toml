@@ -12,9 +12,9 @@ description = "Blinc application framework with clean layout and rendering API"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("fuchsia", "ohos"))', 'cfg(target_env, values("ohos"))'] }
 
 [lib]
-# rlib: Rust library for normal use
-# staticlib: C static library for iOS/Android linking
-crate-type = ["rlib", "staticlib"]
+# Only an rlib: a staticlib here would bundle every dependency into each build. For an iOS
+# static library, ask for it: `cargo rustc -p blinc_app --crate-type staticlib ...`.
+crate-type = ["rlib"]
 
 [dependencies]
 blinc_core = { path = "../blinc_core", version = "0.6.0" }

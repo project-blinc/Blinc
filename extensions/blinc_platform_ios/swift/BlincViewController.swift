@@ -6,7 +6,8 @@
 //  The UI is built in Rust - this handles platform integration only.
 //
 //  Usage:
-//  1. Build libblinc_app.a with `cargo build --features ios --target aarch64-apple-ios`
+//  1. Build libblinc_app.a with
+//     `cargo rustc -p blinc_app --features ios --target aarch64-apple-ios --crate-type staticlib`
 //  2. Add the static library and Blinc-Bridging-Header.h to your Xcode project
 //  3. Your Rust app must define and export a UI builder function
 //  4. Call BlincViewController.registerUIBuilder() with your Rust function

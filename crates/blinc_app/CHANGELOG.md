@@ -16,6 +16,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - The desktop runner has a measurement hook, off unless set: `BLINC_BENCH_WHEEL=<.class|#id>` wheels the page until the first match is in view, waits for it to settle, then feeds horizontal swipes over its centre through the normal input path at 60 steps a second, and exits after `BLINC_BENCH_WHEEL_TURNS` swipes (40 by default). Two builds run under `/usr/bin/time -l` with the same script can be compared by instruction count.
 
 ### Changed
+- The library builds only as an rlib. The staticlib output put every dependency into one archive on each build. That archive was up to a gigabyte, also for a crate that depended on `blinc_app`. To build an iOS static library, run `cargo rustc -p blinc_app --features ios --target aarch64-apple-ios --crate-type staticlib`.
 - `BLINC_DAMAGE_RECT` is read once per process instead of on each frame.
 - Browser frames reuse retained paint for eligible motion and scroll rows instead of walking the tree on every frame. Property, subtree, focus, stylesheet and layout changes invalidate the cache; unsupported content keeps the full-paint path. Unchanged pointer and focus state skips the stylesheet state pass. HTML canvas and worker runners share this path without allocating a static-layer texture.
 - Direct retained frames reuse prepared text and preserve motion glyph row ownership across successive updates. Canvas replay distinguishes actual ordered content from a resolver marker, and leaves unchanged groups intact when no canvas needs splicing.
