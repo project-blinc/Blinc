@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "blinc_cn"
 description = "Blinc Component Library - shadcn-style themed components built on blinc_layout primitives"
 version.workspace = true
@@ -44,3 +45,7 @@ js-sys = "0.3"
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
+
+[[test]]
+name = "integration"
+path = "tests/main.rs"

@@ -93,7 +93,7 @@ fn session(path: Path) -> Option<Headless> {
     // Animation values are applied on the frames a tick finds one running, as in a window.
     ui.gate_animation_apply();
     ui.load_font_data(
-        include_bytes!("../../../../examples/blinc_component_demos/assets/NotoSans-Regular.ttf")
+        include_bytes!("../../../examples/blinc_component_demos/assets/NotoSans-Regular.ttf")
             .to_vec(),
     );
     // Geometry and sharpness measurements use the bundled face on every platform.

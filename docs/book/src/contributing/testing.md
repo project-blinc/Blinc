@@ -14,10 +14,10 @@ test from flaking.
 | Image golden | `Headless::assert_snapshot` | A frame against a recorded picture |
 | Text golden | `blinc_cn` tests | A dump of a widget's render props in each state |
 
-In `blinc_recorder`, `blinc_layout` and `blinc_cn`, the tests under `tests/` link into one
-binary. Each file is a module of `tests/integration/main.rs`. To add a file, put it in
-`tests/integration/` and add a `mod` line for it to `main.rs`. A file under `tests/` itself
-becomes a binary of its own, with a full copy of everything it links.
+A crate with `autotests = false` in its manifest links the files under `tests/` into one
+`integration` binary, and each file is a module of `tests/main.rs`. To add a test file, add a
+`mod` line for it to `main.rs`. Without the line, the file is not compiled and its tests do not
+run. A separate binary for each file would link its own copy of everything the crate depends on.
 
 Prefer the cheapest kind that can fail for the right reason. A colour a rule should give is an
 assertion on a render prop. A transition's last frame is a headless run. A picture is for what

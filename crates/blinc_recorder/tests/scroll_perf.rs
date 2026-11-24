@@ -77,7 +77,7 @@ fn session(way: Way) -> Option<Headless> {
     ui.theme(HybridTheme::bundle(), ColorScheme::Dark);
     ui.gate_state_styles();
     ui.load_font_data(
-        include_bytes!("../../../../examples/blinc_component_demos/assets/NotoSans-Regular.ttf")
+        include_bytes!("../../../examples/blinc_component_demos/assets/NotoSans-Regular.ttf")
             .to_vec(),
     );
     Some(ui)
@@ -327,7 +327,7 @@ fn what_hovering_a_long_list_costs() {
     ui.theme(HybridTheme::bundle().with_css(css), ColorScheme::Dark);
     ui.gate_state_styles();
     ui.load_font_data(
-        include_bytes!("../../../../examples/blinc_component_demos/assets/NotoSans-Regular.ttf")
+        include_bytes!("../../../examples/blinc_component_demos/assets/NotoSans-Regular.ttf")
             .to_vec(),
     );
     ui.mount(move |_| {

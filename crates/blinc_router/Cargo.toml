@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "blinc_router"
 description = "Cross-platform routing with deep linking for Blinc UI framework"
 version.workspace = true
@@ -15,3 +16,7 @@ blinc_layout = { path = "../blinc_layout", version = "0.6.0" }
 blinc_platform = { path = "../blinc_platform", version = "0.6.0" }
 tracing.workspace = true
 rustc-hash.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/main.rs"

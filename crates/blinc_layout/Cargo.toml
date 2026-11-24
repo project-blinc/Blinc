@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "blinc_layout"
 description = "Blinc layout engine - Flexbox layout powered by Taffy"
 version.workspace = true
@@ -127,3 +128,7 @@ arboard = { version = "3", default-features = false }
 # sync `Option<String>` return).
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version = "0.3", features = ["Window", "Navigator", "Clipboard"] }
+
+[[test]]
+name = "integration"
+path = "tests/main.rs"

@@ -119,10 +119,8 @@ fn code_takes_the_font_the_stylesheet_names() {
     let mut ui = Headless::new(640, 220).unwrap();
     ui.theme(HybridTheme::bundle(), ColorScheme::Dark);
     ui.load_font_data(
-        include_bytes!(
-            "../../../../examples/blinc_component_demos/assets/JetBrainsMono-Regular.ttf"
-        )
-        .to_vec(),
+        include_bytes!("../../../examples/blinc_component_demos/assets/JetBrainsMono-Regular.ttf")
+            .to_vec(),
     );
     ui.css(":root { --blinc-code-font-family: \"JetBrains Mono\", monospace; }");
     let state = code_editor_state(SOURCE);

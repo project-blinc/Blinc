@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "blinc_recorder"
 description = "Recording and debugging infrastructure for Blinc applications"
 version.workspace = true
@@ -32,3 +33,7 @@ blinc_cn = { path = "../blinc_cn", version = "0.6.0" }
 blinc_theme = { path = "../blinc_theme", version = "0.6.0" }
 blinc_text = { path = "../blinc_text", version = "0.6.0" }
 blinc_layout = { path = "../blinc_layout", version = "0.6.0", features = ["recorder"] }
+
+[[test]]
+name = "integration"
+path = "tests/main.rs"
