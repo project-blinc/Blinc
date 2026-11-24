@@ -82,6 +82,8 @@ exclude = [
     # in the fetched tree) and chokes on the placeholder package name.
     "toolchain/templates",
     "toolchain/templates/rust",
+    # The patched wgpu-hal below: a dependency, not a member.
+    "third_party/wgpu-hal",
 ]
 
 # Platform-specific crates are included but have target-gated dependencies
@@ -228,6 +230,11 @@ lto = "fat"
 opt-level = "z"
 panic = "abort"
 strip = "symbols"
+
+# wgpu-hal 26.0.5 whose Metal backend makes no command buffer for a pass that encodes nothing;
+# third_party/wgpu-hal/BLINC.md says what changed. Workspace builds only.
+[patch.crates-io]
+wgpu-hal = { path = "third_party/wgpu-hal" }
 
 # Path-patch for downstream `/packages/blinc_*` crates so their
 # pinned git deps on `Blinc.git` (blinc_core / blinc_layout /

@@ -25,6 +25,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - `GpuRenderer::update_time` does nothing: the renderer reads `blinc_core::FrameClock`, which the runners set each frame.
 
 ### Changed
+- Workspace builds use `third_party/wgpu-hal`, wgpu-hal 26.0.5 whose Metal backend makes a command buffer only when a command needs one. Before, every render pass also cost an empty command buffer for its transitions. A crate that depends on `blinc_gpu` from crates.io still gets the published wgpu-hal.
 - `BLINC_DEBUG_FILL_RECT`, `BLINC_MULTISTOP_VERTEX` and `BLINC_FILL_RULE_EVENODD` are read once per process instead of on each rect, gradient or path, so changing them while the app runs has no effect.
 - The layer composite blits write their uniforms into one buffer the renderer keeps, ahead of each blit's pass, instead of creating a buffer for each blit.
 - An opacity or blend group without effects or a named output is composited from the premultiplied colour it was drawn in, and its texture is cleared by the pass that draws its first run of primitives. It took four render passes (a clear, the draw, a conversion to straight colour and the composite) and now takes two. Opacity groups drawn through one atlas skip the same two passes. `LayerCompositeUniforms` gains `premultiplied`, 1 when the source holds premultiplied colour, and padding to 128 bytes, so a struct literal needs both fields.
