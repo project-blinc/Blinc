@@ -21,8 +21,10 @@ fn the_russl_notch_keeps_the_same_joins() {
     assert!(!src.contains("smin(d, flare"), "a flare is blended again");
     assert!(src.contains("let join_depth = min(8.0, min(inner_size.x, inner_size.y) * 0.5);"));
     assert!(src.contains("let deep_depth = min(inner_size.x, inner_size.y) * 0.5;"));
+    // Bulges clip at the centre, peaks at their apex.
     assert_eq!(
-        src.matches("abs(p.x - cx) - half_w").count(),
+        src.matches("abs(p.x - cx) - half_w").count()
+            + src.matches("abs(p.x - apex) - half_w").count(),
         4,
         "a piece is not clipped to its own width"
     );

@@ -273,6 +273,8 @@ pub struct CenterPeak {
     pub width: f32,
     /// Height of the peak (how far it protrudes outward)
     pub height: f32,
+    /// How far the apex sits right of the edge's centre; negative is left
+    pub offset: f32,
 }
 
 // =============================================================================
@@ -820,7 +822,11 @@ impl Notch {
     /// - Narrow width + tall = steep angle
     /// - Wide width + short = gentle angle
     pub fn center_peak_top(mut self, width: f32, height: f32) -> Self {
-        self.top_center_peak = Some(CenterPeak { width, height });
+        self.top_center_peak = Some(CenterPeak {
+            width,
+            height,
+            offset: 0.0,
+        });
         self
     }
 
@@ -835,7 +841,35 @@ impl Notch {
     ///            ╲╱   ← sharp point at height
     /// ```
     pub fn center_peak_bottom(mut self, width: f32, height: f32) -> Self {
-        self.bottom_center_peak = Some(CenterPeak { width, height });
+        self.bottom_center_peak = Some(CenterPeak {
+            width,
+            height,
+            offset: 0.0,
+        });
+        self
+    }
+
+    /// Add a V-peak on the top edge whose apex sits `offset` right of the edge's centre
+    /// (negative is left), such as a popover's pointer toward its anchor.
+    ///
+    /// The peak's base must stay on the straight part of the edge.
+    pub fn peak_top_at(mut self, offset: f32, width: f32, height: f32) -> Self {
+        self.top_center_peak = Some(CenterPeak {
+            width,
+            height,
+            offset,
+        });
+        self
+    }
+
+    /// Add a V-peak on the bottom edge whose apex sits `offset` right of the edge's centre
+    /// (negative is left). See [`Notch::peak_top_at`].
+    pub fn peak_bottom_at(mut self, offset: f32, width: f32, height: f32) -> Self {
+        self.bottom_center_peak = Some(CenterPeak {
+            width,
+            height,
+            offset,
+        });
         self
     }
 
@@ -1829,7 +1863,7 @@ fn build_shape_path(
         path = path.line_to(top_end_x, y);
     } else if let Some(peak) = top_center_peak {
         // Draw top center V-peak - sharp V pointing UPWARD out of the shape
-        let center_x = x + w / 2.0;
+        let center_x = x + w / 2.0 + peak.offset;
         let peak_start_x = center_x - peak.width / 2.0;
         let peak_end_x = center_x + peak.width / 2.0;
         let peak_point_y = y - peak.height; // Point goes upward (out of shape)
@@ -2118,7 +2152,7 @@ fn build_shape_path(
     } else if let Some(peak) = bottom_center_peak {
         // Draw bottom center V-peak - sharp V pointing DOWNWARD out of the shape
         // Path goes right-to-left on bottom edge
-        let center_x = x + w / 2.0;
+        let center_x = x + w / 2.0 + peak.offset;
         let peak_start_x = center_x + peak.width / 2.0; // Start from right
         let peak_end_x = center_x - peak.width / 2.0; // End at left
         let peak_point_y = y + h + peak.height; // Point goes downward (out of shape)
@@ -2588,7 +2622,8 @@ impl ElementBuilder for Notch {
                 } else if let Some(c) = &top_center_cut {
                     [3.0, c.width, c.depth, 0.0]
                 } else if let Some(p) = &top_center_peak {
-                    [4.0, p.width, p.height, 0.0]
+                    // A peak has no corner radius, so its last slot carries the apex offset.
+                    [4.0, p.width, p.height, p.offset]
                 } else {
                     [0.0; 4]
                 };
@@ -2599,7 +2634,7 @@ impl ElementBuilder for Notch {
                 } else if let Some(c) = &bottom_center_cut {
                     [3.0, c.width, c.depth, 0.0]
                 } else if let Some(p) = &bottom_center_peak {
-                    [4.0, p.width, p.height, 0.0]
+                    [4.0, p.width, p.height, p.offset]
                 } else {
                     [0.0; 4]
                 };

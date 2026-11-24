@@ -326,15 +326,17 @@ russl::russl! {
                     Vec2::new(cx + top_w * 0.5, base_y)
                 ), smin_k);
             } else { // peak — union a V-triangle protrusion
+                // A peak's last slot is its apex offset from the centre.
+                let apex = cx + top_cr;
                 // Extend along the sides, so the apex and the slopes are
                 // unchanged and only the buried base moves.
                 let spread = half_w * (top_h + deep_depth) / max(top_h, 0.001);
                 let peak_sd = max(sd_triangle(
                     p,
-                    Vec2::new(cx - spread, base_y + deep_depth),
-                    Vec2::new(cx, base_y - top_h),
-                    Vec2::new(cx + spread, base_y + deep_depth)
-                ), abs(p.x - cx) - half_w);
+                    Vec2::new(apex - spread, base_y + deep_depth),
+                    Vec2::new(apex, base_y - top_h),
+                    Vec2::new(apex + spread, base_y + deep_depth)
+                ), abs(p.x - apex) - half_w);
                 d = smin(d, peak_sd, smin_k);
             }
         }
@@ -377,13 +379,14 @@ russl::russl! {
                     Vec2::new(cx + bot_w * 0.5, base_y)
                 ), smin_k);
             } else { // peak
+                let apex = cx + bot_cr;
                 let spread = half_w * (bot_h + deep_depth) / max(bot_h, 0.001);
                 let peak_sd = max(sd_triangle(
                     p,
-                    Vec2::new(cx - spread, base_y - deep_depth),
-                    Vec2::new(cx, base_y + bot_h),
-                    Vec2::new(cx + spread, base_y - deep_depth)
-                ), abs(p.x - cx) - half_w);
+                    Vec2::new(apex - spread, base_y - deep_depth),
+                    Vec2::new(apex, base_y + bot_h),
+                    Vec2::new(apex + spread, base_y - deep_depth)
+                ), abs(p.x - apex) - half_w);
                 d = smin(d, peak_sd, smin_k);
             }
         }
