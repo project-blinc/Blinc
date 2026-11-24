@@ -2,8 +2,13 @@
 //!
 //! A group with no effect, blend or transform costs the group-at-a-time path a draw and a
 //! composite, each its own render pass. Consecutive groups of that kind are drawn into cells of
-//! one texture in one pass and composited in one pass, in the order they were pushed. A group qualifies when its content is a run of plain primitives
-//! lying entirely inside the viewport, so no cell receives another's pixels.
+//! one texture in one pass and composited in one pass, in the order they were pushed. A group
+//! qualifies when its content is a run of plain primitives. A group alone inside a layer that
+//! draws as its content (full opacity, no effect, no named output) counts as that layer.
+//!
+//! A shape clip's frame sits in the aux rows in the batch's coordinates, and groups that share
+//! one move by different amounts into their cells, so each cell draws through a copy of the
+//! frame moved with it.
 
 use super::{
     Bounds, Cursor, GpuRenderer, Node, PrimitiveBatch, active_effects, bounds, common_clip,
@@ -11,6 +16,7 @@ use super::{
 };
 use crate::primitives::{GpuPrimitive, LayerCompositeUniforms, PrimitiveType};
 use blinc_core::BlendMode;
+use std::collections::HashMap;
 use std::num::NonZeroU64;
 use wgpu::util::DeviceExt;
 
@@ -159,10 +165,17 @@ impl GpuRenderer {
         for at in &atlas.placed {
             let plan = &plans[at.plan];
             let (dx, dy) = (at.x as f32 - plan.min[0], at.y as f32 - plan.min[1]);
+            let mut frames = HashMap::new();
             for (start, end) in &plan.runs {
                 for p in &batch.primitives[start.primitive..end.primitive] {
                     let mut p = *p;
                     shift_primitive(&mut p, dx, dy);
+                    if p.clip_shape[0] > 0.5 {
+                        let pointer = p.clip_shape[0] as usize;
+                        p.clip_shape[0] = *frames
+                            .entry(pointer)
+                            .or_insert_with(|| moved_frame(&mut content.aux_data, pointer, dx, dy));
+                    }
                     content.primitives.push(p);
                 }
             }
@@ -358,6 +371,11 @@ fn plan(
     if config.id.is_some_and(|id| outputs.wanted.contains(&id)) {
         return None;
     }
+    if draws_as_content(config)
+        && let [Node::Layer(inner, children)] = children
+    {
+        return plan(inner, children, batch, viewport, origin, outputs);
+    }
     if config.opacity <= 0.0 {
         return Some(None);
     }
@@ -378,7 +396,7 @@ fn plan(
         }
         if !batch.primitives[start.primitive..end.primitive]
             .iter()
-            .all(plain)
+            .all(|p| plain(p, &batch.aux_data))
         {
             return None;
         }
@@ -417,13 +435,51 @@ fn plan(
     }))
 }
 
-/// A primitive that draws from its own bounds alone: no perspective, mesh or clip frame, which
-/// carry geometry in the aux buffer that a move would have to rewrite per group.
-fn plain(p: &GpuPrimitive) -> bool {
+/// A layer the group-at-a-time path draws as its children, into the same target.
+fn draws_as_content(config: &blinc_core::LayerConfig) -> bool {
+    config.opacity == 1.0
+        && config.blend_mode == BlendMode::Normal
+        && config.transform_3d.is_none()
+        && active_effects(&config.effects).is_empty()
+}
+
+/// A primitive that draws from its own bounds, and from a clip frame the atlas can copy: no
+/// perspective or mesh, which carry geometry in the aux buffer a move would have to rewrite.
+fn plain(p: &GpuPrimitive, aux: &[[f32; 4]]) -> bool {
     p.perspective[2] <= 0.0
         && p.perspective[3] <= 0.0
         && p.type_info[0] != PrimitiveType::Mesh as u32
-        && p.clip_shape[0] as u32 == 0
+        && (p.clip_shape[0] < 0.5 || frame_rows(aux, p.clip_shape[0] as usize - 1).is_some())
+}
+
+/// How many aux rows the shape clip frame at `base` takes, by its kind (`info.z`) as the shader
+/// reads it: a rect with a radius and a shape per corner takes five, a polygon runs to the end
+/// of its points (two to a row, from `shape.x` after the frame), the others take three.
+fn frame_rows(aux: &[[f32; 4]], base: usize) -> Option<usize> {
+    let kind = aux.get(base + 1)?[2];
+    let shape = aux.get(base + 2)?;
+    let rows = if kind > 3.5 {
+        5
+    } else if kind > 2.5 {
+        (shape[0] as usize + (shape[1] as usize).div_ceil(2)).max(3)
+    } else {
+        3
+    };
+    (base + rows <= aux.len()).then_some(rows)
+}
+
+/// Appends a copy of the clip frame `pointer` names, moved by `(dx, dy)` as its primitives are,
+/// and returns the copy's pointer.
+fn moved_frame(aux: &mut Vec<[f32; 4]>, pointer: usize, dx: f32, dy: f32) -> f32 {
+    let base = pointer - 1;
+    let rows = frame_rows(aux, base).expect("plan checked the frame");
+    let at = aux.len();
+    aux.extend_from_within(base..base + rows);
+    // The frame maps a pixel into the clip's space; a pixel moved by d maps back by M d.
+    let [a, b, c, d] = aux[at];
+    aux[at + 1][0] -= a * dx + c * dy;
+    aux[at + 1][1] -= b * dx + d * dy;
+    (at + 1) as f32
 }
 
 #[cfg(test)]
@@ -540,6 +596,33 @@ mod tests {
             ],
         );
         group(0.6, vec![rect(120.0, -8.0, 30.0, 24.0, [0.0, 1.0, 0.0])]);
+        // Two groups, each alone in a layer that draws as its content, cut by one rounded-rect
+        // shape clip they share.
+        let frame = batch.aux_data.len();
+        batch.aux_data.extend_from_slice(&[
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 0.0, 4.0, 0.0],
+            [30.0, 40.0, 100.0, 22.0],
+            [8.0; 4],
+            [1.0; 4],
+        ]);
+        for (x, opacity) in [(22.0, 0.5), (92.0, 0.7)] {
+            let clipped = |x: f32, c: [f32; 3]| {
+                let mut p = rect(x, 36.0, 30.0, 30.0, c);
+                p.clip_shape[0] = (frame + 1) as f32;
+                p
+            };
+            batch.push_layer_command(LayerCommand::Push {
+                config: LayerConfig::new().opacity(1.0),
+            });
+            batch.push_layer_command(LayerCommand::Push {
+                config: LayerConfig::new().opacity(opacity),
+            });
+            batch.push(clipped(x, [1.0, 0.0, 0.0]));
+            batch.push(clipped(x + 10.0, [1.0, 1.0, 1.0]));
+            batch.push_layer_command(LayerCommand::Pop);
+            batch.push_layer_command(LayerCommand::Pop);
+        }
         batch
     }
 
@@ -625,7 +708,8 @@ mod tests {
             let before = r.opacity_atlas_count();
             r.set_batch_opacity_layers(true);
             let batched = render(&mut r, &batch, samples);
-            // All eight groups, those cut by the viewport among them, share one atlas.
+            // All ten groups, those cut by the viewport and the wrapped ones among them, share
+            // one atlas.
             assert_eq!(r.opacity_atlas_count() - before, 1);
             let worst = alone
                 .iter()
@@ -648,6 +732,49 @@ mod tests {
             );
             // The clip cuts the clipped group's left edge.
             assert!(near(at(&batched, 15, 90), [0, 0, 255, 255], 1));
+            // The shared shape clip cuts each wrapped group where it cuts the screen: left of
+            // its rect and inside its rounded corner, the first group leaves the page as it was.
+            let page = render_without_wrapped(&mut r, samples);
+            for (x, y) in [(26, 50), (31, 41)] {
+                assert_eq!(at(&batched, x, y), at(&page, x, y), "({x}, {y})");
+            }
+            assert_ne!(at(&batched, 40, 50), at(&page, 40, 50));
         }
+    }
+
+    fn render_without_wrapped(r: &mut GpuRenderer, samples: u32) -> Vec<u8> {
+        let mut batch = scene();
+        let first = batch
+            .layer_commands
+            .iter()
+            .rposition(|e| matches!(e.command, crate::primitives::LayerCommand::Push { .. }))
+            .unwrap()
+            - 5;
+        let at = batch.layer_commands[first].primitive_index;
+        batch.layer_commands.truncate(first);
+        batch.primitives.truncate(at);
+        render(r, &batch, samples)
+    }
+
+    #[test]
+    fn a_moved_frame_maps_a_moved_pixel_to_the_same_clip_point() {
+        let mut aux = vec![
+            [0.0; 4],
+            [2.0, 0.0, 0.0, 0.5],
+            [3.0, -1.0, 4.0, 0.0],
+            [10.0, 20.0, 5.0, 5.0],
+            [1.0; 4],
+            [1.0; 4],
+        ];
+        assert_eq!(frame_rows(&aux, 1), Some(5));
+        let pointer = moved_frame(&mut aux, 2, 7.0, -4.0);
+        let base = pointer as usize - 1;
+        assert_eq!(aux.len(), 11);
+        let map = |rows: &[[f32; 4]], x: f32, y: f32| {
+            let ([a, b, c, d], [tx, ty, ..]) = (rows[0], rows[1]);
+            (a * x + c * y + tx, b * x + d * y + ty)
+        };
+        assert_eq!(map(&aux[1..], 3.0, 5.0), map(&aux[base..], 10.0, 1.0));
+        assert_eq!(aux[base + 2..base + 5], aux[3..6]);
     }
 }
