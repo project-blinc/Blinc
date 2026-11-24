@@ -16,7 +16,8 @@ crate-type = ["lib"]
 [features]
 # No default backends - must be explicitly selected per platform
 default = []
-vulkan = ["wgpu/vulkan-portability"]
+# Vulkan on Windows, Linux and Android. Apple builds use Metal, so MoltenVK's Vulkan is not built.
+vulkan = ["wgpu/vulkan"]
 metal = ["wgpu/metal"]
 dx12 = ["wgpu/dx12"]
 webgl = ["wgpu/webgl"]

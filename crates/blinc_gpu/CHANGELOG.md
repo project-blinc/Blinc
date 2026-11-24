@@ -25,6 +25,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - `GpuRenderer::update_time` does nothing: the renderer reads `blinc_core::FrameClock`, which the runners set each frame.
 
 ### Changed
+- The `vulkan` feature (in the `desktop`, `android`, `fuchsia` and `harmony` presets) turns on wgpu's Vulkan backend for Windows, Linux and Android only. Before, it turned on Vulkan through MoltenVK on Apple targets too, which compiled `ash` and its helpers into every macOS build although the renderer only asks for Metal there.
 - Workspace builds use `third_party/wgpu-hal`, wgpu-hal 26.0.5 whose Metal backend makes a command buffer only when a command needs one. Before, every render pass also cost an empty command buffer for its transitions. A crate that depends on `blinc_gpu` from crates.io still gets the published wgpu-hal.
 - `BLINC_DEBUG_FILL_RECT`, `BLINC_MULTISTOP_VERTEX` and `BLINC_FILL_RULE_EVENODD` are read once per process instead of on each rect, gradient or path, so changing them while the app runs has no effect.
 - The layer composite blits write their uniforms into one buffer the renderer keeps, ahead of each blit's pass, instead of creating a buffer for each blit.
