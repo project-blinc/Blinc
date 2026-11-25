@@ -1966,6 +1966,7 @@ pub const CN_STYLES: &str = concat!(
 .cn-dropdown-trigger {
     color: var(--text-primary);
     background: transparent;
+    border-width: 1px;
     border-color: var(--border);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-sm);
@@ -2291,6 +2292,9 @@ pub const CN_STYLES: &str = concat!(
 .blinc-rich-text-quote-bar { background: var(--border-secondary); }
 .blinc-rich-text-divider { background: var(--border); }
 .blinc-rich-text-code { color: var(--warning); }
+.blinc-rich-text-table { border-color: var(--border); border-radius: var(--radius-md); }
+.blinc-rich-text-table-header { background: var(--surface-overlay); }
+.blinc-rich-text-table-rule { background: var(--border); }
 .blinc-rich-text-selection { background: var(--selection); }
 /* The floating toolbar fades in and grows out of the side that faces the selection. */
 .blinc-rte-toolbar--enter { animation: blinc-rte-toolbar-enter var(--duration-fast) var(--ease-out); }
@@ -2316,9 +2320,19 @@ pub const CN_STYLES: &str = concat!(
     /* Lifts the bar over the text that scrolls under it. */
     box-shadow: var(--shadow-sm);
 }
-/* The list menu is lit like the icon buttons beside it. */
-.blinc-rte-list .cn-dropdown-trigger { border-width: 0; background: transparent; box-shadow: none; border-radius: var(--radius-default); }
-.blinc-rte-list .cn-dropdown-trigger:hover { background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
+/* The list and table menus are lit like the icon buttons beside them. */
+.blinc-rte-list .cn-dropdown-trigger, .blinc-rte-table .cn-dropdown-trigger { border-width: 0; background: transparent; box-shadow: none; border-radius: var(--radius-default); }
+.blinc-rte-list .cn-dropdown-trigger:hover, .blinc-rte-table .cn-dropdown-trigger:hover { background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
+/* The squares a new table's size is picked from. */
+.blinc-rte-grid-square {
+    border-width: 1px; border-color: var(--border); border-radius: var(--radius-sm);
+    background: transparent; cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease;
+}
+.blinc-rte-grid-square[data-within] {
+    background: color-mix(in srgb, var(--primary) 18%, transparent);
+    border-color: var(--primary);
+}
 .blinc-rte-separator { background: var(--border); }
 /* A mark that is on under the cursor. */
 .blinc-rte-button--active { background: var(--surface-overlay); }

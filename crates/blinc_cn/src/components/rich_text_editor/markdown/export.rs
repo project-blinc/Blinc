@@ -160,12 +160,43 @@ fn write_block_as(
                 text(Breaks::Tags)
             )
         }
+        BlockKind::Table { columns } => table(block, columns, default_color, emphasis),
         BlockKind::Quote => format!("> {}", text(Breaks::Lines("> "))),
         BlockKind::Paragraph if block.is_empty() && block.lines.len() == 1 => {
             EMPTY_PARAGRAPH.into()
         }
         _ => text(breaks),
     }
+}
+
+/// A table's rows, with the row that says how its columns are aligned under the first.
+fn table(
+    block: &Block,
+    columns: &[BlockAlign],
+    default_color: Color,
+    emphasis: Emphasis,
+) -> String {
+    let row = |cells: Vec<String>| format!("| {} |", cells.join(" | "));
+    let rows = block.lines.chunks(columns.len().max(1)).map(|cells| {
+        let cell = |line| {
+            inline::lines(
+                std::slice::from_ref(line),
+                default_color,
+                emphasis,
+                Breaks::Cell,
+            )
+        };
+        row(cells.iter().map(cell).collect())
+    });
+    let rule = |align: &BlockAlign| match align {
+        BlockAlign::Start | BlockAlign::Justify => "---",
+        BlockAlign::Center => ":---:",
+        BlockAlign::End => "---:",
+    };
+    let mut out: Vec<String> = rows.collect();
+    let rule = row(columns.iter().map(|a| rule(a).to_string()).collect());
+    out.insert(1.min(out.len()), rule);
+    out.join("\n")
 }
 
 /// Whether `markdown`, written for `block`, has the block's text and marks, emphasis on the spaces

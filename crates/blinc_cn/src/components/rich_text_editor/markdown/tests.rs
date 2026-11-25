@@ -588,3 +588,96 @@ fn numbering_goes_on_past_nested_items() {
     let ordinals: Vec<_> = (0..5).map(|i| doc.numbered_ordinal(i)).collect();
     assert_eq!(ordinals, [Some(1), None, Some(1), Some(2), Some(3)]);
 }
+
+fn table(columns: Vec<BlockAlign>, cells: Vec<StyledLine>) -> RichDocument {
+    RichDocument::from_blocks(vec![block(BlockKind::Table { columns }, 0, cells)])
+}
+
+#[test]
+fn tables_round_trip() {
+    use BlockAlign::{Center, End, Start};
+    let markdown = round_trips(&table(
+        vec![Start, Center, End],
+        vec![
+            line(&[("Name", P)]),
+            line(&[("Kind", B)]),
+            line(&[("Cost", P)]),
+            line(&[("a|b", P)]),
+            line(&[("x|y", C)]),
+            line(&[]),
+        ],
+    ));
+    assert_eq!(
+        markdown,
+        "| Name | **Kind** | Cost |\n| --- | :---: | ---: |\n| a\\|b | <code>x\\|y</code> |  |\n"
+    );
+    // One column, empty cells and a lone header.
+    for rows in 1..4 {
+        for columns in 1..3 {
+            round_trips(&table(
+                vec![Start; columns],
+                vec![line(&[]); rows * columns],
+            ));
+        }
+    }
+}
+
+#[test]
+fn cells_hold_any_text_and_marks() {
+    let link = M {
+        link: Some("https://a.b/?q=a|b"),
+        ..P
+    };
+    let cells = [
+        "---", ":--", "|", "||", "\\", "\\|", "a\\", "# a", "- a", "> a", "1. a", "`", "a  b",
+        " a ", "<br>", "&amp;", "*a*",
+    ];
+    for cell in cells {
+        for mark in [P, B, C, U, BI, link] {
+            round_trips(&table(
+                vec![BlockAlign::Start; 2],
+                vec![
+                    line(&[("h", P)]),
+                    line(&[(cell, mark)]),
+                    line(&[(cell, mark), ("x", P)]),
+                    line(&[("x", P), (cell, mark), ("y", B)]),
+                ],
+            ));
+        }
+    }
+}
+
+#[test]
+fn a_table_is_read_among_other_blocks() {
+    let doc = RichDocument::from_markdown(
+        "before\n\n| a | b |\n|:-:|---|\n| c<br>d |\n| e | f | g |\n\nafter",
+        Color::TRANSPARENT,
+    );
+    assert_eq!(doc.blocks.len(), 3);
+    assert_eq!(
+        doc.blocks[1].kind,
+        BlockKind::Table {
+            columns: vec![BlockAlign::Center, BlockAlign::Start]
+        }
+    );
+    let cells: Vec<_> = doc.blocks[1].lines.iter().map(|l| &*l.text).collect();
+    // A short row is filled and a long one cut.
+    assert_eq!(cells, ["a", "b", "c d", "", "e", "f"]);
+    round_trips(&doc);
+}
+
+#[test]
+fn lines_like_a_tables_rule_stay_text() {
+    for rule in ["---", ":--", ":-:", "--:", "| --- |", "--- | ---"] {
+        round_trips(&RichDocument::from_blocks(vec![block(
+            BlockKind::Paragraph,
+            0,
+            vec![line(&[("a | b", P)]), line(&[(rule, P)])],
+        )]));
+        round_trips(&RichDocument::from_blocks(vec![block(
+            BlockKind::Paragraph,
+            0,
+            vec![line(&[("a", P)]), line(&[(rule, P)])],
+        )]));
+    }
+}

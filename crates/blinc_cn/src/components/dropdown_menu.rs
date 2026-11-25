@@ -341,8 +341,7 @@ impl DropdownMenuBuilder {
                 .attr_when("data-state", "open", open_state)
                 .flex_row()
                 .items_center()
-                .justify_between()
-                .border_width(1.0);
+                .justify_between();
             let trigger = match &trigger_icon {
                 Some(icon) => trigger
                     .class("cn-dropdown-trigger--icon")

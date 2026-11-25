@@ -248,7 +248,7 @@ pub(super) fn content(state: &RichTextState, version: &Signal<u32>, theme: &Rich
             let mut data = state.lock().unwrap();
             // Clicks on the text are measured below the toolbar.
             data.content_top = fixed_height(&data) + pad;
-            let overflows = fixed_overflows(data.wrap_width + 2.0 * pad);
+            let overflows = fixed_overflows(&data, data.wrap_width + 2.0 * pad);
             vec![format!("{}|{overflows}", signature(&data))]
         })
     };

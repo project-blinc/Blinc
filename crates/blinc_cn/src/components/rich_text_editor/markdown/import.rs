@@ -1,15 +1,15 @@
 //! Markdown to `RichDocument`.
 
 use blinc_core::Color;
-use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Alignment, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 use blinc_layout::styled_text::{StyledLine, TextSpan};
 
 use crate::components::rich_text_editor::document::{Block, BlockAlign, BlockKind, RichDocument};
 
 impl RichDocument {
-    /// Parse `markdown` (CommonMark, strikethrough and checklists, with the inline HTML the module lists) into
-    /// a `RichDocument`. Text that names no colour takes `default_color`.
+    /// Parse `markdown` (CommonMark, strikethrough, checklists and tables, with the inline HTML the
+    /// module lists) into a `RichDocument`. Text that names no colour takes `default_color`.
     ///
     /// # Example
     /// ```ignore
@@ -23,7 +23,8 @@ impl RichDocument {
     /// ```
     pub fn from_markdown(markdown: &str, default_color: Color) -> Self {
         let mut importer = Importer::new(default_color);
-        let options = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
+        let options =
+            Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS | Options::ENABLE_TABLES;
         for event in Parser::new_ext(markdown, options) {
             importer.event(event);
         }
@@ -190,8 +191,11 @@ impl Importer {
     }
 
     fn line_break(&mut self) {
-        if let Some(pending) = &mut self.pending {
-            pending.lines.push(empty_line());
+        match &mut self.pending {
+            // A cell is one line.
+            Some(pending) if pending.kind.table_columns().is_some() => self.text(" ", false),
+            Some(pending) => pending.lines.push(empty_line()),
+            None => {}
         }
     }
 
@@ -278,6 +282,18 @@ impl Importer {
                 self.open(BlockKind::Paragraph, 0);
                 self.push(Inline::Code);
             }
+            Tag::Table(columns) => {
+                let columns = columns.iter().map(column_align).collect();
+                self.open(BlockKind::Table { columns }, 0);
+                if let Some(pending) = &mut self.pending {
+                    pending.lines.clear();
+                }
+            }
+            Tag::TableCell => {
+                if let Some(pending) = &mut self.pending {
+                    pending.lines.push(empty_line());
+                }
+            }
             // The text inside other tags still arrives, with the marks in force.
             _ => {}
         }
@@ -306,7 +322,7 @@ impl Importer {
                     self.flush();
                 }
             }
-            TagEnd::Heading(_) => self.flush(),
+            TagEnd::Heading(_) | TagEnd::Table => self.flush(),
             TagEnd::BlockQuote => {
                 self.flush();
                 if let Some(Frame::Quote(before)) = self.frames.pop()
@@ -395,6 +411,14 @@ impl Importer {
             }
             _ => {}
         }
+    }
+}
+
+fn column_align(column: &Alignment) -> BlockAlign {
+    match column {
+        Alignment::None | Alignment::Left => BlockAlign::Start,
+        Alignment::Center => BlockAlign::Center,
+        Alignment::Right => BlockAlign::End,
     }
 }
 

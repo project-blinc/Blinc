@@ -3961,11 +3961,16 @@ thread_local! {
         use blinc_cn::components::rich_text_editor::{RichDocument, rich_text_state};
         [
             rich_text_state(RichDocument::from_markdown(
-                "## Floating toolbar\n\nSelect some text to **format** it. The toolbar points at the selection.",
+                "## Floating toolbar\n\nSelect some text to **format** it. The toolbar points at the selection.\n\n\
+                 <div align=\"center\">\n\nA centred paragraph\n\n</div>\n\n\
+                 > A quote, and a [link](https://example.com)",
                 Color::TRANSPARENT,
             )),
             rich_text_state(RichDocument::from_markdown(
-                "## Fixed toolbar\n\nThe toolbar stays above the text. Turn on a mark, then type.",
+                "## Fixed toolbar\n\nThe toolbar stays above the text. Turn on a mark, then type.\n\n\
+                 - [x] Tick a box\n- [ ] Press Enter for another\n\n\
+                 | Task | Owner | Days |\n| --- | :---: | ---: |\n\
+                 | Sketch the layout | Ada | 2 |\n| Pick the colours | Lin | 1 |",
                 Color::TRANSPARENT,
             )),
         ]

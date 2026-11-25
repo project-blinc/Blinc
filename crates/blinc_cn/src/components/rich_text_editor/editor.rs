@@ -605,11 +605,18 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                     data.set_focus(false);
                     changed = true;
                 }
-                // Tab — indent the current block (or selected blocks).
+                // Tab — the next cell in a table, else indent the current block (or selected blocks).
                 // Shift+Tab outdents. Only paragraphs and list items
                 // are affected; headings, dividers, and quotes are
                 // skipped by `indent_blocks` / `outdent_blocks`.
                 9 => {
+                    if super::table::Cell::at(&data.document, data.cursor).is_some() {
+                        data.tab_in_table(!ctx.shift);
+                        drop(data);
+                        version_for_key.update(|n| n.wrapping_add(1));
+                        report_change(&state_for_key);
+                        return;
+                    }
                     let range = data.block_range();
                     changed |= data.change(|doc| {
                         if ctx.shift {
@@ -676,55 +683,92 @@ fn toggle_mark(data: &mut super::state::RichTextData, mark: Mark) -> bool {
 /// the line-geometry index. Preserves the cursor's column where possible.
 fn move_vertical(data: &super::state::RichTextData, dir: i32) -> Option<DocPosition> {
     let cursor = data.cursor;
-    // Find the cursor's current visual line in the index.
-    let current_idx = data.line_index.iter().position(|g| {
-        if g.start.block != cursor.block || g.start.line != cursor.line {
-            return false;
-        }
-        let end_col = g.start.col + g.total_chars();
-        cursor.col >= g.start.col && cursor.col <= end_col
-    })?;
-    let target_idx = if dir < 0 {
-        current_idx.checked_sub(1)?
-    } else {
-        let n = current_idx + 1;
-        if n >= data.line_index.len() {
-            return None;
-        }
-        n
-    };
-    let g = &data.line_index[target_idx];
+    let current_idx = data.cursor_line()?;
+    let g = line_beyond(&data.line_index, current_idx, dir)?;
     let local_col = cursor
         .col
         .saturating_sub(data.line_index[current_idx].start.col);
-    let new_col = g.start.col + local_col.min(g.total_chars());
+    let new_col = (g.start.col + local_col).min(data.last_col(g));
     Some(DocPosition::new(g.start.block, g.start.line, new_col))
+}
+
+/// The visual line above or below the one at `index`. In a table that is in the same cell, then in
+/// the cell of the same column, and from the first or last row, outside it.
+fn line_beyond(
+    lines: &[super::state::LineGeometry],
+    index: usize,
+    dir: i32,
+) -> Option<&super::state::LineGeometry> {
+    let here = &lines[index];
+    let next = if dir < 0 {
+        index.checked_sub(1)
+    } else {
+        Some(index + 1)
+    };
+    let next = lines.get(next?);
+    let same_cell =
+        next.is_some_and(|g| (g.start.block, g.start.line) == (here.start.block, here.start.line));
+    if same_cell || (here.cell.is_none() && next.is_none_or(|g| g.cell.is_none())) {
+        return next;
+    }
+    // Into, across or out of a table: the nearest row of it, or line outside it, that way.
+    let edge = |g: &super::state::LineGeometry| match g.cell {
+        Some([_, y, _, h]) => (y, y + h),
+        None => (g.y, g.y + g.height),
+    };
+    let (top, bottom) = edge(here);
+    let beyond = |g: &&super::state::LineGeometry| {
+        let (t, b) = edge(g);
+        if dir < 0 {
+            b <= top + 0.5
+        } else {
+            t >= bottom - 0.5
+        }
+    };
+    let distance = |g: &super::state::LineGeometry| {
+        let (t, b) = edge(g);
+        if dir < 0 { top - b } else { t - bottom }
+    };
+    let nearest = lines
+        .iter()
+        .filter(beyond)
+        .map(distance)
+        .min_by(f32::total_cmp)?;
+    let middle = here.cell.map_or(here.x, |[x, _, w, _]| x + w * 0.5);
+    let aside = |g: &super::state::LineGeometry| match g.cell {
+        Some([x, _, w, _]) => (x - middle).max(middle - (x + w)).max(0.0),
+        None => 0.0,
+    };
+    let row = || {
+        lines
+            .iter()
+            .filter(beyond)
+            .filter(|g| distance(g) - nearest < 0.5)
+    };
+    let closest = row().map(aside).min_by(f32::total_cmp)?;
+    let mut cell = row().filter(|g| aside(g) - closest < 0.5);
+    // The end of the cell that is nearer.
+    if dir < 0 {
+        cell.next_back()
+    } else {
+        cell.next()
+    }
 }
 
 /// Position at the start of the cursor's current visual line.
 fn home_of(data: &super::state::RichTextData) -> DocPosition {
     let cursor = data.cursor;
-    for g in &data.line_index {
-        if g.start.block == cursor.block && g.start.line == cursor.line {
-            let end_col = g.start.col + g.total_chars();
-            if cursor.col >= g.start.col && cursor.col <= end_col {
-                return DocPosition::new(g.start.block, g.start.line, g.start.col);
-            }
-        }
-    }
-    cursor
+    data.cursor_line().map_or(cursor, |line| {
+        let g = &data.line_index[line];
+        DocPosition::new(g.start.block, g.start.line, g.start.col)
+    })
 }
 
 /// Position at the end of the cursor's current visual line.
 fn end_of(data: &super::state::RichTextData) -> DocPosition {
     let cursor = data.cursor;
-    for g in &data.line_index {
-        if g.start.block == cursor.block && g.start.line == cursor.line {
-            let end_col = g.start.col + g.total_chars();
-            if cursor.col >= g.start.col && cursor.col <= end_col {
-                return DocPosition::new(g.start.block, g.start.line, end_col);
-            }
-        }
-    }
-    cursor
+    data.cursor_line().map_or(cursor, |line| {
+        let g = &data.line_index[line];
+        DocPosition::new(g.start.block, g.start.line, data.last_col(g))
+    })
 }

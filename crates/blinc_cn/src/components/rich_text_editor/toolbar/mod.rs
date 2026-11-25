@@ -12,6 +12,7 @@
 mod actions;
 mod controls;
 mod link;
+mod table;
 
 use std::sync::Arc;
 
@@ -24,12 +25,13 @@ use blinc_layout::selector::ScrollBehavior;
 use blinc_layout::widgets::scroll::scroll as scroll_view;
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
-use controls::{ALIGNS, BUTTON, DIVIDER, GAP, MARKS, Target};
+use controls::{BUTTON, DIVIDER, GAP, MARKS, Target};
 
 use super::cursor::ActiveFormat;
 use super::document::{BlockAlign, BlockKind};
 use super::render::RichTextTheme;
 use super::state::{RichTextData, RichTextState};
+use super::table::Cell;
 
 /// Where the formatting toolbar sits.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -65,7 +67,7 @@ const MIN_FLOATING: f32 = 200.0;
 /// out for the same reason.
 pub(super) fn signature(data: &RichTextData) -> String {
     let f = &data.active_format;
-    let block = data.document.blocks.get(data.cursor.block);
+    let (kind, align) = block_at(data);
     format!(
         "{}{}{}{}{}{}|{:?}",
         f.bold as u8,
@@ -74,8 +76,20 @@ pub(super) fn signature(data: &RichTextData) -> String {
         f.strikethrough as u8,
         f.code as u8,
         f.link.is_some() as u8,
-        block.map(|b| (&b.kind, b.align))
+        (kind, align)
     )
+}
+
+/// The kind and alignment of the block under the cursor; in a table, the column's alignment.
+fn block_at(data: &RichTextData) -> (BlockKind, BlockAlign) {
+    let Some(block) = data.document.blocks.get(data.cursor.block) else {
+        return (BlockKind::Paragraph, BlockAlign::Start);
+    };
+    let align = match (&block.kind, Cell::at(&data.document, data.cursor)) {
+        (BlockKind::Table { columns }, Some(cell)) => columns[cell.column],
+        _ => block.align,
+    };
+    (block.kind.clone(), align)
 }
 
 /// A press inside the toolbar leaves the editor's selection where it is.
@@ -185,18 +199,25 @@ fn row_width(buttons: usize, dividers: usize) -> f32 {
 }
 
 /// The controls after the block kind's menu, and their width: the marks, the alignments, the
-/// lists, colour and link, and in the floating toolbar, the close button.
+/// lists and tables, colour and link, and in the floating toolbar, the close button. In a table,
+/// its menu takes the place of the lists, which its cells cannot be.
 fn rest(target: &Target, look: &Look, close: bool) -> (Div, f32) {
     let mut row = div().flex_row().items_center().gap_px(GAP);
     for button in controls::marks(target, &look.format) {
         row = row.child(button);
     }
     row = row.child(controls::divider());
-    for button in controls::aligns(target, look.align) {
+    let in_table = look.in_table();
+    for button in controls::aligns(target, look.align, in_table) {
         row = row.child(button);
     }
+    row = if in_table {
+        row.child(table::menu(target))
+    } else {
+        row.child(controls::lists(target, &look.kind))
+            .child(table::insert(target))
+    };
     row = row
-        .child(controls::lists(target, &look.kind))
         .child(controls::divider())
         .child(controls::color(target, look.swatch))
         .child(link::link_button(target, look.format.link.is_some()));
@@ -205,13 +226,18 @@ fn rest(target: &Target, look: &Look, close: bool) -> (Div, f32) {
             .child(controls::divider())
             .child(controls::close(target));
     }
-    (row, rest_width(close))
+    (row, rest_width(in_table, close))
 }
 
 /// The width of [`rest`].
-fn rest_width(close: bool) -> f32 {
-    let buttons = MARKS.len() + ALIGNS.len() + 2 + close as usize;
-    row_width(buttons, 2 + close as usize) + controls::LIST + GAP
+fn rest_width(in_table: bool, close: bool) -> f32 {
+    // Colour and link, then the close button, and outside a table the one that inserts one.
+    let buttons = MARKS.len()
+        + controls::aligns_for(in_table).len()
+        + 2
+        + close as usize
+        + !in_table as usize;
+    row_width(buttons, 2 + close as usize) + controls::MENU + GAP
 }
 
 /// What a toolbar shows of the editor's state.
@@ -225,13 +251,17 @@ struct Look {
 impl Look {
     fn of(data: &mut RichTextData) -> Self {
         let swatch = data.swatch();
-        let block = data.document.blocks.get(data.cursor.block);
+        let (kind, align) = block_at(data);
         Self {
             format: data.active_format.clone(),
-            kind: block.map_or(BlockKind::Paragraph, |b| b.kind.clone()),
-            align: block.map_or(BlockAlign::Start, |b| b.align),
+            kind,
+            align,
             swatch,
         }
+    }
+
+    fn in_table(&self) -> bool {
+        self.kind.table_columns().is_some()
     }
 }
 
@@ -251,7 +281,7 @@ pub fn selection_toolbar(
     let mut data = state.lock().ok()?;
     let (x, y, w, h) = data.selection_bounds()?;
     let look = Look::of(&mut data);
-    let rest_w = rest_width(true);
+    let rest_w = rest_width(look.in_table(), true);
     let lead_w = controls::HEADING_COMPACT + GAP + DIVIDER;
     let row_w = lead_w + GAP + rest_w;
     // As wide as its controls, or as the editor when that is narrower.
@@ -290,7 +320,7 @@ pub fn selection_toolbar(
     );
 
     let tokens = ThemeState::get();
-    let radius = tokens.radius(RadiusToken::Xl).min(body * 0.5);
+    let radius = tokens.radius(RadiusToken::Lg).min(body * 0.5);
     // The peak's base stays on the straight part of the edge.
     let reach = (width * 0.5 - radius - PEAK_W * 0.5).max(0.0);
     let offset = (center - left - width * 0.5).clamp(-reach, reach);
@@ -345,8 +375,9 @@ pub(super) fn fixed_height(_data: &RichTextData) -> f32 {
 }
 
 /// Whether the fixed toolbar's controls overflow an editor `width` wide, and so scroll.
-pub(super) fn fixed_overflows(width: f32) -> bool {
-    controls::HEADING + GAP + DIVIDER + GAP + rest_width(false) > width - 2.0 * PAD_X
+pub(super) fn fixed_overflows(data: &RichTextData, width: f32) -> bool {
+    let in_table = Cell::at(&data.document, data.cursor).is_some();
+    controls::HEADING + GAP + DIVIDER + GAP + rest_width(in_table, false) > width - 2.0 * PAD_X
 }
 
 /// The fixed toolbar above the text: the block kind's menu, the marks, colour and link. When the

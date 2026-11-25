@@ -21,6 +21,7 @@ use blinc_core::{Color, reactive::signal};
 use blinc_layout::div::{Div, FontWeight, div};
 use blinc_layout::rich_text::{RichText, rich_text_styled};
 use blinc_layout::styled_text::StyledText;
+use blinc_theme::{RadiusToken, ThemeState};
 
 /// Visual configuration for the rich text renderer.
 ///
@@ -226,6 +227,7 @@ pub(super) fn render_block(
         BlockKind::BulletItem | BlockKind::NumberedItem | BlockKind::TaskItem { .. } => {
             list_item_div(block, theme, marker, indent_px, inner_width)
         }
+        BlockKind::Table { .. } => indented_block(table_div(block, theme, inner_width), indent_px),
         BlockKind::Quote => quote_div(block, theme, indent_px, inner_width),
         BlockKind::Divider => {
             let line = div().class("blinc-rich-text-divider").w_full().h(1.0);
@@ -305,6 +307,9 @@ fn absolute_positioned_line(
     let (font_size, weight, italic) = (font.size, font.weight, font.italic);
     let line_width = line_box.width;
 
+    // Everything on the line is put on the block's baseline, whatever its face.
+    let baseline = run_baseline(font_size, theme.line_height, weight, italic);
+
     // One RichText draws a line that has no code and keeps its own spacing.
     if !has_code && !justified {
         // The child needs the width as well as the container: a
@@ -312,7 +317,7 @@ fn absolute_positioned_line(
         // box that is already the right size, so a heading broke across
         // two lines inside a one-line box and overlapped what followed.
         let x = runs.first().map_or(0.0, |(_, run)| run.x_in_line);
-        let text = make_rich_text(visual_line, theme, font_size, weight, italic);
+        let text = make_rich_text(visual_line, theme, font_size, weight, italic).baseline(baseline);
         if x <= 0.0 {
             return div()
                 .w(line_width)
@@ -332,26 +337,7 @@ fn absolute_positioned_line(
         );
     }
 
-    // Put every run on one baseline. Each is otherwise centred in its own
-    // box by half-leading, so the monospace of an inline code run draws
-    // above the prose beside it. `make_code_run` pins the weight to
-    // Normal, so its baseline is computed that way.
-    let body_font = blinc_layout::div::FontFamily::default();
     let code_font = blinc_layout::div::FontFamily::monospace();
-    let body_baseline = run_baseline(font_size, theme.line_height, weight, italic, &body_font);
-    let code_baseline = run_baseline(
-        font_size,
-        theme.line_height,
-        FontWeight::Normal,
-        false,
-        &code_font,
-    );
-    let line_baseline = if has_code {
-        body_baseline.max(code_baseline)
-    } else {
-        body_baseline
-    };
-
     let mut container = div().w(line_width).h(line_height_px).relative();
     for (bytes, run) in runs {
         let is_code = run.font_family.generic == code_font.generic;
@@ -383,12 +369,6 @@ fn absolute_positioned_line(
         let start = bytes.start + lead;
         let run_line = slice_styled_line(visual_line, start, start + drawn.len());
         let draw_w = measure(drawn).ceil();
-        // Drop the run so its own baseline meets the line's.
-        let own_baseline = if is_code {
-            code_baseline
-        } else {
-            body_baseline
-        };
         let mut positioned = div();
         if is_code {
             positioned = positioned.class("blinc-rich-text-code");
@@ -397,16 +377,18 @@ fn absolute_positioned_line(
             positioned
                 .absolute()
                 .left(run.x_in_line + lead_w)
-                // Rounded: an absolute top lands on a whole pixel anyway,
-                // and letting it round implicitly left the run a pixel off.
-                .top((line_baseline - own_baseline).round())
+                .top(0.0)
                 .w(draw_w)
                 .h(line_height_px)
-                .child(if is_code {
-                    make_code_run(&run_line, theme, font_size, weight, italic).w(draw_w)
-                } else {
-                    make_rich_text(&run_line, theme, font_size, weight, italic).w(draw_w)
-                }),
+                .child(
+                    if is_code {
+                        make_code_run(&run_line, theme, font_size, weight, italic)
+                    } else {
+                        make_rich_text(&run_line, theme, font_size, weight, italic)
+                    }
+                    .w(draw_w)
+                    .baseline(baseline),
+                ),
         );
     }
     container
@@ -489,6 +471,71 @@ fn list_item_div(
     indented_block(row, indent_px)
 }
 
+/// Build a table: its cells where [`super::grid::layout`] puts them, and the lines between them.
+fn table_div(block: &Block, theme: &RichTextTheme, width: f32) -> Div {
+    let (cells, height) = super::grid::layout(block, theme, width);
+    let line_height = theme.font_size * theme.line_height;
+    let rule = || {
+        let rule = div().class("blinc-rich-text-table-rule").absolute();
+        match theme.divider {
+            Some(c) => rule.bg(c),
+            None => rule,
+        }
+    };
+    let mut table = div()
+        .class("blinc-rich-text-table")
+        .relative()
+        .w(width)
+        .h(height)
+        .border_width(1.0)
+        // The header's fill follows the table's corners.
+        .rounded(ThemeState::get().radius(RadiusToken::Md))
+        .overflow_clip();
+    let header = cells
+        .iter()
+        .filter(|c| c.header)
+        .map(|c| c.height)
+        .next()
+        .unwrap_or_default();
+    table = table.child(
+        div()
+            .class("blinc-rich-text-table-header")
+            .absolute()
+            .left(0.0)
+            .top(0.0)
+            .w(width)
+            .h(header),
+    );
+    for cell in &cells {
+        if cell.x > 0.0 && cell.header {
+            table = table.child(rule().left(cell.x).top(0.0).w(1.0).h(height));
+        }
+        if cell.y > 0.0 && cell.x == 0.0 {
+            table = table.child(rule().left(0.0).top(cell.y).w(width).h(1.0));
+        }
+        let (x, y) = cell.text_origin();
+        for (i, line) in cell.lines.iter().enumerate() {
+            let line_box = cell.line_box(i);
+            table = table.child(
+                div()
+                    .absolute()
+                    .left(x)
+                    .top(y + i as f32 * line_height)
+                    .w(line_box.width)
+                    .h(line_height)
+                    .child(absolute_positioned_line(
+                        line,
+                        theme,
+                        &cell.font,
+                        &line_box,
+                        line_height,
+                    )),
+            );
+        }
+    }
+    table
+}
+
 /// Build a blockquote div with a left border and muted italic text.
 fn quote_div(block: &Block, theme: &RichTextTheme, indent_px: f32, inner_width: f32) -> Div {
     // Border + gap consume `quote_border_width + 12` of the inner width.
@@ -518,22 +565,10 @@ fn quote_div(block: &Block, theme: &RichTextTheme, indent_px: f32, inner_width: 
     indented_block(row, indent_px)
 }
 
-/// Distance from a run box's top down to the baseline the text is drawn
-/// on, for one face at one size.
-///
-/// Text is centred in its line box by half-leading, so a face's baseline
-/// sits at half_leading + ascender. Two faces with the same line box but
-/// different ascent/descent splits therefore draw on DIFFERENT
-/// baselines: at 15px and line-height 1.5, the UI face lands at 16.92
-/// and monospace at 15.24. Runs sharing a line have to be offset onto a
-/// common baseline, which is what `paragraph_div` uses this for.
-fn run_baseline(
-    font_size: f32,
-    line_height: f32,
-    weight: FontWeight,
-    italic: bool,
-    family: &blinc_layout::div::FontFamily,
-) -> f32 {
+/// The baseline of a line of the document's text, from the top of its line box: half the leading,
+/// then the face's ascender.
+fn run_baseline(font_size: f32, line_height: f32, weight: FontWeight, italic: bool) -> f32 {
+    let family = blinc_layout::div::FontFamily::default();
     let mut options = blinc_layout::text_measure::TextLayoutOptions::new();
     options.font_weight = weight.weight();
     options.italic = italic;

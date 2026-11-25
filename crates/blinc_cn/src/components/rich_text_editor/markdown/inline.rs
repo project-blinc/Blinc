@@ -18,6 +18,8 @@ pub(super) enum Breaks<'a> {
     Lines(&'a str),
     /// `<br>`, where the block must stay on one line of Markdown.
     Tags,
+    /// None: a table's cell is one line, and a `|` in it ends it, even in a code span.
+    Cell,
 }
 
 /// The marks of a run of text.
@@ -94,7 +96,8 @@ pub(super) fn lines(
                 _ => out.push_str("<br>"),
             }
         }
-        out.push_str(&write_line(runs(line, default_color), emphasis));
+        let cell = breaks == Breaks::Cell;
+        out.push_str(&write_line(runs(line, default_color), emphasis, cell));
     }
     out
 }
@@ -108,6 +111,8 @@ enum Token {
     Bold,
     Italic,
     Strike,
+    /// Code as a tag, with its text escaped as any other.
+    Code,
 }
 
 impl Token {
@@ -136,6 +141,7 @@ impl Token {
             Token::Link(_) => "[".into(),
             Token::Color(color) => format!("<span style=\"color:{color}\">"),
             Token::Underline => "<u>".into(),
+            Token::Code => "<code>".into(),
             Token::Bold if tags => "<strong>".into(),
             Token::Italic if tags => "<em>".into(),
             Token::Strike if tags => "<del>".into(),
@@ -151,6 +157,7 @@ impl Token {
             Token::Link(url) => format!("]({})", destination(url)),
             Token::Color(_) => "</span>".into(),
             Token::Underline => "</u>".into(),
+            Token::Code => "</code>".into(),
             Token::Bold if tags => "</strong>".into(),
             Token::Italic if tags => "</em>".into(),
             Token::Strike if tags => "</del>".into(),
@@ -164,7 +171,7 @@ fn destination(url: &str) -> String {
     let plain = !url.is_empty()
         && url
             .chars()
-            .all(|c| !c.is_whitespace() && !c.is_control() && !"()<>\\&".contains(c));
+            .all(|c| !c.is_whitespace() && !c.is_control() && !"()<>\\&|".contains(c));
     if plain {
         return url.to_string();
     }
@@ -172,7 +179,8 @@ fn destination(url: &str) -> String {
     for c in url.chars() {
         match c {
             '\n' | '\r' => {}
-            '<' | '>' | '\\' | '&' => {
+            // A `|` ends a table's cell.
+            '<' | '>' | '\\' | '&' | '|' => {
                 out.push('\\');
                 out.push(c);
             }
@@ -183,7 +191,7 @@ fn destination(url: &str) -> String {
     out
 }
 
-fn write_line(runs: Vec<Run>, emphasis: Emphasis) -> String {
+fn write_line(runs: Vec<Run>, emphasis: Emphasis, cell: bool) -> String {
     let runs = if emphasis == Emphasis::Markers {
         spaces_outside_emphasis(runs)
     } else {
@@ -196,7 +204,11 @@ fn write_line(runs: Vec<Run>, emphasis: Emphasis) -> String {
     let mut open: Vec<Token> = Vec::new();
     let mut at = 0;
     for (text, marks) in &runs {
-        let wanted = Token::of(marks);
+        let mut wanted = Token::of(marks);
+        let tagged_code = marks.code && cell && text.contains('|');
+        if tagged_code {
+            wanted.push(Token::Code);
+        }
         let kept = open.iter().zip(&wanted).take_while(|(a, b)| a == b).count();
         for token in open.drain(kept..).rev() {
             out.push_str(&token.close(emphasis));
@@ -205,7 +217,7 @@ fn write_line(runs: Vec<Run>, emphasis: Emphasis) -> String {
             out.push_str(&token.open(emphasis));
         }
         open = wanted;
-        if marks.code {
+        if marks.code && !tagged_code {
             out.push_str(&code_span(text));
             at += text.chars().count();
             continue;

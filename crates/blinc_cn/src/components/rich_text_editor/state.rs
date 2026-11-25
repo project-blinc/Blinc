@@ -76,6 +76,8 @@ pub struct LineGeometry {
     pub height: f32,
     /// Runs that make up this visual line, in source order.
     pub runs: Vec<RunGeometry>,
+    /// The box of the table cell the line is in (x, y, width, height).
+    pub cell: Option<[f32; 4]>,
 }
 
 impl LineGeometry {
@@ -479,6 +481,51 @@ impl RichTextData {
         self.change(|doc| super::block_ops::toggle_block_kind(doc, range, kind))
     }
 
+    /// Move to the next cell of the table the cursor is in, or the one before it. Past the last
+    /// cell there is a new row.
+    pub(super) fn tab_in_table(&mut self, forward: bool) {
+        use super::table::{Cell, insert_row, next_cell};
+        let here = self.cursor;
+        let to = next_cell(&self.document, here, forward);
+        if let Some(to) = to {
+            self.move_cursor(to, false);
+        } else if let Some(cell) = Cell::at(&self.document, here).filter(|_| forward) {
+            self.change(|doc| insert_row(doc, here, cell.rows).is_some());
+            let first = cell.rows * cell.columns;
+            self.move_cursor(super::cursor::DocPosition::new(here.block, first, 0), false);
+        }
+    }
+
+    /// Put a table at the cursor, with the cursor in its first cell.
+    pub(super) fn insert_table(&mut self, rows: usize, columns: usize) {
+        let here = self.cursor;
+        let mut to = here;
+        self.change(|doc| {
+            to = super::table::insert_table(doc, here, rows, columns);
+            true
+        });
+        self.move_cursor(to, false);
+    }
+
+    /// Change the table the cursor is in with `op`, which says where the cursor goes.
+    pub(super) fn change_table(
+        &mut self,
+        op: fn(&mut RichDocument, DocPosition, &super::table::Cell) -> Option<DocPosition>,
+    ) {
+        let here = self.cursor;
+        let Some(cell) = super::table::Cell::at(&self.document, here) else {
+            return;
+        };
+        let mut to = None;
+        self.change(|doc| {
+            to = op(doc, here, &cell);
+            to.is_some()
+        });
+        if let Some(to) = to {
+            self.move_cursor(to, false);
+        }
+    }
+
     /// Align the blocks of the selection or the cursor.
     pub(super) fn set_align(&mut self, align: super::document::BlockAlign) -> bool {
         let range = self.block_range();
@@ -540,52 +587,76 @@ impl RichTextData {
         self.reset_cursor_blink();
     }
 
-    /// Find the first `LineGeometry` whose vertical band contains `local_y`.
-    /// Falls back to the closest line above (or the very last line) if no
-    /// band hits exactly — clicking past the bottom of the document still
-    /// places the cursor.
-    pub fn line_at_y(&self, local_y: f32) -> Option<&LineGeometry> {
-        if self.line_index.is_empty() {
-            return None;
+    /// The visual line a point is on: in a table, a line of the cell it is in; elsewhere the line
+    /// whose band it is in, the first above the text and the last below it.
+    pub fn line_at(&self, x: f32, y: f32) -> Option<&LineGeometry> {
+        let inside = |[cx, cy, cw, ch]: [f32; 4]| x >= cx && x < cx + cw && y >= cy && y < cy + ch;
+        let away = |g: &LineGeometry| (g.y - y).max(y - (g.y + g.height)).max(0.0);
+        let in_cell = self
+            .line_index
+            .iter()
+            .filter(|g| g.cell.is_some_and(inside))
+            .min_by(|a, b| away(a).total_cmp(&away(b)));
+        if in_cell.is_some() {
+            return in_cell;
         }
-        // Direct hit
-        if let Some(g) = self.line_index.iter().find(|g| g.contains_y(local_y)) {
-            return Some(g);
+        // Beside a table, the nearest cell of the row.
+        let aside = |g: &LineGeometry| (g.x - x).max(x - (g.x + g.width)).max(0.0);
+        let band = |g: &&LineGeometry| match g.cell {
+            Some([_, cy, _, ch]) => y >= cy && y < cy + ch,
+            None => g.contains_y(y),
+        };
+        let nearest = self.line_index.iter().filter(band).min_by(|a, b| {
+            let cells = a.cell.is_some() && b.cell.is_some();
+            let across = if cells {
+                aside(a).total_cmp(&aside(b))
+            } else {
+                std::cmp::Ordering::Equal
+            };
+            across.then(away(a).total_cmp(&away(b)))
+        });
+        if nearest.is_some() {
+            return nearest;
         }
-        // Above the first line — snap to first
-        if local_y < self.line_index[0].y {
-            return Some(&self.line_index[0]);
+        // Between blocks, above the first and below the last.
+        let first = self.line_index.first()?;
+        if y < first.y {
+            return Some(first);
         }
-        // Below everything — snap to last
         self.line_index.last()
     }
 
-    /// Walk the line index for the line whose `start` matches `(block, line)`
-    /// and which contains `col`. Returns the relative `(x, y)` of the
-    /// cursor within the editor's content rect, plus the line height.
-    ///
-    /// Used by the cursor overlay renderer.
+    /// The index of the visual line the cursor is on. Where a line wraps, the column the two parts
+    /// share is the start of the second.
+    pub(super) fn cursor_line(&self) -> Option<usize> {
+        let cursor = self.cursor;
+        let part = |g: &LineGeometry| g.start.block == cursor.block && g.start.line == cursor.line;
+        self.line_index
+            .iter()
+            .rposition(|g| part(g) && g.start.col <= cursor.col)
+            .or_else(|| self.line_index.iter().position(part))
+    }
+
+    /// The last column on the visual line `g`: where a line wraps, the one before the space it
+    /// wraps at.
+    pub(super) fn last_col(&self, g: &LineGeometry) -> usize {
+        let end = g.start.col + g.total_chars();
+        let wraps = self.line_index.iter().any(|next| {
+            (next.start.block, next.start.line) == (g.start.block, g.start.line)
+                && next.start.col > g.start.col
+                && next.start.col <= end
+        });
+        if wraps {
+            end.saturating_sub(1).max(g.start.col)
+        } else {
+            end
+        }
+    }
+
+    /// The cursor's `(x, y)` in the content and its line's height, for the caret.
     pub fn cursor_geometry(&self) -> Option<(f32, f32, f32)> {
         let cursor = self.cursor;
-        // Find the visual line whose start lies on the same source line
-        // and whose char range contains `cursor.col`. Each visual line
-        // covers `[start.col .. start.col + total_chars)`.
-        let mut chosen: Option<&LineGeometry> = None;
-        for g in &self.line_index {
-            if g.start.block == cursor.block && g.start.line == cursor.line {
-                let line_end_col = g.start.col + g.total_chars();
-                if cursor.col >= g.start.col && cursor.col <= line_end_col {
-                    chosen = Some(g);
-                    break;
-                }
-                // Cursor past the end of this visual chunk — keep the
-                // last matching one as a fallback.
-                if cursor.col > line_end_col {
-                    chosen = Some(g);
-                }
-            }
-        }
-        let g = chosen?;
+        let g = &self.line_index[self.cursor_line()?];
         let local_col = cursor.col.saturating_sub(g.start.col);
         // Walk runs left-to-right summing widths until we find the run
         // containing the local column. Each run is measured with its
@@ -626,7 +697,8 @@ impl RichTextData {
     /// with inline code in monospace) place the cursor where the user
     /// actually pointed.
     pub fn position_from_click(&self, local_x: f32, local_y: f32) -> Option<DocPosition> {
-        let g = self.line_at_y(local_y)?.clone();
+        let g = self.line_at(local_x, local_y)?.clone();
+        let last_col = self.last_col(&g);
         let inside_x = (local_x - g.x).max(0.0);
 
         // Walk runs to find which one the click landed in (or past).
@@ -649,7 +721,7 @@ impl RichTextData {
                 return Some(DocPosition::new(
                     g.start.block,
                     g.start.line,
-                    g.start.col + consumed_chars + in_run,
+                    (g.start.col + consumed_chars + in_run).min(last_col),
                 ));
             }
             consumed_chars += run_chars;
@@ -658,7 +730,7 @@ impl RichTextData {
         Some(DocPosition::new(
             g.start.block,
             g.start.line,
-            g.start.col + consumed_chars,
+            (g.start.col + consumed_chars).min(last_col),
         ))
     }
 }
@@ -871,6 +943,7 @@ mod tests {
                 width: 200.0,
                 height: 20.0,
                 runs: vec![make_run("hello world", 0, 0.0)],
+                cell: None,
             },
             LineGeometry {
                 start: DocPosition::new(1, 0, 0),
@@ -879,6 +952,7 @@ mod tests {
                 width: 200.0,
                 height: 20.0,
                 runs: vec![make_run("second block", 0, 0.0)],
+                cell: None,
             },
         ]);
         state

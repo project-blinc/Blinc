@@ -16,6 +16,7 @@ use blinc_layout::styled_text::{StyledLine, TextSpan};
 
 use super::cursor::{ActiveFormat, DocPosition, Selection};
 use super::document::{Block, BlockKind, RichDocument, char_to_byte};
+use super::table::is_table;
 
 // =============================================================================
 // Public API
@@ -46,6 +47,11 @@ pub fn insert_text(
 ) -> DocPosition {
     if text.is_empty() {
         return pos;
+    }
+
+    // A cell is one line.
+    if text.contains('\n') && doc.blocks.get(pos.block).is_some_and(is_table) {
+        return insert_plain(doc, pos, &text.replace('\n', " "), fmt);
     }
 
     // If text contains '\n', split and insert each piece followed by a
@@ -103,6 +109,9 @@ pub fn delete_backward(doc: &mut RichDocument, pos: DocPosition) -> DocPosition 
     if pos.col > 0 {
         return delete_char_in_line(doc, pos.block, pos.line, pos.col - 1);
     }
+    if doc.blocks.get(pos.block).is_some_and(is_table) {
+        return pos;
+    }
     if pos.line > 0 {
         // Soft-break boundary — join previous line in the same block.
         return join_lines(doc, pos.block, pos.line - 1);
@@ -114,6 +123,13 @@ pub fn delete_backward(doc: &mut RichDocument, pos: DocPosition) -> DocPosition 
         return pos;
     }
     if pos.block > 0 {
+        // Text does not join a table: the cursor goes into its last cell.
+        if is_table(&doc.blocks[pos.block - 1]) {
+            if doc.blocks[pos.block].is_empty() {
+                doc.blocks.remove(pos.block);
+            }
+            return DocPosition::end_of(doc, pos.block - 1);
+        }
         return merge_with_previous_block(doc, pos.block);
     }
     pos
@@ -142,6 +158,12 @@ pub fn delete_forward(doc: &mut RichDocument, pos: DocPosition) -> DocPosition {
     if pos.col < line_len {
         // Plain delete inside the line.
         delete_char_in_line(doc, pos.block, pos.line, pos.col);
+        return pos;
+    }
+    // Cells join nothing, and nothing joins them.
+    if is_table(block)
+        || doc.blocks.get(pos.block + 1).is_some_and(is_table) && pos.line + 1 >= block.lines.len()
+    {
         return pos;
     }
     // At end of line: join the next line if any, else merge with the
@@ -175,6 +197,10 @@ pub fn delete_selection(doc: &mut RichDocument, sel: Selection) -> DocPosition {
         );
         return start;
     }
+    let (start, end) = match delete_in_tables(doc, start, end) {
+        Some(ends) => ends,
+        None => return start,
+    };
     // What follows the selection in its last block.
     let mut tail = doc.blocks[end.block].lines.split_off(end.line);
     delete_in_line(&mut tail[0], 0, end.col);
@@ -194,6 +220,69 @@ pub fn delete_selection(doc: &mut RichDocument, sel: Selection) -> DocPosition {
     }
     head.lines.extend(tail);
     start
+}
+
+/// Delete what a selection holds of the tables at its ends. Returns the ends that are left to
+/// join, or none where one is in a table that stays.
+fn delete_in_tables(
+    doc: &mut RichDocument,
+    start: DocPosition,
+    end: DocPosition,
+) -> Option<(DocPosition, DocPosition)> {
+    let last = DocPosition::end_of(doc, end.block);
+    let across = start.block != end.block;
+    // A table selected from its first cell to past its last goes, with what is in it.
+    for (index, whole) in [
+        (start.block, start.line == 0 && start.col == 0 && across),
+        (end.block, end == last && across),
+    ] {
+        if whole && is_table(&doc.blocks[index]) {
+            doc.blocks[index] = Block::paragraph_empty();
+        }
+    }
+    let clear = |block: &mut Block, from: DocPosition, to: DocPosition| {
+        for (i, line) in block.lines.iter_mut().enumerate() {
+            if (from.line..=to.line).contains(&i) {
+                let first = if i == from.line { from.col } else { 0 };
+                let past = if i == to.line { to.col } else { usize::MAX };
+                delete_in_line(line, first, past);
+            }
+        }
+    };
+    let far = DocPosition::new(end.block, usize::MAX - 1, usize::MAX);
+    let (in_start, in_end) = (
+        is_table(&doc.blocks[start.block]),
+        is_table(&doc.blocks[end.block]),
+    );
+    if !in_start && !in_end {
+        // A table that went is a paragraph of one line.
+        return Some((start.clamp(doc), end.clamp(doc)));
+    }
+    if !across {
+        clear(&mut doc.blocks[start.block], start, end);
+        return None;
+    }
+    // Each end keeps its block, with what the selection leaves of it.
+    if in_start {
+        clear(&mut doc.blocks[start.block], start, far);
+    } else {
+        let block = &mut doc.blocks[start.block];
+        block.lines.truncate(start.line + 1);
+        delete_in_line(&mut block.lines[start.line], start.col, usize::MAX);
+    }
+    if in_end {
+        clear(
+            &mut doc.blocks[end.block],
+            DocPosition::new(end.block, 0, 0),
+            end,
+        );
+    } else {
+        let block = &mut doc.blocks[end.block];
+        block.lines.drain(..end.line);
+        delete_in_line(&mut block.lines[0], 0, end.col);
+    }
+    doc.blocks.drain(start.block + 1..end.block);
+    None
 }
 
 /// Take the characters `from..to` out of a line.
@@ -220,6 +309,10 @@ fn append_line(line: &mut StyledLine, rest: StyledLine) {
 /// into two lines inside the same block.
 pub fn soft_break(doc: &mut RichDocument, pos: DocPosition) -> DocPosition {
     let pos = pos.clamp(doc);
+    // A cell is one line.
+    if doc.blocks.get(pos.block).is_some_and(is_table) {
+        return pos;
+    }
     let Some(block) = doc.blocks.get_mut(pos.block) else {
         return pos;
     };
@@ -257,6 +350,10 @@ pub fn split_block(doc: &mut RichDocument, pos: DocPosition) -> DocPosition {
         return DocPosition::ZERO;
     }
     let block = doc.blocks[pos.block].clone();
+
+    if let Some(below) = super::table::below(doc, pos) {
+        return below;
+    }
 
     // An empty list item steps out a level, and out of the list from the first.
     if block.kind.is_list_item() && block.is_empty() {

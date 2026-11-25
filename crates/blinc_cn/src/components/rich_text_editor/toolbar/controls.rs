@@ -98,16 +98,21 @@ pub(super) fn marks(target: &Target, format: &ActiveFormat) -> Vec<Div> {
 }
 
 /// The alignments, in toolbar order.
-pub(super) const ALIGNS: [(BlockAlign, &str, &str); 4] = [
+const ALIGNS: [(BlockAlign, &str, &str); 4] = [
     (BlockAlign::Start, icons::TEXT_ALIGN_START, "Align left"),
     (BlockAlign::Center, icons::TEXT_ALIGN_CENTER, "Align centre"),
     (BlockAlign::End, icons::TEXT_ALIGN_END, "Align right"),
     (BlockAlign::Justify, icons::TEXT_ALIGN_JUSTIFY, "Justify"),
 ];
 
-/// One button per alignment, pressed for the one of the block under the cursor.
-pub(super) fn aligns(target: &Target, current: BlockAlign) -> Vec<Div> {
-    ALIGNS
+/// The alignments on offer: a table's columns are not justified.
+pub(super) fn aligns_for(table: bool) -> &'static [(BlockAlign, &'static str, &'static str)] {
+    &ALIGNS[..ALIGNS.len() - table as usize]
+}
+
+/// One button per alignment, pressed for the one of the block or column under the cursor.
+pub(super) fn aligns(target: &Target, current: BlockAlign, table: bool) -> Vec<Div> {
+    aligns_for(table)
         .iter()
         .map(|&(align, icon, label)| {
             icon_button(target, icon, label, align == current, move |t| {
@@ -119,8 +124,8 @@ pub(super) fn aligns(target: &Target, current: BlockAlign) -> Vec<Div> {
         .collect()
 }
 
-/// The list menu's width.
-pub(super) const LIST: f32 = 48.0;
+/// The width of the list menu and the table menu.
+pub(super) const MENU: f32 = 48.0;
 
 /// The kinds of list: the icon, the name and the block kind of each.
 const LISTS: [(&str, &str, BlockKind); 3] = [
@@ -157,7 +162,7 @@ pub(super) fn lists(target: &Target, current: &BlockKind) -> Div {
     div()
         .class("blinc-rte-list")
         .flex_shrink_0()
-        .w(LIST)
+        .w(MENU)
         .child(menu)
 }
 
@@ -214,6 +219,8 @@ pub(super) fn heading(target: &Target, kind: &BlockKind, compact: bool) -> Div {
     let mut menu = select(signal(current))
         .size(SelectSize::Small)
         .w(if compact { HEADING_COMPACT } else { HEADING })
+        // A table's cells are no headings.
+        .disabled(kind.table_columns().is_some())
         .option("p", kind_label(&BlockKind::Paragraph, compact))
         .on_change(move |value| {
             let level = value.parse::<u8>().ok();

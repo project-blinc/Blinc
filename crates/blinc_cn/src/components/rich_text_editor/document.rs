@@ -39,9 +39,23 @@ pub enum BlockKind {
     Quote,
     /// Horizontal divider (no inline content).
     Divider,
+    /// A table, whose first row is its header. The block's lines are its cells, row by row, so a
+    /// position in a cell is a position in its line. A cell is one line, which wraps.
+    Table {
+        /// The alignment of each column.
+        columns: Vec<BlockAlign>,
+    },
 }
 
 impl BlockKind {
+    /// How many columns a table has.
+    pub fn table_columns(&self) -> Option<usize> {
+        match self {
+            Self::Table { columns } => Some(columns.len().max(1)),
+            _ => None,
+        }
+    }
+
     /// Whether this is an item of a list, whichever kind of list.
     pub fn is_list_item(&self) -> bool {
         matches!(
@@ -168,6 +182,23 @@ impl Block {
         }
     }
 
+    /// Create a table of empty cells, its first row the header.
+    pub fn table(rows: usize, columns: usize) -> Self {
+        let (rows, columns) = (rows.max(1), columns.max(1));
+        let cell = StyledLine {
+            text: String::new(),
+            spans: Vec::new(),
+        };
+        Self {
+            kind: BlockKind::Table {
+                columns: vec![BlockAlign::Start; columns],
+            },
+            lines: vec![cell; rows * columns],
+            indent: 0,
+            align: BlockAlign::Start,
+        }
+    }
+
     /// Total length in characters across all soft-broken lines (excluding
     /// the line breaks themselves). Useful for navigation and tests.
     pub fn char_len(&self) -> usize {
@@ -282,7 +313,12 @@ impl RichDocument {
             };
             for (line_idx, line) in block.lines.iter().enumerate().take(e_line + 1).skip(s_line) {
                 if line_idx > s_line {
-                    out.push('\n');
+                    // The cells of a row are apart by a tab, as a spreadsheet takes them.
+                    let in_row = block
+                        .kind
+                        .table_columns()
+                        .is_some_and(|columns| line_idx % columns > 0);
+                    out.push(if in_row { '\t' } else { '\n' });
                 }
                 let line_chars = line.text.chars().count();
                 let from_col = if block_idx == s_block && line_idx == s_line {

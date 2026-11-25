@@ -52,9 +52,25 @@ The floating toolbar's heading select shows short names, P and H1 to H6; the fix
 
 Blocks can be items of a bulleted list, a numbered list or a checklist. The toolbar's list menu toggles them, and so do Cmd+Shift+8, 7 and 6, or Ctrl on other platforms. Tab nests an item and Shift+Tab takes it out. Enter starts a new item. On an empty item it steps out a level, and out of the list from the first; Backspace at the start of an item does the same. Press a checklist's box to tick it, or use Cmd+Enter for the item under the cursor.
 
+## Tables
+
+The toolbar's table button opens a grid to pick a new table's size from. The first row is the header, and the columns share the table's width. A cell holds one line of text, which wraps, and takes every mark.
+
+Tab moves to the next cell and Shift+Tab to the one before it; Tab in the last cell adds a row. Enter moves to the cell below, and from the last row to the text after the table. The arrow keys move through the lines of a cell and between rows. With the cursor in a table, the toolbar's list menu gives way to a table menu, which adds and removes rows and columns and removes the table, and the alignment buttons align the cursor's column.
+
+In your own code, `Block::table(rows, columns)` makes a table, and the `table` module changes one in a document:
+
+```rust
+use blinc::cn::components::rich_text_editor::table;
+
+table::insert_table(&mut doc, cursor, 3, 2);
+```
+
+A table is one block, `BlockKind::Table { columns }`. Its `lines` are the cells, row by row, and `columns` holds each column's alignment.
+
 ## Alignment
 
-Each block has an `align`: `BlockAlign::Start`, `Center`, `End` or `Justify`. The toolbar's alignment buttons set it for the blocks of the selection, or the cursor's. So do Cmd+Shift+L, E, R and J, or Ctrl on other platforms. A new paragraph takes the alignment of the one it was split from. In your own code, `block_ops::set_block_align` sets it on a document.
+Each block has an `align`: `BlockAlign::Start`, `Center`, `End` or `Justify`. The toolbar's alignment buttons set it for the blocks of the selection, or the cursor's. So do Cmd+Shift+L, E, R and J, or Ctrl on other platforms. A new paragraph takes the alignment of the one it was split from. In a table they align the column, which cannot be justified. In your own code, `block_ops::set_block_align` sets it on a document.
 
 ## Markdown
 
@@ -65,7 +81,7 @@ let markdown = document.lock().unwrap().document.to_markdown(Color::TRANSPARENT)
 let same = RichDocument::from_markdown(&markdown, Color::TRANSPARENT);
 ```
 
-Give both the same colour: it is the colour of text that has none of its own, and is not written. What Markdown has no syntax for is written as inline HTML, which `from_markdown` reads: `<u>` for underline, `<span style="color:#rrggbb">` for a colour, `<br>` for an empty paragraph, `<div align="center">` around aligned blocks, and tags for emphasis that Markdown's markers cannot mark beside punctuation.
+Give both the same colour: it is the colour of text that has none of its own, and is not written. What Markdown has no syntax for is written as inline HTML, which `from_markdown` reads: `<u>` for underline, `<span style="color:#rrggbb">` for a colour, `<br>` for an empty paragraph, `<div align="center">` around aligned blocks, and tags for emphasis that Markdown's markers cannot mark beside punctuation. Tables are written as GFM tables.
 
 ## Changes
 

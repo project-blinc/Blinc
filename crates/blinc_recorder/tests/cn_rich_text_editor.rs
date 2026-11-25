@@ -240,8 +240,9 @@ fn the_rich_text_toolbar_and_a_fixed_palette() {
         background(&ui, one(&ui, "blinc-rich-text-selection")),
         theme.color(ColorToken::Selection)
     ));
-    // Five marks, four alignments, link and close, and the colour picker's swatch beside them.
-    assert_eq!(all(&ui, "blinc-rte-button").len(), 11);
+    // Five marks, four alignments, insert table, link and close, and the colour picker's swatch
+    // beside them.
+    assert_eq!(all(&ui, "blinc-rte-button").len(), 12);
     assert_eq!(all(&ui, "blinc-rte-color").len(), 1);
 
     // The dark palette's near-white text, on the light theme.
@@ -1059,5 +1060,385 @@ fn the_list_menu_makes_lists_of_the_selected_blocks() {
         assert_eq!(items.len(), 3, "the list menu did not open");
         press(&mut ui, items[item]);
         assert_eq!(state.lock().unwrap().document.blocks[0].kind, kind);
+    }
+}
+
+/// An editor over `markdown` with a fixed toolbar, focused with the cursor at `at`.
+fn fixed_editor(
+    markdown: &str,
+    at: blinc_cn::components::rich_text_editor::DocPosition,
+) -> Option<(
+    Headless,
+    blinc_cn::components::rich_text_editor::RichTextState,
+)> {
+    use blinc_cn::components::rich_text_editor::{
+        RichDocument, RichTextTheme, ToolbarPlacement, rich_text_editor, rich_text_state,
+    };
+    let mut ui = session_sized(ColorScheme::Light, WIDE)?;
+    let state = rich_text_state(RichDocument::from_markdown(markdown, Color::TRANSPARENT));
+    {
+        let mut d = state.lock().unwrap();
+        d.set_focus(true);
+        d.cursor = at;
+    }
+    let editor = state.clone();
+    ui.mount(move |_| {
+        div()
+            .w(WIDE as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(12.0))
+            .child(rich_text_editor(
+                &editor,
+                RichTextTheme::default().toolbar(ToolbarPlacement::Fixed),
+                WIDE as f32 - 24.0,
+            ))
+    });
+    ui.settle();
+    Some((ui, state))
+}
+
+const TABLE: &str = "Costs\n\n| Item | Each | Total |\n| --- | :---: | ---: |\n\
+    | A long name that has to wrap inside its own cell of the table | 2 | 40 |\n\
+    | Short | **3** | 9 |\n\nafter";
+
+#[test]
+fn a_table_is_drawn_in_cells_and_clicked_there() {
+    use blinc_cn::components::rich_text_editor::DocPosition;
+    let Some((mut ui, state)) = fixed_editor(TABLE, DocPosition::new(1, 1, 2)) else {
+        return;
+    };
+    ui.leave().settle();
+    ui.assert_snapshot("cn_rich_text_table");
+    let table = ui
+        .tree()
+        .get_absolute_bounds(one(&ui, "blinc-rich-text-table"))
+        .unwrap();
+    // A press in the middle of each cell puts the cursor in it, below the text too.
+    let column = table.width / 3.0;
+    let rows = {
+        let d = state.lock().unwrap();
+        let mut tops: Vec<(f32, f32)> = d
+            .line_index
+            .iter()
+            .filter_map(|g| g.cell.map(|[_, y, _, h]| (y, h)))
+            .collect();
+        tops.dedup();
+        tops
+    };
+    assert_eq!(rows.len(), 3);
+    assert!(rows[1].1 > rows[2].1, "the wrapped row is taller: {rows:?}");
+    let top = rows[0].0;
+    for (r, (y, h)) in rows.iter().enumerate() {
+        for c in 0..3 {
+            ui.move_to(
+                table.x + (c as f32 + 0.5) * column,
+                table.y + y - top + h - 2.0,
+            );
+            ui.mouse_down();
+            ui.mouse_up();
+            ui.settle();
+            let mut d = state.lock().unwrap();
+            assert_eq!((d.cursor.block, d.cursor.line), (1, r * 3 + c));
+            // Each press starts a click of its own.
+            d.last_click_time = None;
+        }
+    }
+}
+
+#[test]
+fn keys_move_between_cells() {
+    use blinc_cn::components::rich_text_editor::DocPosition;
+    const TAB: u32 = 9;
+    const ENTER: u32 = 13;
+    const UP: u32 = 38;
+    const DOWN: u32 = 40;
+    let Some((mut ui, state)) = fixed_editor(TABLE, DocPosition::new(0, 0, 0)) else {
+        return;
+    };
+    let at = |state: &blinc_cn::components::rich_text_editor::RichTextState| {
+        let d = state.lock().unwrap();
+        (d.cursor.block, d.cursor.line)
+    };
+    let put = |line| {
+        state
+            .lock()
+            .unwrap()
+            .move_cursor(DocPosition::new(1, line, 0), false)
+    };
+    // The focused editor hears keys once pressed.
+    let b = ui
+        .tree()
+        .get_absolute_bounds(one(&ui, "blinc-rich-text"))
+        .unwrap();
+    ui.move_to(b.x + 3.0, b.y + 8.0);
+    ui.mouse_down();
+    ui.mouse_up();
+    ui.settle();
+    assert_eq!(at(&state), (0, 0));
+    // Down, into the table and out of it, through the wrapped cell's two lines.
+    let mut seen = Vec::new();
+    for _ in 0..5 {
+        ui.key(DOWN);
+        ui.settle();
+        seen.push(at(&state));
+    }
+    assert_eq!(seen, [(1, 0), (1, 3), (1, 3), (1, 6), (2, 0)]);
+    for want in [(1, 6), (1, 3), (1, 3), (1, 0), (0, 0)] {
+        ui.key(UP);
+        ui.settle();
+        assert_eq!(at(&state), want);
+    }
+    // The middle column is kept.
+    put(1);
+    ui.key(DOWN);
+    ui.settle();
+    assert_eq!(at(&state), (1, 4));
+    ui.key(DOWN);
+    ui.settle();
+    assert_eq!(at(&state), (1, 7));
+    // Enter goes down, and from the last row out.
+    put(5);
+    ui.key(ENTER);
+    ui.settle();
+    assert_eq!(at(&state), (1, 8));
+    ui.key(ENTER);
+    ui.settle();
+    assert_eq!(at(&state), (2, 0));
+    // Tab goes on, back with Shift, and makes a row past the last cell.
+    put(0);
+    ui.key(TAB);
+    ui.settle();
+    assert_eq!(at(&state), (1, 1));
+    ui.key_with_shift(TAB, true);
+    ui.settle();
+    assert_eq!(at(&state), (1, 0));
+    put(8);
+    ui.key(TAB);
+    ui.settle();
+    assert_eq!(at(&state), (1, 9));
+    assert_eq!(state.lock().unwrap().document.blocks[1].lines.len(), 12);
+    assert!(state.lock().unwrap().undo());
+    assert_eq!(state.lock().unwrap().document.blocks[1].lines.len(), 9);
+}
+
+#[test]
+fn the_grid_inserts_a_table_and_its_menu_changes_it() {
+    use blinc_cn::components::rich_text_editor::{BlockAlign, BlockKind, DocPosition};
+    let Some((mut ui, state)) = fixed_editor("only", DocPosition::new(0, 0, 4)) else {
+        return;
+    };
+    let insert = tool(&ui, "Insert table");
+    press(&mut ui, insert);
+    let square = |ui: &Headless, label: &str| {
+        let registry = ui.tree().element_registry().clone();
+        all(ui, "blinc-rte-grid-square")
+            .into_iter()
+            .find(|n| registry.attribute(*n, "aria-label").as_deref() == Some(label))
+            .unwrap_or_else(|| panic!("no {label}"))
+    };
+    let pick = square(&ui, "2 by 3 table");
+    let b = ui.tree().get_absolute_bounds(pick).unwrap();
+    ui.move_to(b.x + b.width / 2.0, b.y + b.height / 2.0);
+    ui.settle();
+    let lit = {
+        let registry = ui.tree().element_registry().clone();
+        all(&ui, "blinc-rte-grid-square")
+            .into_iter()
+            .filter(|n| registry.attribute(*n, "data-within").is_some())
+            .count()
+    };
+    assert_eq!(lit, 6, "the squares of the size under the pointer are lit");
+    press(&mut ui, pick);
+    ui.advance(400);
+    ui.settle();
+    assert!(all(&ui, "blinc-rte-grid").is_empty(), "a pick closes it");
+    let shape = || {
+        let d = state.lock().unwrap();
+        let table = &d.document.blocks[1];
+        (
+            table.kind.table_columns().unwrap(),
+            table.lines.len(),
+            d.cursor.block,
+            d.cursor.line,
+        )
+    };
+    assert_eq!(shape(), (3, 6, 1, 0));
+    assert_eq!(state.lock().unwrap().document.blocks.len(), 3);
+    // In a table the menu takes the place of the lists, and columns are not justified.
+    assert!(all(&ui, "blinc-rte-list").is_empty());
+    let registry = ui.tree().element_registry().clone();
+    assert!(
+        !all(&ui, "blinc-rte-button")
+            .iter()
+            .any(|n| registry.attribute(*n, "aria-label").as_deref() == Some("Justify"))
+    );
+    let centre = tool(&ui, "Align centre");
+    press(&mut ui, centre);
+    assert_eq!(
+        state.lock().unwrap().document.blocks[1].kind,
+        BlockKind::Table {
+            columns: vec![BlockAlign::Center, BlockAlign::Start, BlockAlign::Start]
+        }
+    );
+    let choose = |ui: &mut Headless, item: usize| {
+        let trigger = one(ui, "cn-dropdown-trigger");
+        press(ui, trigger);
+        let items = all(ui, "cn-dropdown-item");
+        assert_eq!(items.len(), 7, "the table menu did not open");
+        press(ui, items[item]);
+        ui.advance(400);
+        ui.settle();
+    };
+    choose(&mut ui, 1);
+    assert_eq!(shape(), (3, 9, 1, 3), "a row below");
+    choose(&mut ui, 3);
+    assert_eq!(shape(), (4, 12, 1, 5), "a column after");
+    choose(&mut ui, 5);
+    assert_eq!(shape(), (3, 9, 1, 4), "the column gone");
+    choose(&mut ui, 4);
+    assert_eq!(shape().1, 6, "the row gone");
+    choose(&mut ui, 6);
+    let d = state.lock().unwrap();
+    assert_eq!(d.document.blocks[1].kind, BlockKind::Paragraph);
+}
+
+#[test]
+fn the_caret_moves_through_wrapped_lines() {
+    use blinc_cn::components::rich_text_editor::DocPosition;
+    const END: u32 = 35;
+    const DOWN: u32 = 40;
+    let prose = "words that wrap ".repeat(16);
+    let Some((mut ui, state)) = fixed_editor(&prose, DocPosition::new(0, 0, 0)) else {
+        return;
+    };
+    let b = ui
+        .tree()
+        .get_absolute_bounds(one(&ui, "blinc-rich-text"))
+        .unwrap();
+    ui.move_to(b.x + 1.0, b.y + 8.0);
+    ui.mouse_down();
+    ui.mouse_up();
+    ui.settle();
+    let starts: Vec<usize> = {
+        let d = state.lock().unwrap();
+        d.line_index.iter().map(|g| g.start.col).collect()
+    };
+    assert!(starts.len() > 2, "the text wraps: {starts:?}");
+    for &start in &starts[1..] {
+        ui.key(DOWN);
+        ui.settle();
+        assert_eq!(state.lock().unwrap().cursor.col, start);
+    }
+    // Pressed past a wrapped line's end, and sent there by a key, the caret stays on the line.
+    state
+        .lock()
+        .unwrap()
+        .move_cursor(DocPosition::new(0, 0, 0), false);
+    ui.key(END);
+    ui.settle();
+    let end = state.lock().unwrap().cursor;
+    assert_eq!(end.col, starts[1] - 1);
+    state.lock().unwrap().last_click_time = None;
+    ui.move_to(b.x + b.width - 1.0, b.y + 8.0);
+    ui.mouse_down();
+    ui.mouse_up();
+    ui.settle();
+    assert_eq!(state.lock().unwrap().cursor, end);
+}
+
+/// The last row with ink between two columns, in a box `top` to `bottom`.
+fn last_inked_row(
+    frame: &blinc_recorder::CapturedFrame,
+    (left, right): (f32, f32),
+    (top, bottom): (f32, f32),
+) -> Option<u32> {
+    (top as u32..bottom as u32).rev().find(|&y| {
+        (left as u32..right as u32).any(|x| {
+            let p = frame.get_pixel(x, y).unwrap();
+            p[0].min(p[1]).min(p[2]) < 195
+        })
+    })
+}
+
+#[test]
+fn the_runs_of_a_line_share_a_baseline() {
+    use blinc_cn::components::rich_text_editor::DocPosition;
+    // Letters without descenders, so the last inked row is the baseline.
+    for markdown in [
+        "nnnn **nnnn** *nnnn* ***nnnn***",
+        "nnnn **nnnn** `nnnn` *nnnn*",
+        "# nnnn `nnnn` *nnnn*",
+        "> nnnn **nnnn** `nnnn`",
+        "- nnnn **nnnn** `nnnn`",
+        "| nnnn | `nnnn` |\n|---|---|\n| nnnn | **nnnn** |\n| nnnn | `nnnn` nnnn *nnnn* |",
+    ] {
+        let Some((mut ui, state)) = fixed_editor(markdown, DocPosition::new(0, 0, 0)) else {
+            return;
+        };
+        state.lock().unwrap().set_focus(false);
+        ui.leave().settle();
+        let b = ui
+            .tree()
+            .get_absolute_bounds(one(&ui, "blinc-rich-text"))
+            .unwrap();
+        let frame = ui.snapshot().unwrap();
+        let d = state.lock().unwrap();
+        let mut rows: std::collections::BTreeMap<u32, Vec<(String, Option<u32>)>> =
+            Default::default();
+        for g in &d.line_index {
+            for run in g.runs.iter().filter(|r| !r.text.trim().is_empty()) {
+                let x = b.x + g.x + run.x_in_line;
+                let y = b.y + g.y;
+                let row = last_inked_row(&frame, (x, x + run.width), (y, y + g.height));
+                rows.entry(g.y as u32)
+                    .or_default()
+                    .push((run.text.clone(), row));
+            }
+        }
+        for runs in rows.values() {
+            assert!(
+                runs.iter()
+                    .all(|(_, row)| *row == runs[0].1 && row.is_some()),
+                "{markdown:?}: {runs:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_faces_of_a_rich_text_share_a_baseline() {
+    let Some(mut ui) = session_sized(ColorScheme::Light, WIDE) else {
+        return;
+    };
+    const SIZES: [f32; 6] = [12.0, 13.0, 14.0, 15.0, 18.0, 24.0];
+    ui.mount(|_| {
+        let mut column = div().w(WIDE as f32).h(H as f32).flex_col();
+        for size in SIZES {
+            column = column.child(div().h(48.0).child(
+                blinc_layout::rich_text::rich_text("nnnn<b>nnnn</b><i>nnnn</i>").size(size),
+            ));
+        }
+        column
+    });
+    ui.settle();
+    let frame = ui.snapshot().unwrap();
+    for (i, size) in SIZES.iter().enumerate() {
+        let (top, bottom) = (i as f32 * 48.0, (i + 1) as f32 * 48.0);
+        let ink: Vec<u32> = (0..WIDE)
+            .filter_map(|x| last_inked_row(&frame, (x as f32, x as f32 + 1.0), (top, bottom)))
+            .collect();
+        // Every stem ends on one row.
+        let row = ink.iter().max().unwrap();
+        let on_it = ink.iter().filter(|r| *r == row).count();
+        assert!(
+            on_it as f32 > ink.len() as f32 * 0.3,
+            "size {size}: {on_it} of {} on row {row}",
+            ink.len()
+        );
+        let higher = (
+            ink.iter().take(ink.len() / 4).max(),
+            ink.iter().rev().take(ink.len() / 4).max(),
+        );
+        assert_eq!(higher, (Some(row), Some(row)), "size {size}");
     }
 }

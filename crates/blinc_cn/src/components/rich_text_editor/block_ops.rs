@@ -17,6 +17,7 @@ use blinc_layout::styled_text::StyledLine;
 use super::cursor::{DocPosition, Selection};
 use super::document::{Block, BlockAlign, BlockKind, RichDocument, char_to_byte};
 use super::edit::split_spans;
+use super::table::{align_column, is_table};
 
 // =============================================================================
 // Public API
@@ -63,8 +64,8 @@ pub fn set_block_kind(doc: &mut RichDocument, range: Selection, kind: BlockKind)
         let Some(block) = doc.blocks.get_mut(idx) else {
             break;
         };
-        // A task keeps its tick.
-        if !block.kind.is_same_kind(&kind) {
+        // A task keeps its tick, and a table is no other kind of block.
+        if !block.kind.is_same_kind(&kind) && !is_table(block) {
             block.kind = kind.clone();
             // Headings have no indent; clear it so they don't visually
             // hang from a previous list level.
@@ -115,8 +116,21 @@ pub fn set_block_align(doc: &mut RichDocument, range: Selection, align: BlockAli
         return false;
     };
     let mut changed = false;
-    for block in &mut doc.blocks[first..=last] {
-        if block.kind != BlockKind::Divider && block.align != align {
+    for index in first..=last {
+        let block = &mut doc.blocks[index];
+        if is_table(block) {
+            // The columns the selection has a cell in.
+            let columns = block.kind.table_columns().unwrap_or(1);
+            let from = if index == start.block { start.line } else { 0 };
+            let to = if index == end.block {
+                end.line
+            } else {
+                block.lines.len().saturating_sub(1)
+            };
+            for line in from..=to.min(from + columns - 1) {
+                changed |= align_column(doc, DocPosition::new(index, line, 0), align);
+            }
+        } else if block.kind != BlockKind::Divider && block.align != align {
             block.align = align;
             changed = true;
         }
@@ -220,6 +234,9 @@ pub fn convert_selection_to_block(
 
     let block_idx = start.block;
     let block = doc.blocks.get(block_idx)?.clone();
+    if is_table(&block) {
+        return None;
+    }
 
     // Don't try to splice across soft breaks — keep the implementation
     // simple and just convert the whole block.

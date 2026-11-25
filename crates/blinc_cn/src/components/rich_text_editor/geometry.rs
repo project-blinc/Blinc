@@ -36,6 +36,27 @@ pub fn compute_line_geometry(
                 // implicit block_gap below. Skip it for cursor purposes.
                 y += 1.0;
             }
+            BlockKind::Table { .. } => {
+                let (cells, height) = super::grid::layout(block, theme, inner_width);
+                let line_height = theme.font_size * theme.line_height;
+                for (line, cell) in cells.iter().enumerate() {
+                    let (text_x, text_y) = cell.text_origin();
+                    for (i, visual) in cell.lines.iter().enumerate() {
+                        let line_box = cell.line_box(i);
+                        let runs = super::line::runs(visual, &cell.font, &line_box);
+                        out.push(LineGeometry {
+                            start: DocPosition::new(block_idx, line, visual.source_start_col),
+                            x: indent_px + text_x,
+                            y: y + text_y + i as f32 * line_height,
+                            width: line_box.width,
+                            height: line_height,
+                            runs: runs.into_iter().map(|(_, run)| run).collect(),
+                            cell: Some([indent_px + cell.x, y + cell.y, cell.width, cell.height]),
+                        });
+                    }
+                }
+                y += height;
+            }
             BlockKind::Paragraph => {
                 emit_paragraph_geometry(
                     &mut out,
@@ -144,6 +165,7 @@ fn emit_paragraph_geometry(
                 width: line_width,
                 height: line_height_px,
                 runs,
+                cell: None,
             });
             *y += line_height_px;
         }
