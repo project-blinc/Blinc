@@ -1,3 +1,5 @@
+@use "blinc/mixins" as *;
+
 /* ============================================================================
    Toggle (binary on/off button — shadcn `<Toggle>`)
    ============================================================================ */
@@ -8,9 +10,9 @@
    an app's own rules. */
 
 .cn-toggle[data-state="on"] {
-    background: var(--cn-toggle-selected-bg, color-mix(in srgb, var(--text-primary) 10%, var(--background))) !important;
+    background: var(--cn-toggle-selected-bg, tint(10%, var(--background))) !important;
     color: var(--cn-toggle-selected-color, var(--text-primary)) !important;
 }
 .cn-toggle[data-state="on"]:hover:not(:disabled) {
-    background: var(--cn-toggle-selected-hover-bg, color-mix(in srgb, var(--text-primary) 14%, var(--background))) !important;
+    background: var(--cn-toggle-selected-hover-bg, tint(14%, var(--background))) !important;
 }

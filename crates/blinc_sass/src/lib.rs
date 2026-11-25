@@ -5,8 +5,7 @@
 //! application's own CSS stays plain CSS.
 //!
 //! The sources are modules: `styles/index.scss` `@use`s one partial per component, and a partial
-//! can `@use "blinc/mixins"` and `@use "blinc/tokens"`, which this crate carries so that every
-//! stylesheet shares them. The compiler is [grass](https://docs.rs/grass), a Sass compiler written
+//! can `@use "blinc/mixins"`, which this crate carries so that every stylesheet shares it. The compiler is [grass](https://docs.rs/grass), a Sass compiler written
 //! in Rust.
 //!
 //! Output is Blinc's CSS and nothing else: no `@charset`, expanded style, and optionally wrapped
@@ -23,10 +22,7 @@ use std::path::{Path, PathBuf};
 const ROOT: &str = "/__blinc_sass__";
 
 /// The shared partials, by path under [`ROOT`].
-const SHARED: &[(&str, &str)] = &[
-    ("blinc/_mixins.scss", include_str!("../scss/_mixins.scss")),
-    ("blinc/_tokens.scss", include_str!("../scss/_tokens.scss")),
-];
+const SHARED: &[(&str, &str)] = &[("blinc/_mixins.scss", include_str!("../scss/_mixins.scss"))];
 
 /// A stylesheet that did not compile.
 #[derive(Debug)]
@@ -168,31 +164,33 @@ mod tests {
     }
 
     #[test]
-    fn partials_use_the_shared_mixins_and_tokens() {
+    fn partials_use_the_shared_mixins() {
         let dir = Scratch::new(
             "shared",
             &[
                 ("index.scss", "@use \"button\";\n"),
                 (
                     "_button.scss",
-                    "@use \"blinc/mixins\" as *;\n@use \"blinc/tokens\" as t;\n@use \"sass:map\";\n\
-                     .cn-button { @include transition(background-color, color); background: tint(5%); \
-                     height: map.get(map.get(t.$control-sizes, sm), height); }\n",
+                    "@use \"blinc/mixins\" as *;\n\
+                     .cn-button { @include transition(background-color color); background: tint(5%); \
+                     &:focus-visible { @include focus-ring; } \
+                     &:active { @include focus-ring(-1px); background: blend(var(--primary), 44%, var(--input-bg)); } \
+                     .cn-icon { @include transition(transform, normal, out); } }\n",
                 ),
             ],
         );
         let css = compile(dir.entry(), None).unwrap();
-        assert!(
-            css.contains(
-                "transition: background-color var(--duration-fast) var(--ease-state), \
-                 color var(--duration-fast) var(--ease-state);"
-            ),
-            "{css}"
-        );
-        assert!(
-            css.contains("background: color-mix(in srgb, var(--text-primary) 5%, transparent);")
-        );
-        assert!(css.contains("height: 32px;"));
+        for part in [
+            "transition: background-color var(--duration-fast) var(--ease-state), \
+             color var(--duration-fast) var(--ease-state);",
+            "background: color-mix(in srgb, var(--text-primary) 5%, transparent);",
+            "outline: 2px solid var(--focus-ring);\n  outline-offset: 2px;",
+            "outline-offset: -1px;",
+            "background: color-mix(in srgb, var(--primary) 44%, var(--input-bg));",
+            "transition: transform var(--duration-normal) var(--ease-out);",
+        ] {
+            assert!(css.contains(part), "{part} not in {css}");
+        }
     }
 
     #[test]
@@ -227,23 +225,6 @@ mod tests {
         ] {
             assert!(out.contains(part), "{part} not in {out}");
         }
-    }
-
-    #[test]
-    fn a_keyframes_mixin_writes_its_steps() {
-        let dir = Scratch::new(
-            "keyframes",
-            &[(
-                "index.scss",
-                "@use \"blinc/mixins\" as *;\n@include keyframes(cn-spin, (from: (transform: rotate(0deg)), to: (transform: rotate(360deg))));\n",
-            )],
-        );
-        let css = compile(dir.entry(), None).unwrap();
-        assert!(css.contains("@keyframes cn-spin"), "{css}");
-        assert!(
-            css.contains("from {\n    transform: rotate(0deg);"),
-            "{css}"
-        );
     }
 
     #[test]

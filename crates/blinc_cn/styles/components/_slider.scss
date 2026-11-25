@@ -1,3 +1,5 @@
+@use "blinc/mixins" as *;
+
 /* ============================================================================
    Slider
    ============================================================================ */
@@ -25,8 +27,7 @@
     border: 2px solid var(--primary);
     border-radius: var(--radius-full);
     box-shadow: var(--shadow-sm);
-    transition: transform var(--duration-fast) var(--ease-state),
-        border-color var(--duration-fast) var(--ease-state);
+    @include transition(transform border-color);
 }
 .cn-slider:hover:not(:disabled) > .cn-slider-thumb {
     transform: scale(1.1);

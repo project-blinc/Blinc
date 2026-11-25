@@ -1,3 +1,5 @@
+@use "blinc/mixins" as *;
+
 /* ============================================================================
    Select
    ============================================================================ */
@@ -5,7 +7,7 @@
 /* The caret of a trigger turns half a turn while its list is open, eased by a
    transition so it spins rather than flips. */
 .cn-chevron {
-    transition: transform var(--duration-normal) var(--ease-state);
+    @include transition(transform, normal);
 }
 .cn-select-trigger[data-state="open"] > .cn-chevron,
 .cn-combobox-trigger[data-state="open"] > .cn-chevron,
@@ -22,17 +24,15 @@
     border-color: var(--border);
     border-radius: var(--radius-default);
     cursor: pointer;
-    transition:
-        background-color var(--duration-fast) var(--ease-state),
-        border-color var(--duration-fast) var(--ease-state);
+    @include transition(background-color border-color);
 }
 /* Hover and press tint as the outline button's do; the border darkens while
    the list is open. */
 .cn-select-trigger:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+    background: tint(5%);
 }
 .cn-select-trigger:active:not(:disabled) {
-    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+    background: tint(10%);
 }
 .cn-select-trigger[data-state="open"]:not(:disabled) {
     border-color: var(--border-hover);

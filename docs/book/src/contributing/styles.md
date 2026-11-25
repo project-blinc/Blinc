@@ -14,7 +14,6 @@ crates/blinc_cn/styles/
   ...
 crates/blinc_sass/scss/
   _mixins.scss            shared by every stylesheet
-  _tokens.scss
 ```
 
 `index.scss` lists the partials with `@use`. The compiled rules come out in that order, so a later
@@ -43,16 +42,25 @@ A partial starts with the modules it needs:
 
 ```scss
 @use "blinc/mixins" as *;
-@use "blinc/tokens" as t;
 ```
 
 | Name | What it gives |
 | --- | --- |
-| `transition($props...)` | A `transition` over the properties, at the standard duration and easing |
+| `transition($props, $duration, $easing)` | A `transition` over the space-separated properties, at `fast` and `state` unless you name others |
+| `focus-ring($offset)` | The focus outline, `2px` from the edge unless you give another offset |
 | `tint($percent, $into)` | The text colour mixed into `$into`, as a hover or press tint is |
-| `keyframes($name, $steps)` | An `@keyframes` rule from a map of steps |
-| `t.$control-sizes` | The `sm`, `md` and `lg` heights, padding, font size and radius |
+| `blend($color, $percent, $into)` | Any colour mixed into `$into` |
 
+```scss
+.cn-toggle {
+  @include transition(background-color color);
+  &:hover:not(:disabled) { background: tint(5%); }
+  &:focus-visible { @include focus-ring; }
+}
+```
+
+A rule that does not fit a mixin stays plain CSS. Write the property out where a mixin would hide
+what the rule does.
 Blinc's own CSS passes through the compiler unchanged: custom properties, `color-mix()`,
 `var()` with fallbacks, `overflow-fade`, `@keyframes`, and the pseudo-classes and attribute
 selectors the engine reads. The one visible change is that an attribute selector loses the quotes

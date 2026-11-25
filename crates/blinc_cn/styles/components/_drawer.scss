@@ -1,3 +1,5 @@
+@use "blinc/mixins" as *;
+
 /* ============================================================================
    Drawer
    ============================================================================ */
@@ -19,12 +21,10 @@
 .cn-drawer-close, .cn-sheet-close {
     color: var(--text-secondary);
     border-radius: var(--radius-md);
-    transition:
-        background-color var(--duration-fast) var(--ease-state),
-        color var(--duration-fast) var(--ease-state);
+    @include transition(background-color color);
 }
 .cn-drawer-close:hover, .cn-sheet-close:hover {
-    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    background: tint(8%);
     color: var(--text-primary);
 }
 .cn-drawer-header {

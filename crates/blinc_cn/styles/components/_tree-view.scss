@@ -1,3 +1,5 @@
+@use "blinc/mixins" as *;
+
 /* ============================================================================
    Tree View
    ============================================================================ */
@@ -13,12 +15,11 @@
     cursor: pointer;
     outline: 0 solid var(--focus-ring);
     outline-offset: -2px;
-    transition: background var(--duration-fast) var(--ease-state),
-        color var(--duration-fast) var(--ease-state);
+    @include transition(background color);
 }
 .cn-tree-row:hover { background: var(--accent-subtle); color: var(--text-primary); }
 .cn-tree-row[data-selected], .cn-tree-row[data-selected]:hover {
-    background: color-mix(in srgb, var(--primary) 24%, transparent) !important;
+    background: blend(var(--primary), 24%) !important;
     color: var(--text-primary) !important;
 }
 .cn-tree-row[data-focus-visible] { outline-width: 2px; }
@@ -27,7 +28,7 @@
 .cn-tree-row[data-diff="modified"] { color: var(--warning); }
 .cn-tree-chevron {
     color: var(--text-tertiary);
-    transition: transform var(--duration-normal) var(--ease-state);
+    @include transition(transform, normal);
 }
 .cn-tree-item[data-state="open"] > .cn-tree-row > .cn-tree-chevron { transform: rotate(90deg); }
 .cn-tree-icon { color: var(--text-tertiary); }

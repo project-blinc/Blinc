@@ -1,3 +1,5 @@
+@use "blinc/mixins" as *;
+
 /* ============================================================================
    Tabs
    ============================================================================ */
@@ -14,7 +16,7 @@
     border-radius: var(--radius-default);
     cursor: pointer;
     color: var(--text-secondary);
-    transition: color var(--duration-fast) var(--ease-state);
+    @include transition(color);
 }
 .cn-tabs-trigger:hover:not(.cn-tabs-trigger--active) {
     color: var(--text-primary);
@@ -46,13 +48,13 @@
     border-radius: var(--radius-sm);
     color: var(--text-tertiary);
     opacity: 0;
-    transition: opacity var(--duration-fast) var(--ease-state);
+    @include transition(opacity);
 }
 .cn-tabs-trigger:hover > .cn-tabs-close,
 .cn-tabs-trigger--active > .cn-tabs-close { opacity: 1; }
 .cn-tabs-close:hover {
     color: var(--text-primary);
-    background: color-mix(in srgb, var(--text-primary) 18%, transparent);
+    background: tint(18%);
 }
 /* The pill behind the active trigger, raised to --surface over the
    --surface-overlay tray. It slides to the next trigger on a switch. */

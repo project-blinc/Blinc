@@ -1,29 +1,32 @@
 // Shared by the component stylesheets: `@use "blinc/mixins" as *;`.
 @use "sass:list";
 
-// A `transition` over `$props`, each at the standard duration and easing.
-@mixin transition($props...) {
+// A `transition` over `$props`, a space-separated list, each at `$duration` and `$easing`, named
+// as the theme's `--duration-*` and `--ease-*` tokens are.
+@mixin transition($props, $duration: fast, $easing: state) {
   $parts: ();
   @each $prop in $props {
-    $parts: list.append($parts, unquote("#{$prop} var(--duration-fast) var(--ease-state)"), comma);
+    $parts: list.append(
+      $parts,
+      unquote("#{$prop} var(--duration-#{$duration}) var(--ease-#{$easing})"),
+      comma
+    );
   }
   transition: $parts;
 }
 
-// The text colour mixed into the background by `$percent`, as hover and press tints are.
-@function tint($percent, $into: transparent) {
-  @return color-mix(in srgb, var(--text-primary) $percent, $into);
+// The focus ring: a 2px outline in the ring colour, `$offset` away from the edge.
+@mixin focus-ring($offset: 2px) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: $offset;
 }
 
-// `@keyframes $name` from a map of steps to maps of properties.
-@mixin keyframes($name, $steps) {
-  @keyframes #{$name} {
-    @each $at, $props in $steps {
-      #{$at} {
-        @each $prop, $value in $props {
-          #{$prop}: $value;
-        }
-      }
-    }
-  }
+// `$color` mixed into `$into` by `$percent`, as a hover or press tint is.
+@function blend($color, $percent, $into: transparent) {
+  @return color-mix(in srgb, $color $percent, $into);
+}
+
+// The text colour blended into `$into`: the tint a hovered or pressed control takes.
+@function tint($percent, $into: transparent) {
+  @return blend(var(--text-primary), $percent, $into);
 }

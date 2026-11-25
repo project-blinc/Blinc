@@ -1,3 +1,5 @@
+@use "blinc/mixins" as *;
+
 /* ============================================================================
    Resizable
    ============================================================================ */
@@ -14,7 +16,7 @@
 }
 .cn-resizable-line {
     background: var(--border);
-    transition: background var(--duration-fast) var(--ease-state);
+    @include transition(background);
 }
 .cn-resizable-handle:hover > .cn-resizable-line,
 .cn-resizable-handle[data-state="dragging"] > .cn-resizable-line {

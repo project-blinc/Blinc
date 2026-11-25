@@ -1,3 +1,5 @@
+@use "blinc/mixins" as *;
+
 /* ============================================================================
    Combobox
    ============================================================================ */
@@ -11,13 +13,13 @@
     border-color: var(--border);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-sm);
-    transition: background-color var(--duration-fast) var(--ease-state);
+    @include transition(background-color);
 }
 .cn-dropdown-trigger:hover {
-    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+    background: tint(5%);
 }
 .cn-dropdown-trigger:active {
-    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+    background: tint(10%);
 }
 
 .cn-combobox-trigger {
@@ -27,9 +29,7 @@
     border-color: var(--border);
     border-radius: var(--radius-default);
     cursor: pointer;
-    transition:
-        background-color var(--duration-fast) var(--ease-state),
-        border-color var(--duration-fast) var(--ease-state);
+    @include transition(background-color border-color);
 }
 .cn-combobox-trigger:hover:not(:disabled) { border-color: var(--border-hover); }
 /* Open wins over hover; the hover variant is listed because rules with a

@@ -1,3 +1,5 @@
+@use "blinc/mixins" as *;
+
 /* ============================================================================
    Collapsible
    ============================================================================ */
@@ -14,10 +16,10 @@
     cursor: pointer;
     color: var(--text-primary);
     border-radius: var(--radius-md);
-    transition: background-color var(--duration-fast) var(--ease-state);
+    @include transition(background-color);
 }
 .cn-collapsible-trigger:hover,
 .cn-collapsible-trigger:active {
-    background: color-mix(in srgb, var(--surface-elevated) 50%, transparent);
+    background: blend(var(--surface-elevated), 50%);
 }
 .cn-collapsible-trigger > .cn-chevron { color: var(--text-secondary); }

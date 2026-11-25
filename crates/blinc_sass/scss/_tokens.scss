@@ -1,8 +1,0 @@
-// Values the component stylesheets share: `@use "blinc/tokens" as t;`.
-
-// The control sizes: height, horizontal padding, font size and corner radius per name.
-$control-sizes: (
-  sm: (height: 32px, padding: 0 8px, font-size: var(--text-xs), radius: var(--radius-sm)),
-  md: (height: 36px, padding: 0 12px, font-size: var(--text-sm), radius: var(--radius-md)),
-  lg: (height: 40px, padding: 0 16px, font-size: var(--text-base), radius: var(--radius-lg)),
-);

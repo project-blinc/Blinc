@@ -1,3 +1,5 @@
+@use "blinc/mixins" as *;
+
 /* ============================================================================
    Input
    ============================================================================ */
@@ -31,8 +33,7 @@
        drawn 2px out from the input edge. The ring uses the fainter
        `--focus-ring` (alpha-tinted variant token) so the crisp border edge
        stays distinguishable from the soft halo. */
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    @include focus-ring;
 }
 .cn-input:disabled,
 .cn-textarea:disabled,
@@ -79,8 +80,7 @@
 }
 .cn-input-otp-slot:focus:not(:disabled) {
     /* HID focus ring — see `.cn-input:focus` for rationale. */
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    @include focus-ring;
 }
 .cn-input-otp-slot.cn-input-otp-slot--error:not(:disabled),
 .cn-input-otp-slot.cn-input-otp-slot--error:hover:not(:disabled),

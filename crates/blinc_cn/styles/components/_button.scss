@@ -1,3 +1,5 @@
+@use "blinc/mixins" as *;
+
 /* ============================================================================
    Button
    ============================================================================ */
@@ -25,8 +27,7 @@
 .cn-sidebar-item:focus-visible, .cn-pagination-btn:focus-visible, .cn-breadcrumb-item:focus-visible,
 .cn-sheet-close:focus-visible, .cn-drawer-close:focus-visible, .cn-slider:focus-visible,
 .cn-number-gauge:focus-visible, .blinc-link:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    @include focus-ring;
 }
 /* Press feedback: a pressed button shrinks a little and eases back. A link
    button is flat, so it dims instead. */
@@ -56,8 +57,8 @@
     color: var(--text-inverse);
     box-shadow: var(--shadow-md);
 }
-.cn-button--destructive:hover:not(:disabled) { background: color-mix(in srgb, var(--error) 90%, black); }
-.cn-button--destructive:active:not(:disabled) { background: color-mix(in srgb, var(--error) 85%, black); }
+.cn-button--destructive:hover:not(:disabled) { background: blend(var(--error), 90%, black); }
+.cn-button--destructive:active:not(:disabled) { background: blend(var(--error), 85%, black); }
 .cn-button--outline {
     background: transparent;
     color: var(--text-primary);
@@ -69,10 +70,10 @@
     color: var(--text-primary);
 }
 .cn-button--outline:hover:not(:disabled), .cn-button--ghost:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+    background: tint(5%);
 }
 .cn-button--outline:active:not(:disabled), .cn-button--ghost:active:not(:disabled) {
-    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+    background: tint(10%);
 }
 .cn-button--link {
     background: transparent;

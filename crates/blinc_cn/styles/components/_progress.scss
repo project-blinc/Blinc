@@ -1,3 +1,5 @@
+@use "blinc/mixins" as *;
+
 /* ============================================================================
    Progress
    ============================================================================ */
@@ -13,7 +15,7 @@
 .cn-progress-bar {
     background: var(--cn-progress-bar, var(--primary));
     border-radius: var(--radius-full);
-    transition: flex-grow var(--duration-slow) var(--ease-nav);
+    @include transition(flex-grow, slow, nav);
 }
 @keyframes cn-progress-pulse {
     from { opacity: 0.35; }

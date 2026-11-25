@@ -1,3 +1,5 @@
+@use "blinc/mixins" as *;
+
 /* ============================================================================
    Textarea
    ============================================================================ */
@@ -20,8 +22,7 @@
    rules, which these sit beside at the same specificity. */
 .cn-textarea:focus:not(:disabled) {
     /* HID focus ring — see `.cn-input:focus` for rationale. */
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    @include focus-ring;
 }
 .cn-textarea[data-invalid]:not(:disabled),
 .cn-textarea[data-invalid]:hover:not(:disabled),
@@ -55,18 +56,16 @@
 .cn-number-input-step {
     background: transparent;
     color: var(--text-secondary);
-    transition:
-        background-color var(--duration-fast) var(--ease-state),
-        color var(--duration-fast) var(--ease-state);
+    @include transition(background-color color);
 }
 .cn-number-input-step--dec { border-right: 1px solid var(--border); }
 .cn-number-input-step--inc { border-left: 1px solid var(--border); }
 .cn-number-input-step:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+    background: tint(6%);
     color: var(--text-primary);
 }
 .cn-number-input-step:active:not(:disabled) {
-    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+    background: tint(10%);
 }
 .cn-number-input-step:disabled { color: var(--text-tertiary); }
 
@@ -80,24 +79,24 @@
     cursor: ew-resize;
     outline: 2px solid transparent;
     outline-offset: 2px;
-    transition: border-color var(--duration-fast) var(--ease-state);
+    @include transition(border-color);
 }
 .cn-number-gauge--sm { border-radius: var(--radius-sm); }
 .cn-number-gauge--md, .cn-number-gauge--lg { border-radius: var(--radius-default); }
 .cn-number-gauge:hover:not(:disabled) { border-color: var(--border-hover); }
 .cn-number-gauge[data-focus-visible] { outline-color: var(--focus-ring); }
-.cn-number-gauge-fill { background: color-mix(in srgb, var(--primary) 22%, var(--input-bg)); }
+.cn-number-gauge-fill { background: blend(var(--primary), 22%, var(--input-bg)); }
 .cn-number-gauge-rest { background: transparent; }
 .cn-number-gauge-thumb {
-    background: color-mix(in srgb, var(--primary) 30%, var(--input-bg));
+    background: blend(var(--primary), 30%, var(--input-bg));
     color: var(--primary);
-    transition: background-color var(--duration-fast) var(--ease-state);
+    @include transition(background-color);
 }
 .cn-number-gauge:hover:not(:disabled) > .cn-number-gauge-thumb,
 .cn-number-gauge:active:not(:disabled) > .cn-number-gauge-thumb,
 .cn-number-gauge[data-state="dragging"] > .cn-number-gauge-thumb,
 .cn-number-gauge[data-focus-visible] > .cn-number-gauge-thumb {
-    background: color-mix(in srgb, var(--primary) 44%, var(--input-bg));
+    background: blend(var(--primary), 44%, var(--input-bg));
 }
 .cn-number-gauge:disabled { color: var(--text-tertiary); cursor: default; }
 .cn-number-gauge:disabled > .cn-number-gauge-fill { background: var(--input-bg-disabled); }
@@ -112,7 +111,7 @@
 .cn-number-gauge:active:not(:disabled) > .cn-number-gauge-layer > .cn-number-gauge-thumb,
 .cn-number-gauge[data-state="dragging"] > .cn-number-gauge-layer > .cn-number-gauge-thumb,
 .cn-number-gauge[data-focus-visible] > .cn-number-gauge-layer > .cn-number-gauge-thumb {
-    background: color-mix(in srgb, var(--primary) 44%, var(--input-bg));
+    background: blend(var(--primary), 44%, var(--input-bg));
 }
 .cn-number-gauge:disabled > .cn-number-gauge-layer > .cn-number-gauge-fill { background: var(--input-bg-disabled); }
 .cn-number-gauge:disabled > .cn-number-gauge-layer > .cn-number-gauge-thumb {

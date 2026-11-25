@@ -1,3 +1,5 @@
+@use "blinc/mixins" as *;
+
 /* ============================================================================
    Switch
    ============================================================================ */
@@ -8,13 +10,13 @@
     background: var(--border-secondary);
     border-radius: var(--radius-full);
     cursor: pointer;
-    transition: background-color var(--duration-normal) var(--ease-state);
+    @include transition(background-color, normal);
 }
 /* A wash of the text colour over the idle track, so hovering moves it the same
    way in either scheme (`--border-hover` is translucent and reads darker than
    this solid track on a dark theme). */
 .cn-switch:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--text-primary) 10%, var(--border-secondary));
+    background: tint(10%, var(--border-secondary));
 }
 .cn-switch:checked { background: var(--primary) !important; }
 .cn-switch:checked:hover:not(:disabled) { background: var(--primary-hover) !important; }
@@ -32,7 +34,7 @@
     background: var(--text-inverse);
     border-radius: var(--radius-full);
     box-shadow: var(--shadow-sm);
-    transition: transform var(--duration-normal) var(--ease-state);
+    @include transition(transform, normal);
 }
 .cn-switch:disabled > .cn-switch-thumb {
     box-shadow: none;
