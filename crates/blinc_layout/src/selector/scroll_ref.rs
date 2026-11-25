@@ -35,6 +35,8 @@ pub struct ScrollRefInner {
     /// The vertical offset as a signal, for content that follows the scroll
     /// (a virtual list's window); made by [`ScrollRef::watch_y`].
     watch_y: Option<blinc_core::reactive::Signal<f32>>,
+    /// The horizontal offset as a signal; made by [`ScrollRef::watch_x`].
+    watch_x: Option<blinc_core::reactive::Signal<f32>>,
 }
 
 /// A pending scroll operation to be executed by the renderer
@@ -189,17 +191,27 @@ impl ScrollRef {
         content_size: (f32, f32),
         viewport_size: (f32, f32),
     ) {
-        let watch = self.inner.lock().ok().and_then(|mut inner| {
-            inner.offset = offset;
-            inner.content_size = Some(content_size);
-            inner.viewport_size = Some(viewport_size);
-            inner.watch_y
-        });
+        let (watch, watch_x) = self
+            .inner
+            .lock()
+            .ok()
+            .map(|mut inner| {
+                inner.offset = offset;
+                inner.content_size = Some(content_size);
+                inner.viewport_size = Some(viewport_size);
+                (inner.watch_y, inner.watch_x)
+            })
+            .unwrap_or_default();
         // Set outside the lock: what follows the signal may read this ref.
         if let Some(watch) = watch
             && watch.try_get().is_none_or(|y| (y - offset.1).abs() > 0.5)
         {
             watch.set(offset.1);
+        }
+        if let Some(watch) = watch_x
+            && watch.try_get().is_none_or(|x| (x - offset.0).abs() > 0.5)
+        {
+            watch.set(offset.0);
         }
     }
 
@@ -211,6 +223,16 @@ impl ScrollRef {
         *inner
             .watch_y
             .get_or_insert_with(|| blinc_core::reactive::signal(initial))
+    }
+
+    /// The horizontal offset (0 at the left, growing rightward) as a signal the renderer keeps up
+    /// to date as the container scrolls, starting at `initial` until it first reports. It is owned
+    /// by no build, so it lasts as long as the ref.
+    pub fn watch_x(&self, initial: f32) -> blinc_core::reactive::Signal<f32> {
+        let mut inner = self.inner.lock().unwrap();
+        *inner.watch_x.get_or_insert_with(|| {
+            blinc_core::owner::Owner::detached(|| blinc_core::reactive::signal(initial))
+        })
     }
 
     /// Take pending scroll command (called by renderer each frame)

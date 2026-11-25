@@ -378,6 +378,11 @@ pub type DivRef = ElementRef<Div>;
 /// A div element builder with GPUI/Tailwind-style methods
 pub struct Div {
     ime_binding: Option<crate::ime::ImeBinding>,
+    /// Where the layout writes this element's bounds, and what to call when its size changes.
+    layout_change: Option<(
+        crate::renderer::LayoutBoundsStorage,
+        crate::renderer::LayoutBoundsCallback,
+    )>,
     pub(crate) style: Style,
     /// `align_self` came from `w_fit`/`h_fit` as an anti-stretch
     /// default, not from an author naming an alignment. A parent that
@@ -537,10 +542,19 @@ impl Div {
         self
     }
 
+    /// Call `f` with this element's laid-out bounds after a layout that changes its size, such as
+    /// for content that wraps to the width it is given. It runs after layout, so a rebuild it asks
+    /// for shows on the next frame.
+    pub fn on_layout_change(mut self, f: impl Fn(ElementBounds) + Send + Sync + 'static) -> Self {
+        self.layout_change = Some((Arc::new(Mutex::new(None)), Arc::new(f)));
+        self
+    }
+
     /// Create a new div element
     pub fn new() -> Self {
         Self {
             ime_binding: None,
+            layout_change: None,
             style: Style::default(),
             incidental_align_self: false,
             children: Vec::new(),
@@ -610,6 +624,7 @@ impl Div {
     pub fn with_style(style: Style) -> Self {
         Self {
             ime_binding: None,
+            layout_change: None,
             style,
             incidental_align_self: false,
             children: Vec::new(),
@@ -5687,6 +5702,14 @@ impl ElementBuilder for Div {
     }
     fn ime_binding(&self) -> Option<crate::ime::ImeBinding> {
         self.ime_binding.clone()
+    }
+    fn layout_bounds_storage(&self) -> Option<crate::renderer::LayoutBoundsStorage> {
+        self.layout_change
+            .as_ref()
+            .map(|(storage, _)| Arc::clone(storage))
+    }
+    fn layout_bounds_callback(&self) -> Option<crate::renderer::LayoutBoundsCallback> {
+        self.layout_change.as_ref().map(|(_, f)| Arc::clone(f))
     }
     fn bound_scroll_ref(&self) -> Option<&crate::selector::ScrollRef> {
         self.scroll_ref.as_ref()

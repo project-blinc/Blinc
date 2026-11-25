@@ -129,14 +129,26 @@ impl RenderTree {
             any_modified = true;
 
             match pending_scroll {
-                PendingScroll::ToOffset { x, y, smooth: _ } => {
-                    // For now, instant scroll (smooth animation TBD)
-                    physics.cancel_active_animation();
-                    physics.offset_x = -x;
-                    physics.offset_y = -y;
+                PendingScroll::ToOffset { x, y, smooth } => {
+                    if smooth {
+                        physics.scroll_to_animated(-x, -y);
+                    } else {
+                        physics.cancel_active_animation();
+                        physics.offset_x = -x;
+                        physics.offset_y = -y;
+                    }
                 }
-                PendingScroll::ByAmount { dx, dy, smooth: _ } => {
-                    physics.apply_scroll_delta(dx, dy);
+                PendingScroll::ByAmount { dx, dy, smooth } => {
+                    if smooth {
+                        // Springs to the offset the step reaches, held inside the content.
+                        let x = (physics.offset_x + dx)
+                            .clamp(physics.max_offset_x(), physics.min_offset_x());
+                        let y = (physics.offset_y + dy)
+                            .clamp(physics.max_offset_y(), physics.min_offset_y());
+                        physics.scroll_to_animated(x, y);
+                    } else {
+                        physics.apply_scroll_delta(dx, dy);
+                    }
                 }
                 PendingScroll::ToTop { smooth: _ } => {
                     physics.offset_y = 0.0;

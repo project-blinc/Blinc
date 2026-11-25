@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- `Headless::scroll_physics` advances scroll momentum, edge springs, animated scrolls and scrollbar fades each frame, as a window does. It is off by default.
 - Headless sessions expose `accessibility_action` to test assistive activation, editing and focus through the shared semantic routing.
 
 ### Changed

@@ -157,6 +157,8 @@ pub struct Headless {
     /// Whether the state-style pass runs only when hover, press or focus changed, as a window
     /// does, rather than on every frame.
     gate_state_styles: bool,
+    /// Whether each frame advances scroll physics, as a window does.
+    scroll_physics: bool,
     /// Apply CSS and FLIP animation values only on a frame a tick found one active.
     gate_animation_apply: bool,
     state_fingerprint: Option<u64>,
@@ -304,11 +306,20 @@ impl Headless {
             frames: 0,
             recording: None,
             gate_state_styles: false,
+            scroll_physics: false,
             gate_animation_apply: false,
             state_fingerprint: None,
             hover_stamp: None,
             painted_epoch: None,
         })
+    }
+
+    /// Advance scroll momentum, edge springs, animated scrolls and scrollbar fades each frame, as
+    /// a window does. Off by default: tests and goldens recorded without it expect scrolls to
+    /// stand still between frames.
+    pub fn scroll_physics(&mut self) -> &mut Self {
+        self.scroll_physics = true;
+        self
     }
 
     /// Run the state-style pass (`:hover`, `:active`, `:focus`) only when hover, press or focus
@@ -420,6 +431,9 @@ impl Headless {
         // window applies it at the top of its frame.
         if let Some(tree) = self.tree.as_mut() {
             tree.process_pending_scroll_refs();
+            if self.scroll_physics {
+                tree.tick_scroll_physics(self.now_ms);
+            }
         }
         self.drain_queued_css();
         self.rebuild_if_needed();

@@ -8,6 +8,9 @@ All notable changes to `blinc_layout` will be documented in this file.
 - The rich text editor moved to `blinc_cn` as `blinc_cn::components::rich_text_editor`, so that its toolbar can use the cn components. Its CSS rules moved to `CN_STYLES`.
 
 ### Added
+- `ScrollRef::scroll_by_with_behavior` and `set_scroll_offset_with_behavior` with `ScrollBehavior::Smooth` spring to the new offset instead of jumping to it.
+- `ScrollRef::watch_x` is the horizontal offset as a signal that outlasts the build that asks for it.
+- `Div::on_layout_change` calls back with the element's laid-out bounds after a layout that changes its size, for content that wraps to the width it is given.
 - `Notch::peak_top_at` and `Notch::peak_bottom_at` place a peak's apex off the edge's centre, such as a popover's pointer toward its anchor. `CenterPeak` has an `offset` field.
 - `ime::ImeSession`, `ime::char_offset`, `ime::utf16_offset`, `ime::valid_edit`, `EventContext::command_modifier` and `ua_styles::stylesheet_color` are public, for editable widgets outside this crate.
 
