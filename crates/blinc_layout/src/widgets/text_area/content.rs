@@ -337,8 +337,7 @@ pub(super) fn text_row(
                 .h(line_height)
                 .w(&highlight_width)
                 .transform(&highlight_at)
-                .bg(selection_color)
-                .rounded(2.0),
+                .bg(selection_color),
         )
         .child(run(0))
         .child(run(1))

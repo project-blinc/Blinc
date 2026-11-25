@@ -162,12 +162,7 @@ pub(super) fn content(
         .flex_row()
         .items_center()
         .child(run(Run::Before))
-        .child(
-            div()
-                .bg(cfg.selection_color)
-                .rounded(cfg.corner_radius)
-                .child(run(Run::Selected)),
-        )
+        .child(div().bg(cfg.selection_color).child(run(Run::Selected)))
         .child(run(Run::Composing))
         .child(run(Run::After));
 

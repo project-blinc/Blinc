@@ -2665,8 +2665,7 @@ fn build_editor_content(
                         .left(x_start + pad)
                         .top(sel_top)
                         .w(width)
-                        .h(line_height_px)
-                        .rounded(2.0);
+                        .h(line_height_px);
                     code_area = code_area.child(match sel_color {
                         Some(c) => sel.bg(c),
                         None => sel,
