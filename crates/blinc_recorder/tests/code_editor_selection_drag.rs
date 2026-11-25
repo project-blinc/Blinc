@@ -2,10 +2,11 @@
 //! Dragging across one line selects as the pointer moves: the selection's highlight follows
 //! each frame, as it does across lines.
 
+use blinc_core::Brush;
 use blinc_layout::div::div;
 use blinc_layout::prelude::*;
 use blinc_recorder::Headless;
-use blinc_theme::{ColorScheme, HybridTheme};
+use blinc_theme::{ColorScheme, ColorToken, HybridTheme, ThemeState};
 
 fn selection_width(ui: &Headless) -> Option<f32> {
     let node = ui.find(".blinc-code-selection")?;
@@ -45,6 +46,16 @@ fn a_drag_along_one_line_highlights_each_frame() {
         widths.push(selection_width(&ui));
     }
     ui.mouse_up();
+    ui.settle();
+    // The box that grew is styled as a selection.
+    let node = ui.find(".blinc-code-selection").unwrap();
+    let props = &ui.tree().get_render_node(node).unwrap().props;
+    let selection = ThemeState::get().color(ColorToken::Selection);
+    assert!(
+        matches!(&props.background, Some(Brush::Solid(c)) if *c == selection),
+        "{:?}",
+        props.background
+    );
     let shown: Vec<f32> = widths.iter().map(|w| w.unwrap_or(0.0)).collect();
     assert!(
         shown.windows(2).skip(1).all(|w| w[1] > w[0]),

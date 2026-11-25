@@ -692,6 +692,8 @@ impl RenderTree {
                     self.handler_registry.register(stable_id, handlers.clone());
                 }
 
+                self.adopt_classes(*child_id, new_child.as_ref());
+
                 if !new_child.children_builders().is_empty() {
                     self.update_subtree_layout_from_builder(*child_id, new_child.as_ref(), router);
                 }
@@ -704,6 +706,26 @@ impl RenderTree {
         // Layout overrides too — the full replace cleared class-driven
         // padding / size / flex along with the visual props.
         self.apply_stylesheet_layout_overrides_for_subtree(parent_id);
+    }
+
+    /// Register the classes of the element now at a node patched in place, so the stylesheet
+    /// passes that follow match them and not the ones it had. Where they changed, the styles
+    /// worked out for the old ones are forgotten, so the node's base includes the new.
+    fn adopt_classes(&mut self, node_id: LayoutNodeId, element: &dyn crate::div::ElementBuilder) {
+        let new_classes = element.element_classes();
+        let old_classes = self.element_registry.get_classes(node_id);
+        let classes_changed = new_classes != old_classes.as_deref().unwrap_or(&[]);
+        if !new_classes.is_empty() {
+            self.element_registry
+                .register_classes(node_id, new_classes.to_vec());
+        } else {
+            self.element_registry.clear_classes(node_id);
+        }
+        if classes_changed {
+            self.base_styles.remove(&node_id);
+            self.state_layers.remove(&node_id);
+            self.dynamic_classes.remove(&node_id);
+        }
     }
 
     /// Update subtree props from a generic ElementBuilder (for recursion)
@@ -742,27 +764,7 @@ impl RenderTree {
                     self.handler_registry.register(stable_id, handlers.clone());
                 }
 
-                // Update CSS class registrations so apply_stylesheet_base_styles_for_subtree
-                // uses the current classes (not stale ones from the previous build).
-                // Without this, adding/removing classes (e.g. cn-sidebar-item--active)
-                // wouldn't take effect during visual-only rebuilds.
-                let new_classes = new_child.element_classes();
-                let old_classes = self.element_registry.get_classes(*child_id);
-                let classes_changed = new_classes != old_classes.as_deref().unwrap_or(&[]);
-                if !new_classes.is_empty() {
-                    self.element_registry
-                        .register_classes(*child_id, new_classes.to_vec());
-                } else {
-                    self.element_registry.clear_classes(*child_id);
-                }
-                // Invalidate base_styles cache when classes change so that
-                // apply_complex_selector_styles resets to the correct base
-                // (e.g., node gaining --active needs its new base to include that)
-                if classes_changed {
-                    self.base_styles.remove(child_id);
-                    self.state_layers.remove(child_id);
-                    self.dynamic_classes.remove(child_id);
-                }
+                self.adopt_classes(*child_id, new_child.as_ref());
 
                 // Recursively update grandchildren
                 if !new_child.children_builders().is_empty() {
