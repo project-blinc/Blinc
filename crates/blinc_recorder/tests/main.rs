@@ -46,6 +46,7 @@ mod cn_textarea_snapshots;
 mod cn_toggle_snapshots;
 mod cn_tooltip_pointer;
 mod code_block_hscroll;
+mod code_editor_control;
 mod code_editor_diagnostics;
 mod code_editor_hscroll;
 mod code_editor_minimap;

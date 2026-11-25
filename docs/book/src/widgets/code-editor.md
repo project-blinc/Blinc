@@ -54,8 +54,10 @@ code_editor(&state)
 
 ### Editing
 - Type, Enter (auto-indent), Backspace, Delete
-- Tab / Shift+Tab: indent/dedent selected lines
+- Tab / Shift+Tab: indent/dedent selected lines, by `.tab_size(n)` spaces (4 unless set)
 - Cmd+Backspace/Delete: delete word backward/forward
+- `.read_only(true)`: the text can be read, selected and copied, and nothing changes it
+- `.placeholder("…")`: shown, dimmed, while there is no text
 
 ### Navigation
 - Arrow keys (with Shift for selection)
@@ -165,6 +167,36 @@ A syntax theme colours the text, fill and line numbers itself, and a colour
 given to the editor (`code_bg`, `text_color`, a `CodeConfig` colour) is set on
 the element; both win over the rules.
 
+## Driving an editor from outside
+
+An application, or a toolbar of its own, changes the editor through these:
+
+```rust
+use blinc_layout::widgets::code::{
+    focus_code_editor, refresh_code_editor, replace_all_code_matches, set_code_value,
+};
+
+// Replace all the text. It is your change: `on_change` does not report it, and undo forgets it.
+set_code_value(&state, "fn main() {}");
+
+// Search with your own controls: set the query, mark the matches and draw the editor again.
+{
+    let mut editor = state.lock().unwrap();
+    editor.apply_search_query("main".to_string());
+    editor.find_open = true;
+}
+refresh_code_editor(&state);
+
+// A replacement calls `on_change`.
+replace_all_code_matches(&state);
+
+// Give the editor the keyboard again, after one of your fields had it.
+focus_code_editor(&state);
+```
+
+`CodeEditorData` holds the query, the options (`search_case_sensitive`, `search_whole_word`,
+`search_regex`), the matches and, for a regex that does not compile, `search_error`.
+
 ## Syntax Highlighters
 
 Built-in highlighters:
@@ -218,6 +250,9 @@ code_editor(&state)
     .code_bg(Color::BLACK)     // Background color
     .text_color(Color::WHITE)  // Default text color
     .edit(true)                // Enable editing (default for code_editor)
+    .read_only(false)          // Let the text be changed
+    .tab_size(4)               // Spaces per Tab
+    .placeholder("Write…")     // Shown while empty
     .indent_guides(true)       // Show vertical indent guides
     .code_folding(true)        // Enable fold/unfold
     .minimap(true)             // Show minimap sidebar

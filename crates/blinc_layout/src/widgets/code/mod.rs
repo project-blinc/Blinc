@@ -73,7 +73,12 @@ mod find;
 mod hscroll;
 mod ime;
 mod minimap;
+pub use control::{
+    focus_code_editor, refresh_code_editor, replace_all_code_matches, replace_code_match,
+    set_code_value,
+};
 pub use minimap::code_minimap;
+mod control;
 mod search;
 
 pub use diagnostics::{CodeDiagnostic, DiagnosticSeverity, set_code_diagnostics};
@@ -131,6 +136,12 @@ pub struct CodeConfig {
     /// viewport; leave off when embedding inside a `cn::popover`
     /// or any host overlay that uses click_outside dismissal.
     pub search_enabled: bool,
+    /// Whether the text can be read, selected and copied but not changed.
+    pub read_only: bool,
+    /// How many columns a tab is: what Tab and Shift+Tab indent and dedent by.
+    pub tab_size: usize,
+    /// Shown, dimmed, while there is no text.
+    pub placeholder: Option<String>,
 }
 
 impl Default for CodeConfig {
@@ -153,6 +164,9 @@ impl Default for CodeConfig {
             indent_guide_color: None,
             code_folding: false,
             search_enabled: false,
+            read_only: false,
+            tab_size: 4,
+            placeholder: None,
         }
     }
 }
@@ -252,6 +266,10 @@ pub struct CodeEditorData {
     /// The editor's own refresh handle, so the find bar can redraw it.
     pub(crate) editor_stateful:
         Option<crate::stateful::SharedState<crate::stateful::TextFieldState>>,
+    /// A find bar other than the built-in one is open, so the matches are marked.
+    pub find_open: bool,
+    /// The editor's node, as of the last press on it, for giving it the focus again.
+    pub(crate) editor_node: Option<LayoutNodeId>,
     /// All match positions: (line, start_col, end_col)
     pub search_matches: Vec<(usize, usize, usize)>,
     /// Why the query matches nothing, when it is a regex that does not compile.
@@ -339,6 +357,8 @@ pub fn code_editor_state(content: impl Into<String>) -> SharedCodeEditorState {
         editor_stateful: None,
         diagnostics: Vec::new(),
         h_scroll: Arc::new(Mutex::new(ScrollPhysics::default())),
+        find_open: false,
+        editor_node: None,
         search_matches: Vec::new(),
         search_error: None,
         search_match_idx: 0,
@@ -423,6 +443,9 @@ impl CodeEditorData {
 
     /// Undo last change
     pub fn undo(&mut self) -> bool {
+        if self.config.read_only {
+            return false;
+        }
         if let Some(entry) = self.undo_stack.pop() {
             self.redo_stack.push(UndoEntry {
                 lines: self.lines.clone(),
@@ -441,6 +464,9 @@ impl CodeEditorData {
 
     /// Redo last undone change
     pub fn redo(&mut self) -> bool {
+        if self.config.read_only {
+            return false;
+        }
         if let Some(entry) = self.redo_stack.pop() {
             self.undo_stack.push(UndoEntry {
                 lines: self.lines.clone(),
@@ -459,6 +485,9 @@ impl CodeEditorData {
 
     /// Insert text at cursor position
     pub fn insert(&mut self, text: &str) {
+        if self.config.read_only {
+            return;
+        }
         self.push_undo();
         self.delete_selection();
         let start_line = self.cursor.line;
@@ -507,6 +536,9 @@ impl CodeEditorData {
 
     /// Delete backward (backspace)
     pub fn delete_backward(&mut self) {
+        if self.config.read_only {
+            return;
+        }
         if self.delete_selection() {
             return;
         }
@@ -535,6 +567,9 @@ impl CodeEditorData {
 
     /// Delete forward (delete key)
     pub fn delete_forward(&mut self) {
+        if self.config.read_only {
+            return;
+        }
         if self.delete_selection() {
             return;
         }
@@ -563,6 +598,9 @@ impl CodeEditorData {
 
     /// Delete selection. Returns true if a selection was deleted.
     pub fn delete_selection(&mut self) -> bool {
+        if self.config.read_only {
+            return false;
+        }
         if let Some(sel_start) = self.selection_start.take() {
             let (start, end) = order_positions(sel_start, self.cursor);
             if start == end {
@@ -764,6 +802,9 @@ impl CodeEditorData {
 
     /// Delete word backward (Ctrl/Cmd+Backspace)
     pub fn delete_word_backward(&mut self) {
+        if self.config.read_only {
+            return;
+        }
         if self.delete_selection() {
             return;
         }
@@ -790,6 +831,9 @@ impl CodeEditorData {
 
     /// Delete word forward (Ctrl/Cmd+Delete)
     pub fn delete_word_forward(&mut self) {
+        if self.config.read_only {
+            return;
+        }
         if self.delete_selection() {
             return;
         }
@@ -933,26 +977,35 @@ impl CodeEditorData {
 
     /// Indent selected lines (Tab with selection) or indent at cursor
     pub fn indent_lines(&mut self) {
+        if self.config.read_only {
+            return;
+        }
+        let width = self.config.tab_size.max(1);
+        let indent = " ".repeat(width);
         if let Some(sel_start) = self.selection_start {
             let (start, end) = order_positions(sel_start, self.cursor);
             self.push_undo();
             for line_idx in start.line..=end.line {
                 if line_idx < self.lines.len() {
-                    self.lines[line_idx] = format!("    {}", self.lines[line_idx]);
+                    self.lines[line_idx] = format!("{indent}{}", self.lines[line_idx]);
                     self.invalidate_highlight_line(line_idx);
                 }
             }
             // Adjust selection and cursor columns
-            self.selection_start = Some(TextPosition::new(start.line, start.column + 4));
-            self.cursor = TextPosition::new(end.line, end.column + 4);
+            self.selection_start = Some(TextPosition::new(start.line, start.column + width));
+            self.cursor = TextPosition::new(end.line, end.column + width);
             self.sync_highlight_cache();
         } else {
-            self.insert("    ");
+            self.insert(&indent);
         }
     }
 
     /// Dedent selected lines (Shift+Tab)
     pub fn dedent_lines(&mut self) {
+        if self.config.read_only {
+            return;
+        }
+        let width = self.config.tab_size.max(1);
         let (start_line, end_line) = if let Some(sel_start) = self.selection_start {
             let (start, end) = order_positions(sel_start, self.cursor);
             (start.line, end.line)
@@ -963,7 +1016,7 @@ impl CodeEditorData {
         for line_idx in start_line..=end_line {
             if line_idx < self.lines.len() {
                 let line = &self.lines[line_idx];
-                let spaces = line.chars().take(4).take_while(|c| *c == ' ').count();
+                let spaces = line.chars().take(width).take_while(|c| *c == ' ').count();
                 if spaces > 0 {
                     self.lines[line_idx] = self.lines[line_idx][spaces..].to_string();
                     self.invalidate_highlight_line(line_idx);
@@ -973,10 +1026,10 @@ impl CodeEditorData {
         // Adjust cursor column
         if self.cursor.line < self.lines.len() {
             let line_len = self.lines[self.cursor.line].chars().count();
-            self.cursor.column = self.cursor.column.saturating_sub(4).min(line_len);
+            self.cursor.column = self.cursor.column.saturating_sub(width).min(line_len);
         }
         if let Some(ref mut sel) = self.selection_start {
-            sel.column = sel.column.saturating_sub(4);
+            sel.column = sel.column.saturating_sub(width);
         }
         self.sync_highlight_cache();
     }
@@ -1402,6 +1455,7 @@ impl CodeEditor {
                         Ok(d) => d,
                         Err(_) => return,
                     };
+                    d.editor_node = Some(ctx.node_id);
 
                     // Store editor bounds for overlay positioning
                     d.editor_bounds = (
@@ -1545,10 +1599,14 @@ impl CodeEditor {
                                     ctx.bounds_y + click_y,
                                     0.0,
                                     d.config.font_size * d.config.line_height,
-                                    edit_menu_actions::CUT
-                                        | edit_menu_actions::COPY
-                                        | edit_menu_actions::PASTE
-                                        | edit_menu_actions::SELECT_ALL,
+                                    if d.config.read_only {
+                                        edit_menu_actions::COPY | edit_menu_actions::SELECT_ALL
+                                    } else {
+                                        edit_menu_actions::CUT
+                                            | edit_menu_actions::COPY
+                                            | edit_menu_actions::PASTE
+                                            | edit_menu_actions::SELECT_ALL
+                                    },
                                 );
                             }
                         } else if touch {
@@ -1714,7 +1772,7 @@ impl CodeEditor {
                         Ok(d) => d,
                         Err(_) => return,
                     };
-                    if !d.focused {
+                    if !d.focused || d.config.read_only {
                         return;
                     }
                     // Skip control characters and modifier combos (Cmd+C/V/Z etc.)
@@ -1793,6 +1851,8 @@ impl CodeEditor {
                     let mod_key = ctx.command_modifier();
 
                     match ctx.key_code {
+                        // Nothing changes a read-only editor.
+                        8 | 9 | 13 | 127 if d.config.read_only => cursor_changed = false,
                         8 => {
                             // Backspace / Cmd+Backspace
                             if mod_key {
@@ -1888,16 +1948,15 @@ impl CodeEditor {
                                         }
                                         cursor_changed = false;
                                     }
-                                    // X = Cut
+                                    // X = Cut, which only copies from a read-only editor
                                     88 => {
                                         if let Some(selected) = d.selected_text() {
                                             text_edit::clipboard_write(&selected);
-                                            d.delete_selection();
-                                            text_changed = true;
+                                            text_changed = d.delete_selection();
                                         }
                                     }
                                     // V = Paste
-                                    86 => {
+                                    86 if !d.config.read_only => {
                                         if let Some(clip) = text_edit::clipboard_read() {
                                             d.insert(&clip);
                                             text_changed = true;
@@ -1958,7 +2017,7 @@ impl CodeEditor {
                                         }
                                     }
                                     // Z = Undo / Shift+Z = Redo
-                                    90 => {
+                                    90 if !d.config.read_only => {
                                         if ctx.shift {
                                             d.redo();
                                         } else {
@@ -2123,6 +2182,24 @@ impl CodeEditor {
     /// through cleanly.
     pub fn search_enabled(self, enabled: bool) -> Self {
         self.state.lock().unwrap().config.search_enabled = enabled;
+        self
+    }
+
+    /// Let the text be read, selected and copied but not changed.
+    pub fn read_only(self, read_only: bool) -> Self {
+        self.state.lock().unwrap().config.read_only = read_only;
+        self
+    }
+
+    /// How many columns Tab and Shift+Tab indent and dedent by, 4 unless set.
+    pub fn tab_size(self, columns: usize) -> Self {
+        self.state.lock().unwrap().config.tab_size = columns.max(1);
+        self
+    }
+
+    /// Text shown, dimmed, while there is none.
+    pub fn placeholder(self, text: impl Into<String>) -> Self {
+        self.state.lock().unwrap().config.placeholder = Some(text.into());
         self
     }
 
@@ -2728,7 +2805,7 @@ fn build_editor_content(
     }
 
     // Search match highlights
-    if data.search_active && !data.search_matches.is_empty() {
+    if (data.search_active || data.find_open) && !data.search_matches.is_empty() {
         for (match_idx, &(line_idx, col_start, col_end)) in data.search_matches.iter().enumerate() {
             if let Some(vis_row) = visible_lines.iter().position(|&l| l == line_idx)
                 && line_idx < data.lines.len()
@@ -2760,6 +2837,27 @@ fn build_editor_content(
 
     for overlay in diagnostic_overlays {
         code_area = code_area.child(overlay);
+    }
+
+    if data.is_empty()
+        && let Some(hint) = &config.placeholder
+    {
+        code_area = code_area.child(
+            div()
+                .class("blinc-code-placeholder")
+                .absolute()
+                .left(pad)
+                .top(pad)
+                .h(line_height_px)
+                .pointer_events_none()
+                .child(
+                    text(hint.clone())
+                        .size(config.font_size)
+                        .monospace()
+                        .no_wrap()
+                        .pointer_events_none(),
+                ),
+        );
     }
 
     // Text lines in a padded wrapper (only visible lines)

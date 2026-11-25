@@ -196,7 +196,7 @@ impl CodeEditorData {
     /// Replace the current search match with the replacement text, and move to the next match.
     /// Returns whether the text changed.
     pub fn replace_current(&mut self) -> bool {
-        if self.search_matches.is_empty() {
+        if self.config.read_only || self.search_matches.is_empty() {
             return false;
         }
         let (line, col_start, col_end) = self.search_matches[self.search_match_idx];
@@ -222,7 +222,7 @@ impl CodeEditorData {
     /// Replace every search match with the replacement text, as one undo step. Returns how many
     /// were replaced.
     pub fn replace_all(&mut self) -> usize {
-        if self.search_matches.is_empty() {
+        if self.config.read_only || self.search_matches.is_empty() {
             return 0;
         }
         let re = self.query_regex().and_then(Result::ok);

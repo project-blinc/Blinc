@@ -91,13 +91,7 @@ fn bar_width(font_size: f32) -> f32 {
 
 /// Redraw the editor itself: its matches and cursor follow the search.
 pub(super) fn refresh_editor(shared_state: &SharedCodeEditorState) {
-    let stateful = shared_state
-        .lock()
-        .ok()
-        .and_then(|d| d.editor_stateful.clone());
-    if let Some(stateful) = stateful {
-        crate::stateful::refresh_stateful(&stateful);
-    }
+    super::control::refresh_code_editor(shared_state);
 }
 
 /// A change to the search: the bar and the editor both follow it.

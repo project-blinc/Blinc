@@ -215,6 +215,7 @@ pub const UA_STYLES: &str = concat!(
 .blinc-code-line-number, .blinc-code-fold, .blinc-code-fold-hint { color: var(--text-tertiary); }
 .blinc-code-active-line { background: color-mix(in srgb, var(--primary) 5%, transparent); }
 .blinc-code-selection { background: var(--selection); }
+.blinc-code-placeholder { color: var(--text-tertiary); }
 .blinc-code-guide { background: color-mix(in srgb, var(--border) 55%, transparent); }
 .blinc-code-bracket {
     background: color-mix(in srgb, var(--primary) 15%, transparent);

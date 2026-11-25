@@ -13,6 +13,7 @@ mod child_index;
 mod class_when;
 mod class_when_descendants;
 mod code_bound;
+mod code_control;
 mod code_find_field;
 mod collapsed_when;
 mod css_attribute_selectors;

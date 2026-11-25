@@ -64,7 +64,7 @@ pub(super) fn binding(data: &SharedCodeEditorState) -> ImeBinding {
         read: Arc::new(move || {
             finish_on_blur(&source);
             let mut d = source.lock().unwrap();
-            if !d.focused {
+            if !d.focused || d.config.read_only {
                 return None;
             }
             let text = d.value();
@@ -87,7 +87,7 @@ pub(super) fn binding(data: &SharedCodeEditorState) -> ImeBinding {
         edit: Arc::new(move |edit| {
             let callback = {
                 let mut d = target.lock().unwrap();
-                if !d.focused || !d.ime.receive(edit) {
+                if !d.focused || d.config.read_only || !d.ime.receive(edit) {
                     return false;
                 }
                 if !crate::ime::valid_edit(edit) {
