@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1795613462,"nonce":"kSePXSWsAp1xKC1Q9UdVpwKzTNk=","added":["bug","area:text","area:layout"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1795613490,"nonce":"qYEAQXj9e6iYSDPiMyx3FABfPJk=","message":"The baseline fix landed in 586f0e4f.","files":null}]}
