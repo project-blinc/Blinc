@@ -1,12 +1,14 @@
 # Code Editor
 
-There are two code widgets. `code(text)` shows code. `code_editor(&state)` edits it, with syntax
-highlighting, line numbers, folding, a minimap, diagnostics and search. For a find and replace bar
-made of cn components, use [`cn::code_editor`](../cn/code-editor.md) over the same state.
+There are two code widgets. `code(text)` shows code. `code_editor(&state)` edits code. The editor has
+syntax highlighting, line numbers, folding, a minimap, diagnostics and search.
+
+[`cn::code_editor`](../cn/code-editor.md) is the same editor with a find and replace bar made of cn
+components.
 
 ## Read-Only Code Block
 
-Display syntax-highlighted code:
+A code block shows code with syntax highlighting:
 
 ```rust
 use blinc::layout::prelude::*;
@@ -19,13 +21,13 @@ code(r#"fn main() { println!("Hello"); }"#)
     .w_full()
 ```
 
-The lines scroll sideways in their own scroll container while the gutter stays
-put. In a vertical `scroll()`, give the block `.w_full()` (after the other
-setters) so it is as wide as the scroll and its long lines scroll inside it.
+Long lines scroll sideways, and the line numbers stay in place. If the block is inside a vertical
+`scroll()`, call `.w_full()` after the other methods. The block then takes the width of the scroll,
+and its long lines scroll inside it.
 
-`Code::bound` takes a signal or computed of the text instead, and follows it in
-place: a change rebuilds only the lines it touched, so a block showing a
-compiler's output or a log keeps the rest of its rows.
+`Code::bound` takes a signal or a computed value as the text. The block follows each change of the
+value. It builds again only the lines that changed. This helps a block that shows compiler output or
+a log.
 
 ```rust
 let output = signal(String::new());
@@ -51,83 +53,95 @@ code_editor(&state)
     .h(400.0)
 ```
 
-Create the state once, outside the builder, so that edits survive a resize or a theme change.
-`state.lock().unwrap().value()` is the text.
+Create the state one time, outside the builder. Then your edits stay after a resize or a theme
+change. `state.lock().unwrap().value()` gives the text.
 
 ### Size and scrolling
 
-With `.h(pixels)`, the editor has that height and scrolls its text. Without a height, it is as tall
-as its text. A long line scrolls sideways, and the gutter stays in place. A scroll bar shows only
-during a scroll, and only when the editor has something to scroll.
+If you set `.h(pixels)`, the editor has that height and scrolls its text. If you do not, the editor
+is as tall as its text. A long line scrolls sideways, and the line numbers stay in place. If there
+is text to scroll to, a scroll bar shows while you scroll.
 
-The text is as tall as its lines plus the padding above and below. The editor does not scroll when
-the box cuts off only the padding below the last line.
+The height of the text is the height of its lines plus the space above and below. If the box hides
+only the space below the last line, the editor does not scroll.
 
 ## Editing
 
 | Keys | What they do |
 |------|--------------|
-| Enter | New line, with the indent of the line before |
-| Backspace, Delete | Delete a character or the selection |
+| Enter | Start a new line with the same indent as the line before |
+| Backspace, Delete | Delete a character or the selected text |
 | Cmd or Ctrl with Backspace or Delete | Delete a word |
-| Tab, Shift+Tab | Indent and dedent the selected lines, by `tab_size` spaces (4 unless set) |
+| Tab, Shift+Tab | Add or remove an indent on the selected lines (`tab_size` spaces, 4 by default) |
 | Cmd or Ctrl+C, X, V | Copy, cut, paste |
-| Cmd or Ctrl+Z, with Shift | Undo, redo (the editor keeps 200 steps) |
-| Esc | Take the keyboard off the editor |
+| Cmd or Ctrl+Z | Undo. The editor keeps 200 steps |
+| Cmd or Ctrl+Shift+Z | Redo |
+| Esc | Move the keyboard away from the editor |
 
-Text from an input method, such as Chinese or Japanese input, is shown while it is composed.
+An input method is a tool that types characters such as Chinese or Japanese. The editor shows its
+text while you compose it.
 
-`.read_only(true)` lets the reader move, select and copy, and nothing changes the text.
-`.placeholder("…")` shows dimmed text while there is none.
+`.read_only(true)` lets the user move, select and copy, but not change the text. `.placeholder("…")`
+shows faint text while the editor is empty.
 
 ## Moving and selecting
 
 | Keys or action | What they do |
 |----------------|--------------|
-| Arrows, with Shift to select | Move by character or line |
-| Cmd or Ctrl with Left or Right | Move by word |
-| Home | To the first character that is not a space, then to the start of the line |
-| End | To the end of the line |
-| Page Up, Page Down | Move by the height of the view |
+| Arrow keys | Move by one character or one line. With Shift, select |
+| Cmd or Ctrl with Left or Right | Move by one word |
+| Home | Move to the first character that is not a space, then to the start of the line |
+| End | Move to the end of the line |
+| Page Up, Page Down | Move by the height of the editor |
 | Cmd or Ctrl+A | Select all |
-| Press, drag | Place the cursor, select |
-| Double press | Select a word |
+| Click, drag | Place the cursor, select text |
+| Double click | Select a word |
 
 On a touch screen, a tap places the cursor and a drag moves it. A long press or a double tap selects
-a word and opens the system's edit menu.
+a word and opens the edit menu of the system.
 
 ## Folding
 
-`.code_folding(true)` shows a chevron in the gutter beside each line that opens a block. A block
-starts at a `{` and ends at the matching `}` on a later line. Press the chevron to fold the block:
-the lines between the braces are hidden and the first line ends in `...`.
+`.code_folding(true)` shows a small arrow beside each line that opens a block. A block starts at a `{`
+and ends at the matching `}` on a later line. Click the arrow to fold the block. The lines between the
+two braces are then hidden, and the first line ends in `...`.
 
-- The cursor keys move over a folded block.
-- A block stays folded while you add or remove lines above it.
-- A block opens when an edit breaks its braces, or when a search match, an undo or your code puts
-  the cursor inside it.
+- The cursor keys skip a folded block.
+- A folded block stays folded while you add or remove lines above it.
+- If you change the braces of a block, the block opens.
+- If a search match, an undo or your code puts the cursor inside a block, the block opens.
 
-`CodeEditorData::toggle_fold(line)` folds or opens the block on a line, counted from 0.
+`CodeEditorData::toggle_fold(line)` folds or opens the block on a line. The first line is line 0.
 
 ## Minimap
 
-`.minimap(true)` shows the whole text in small bars at the right edge, coloured as the lines are.
-When the text is taller than the view, a box marks the part in view. A press or a drag on the
-minimap scrolls the editor. `code_minimap(&state)` makes a minimap that you place yourself.
+The minimap is a small picture of the whole text at the right edge. `.minimap(true)` shows it. Each
+line has the color of its code. If the text is taller than the editor, a box shows the visible part.
+Click or drag on the minimap to scroll. `code_minimap(&state)` makes a minimap that you place
+yourself.
 
 ## Marks in the text
 
-The editor marks the line of the cursor, the selection and the bracket that matches the one beside
-the cursor. `.indent_guides(true)` draws a line down each indented block.
+The editor marks these items:
+
+- The line that has the cursor
+- The selected text
+- The bracket that matches the bracket beside the cursor
+
+`.indent_guides(true)` also draws a vertical line beside each indented block.
 
 ### Diagnostics
 
-A compiler or linter marks problems in the editor with `set_code_diagnostics`.
-Each `CodeDiagnostic` is a span on one line (lines and columns from 0), a
-`DiagnosticSeverity` (`Error`, `Warning`, `Info`, `Hint`) and a message. The
-editor underlines each span, tints its line, puts a dot in the gutter, and shows
-the line's most severe message after its text. It keeps them until the next
-call; an empty list clears them.
+A diagnostic is a problem that a tool reports, for example a compiler error. Call
+`set_code_diagnostics` to show diagnostics in the editor. Each `CodeDiagnostic` has these parts:
+
+- A position on one line (lines and columns start at 0)
+- A `DiagnosticSeverity`: `Error`, `Warning`, `Info` or `Hint`
+- A message
+
+For each diagnostic, the editor underlines the text, colors the line and puts a dot beside it. After
+the line, it shows the message of the most serious problem on that line. The marks stay until the next
+call. An empty list removes them.
 
 ```rust
 set_code_diagnostics(&state, vec![
@@ -136,33 +150,33 @@ set_code_diagnostics(&state, vec![
 ]);
 ```
 
-Each part is a class per severity, coloured from the theme:
+Each part has one class for each severity, and the theme gives its color:
 
 | Class | Part | Default |
 |-------|------|---------|
-| `blinc-code-underline-{error,warning,info,hint}` | the underline | `--error`, `--warning`, `--info`, `--text-tertiary` |
-| `blinc-code-mark-{severity}` | the gutter dot | as the underline |
-| `blinc-code-line-{error,warning,info}` | the line's tint | the colour at 6 to 9% |
-| `blinc-code-lens-{severity}` | the message after the line | as the underline |
+| `blinc-code-underline-{error,warning,info,hint}` | The underline | `--error`, `--warning`, `--info`, `--text-tertiary` |
+| `blinc-code-mark-{severity}` | The dot | The color of the underline |
+| `blinc-code-line-{error,warning,info}` | The color of the line | The same color at 6 to 9% |
+| `blinc-code-lens-{severity}` | The message after the line | The color of the underline |
 
 ## Search
 
-`.search_enabled(true)` turns on the editor's own search bar. The cn code editor has a bar of its
-own, so it does not need this.
+`.search_enabled(true)` adds the search bar of this editor. The cn code editor has its own bar, so it
+does not use this one.
 
-- Cmd or Ctrl+F opens the bar. It starts from a selection on one line.
+- Cmd or Ctrl+F opens the bar. A selection on one line becomes the search text.
 - The search runs while you type and shows the number of matches.
-- Enter moves to the next match, Shift+Enter to the one before. Cmd or Ctrl+G does the same.
-- Cmd or Ctrl+H opens the replace row, which replaces one match or all of them. A replacement calls
-  `on_change`, and "replace all" is one undo step.
-- Cmd or Ctrl+R turns regular expressions on and off. The bar also has buttons for match case and
-  whole word.
-- With regular expressions, the replacement expands `$1`, `${name}`, `$&` (the whole match) and
-  `$$` (a dollar sign). A pattern that does not compile shows the reason in place of the count.
-- A match is on one line.
+- Enter moves to the next match, and Shift+Enter moves to the one before. Cmd or Ctrl+G also works.
+- Cmd or Ctrl+H opens the replace row. You can replace one match or all matches.
+- Each replacement calls `on_change`. One undo reverses "replace all".
+- Cmd or Ctrl+R turns regular expressions on or off. Two buttons set match case and whole word.
+- With regular expressions, the replacement text can use `$1`, `${name}`, `$&` (the whole match)
+  and `$$` (a dollar sign).
+- If a pattern is not valid, the bar shows the reason where the match count was.
+- A match is always on one line.
 
-The bar is built from elements with classes. Its look comes from the `.blinc-find` rules in the
-default stylesheet, and your CSS can replace any of them:
+The `.blinc-find` rules in the default stylesheet give the bar its style. Rules in your CSS replace
+them:
 
 ```css
 .blinc-find { background: var(--surface); border-radius: var(--radius-md); }
@@ -171,40 +185,42 @@ default stylesheet, and your CSS can replace any of them:
 .blinc-find-count--none { color: var(--warning); }
 ```
 
-The classes are `blinc-find` (the panel), `blinc-find-row`, `blinc-find-field`,
-`blinc-find-input`, `blinc-find-button` (with `-chevron`, `-prev`, `-next`,
-`-close`, `-replace`, `-replace-all`), `blinc-find-toggle` and
-`blinc-find-toggle--on`, and `blinc-find-count` and `blinc-find-count--none`.
+The bar has these classes:
+
+- `blinc-find` (the bar), `blinc-find-row`, `blinc-find-field`, `blinc-find-input`
+- `blinc-find-button`, with the endings `-chevron`, `-prev`, `-next`, `-close`, `-replace` and
+  `-replace-all`
+- `blinc-find-toggle`, `blinc-find-toggle--on`, `blinc-find-count` and `blinc-find-count--none`
 
 ## Theming
 
-The code block and the editor take every colour from the theme, with or without a syntax
-highlighter. They change with the theme and between light and dark. Your CSS changes any part.
+The code block and the editor take all their colors from the theme, with or without a highlighter. The
+colors change with the theme, and between light and dark. Your CSS can change each part.
 
 | Class | Part | Default |
 |-------|------|---------|
-| `blinc-code` | the block or editor | `--surface` fill, `--text-primary` text, `--radius-md` corners |
-| `blinc-code-line-number` | a line number | `--text-tertiary` |
-| `blinc-code-fold`, `blinc-code-fold-hint` | a fold chevron, the `...` of a folded block | `--text-tertiary` |
-| `blinc-code-active-line` | the line of the cursor | `--primary` at 5% |
-| `blinc-code-selection` | the selection | `--selection` |
-| `blinc-code-guide` | an indent guide | `--border` |
-| `blinc-code-bracket` | a matching bracket | `--primary` at 15%, with a border |
-| `blinc-code-find-match` | a search match, with `data-active` on the current one | `--warning` at 25%, 50% on the current one |
-| `blinc-code-placeholder` | the placeholder | `--text-tertiary` |
-| `blinc-code-minimap` | the minimap's edge | `--border` |
+| `blinc-code` | The block or editor | `--surface` background, `--text-primary` text, `--radius-md` corners |
+| `blinc-code-line-number` | A line number | `--text-tertiary` |
+| `blinc-code-fold`, `blinc-code-fold-hint` | A fold arrow, and the `...` of a folded block | `--text-tertiary` |
+| `blinc-code-active-line` | The line that has the cursor | `--primary` at 5% |
+| `blinc-code-selection` | The selected text | `--selection` |
+| `blinc-code-guide` | An indent guide | `--border` |
+| `blinc-code-bracket` | A matching bracket | `--primary` at 15%, with a border |
+| `blinc-code-find-match` | A search match. The current one has `data-active` | `--warning` at 25%, or 50% for the current one |
+| `blinc-code-placeholder` | The placeholder | `--text-tertiary` |
+| `blinc-code-minimap` | The edge of the minimap | `--border` |
 
-The editor draws the caret and the minimap itself, and reads these variables for them:
+The editor draws the cursor and the minimap itself. These variables set their colors and the font:
 
 | Variable | Part | Default |
 |----------|------|---------|
-| `--blinc-code-caret` | the caret | `--accent` |
-| `--blinc-code-minimap-line` | a minimap line without a syntax colour | `--text-primary` at 40% |
-| `--blinc-code-minimap-slider` | the box over the part in view | `--text-primary` at 8% |
-| `--blinc-code-font-family` | the face of the code | the generic monospace face |
+| `--blinc-code-caret` | The cursor | `--accent` |
+| `--blinc-code-minimap-line` | A minimap line that has no syntax color | `--text-primary` at 40% |
+| `--blinc-code-minimap-slider` | The box over the visible part | `--text-primary` at 8% |
+| `--blinc-code-font-family` | The font of the code | The generic monospace font |
 
-The editor measures the caret and the selection in the same face. A family that it does not have
-falls back to monospace for both. Register a face that is not installed with
+The editor uses the same font to place the cursor and the selection. If the app does not have a font
+family, the editor uses the monospace font. If a font is not installed, register it first with
 `blinc_app::register_font`.
 
 ```css
@@ -215,24 +231,24 @@ falls back to monospace for both. Register a face that is not installed with
 .blinc-code-selection { background: rgba(245, 158, 11, 0.3); }
 ```
 
-### Syntax colours
+### Syntax colors
 
-A highlighter names each token, and the token gets a class. The default stylesheet colours the
-class from the theme. To change a colour everywhere, set its variable. To change more than the
-colour, write a rule for the class.
+A highlighter finds the tokens, for example keywords and strings. Each token gets a class, and the
+default stylesheet gives that class a color from the theme. To change a color, set its variable. To
+change more than the color, write a rule for the class.
 
 | Class | Variable | Default |
 |-------|----------|---------|
 | `blinc-code-token-keyword` | `--blinc-syntax-keyword` | `--primary` mixed with `--error` |
-| `blinc-code-token-lifetime` | `--blinc-syntax-lifetime` | the keyword colour |
-| `blinc-code-token-string` | `--blinc-syntax-string` | `--success`, darkened or lightened toward the text |
-| `blinc-code-token-number` | `--blinc-syntax-number` | `--warning`, toward the text |
-| `blinc-code-token-constant` | `--blinc-syntax-constant` | the number colour |
-| `blinc-code-token-comment` | `--blinc-syntax-comment` | between `--text-secondary` and `--text-tertiary` |
-| `blinc-code-token-function` | `--blinc-syntax-function` | `--primary`, toward the text |
-| `blinc-code-token-property` | `--blinc-syntax-property` | the function colour |
-| `blinc-code-token-type` | `--blinc-syntax-type` | `--info` mixed with `--success`, toward the text |
-| `blinc-code-token-macro` | `--blinc-syntax-macro` | the type colour |
+| `blinc-code-token-lifetime` | `--blinc-syntax-lifetime` | The keyword color |
+| `blinc-code-token-string` | `--blinc-syntax-string` | `--success` mixed with the text color |
+| `blinc-code-token-number` | `--blinc-syntax-number` | `--warning` mixed with the text color |
+| `blinc-code-token-constant` | `--blinc-syntax-constant` | The number color |
+| `blinc-code-token-comment` | `--blinc-syntax-comment` | A mix of `--text-secondary` and `--text-tertiary` |
+| `blinc-code-token-function` | `--blinc-syntax-function` | `--primary` mixed with the text color |
+| `blinc-code-token-property` | `--blinc-syntax-property` | The function color |
+| `blinc-code-token-type` | `--blinc-syntax-type` | A mix of `--info`, `--success` and the text color |
+| `blinc-code-token-macro` | `--blinc-syntax-macro` | The type color |
 | `blinc-code-token-operator` | `--blinc-syntax-operator` | `--text-secondary` |
 | `blinc-code-token-variable` | `--blinc-syntax-variable` | `--text-primary` |
 
@@ -241,19 +257,19 @@ colour, write a rule for the class.
 .blinc-code-token-comment { color: var(--text-tertiary); }
 ```
 
-A colour given to a builder (`code_bg`, `text_color`, a `CodeConfig` colour) or named by a
-highlighter is set on the element, and it wins over these rules.
+Some colors come from your code: `code_bg`, `text_color`, a `CodeConfig` color, or a color that a
+highlighter gives. The widget sets these colors on the element, and they replace the rules above.
 
 ## Driving an editor from outside
 
-An application, or a toolbar of its own, changes the editor through these:
+Your app, or a toolbar that you build, can change the editor with these functions:
 
 ```rust
 use blinc_layout::widgets::code::{
     focus_code_editor, refresh_code_editor, replace_all_code_matches, set_code_value,
 };
 
-// Replace all the text. It is your change: `on_change` does not report it, and undo forgets it.
+// Replace all the text. `on_change` does not report this change, and undo cannot reverse it.
 set_code_value(&state, "fn main() {}");
 
 // Search with your own controls: set the query, mark the matches and draw the editor again.
@@ -267,17 +283,18 @@ refresh_code_editor(&state);
 // A replacement calls `on_change`.
 replace_all_code_matches(&state);
 
-// Give the editor the keyboard again, after one of your fields had it.
+// Give the keyboard back to the editor after one of your fields used it.
 focus_code_editor(&state);
 ```
 
-`CodeEditorData` holds the query, the options (`search_case_sensitive`, `search_whole_word`,
-`search_regex`), the matches and, for a regex that does not compile, `search_error`.
+`CodeEditorData` holds the search text, the options (`search_case_sensitive`, `search_whole_word`,
+`search_regex`) and the matches. If a regular expression is not valid, `search_error` holds the
+reason.
 
 ## Syntax Highlighters
 
 The built-in highlighters are `RustHighlighter`, `JsonHighlighter`, `LuaHighlighter` and
-`PlainHighlighter`, which marks strings, numbers and comments in most languages.
+`PlainHighlighter`. `PlainHighlighter` marks strings, numbers and comments in most languages.
 
 ```rust
 use blinc::layout::syntax::{JsonHighlighter, SyntaxConfig};
@@ -287,8 +304,9 @@ let config = SyntaxConfig::new(JsonHighlighter::new());
 
 ### Custom Highlighter
 
-Implement the `SyntaxHighlighter` trait. A rule is a regular expression, matched against one line at
-a time. Where two matches overlap, the one that starts first wins.
+To make your own highlighter, implement the `SyntaxHighlighter` trait. A rule is a regular expression
+that the highlighter applies to one line at a time. If two matches overlap, the match that starts
+first wins.
 
 ```rust
 use blinc::core::Color;
@@ -305,7 +323,7 @@ impl Ini {
                 TokenRule::themed(r"^\s*[;#].*$", TokenType::Comment),
                 TokenRule::themed(r"^\[[^\]]*\]", TokenType::Keyword).bold(),
                 TokenRule::themed(r"^[^=]+", TokenType::custom("property")),
-                // A colour of its own, in every theme.
+                // This color is the same in every theme.
                 TokenRule::new(r"\b(true|false)\b", Color::rgb(0.9, 0.5, 0.2)),
             ],
         }
@@ -319,11 +337,11 @@ impl SyntaxHighlighter for Ini {
 }
 ```
 
-`TokenRule::themed` leaves the colour to the stylesheet. A custom token type gets the class
-`blinc-code-token-` plus its name, and your CSS colours it. `TokenRule::new` gives a fixed colour.
+`TokenRule::themed` lets the stylesheet choose the color. `TokenRule::new` sets a fixed color. A
+custom token type gets the class `blinc-code-token-` plus its name, and your CSS gives it a color.
 
-The trait also has `default_color`, `background_color` and `line_number_color`. They return
-nothing unless you implement them, and then the theme applies.
+The trait also has `default_color`, `background_color` and `line_number_color`. They return nothing
+unless you implement them. The theme then gives these colors.
 
 ## Configuration
 
@@ -332,17 +350,17 @@ code_editor(&state)
     .line_numbers(true)        // Show line numbers
     .gutter_width(48.0)        // Width of the line number column
     .font_size(13.0)           // Font size in pixels
-    .line_height(1.5)          // Line height multiplier
+    .line_height(1.5)          // Line height, times the font size
     .padding(16.0)             // Space around the text
-    .rounded(8.0)              // Corner radius over the theme's
-    .code_bg(Color::BLACK)     // Background over the theme's
-    .text_color(Color::WHITE)  // Plain text colour over the theme's
-    .read_only(false)          // Let the text be changed
+    .rounded(8.0)              // Corner radius instead of the theme radius
+    .code_bg(Color::BLACK)     // Background instead of the theme color
+    .text_color(Color::WHITE)  // Plain text color instead of the theme color
+    .read_only(false)          // Let the user change the text
     .tab_size(4)               // Spaces per Tab
-    .placeholder("Write…")     // Shown while empty
-    .indent_guides(true)       // Lines down indented blocks
-    .code_folding(true)        // Fold blocks from the gutter
-    .minimap(true)             // The text in small at the right edge
-    .search_enabled(true)      // The built-in search bar
+    .placeholder("Write…")     // Text for an empty editor
+    .indent_guides(true)       // Lines beside indented blocks
+    .code_folding(true)        // Fold blocks
+    .minimap(true)             // Small picture of the text at the right edge
+    .search_enabled(true)      // The search bar
     .on_change(|text| {})      // Called after each change
 ```

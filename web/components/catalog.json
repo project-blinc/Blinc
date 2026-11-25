@@ -3888,7 +3888,7 @@
       ],
       "since": null,
       "maturity": "stable",
-      "description": "Edit source with syntax highlighting, line numbers, folding, a minimap and a floating find and replace bar.",
+      "description": "Edit code with syntax highlighting, line numbers, folding, a minimap and a find and replace bar.",
       "doc": "docs/book/src/cn/code-editor.md",
       "doc_section": null,
       "entry": "code_editor_demo",
@@ -3945,9 +3945,9 @@
         ".blinc-code-find-match",
         ".blinc-code-fold-hint"
       ],
-      "keyboard": "Click to focus. Arrows navigate, Enter inserts a line, Tab indents. Cmd/Ctrl+F finds and Cmd+Option+F or Ctrl+H replaces; Enter and Shift+Enter step through matches, Alt+C, W and R set the options, Esc closes. Standard selection, clipboard and undo shortcuts apply.",
+      "keyboard": "Click the editor to type. The arrow keys move the cursor, Enter starts a line and Tab indents. Cmd or Ctrl+F opens find. Cmd+Option+F or Ctrl+H opens replace. Enter and Shift+Enter move between matches. Alt+C, Alt+W and Alt+R set the search options. Esc closes the bar. The usual selection, clipboard and undo keys also work.",
       "tokens": "--blinc-code-caret, --blinc-code-minimap-line, --blinc-code-minimap-slider, --accent",
-      "notes": "blinc_cn wraps the layout code editor over the same state, with its find and replace bar built from cn inputs, toggles and buttons and styled by the cn stylesheet.",
+      "notes": "The cn code editor adds a find and replace bar to the layout code editor. Both use the same state. The bar uses cn inputs, toggles and buttons, and the cn stylesheet gives them their style.",
       "recipe": "code-editor.css",
       "recording": {
         "target": ".blinc-code",
@@ -3969,7 +3969,7 @@
       ],
       "since": null,
       "maturity": "stable",
-      "description": "Write formatted prose with headings, lists, checklists, tables, alignment and links, from a fixed or floating toolbar.",
+      "description": "Write formatted text with headings, lists, checklists, tables, alignment and links. Use a fixed toolbar or a floating toolbar.",
       "doc": "docs/book/src/cn/rich-text-editor.md",
       "doc_section": null,
       "entry": "rich_text_editor_demo",
@@ -4011,9 +4011,9 @@
         ".cn-rich-text-editor-quote-bar",
         ".cn-rich-text-editor-table"
       ],
-      "keyboard": "Click to focus, type and select text. Use arrows, Enter and Backspace; Tab and Shift+Tab move between table cells and nest list items; Cmd or Ctrl with B, I, U, E and Shift with L, E, R, J, 6, 7, 8 and 9 format and align; see the guide below.",
+      "keyboard": "Click the editor, then type or select text. The arrow keys, Enter and Backspace work as usual. Tab and Shift+Tab move between table cells, and move a list item in or out. Cmd or Ctrl with B, I, U or E makes bold, italic, underline or code. Add Shift with L, E, R or J to align text. Add Shift with 6, 7, 8 or 9 to make a checklist, a numbered list, a bulleted list or a quote.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
-      "notes": "Choose a fixed toolbar above the text or a floating one that points at the selection. Both are built from cn components, and the document reads and writes Markdown.",
+      "notes": "Choose a fixed toolbar above the text, or a floating toolbar that points at the selected text. Both use cn components. The document can read and write Markdown.",
       "recipe": "rich-text-editor.css",
       "recording": {
         "target": ".cn-rich-text-editor-document",
