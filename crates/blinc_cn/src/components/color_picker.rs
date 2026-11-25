@@ -209,7 +209,11 @@ fn swatch(c: &Controller) -> Div {
         .class("cn-color-picker-swatch")
         .relative()
         .overflow_clip()
-        .child(super::color_picker_controls::checker())
+        // Only under a colour that lets it through.
+        .show(
+            computed(move |g| g.get(value).unwrap_or_default().a < 1.0),
+            super::color_picker_controls::checker,
+        )
         .child(
             div()
                 .absolute()

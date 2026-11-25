@@ -258,22 +258,29 @@ impl TooltipBuilder {
                     offset,
                     (vw, vh),
                 );
-                // Compute anchor in viewport coords from the trigger's bounds.
-                let (x, y) = calculate_tooltip_position(
-                    ctx.bounds_x,
-                    ctx.bounds_y,
-                    ctx.bounds_width,
-                    ctx.bounds_height,
-                    side,
-                    align,
-                    offset,
-                );
-
                 let Some(ref text_str) = tooltip_text else {
                     return;
                 };
                 let text_owned = clone_reactive(text_str);
                 let font_size = ThemeState::get().typography().text_xs;
+                // The overlay is placed by its corner, so centring needs the tooltip's width: its
+                // text and the `.cn-tooltip` rule's horizontal padding.
+                let width = blinc_layout::text_measure::measure_text(&current(text_str), font_size)
+                    .width
+                    + 2.0 * ThemeState::get().spacing().space_3;
+                // Compute anchor in viewport coords from the trigger's bounds.
+                let (x, y) = calculate_tooltip_position(
+                    (
+                        ctx.bounds_x,
+                        ctx.bounds_y,
+                        ctx.bounds_width,
+                        ctx.bounds_height,
+                    ),
+                    width,
+                    side,
+                    align,
+                    offset,
+                );
                 let anchor_dir = match side {
                     TooltipSide::Top => AnchorDirection::Top,
                     TooltipSide::Bottom => AnchorDirection::Bottom,
@@ -300,15 +307,11 @@ impl TooltipBuilder {
 
                 let stored_close = stored_for_close;
                 let stored_open = stored_for_open;
-                // Tooltips are single-line `no_wrap`; the cap of
-                // ~40 chars at text_xs covers the documented use
-                // case (lightweight informational labels). Hosts
-                // that pass longer strings will simply paint
-                // wider than the hint — the size only feeds the
-                // viewport clamp.
+                // Tooltips are single-line `no_wrap`, so the measured width is the drawn width.
                 let handle = OverlayBuilder::tooltip()
                     .at(x, y)
-                    .size(280.0, 32.0)
+                    // The real width, so keeping it inside the window does not move it off centre.
+                    .size(width, 32.0)
                     .anchor_direction(anchor_dir)
                     .dismissable_by_mouse_leave(true, close_delay_ms)
                     .auto_dismiss_after_ms(auto_hide_ms)
@@ -401,18 +404,12 @@ fn fitting_side(
 }
 
 fn calculate_tooltip_position(
-    trigger_x: f32,
-    trigger_y: f32,
-    trigger_w: f32,
-    trigger_h: f32,
+    (trigger_x, trigger_y, trigger_w, trigger_h): (f32, f32, f32, f32),
+    tooltip_width: f32,
     side: TooltipSide,
     align: TooltipAlign,
     offset: f32,
 ) -> (f32, f32) {
-    // Estimate tooltip width for alignment calculations
-    // Tooltips are typically small, so use a smaller estimate than hover cards
-    let tooltip_width_estimate = 100.0;
-
     match side {
         TooltipSide::Top => {
             // Position above trigger - use trigger_y - offset as the bottom anchor point
@@ -420,8 +417,8 @@ fn calculate_tooltip_position(
             let y = trigger_y - (offset * 6.0);
             let x = match align {
                 TooltipAlign::Start => trigger_x,
-                TooltipAlign::Center => trigger_x + (trigger_w - tooltip_width_estimate) / 2.0,
-                TooltipAlign::End => trigger_x + trigger_w - tooltip_width_estimate,
+                TooltipAlign::Center => trigger_x + (trigger_w - tooltip_width) / 2.0,
+                TooltipAlign::End => trigger_x + trigger_w - tooltip_width,
             };
             (x.max(0.0), y.max(0.0))
         }
@@ -430,8 +427,8 @@ fn calculate_tooltip_position(
             let y = trigger_y + trigger_h + offset;
             let x = match align {
                 TooltipAlign::Start => trigger_x,
-                TooltipAlign::Center => trigger_x + (trigger_w - tooltip_width_estimate) / 2.0,
-                TooltipAlign::End => trigger_x + trigger_w - tooltip_width_estimate,
+                TooltipAlign::Center => trigger_x + (trigger_w - tooltip_width) / 2.0,
+                TooltipAlign::End => trigger_x + trigger_w - tooltip_width,
             };
             (x.max(0.0), y)
         }
@@ -447,7 +444,7 @@ fn calculate_tooltip_position(
         }
         TooltipSide::Left => {
             // Position to the left of trigger
-            let x = trigger_x - tooltip_width_estimate - offset;
+            let x = trigger_x - tooltip_width - offset;
             let y = match align {
                 TooltipAlign::Start => trigger_y,
                 TooltipAlign::Center => trigger_y,
@@ -572,27 +569,23 @@ mod tests {
     #[test]
     fn test_tooltip_position_top() {
         let (x, y) = calculate_tooltip_position(
-            100.0,
-            50.0,
-            80.0,
-            30.0,
+            (100.0, 50.0, 80.0, 30.0),
+            40.0,
             TooltipSide::Top,
             TooltipAlign::Center,
             6.0,
         );
         // y uses offset * 6.0 multiplier for top positioning
         assert_eq!(y, 50.0 - (6.0 * 6.0)); // 14.0
-        // x should be centered (tooltip_width_estimate = 100.0)
-        assert_eq!(x, 100.0 + (80.0 - 100.0) / 2.0); // 90.0
+        // Centred: the 40-wide tooltip's middle is the trigger's.
+        assert_eq!(x + 20.0, 100.0 + 40.0);
     }
 
     #[test]
     fn test_tooltip_position_bottom() {
         let (x, y) = calculate_tooltip_position(
-            100.0,
-            50.0,
-            80.0,
-            30.0,
+            (100.0, 50.0, 80.0, 30.0),
+            40.0,
             TooltipSide::Bottom,
             TooltipAlign::Start,
             6.0,
@@ -604,10 +597,8 @@ mod tests {
     #[test]
     fn test_tooltip_position_right() {
         let (x, y) = calculate_tooltip_position(
-            100.0,
-            50.0,
-            80.0,
-            30.0,
+            (100.0, 50.0, 80.0, 30.0),
+            40.0,
             TooltipSide::Right,
             TooltipAlign::Center,
             6.0,

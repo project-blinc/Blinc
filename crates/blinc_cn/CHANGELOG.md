@@ -29,6 +29,8 @@ All notable changes to `blinc_cn` will be documented in this file.
 - Typography has a dedicated guide covering all helpers, reactive content, inline composition and CSS class hooks; the gallery embeds that guide.
 
 ### Fixed
+- A colour picker's swatch draws its checkerboard only under a translucent colour.
+- A tooltip is centred on its trigger whatever its width. It was centred as if it were 100 px wide, and kept inside the window as if it were 280 px wide, which moved it off its trigger.
 - In the rich text editor, a mark turned on with a collapsed cursor applies to the text typed next, and a caret at the boundary of two runs takes the marks of the run before it.
 - In a container narrower than they are, the menubar, navigation menu, breadcrumb and pagination wrap onto more lines instead of running past its edge, and pagination buttons keep their size instead of being squeezed. A progress bar or chart with a set width shrinks to such a container; the chart draws at the width it gets.
 - The pill behind the active tab takes no pointer input, so the desktop runner hovers what is drawn over it, such as a closable tab's close button, however the pointer arrives.
