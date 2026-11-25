@@ -34,7 +34,8 @@ Code::bound(output)
 
 ## Editable Code Editor
 
-Full editor with Stateful incremental updates:
+Full editor with Stateful incremental updates. For a find and replace bar made of cn components, use
+[`cn::code_editor`](../cn/code-editor.md) over the same state.
 
 ```rust
 let state = code_editor_state("let x = 42;");

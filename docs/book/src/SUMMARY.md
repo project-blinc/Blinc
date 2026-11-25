@@ -117,6 +117,7 @@
 - [Form Components](./cn/form.md)
 - [Date, Time and Colour Pickers](./cn/pickers.md)
 - [Rich Text Editor](./cn/rich-text-editor.md)
+- [Code Editor](./cn/code-editor.md)
 - [Navigation](./cn/navigation.md)
 - [Feedback](./cn/feedback.md)
 - [Layout](./cn/layout.md)

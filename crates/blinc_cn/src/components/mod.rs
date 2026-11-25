@@ -19,6 +19,7 @@ pub(crate) mod calendar_date;
 pub mod card;
 pub mod chart;
 pub mod checkbox;
+pub mod code_editor;
 pub mod collapsible;
 pub mod color_picker;
 mod color_picker_controls;

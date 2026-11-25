@@ -1,0 +1,53 @@
+@use "blinc/mixins" as *;
+
+/* ============================================================================
+   Code Editor
+
+   The layout editor takes its own `.blinc-code` rules; these style the find
+   and replace bar floating over it and the marks of its matches.
+   ============================================================================ */
+
+.cn-code-editor-find {
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    padding: 6px;
+    transform-origin: top right;
+    animation: cn-code-editor-find-enter var(--duration-fast) var(--ease-out);
+}
+@keyframes cn-code-editor-find-enter {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.cn-code-editor-find-replace {
+    margin-top: 6px;
+    animation: cn-code-editor-replace-enter var(--duration-fast) var(--ease-out);
+}
+@keyframes cn-code-editor-replace-enter {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+/* The chevron turns down while the replace row shows. */
+.cn-code-editor-find-chevron { @include transition(transform); }
+.cn-code-editor-find-chevron[data-state="open"] { transform: rotate(90deg); }
+.cn-code-editor-find-count {
+    min-width: 56px;
+    padding: 0 6px;
+    color: var(--text-secondary);
+    font-size: var(--text-xs);
+}
+.cn-code-editor-find-count--none { color: var(--error); }
+/* Why a pattern does not compile, under the rows and in line with the fields. */
+.cn-code-editor-find-error {
+    margin-top: 4px;
+    padding: 0 6px 0 32px;
+    color: var(--error);
+    font-size: var(--text-xs);
+}
+/* A disabled arrow or replace button stays as quiet as the others. */
+.cn-code-editor-find .cn-button:disabled { background: transparent; border-color: transparent; }
+/* The matches in the text, and the one the arrows are on. */
+.cn-code-editor .blinc-code-find-match { background: blend(var(--warning), 28%); }
+.cn-code-editor .blinc-code-find-match[data-active] { background: blend(var(--warning), 55%); }

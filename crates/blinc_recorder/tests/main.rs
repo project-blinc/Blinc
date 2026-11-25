@@ -11,6 +11,7 @@ mod cn_button_snapshots;
 mod cn_calendar;
 mod cn_chart;
 mod cn_checkbox_snapshots;
+mod cn_code_editor;
 mod cn_cursor;
 mod cn_date_picker;
 mod cn_disclosure;

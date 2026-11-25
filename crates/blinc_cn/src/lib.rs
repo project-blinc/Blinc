@@ -67,6 +67,7 @@ pub mod cn {
         threshold_line_chart,
     };
     pub use crate::components::checkbox::checkbox;
+    pub use crate::components::code_editor::code_editor;
     pub use crate::components::collapsible::{collapsible, collapsible_section};
     pub use crate::components::color_picker::color_picker;
     pub use crate::components::combobox::combobox;

@@ -4,6 +4,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 
 ## [Unreleased]
 
+- `cn::code_editor` is the layout code editor with a find and replace bar that floats over it, built from cn inputs, toggles and buttons: Cmd or Ctrl+F to find, Cmd+Option+F or Ctrl+H to replace, match case, whole word and regular expression, a match count, and replace one or all. Its classes are `.cn-code-editor` and `.cn-code-editor-find*`.
 - The default stylesheet is written in SCSS, one partial for each component under `styles/components/`, and is compiled by `build.rs` with the new `blinc_sass` crate. `CN_STYLES` is the same constant with the same rules in the same order; the cn styles use the shared `transition`, `focus-ring`, `tint` and `blend` mixins for what repeated, and the time, colour and date pickers have a partial of their own. The only difference in the compiled text is that an attribute selector loses its quotes where the value is a plain word (`[data-state=on]`).
 - The rich text editor is a cn component, `blinc_cn::components::rich_text_editor`, moved from `blinc_layout` with its tests. Its CSS rules are part of `CN_STYLES`, and its classes carry the cn prefix: `.cn-rich-text-editor` for the editor, `.cn-rich-text-editor-document` for its text, and `.cn-rich-text-editor-*` for the rest, in place of `.blinc-rich-text-*` and `.blinc-rte-*`. The caret colour variable is `--cn-rich-text-editor-caret`.
 
