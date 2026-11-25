@@ -13,6 +13,8 @@
 
 .demo-pie { display: flex; align-items: center; justify-content: center; width: 100%; max-width: 420px; }
 .demo-wide { display:flex; flex-direction:column; gap:16px; width:100%; max-width:420px; }
+/* Wide enough for the code editor's find bar to take one line. */
+.demo-wide.demo-editor { max-width:504px; }
 .demo-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:12px; }
 .demo-card-width { width:100%; max-width:360px; }
 .demo-panel { padding:16px; background:var(--surface); color:var(--text-primary); border-radius:var(--radius-default); }

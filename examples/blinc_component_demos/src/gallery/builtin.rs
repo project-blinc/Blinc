@@ -17,17 +17,17 @@ pub fn code_editor_demo(values: &DemoState, _: (f32, f32)) -> Div {
     let name = values.name;
     div()
         .class("demo-wide")
+        .class("demo-editor")
         .child(
-            code_editor(&values.code)
+            blinc_cn::components::code_editor::code_editor(&values.code)
                 .syntax(SyntaxConfig::new(RustHighlighter::new()))
                 .line_numbers(true)
                 .font_size(13.0)
-                .search_enabled(true)
                 .on_change(move |text| name.set(text.to_string()))
                 .w_full()
                 .h(216.0),
         )
-        .child(text("Edit Rust · ⌘/Ctrl F to find").class("demo-caption"))
+        .child(text("Edit Rust · ⌘/Ctrl F to find and replace").class("demo-caption"))
 }
 
 pub fn rich_text_editor_demo(values: &DemoState, viewport: (f32, f32)) -> Div {

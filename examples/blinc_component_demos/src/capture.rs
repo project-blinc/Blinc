@@ -231,6 +231,18 @@ fn capture(output: &std::path::Path, slug: &str) -> Result<(), Box<dyn Error>> {
                         ui.key_with_shift(39, true);
                     }
                 }
+                if slug == "code-editor" {
+                    // After the edit, find a word in the code and step to its next match.
+                    if index == 34 {
+                        ui.key_with_modifiers(70, false, false, false, true);
+                    }
+                    if (40..50).contains(&index) && index % 2 == 0 {
+                        ui.type_text(&"theme"[(index - 40) / 2..][..1]);
+                    }
+                    if index == 56 {
+                        ui.key(13);
+                    }
+                }
                 if index == 18 && slug == "rich-text-editor" {
                     ui.key(40).key(35).key(13);
                 }

@@ -9,6 +9,8 @@ use blinc_app::windowed::WindowedApp;
 use blinc_app::windowed::WindowedContext;
 use blinc_cn::prelude::*;
 use blinc_core::{Color, computed};
+use blinc_layout::syntax::{RustHighlighter, SyntaxConfig};
+use blinc_layout::widgets::code::{SharedCodeEditorState, code_editor_state};
 use blinc_layout::widgets::text_input::text_input_data;
 use blinc_theme::{ColorToken, ThemeBundle, ThemeState};
 
@@ -148,6 +150,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                         .child(tree_view_section())
                         .child(table_section())
                         .child(rich_text_section(ctx))
+                        .child(code_editor_section())
                         .child(charts_section(ctx)),
                 ),
         )
@@ -3975,6 +3978,38 @@ thread_local! {
             )),
         ]
     };
+}
+
+thread_local! {
+    /// The code example's text, kept across rebuilds so edits survive a resize.
+    static CODE_DOC: SharedCodeEditorState = code_editor_state(
+        "use std::collections::HashMap;\n\n/// How often each word comes up.\n\
+         fn count(words: &[&str]) -> HashMap<String, usize> {\n    \
+         let mut seen = HashMap::new();\n    for word in words {\n        \
+         *seen.entry(word.to_string()).or_insert(0) += 1;\n    }\n    seen\n}\n\n\
+         fn main() {\n    let words = [\"tree\", \"leaf\", \"tree\"];\n    \
+         println!(\"{:?}\", count(&words));\n}",
+    );
+}
+
+fn code_editor_section() -> impl ElementBuilder + use<> {
+    let code = CODE_DOC.with(|code| code.clone());
+    section_container()
+        .id("code-editor-examples")
+        .child(section_title("Code Editor"))
+        .child(
+            cn::code_editor(&code)
+                .syntax(SyntaxConfig::new(RustHighlighter::new()))
+                .line_numbers(true)
+                .code_folding(true)
+                .indent_guides(true)
+                .minimap(true)
+                .w_full()
+                .h(320.0),
+        )
+        .child(cn::label(
+            "Cmd or Ctrl+F finds, Cmd+Option+F or Ctrl+H replaces",
+        ))
 }
 
 fn rich_text_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {

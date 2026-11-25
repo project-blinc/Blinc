@@ -3878,8 +3878,8 @@
     {
       "slug": "code-editor",
       "title": "Code Editor",
-      "library": "layout",
-      "module": "layout::widgets::code",
+      "library": "cn",
+      "module": "cn::code_editor",
       "category": "Editors",
       "tags": [
         "editors",
@@ -3888,12 +3888,13 @@
       ],
       "since": null,
       "maturity": "stable",
-      "description": "Edit source with syntax highlighting, line numbers, search and selection.",
-      "doc": "docs/book/src/widgets/code-editor.md",
-      "doc_section": "Editable Code Editor",
+      "description": "Edit source with syntax highlighting, line numbers, folding, a minimap and a floating find and replace bar.",
+      "doc": "docs/book/src/cn/code-editor.md",
+      "doc_section": null,
       "entry": "code_editor_demo",
       "source": "examples/blinc_component_demos/src/gallery/builtin.rs",
       "implementation": [
+        "crates/blinc_cn/src/components/code_editor/mod.rs",
         "crates/blinc_layout/src/widgets/code/mod.rs",
         "examples/blinc_component_demos/src/gallery/builtin.rs"
       ],
@@ -3922,13 +3923,16 @@
           "example": "RustHighlighter"
         },
         {
-          "name": "line_numbers / search_enabled",
+          "name": "line_numbers / find",
           "kind": "Construction",
           "type": "bool",
           "example": "true"
         }
       ],
       "classes": [
+        ".cn-code-editor",
+        ".cn-code-editor-find",
+        ".cn-code-editor-find-count",
         ".blinc-code",
         ".blinc-code-line-number",
         ".blinc-code-fold",
@@ -3941,9 +3945,9 @@
         ".blinc-code-find-match",
         ".blinc-code-fold-hint"
       ],
-      "keyboard": "Click to focus. Type and select text; arrow keys navigate, Enter inserts a line, Tab indents, and Cmd/Ctrl+F opens search. Standard selection, clipboard and undo shortcuts apply.",
+      "keyboard": "Click to focus. Arrows navigate, Enter inserts a line, Tab indents. Cmd/Ctrl+F finds and Cmd+Option+F or Ctrl+H replaces; Enter and Shift+Enter step through matches, Alt+C, W and R set the options, Esc closes. Standard selection, clipboard and undo shortcuts apply.",
       "tokens": "--blinc-code-caret, --blinc-code-minimap-line, --blinc-code-minimap-slider, --accent",
-      "notes": "Edit source with syntax highlighting, line numbers, search and selection. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
+      "notes": "blinc_cn wraps the layout code editor over the same state, with its find and replace bar built from cn inputs, toggles and buttons and styled by the cn stylesheet.",
       "recipe": "code-editor.css",
       "recording": {
         "target": ".blinc-code",
