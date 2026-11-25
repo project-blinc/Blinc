@@ -122,9 +122,9 @@ pub(super) fn content(state: &RichTextState, version: &Signal<u32>, theme: &Rich
             // A box registers itself with the state.
             drop(data);
             let marker = match block.kind {
-                BlockKind::TaskItem { checked } => {
-                    Some(Marker::Box(task_box(&state, version, key.index, checked)))
-                }
+                BlockKind::TaskItem { checked } => Some(Marker::Task(Box::new(task_box(
+                    &state, version, key.index, checked,
+                )))),
                 _ => text.map(Marker::Text),
             };
             render_block(&block, marker, &theme, width)

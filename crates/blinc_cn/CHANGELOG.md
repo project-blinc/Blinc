@@ -36,6 +36,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - Typography has a dedicated guide covering all helpers, reactive content, inline composition and CSS class hooks; the gallery embeds that guide.
 
 ### Fixed
+- Deleting a rich text selection that starts at a divider removes the divider too.
 - A rich text numbered list goes on counting past items nested in it.
 - In the rich text editor, the cursor, the selection and the line wrapping measure bold and italic text in its own face. They drifted along a line with any.
 - `RichDocument::from_markdown` makes a hard break a line of its own, keeps a quote's paragraphs apart, keeps an item's text after a nested list, and reads a code block as code, line by line.

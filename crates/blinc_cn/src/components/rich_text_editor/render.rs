@@ -153,7 +153,7 @@ pub fn render_document(doc: &RichDocument, theme: &RichTextTheme, content_width:
 pub(super) enum Marker {
     Text(String),
     /// A checklist item's box.
-    Box(Div),
+    Task(Box<Div>),
 }
 
 impl Marker {
@@ -161,14 +161,14 @@ impl Marker {
     fn of(doc: &RichDocument, index: usize) -> Option<Self> {
         let block = &doc.blocks[index];
         match block.kind {
-            BlockKind::TaskItem { checked } => Some(Self::Box(
+            BlockKind::TaskItem { checked } => Some(Self::Task(Box::new(
                 div().child(
                     checkbox(signal(checked))
                         .size(CheckboxSize::Small)
                         .disabled(true)
                         .build_component(),
                 ),
-            )),
+            ))),
             _ => Self::text(doc, index).map(Self::Text),
         }
     }
@@ -463,11 +463,11 @@ fn list_item_div(
             column.child(rich_text_styled(StyledText::plain(&text, ink)).size(theme.font_size))
         }
         // In the middle of the first line.
-        Some(Marker::Box(task)) => column
+        Some(Marker::Task(task)) => column
             .h(theme.font_size * theme.line_height)
             .flex_row()
             .items_center()
-            .child(task),
+            .child(*task),
         None => column,
     };
     // The marker column eats `bullet_column_width + 8` (gap) of the inner width.

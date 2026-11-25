@@ -159,36 +159,61 @@ pub fn delete_forward(doc: &mut RichDocument, pos: DocPosition) -> DocPosition {
     pos
 }
 
-/// Delete the entire selection. Returns the position the cursor should
-/// land at (the start of the deleted range).
+/// Delete the entire selection, joining what is left of the lines at its ends. Returns the
+/// position the cursor should land at (the start of the deleted range).
 pub fn delete_selection(doc: &mut RichDocument, sel: Selection) -> DocPosition {
     let (start, end) = sel.ordered();
-    if start == end {
+    let (start, end) = (start.clamp(doc), end.clamp(doc));
+    if start == end || doc.blocks.is_empty() {
         return start;
     }
-    // Same line — chop the range out.
-    if start.block == end.block && start.line == end.line {
-        if let Some(block) = doc.blocks.get_mut(start.block)
-            && let Some(line) = block.lines.get_mut(start.line)
-        {
-            let s_byte = char_to_byte(&line.text, start.col);
-            let e_byte = char_to_byte(&line.text, end.col);
-            line.text.replace_range(s_byte..e_byte, "");
-            rewrite_spans_after_delete(line, s_byte, e_byte - s_byte);
-        }
+    if (start.block, start.line) == (end.block, end.line) {
+        delete_in_line(
+            &mut doc.blocks[start.block].lines[start.line],
+            start.col,
+            end.col,
+        );
         return start;
     }
-
-    // Multi-line / multi-block — repeatedly delete forward from `start`
-    // until we reach `end`. Inefficient but correct, and the doc is
-    // small enough that it doesn't matter.
-    let mut cursor = end;
-    while cursor > start {
-        let prev = super::cursor::step_backward(doc, cursor).unwrap_or(start);
-        delete_backward(doc, cursor);
-        cursor = prev;
+    // What follows the selection in its last block.
+    let mut tail = doc.blocks[end.block].lines.split_off(end.line);
+    delete_in_line(&mut tail[0], 0, end.col);
+    if start.block != end.block {
+        doc.blocks.drain(start.block + 1..=end.block);
     }
+    let head = &mut doc.blocks[start.block];
+    // A divider at the start was selected with the rest.
+    if head.kind == BlockKind::Divider {
+        *head = Block::paragraph_empty();
+    }
+    head.lines.truncate(start.line + 1);
+    delete_in_line(&mut head.lines[start.line], start.col, usize::MAX);
+    let mut tail = tail.into_iter();
+    if let Some(rest) = tail.next() {
+        append_line(&mut head.lines[start.line], rest);
+    }
+    head.lines.extend(tail);
     start
+}
+
+/// Take the characters `from..to` out of a line.
+fn delete_in_line(line: &mut StyledLine, from: usize, to: usize) {
+    let (start, end) = (char_to_byte(&line.text, from), char_to_byte(&line.text, to));
+    if start < end {
+        line.text.replace_range(start..end, "");
+        rewrite_spans_after_delete(line, start, end - start);
+    }
+}
+
+/// Put `rest` at the end of a line.
+fn append_line(line: &mut StyledLine, rest: StyledLine) {
+    let at = line.text.len();
+    line.text.push_str(&rest.text);
+    line.spans.extend(rest.spans.into_iter().map(|mut span| {
+        span.start += at;
+        span.end += at;
+        span
+    }));
 }
 
 /// Insert a soft line break at `pos` — splits the current `StyledLine`
@@ -815,5 +840,62 @@ mod tests {
             assert_eq!(delete_backward(&mut d, start), DocPosition::new(0, 0, 1));
             assert_eq!(d.blocks[0].plain_text(), "ab");
         }
+    }
+
+    #[test]
+    fn deleting_across_blocks_joins_their_ends_whatever_their_kinds() {
+        let select = |a, b| Selection { anchor: a, head: b };
+        for kind in [
+            BlockKind::Paragraph,
+            BlockKind::Heading(1),
+            BlockKind::BulletItem,
+            BlockKind::TaskItem { checked: true },
+            BlockKind::Quote,
+        ] {
+            let mut d = doc(vec![
+                item(kind.clone(), 0, "one"),
+                Block::divider(),
+                item(kind.clone(), 1, "two"),
+                item(kind.clone(), 2, "three"),
+                item(kind.clone(), 0, "after"),
+            ]);
+            let sel = select(DocPosition::new(3, 0, 2), DocPosition::new(0, 0, 1));
+            assert_eq!(delete_selection(&mut d, sel), DocPosition::new(0, 0, 1));
+            let texts: Vec<_> = d.blocks.iter().map(|b| b.plain_text()).collect();
+            assert_eq!(texts, ["oree", "after"], "{kind:?}");
+            assert_eq!((&d.blocks[0].kind, d.blocks[0].indent), (&kind, 0));
+        }
+    }
+
+    #[test]
+    fn deleting_across_lines_keeps_the_lines_outside() {
+        let lines = |texts: &[&str]| Block {
+            lines: texts
+                .iter()
+                .map(|t| StyledLine::plain(*t, Color::WHITE))
+                .collect(),
+            ..Block::paragraph("", Color::WHITE)
+        };
+        let select = |a, b| Selection { anchor: a, head: b };
+        let mut d = doc(vec![lines(&["ab", "cd", "ef"])]);
+        delete_selection(
+            &mut d,
+            select(DocPosition::new(0, 0, 1), DocPosition::new(0, 2, 1)),
+        );
+        assert_eq!(d.blocks[0].plain_text(), "af");
+        let mut d = doc(vec![lines(&["ab", "cd"]), lines(&["ef", "gh", "ij"])]);
+        delete_selection(
+            &mut d,
+            select(DocPosition::new(0, 1, 1), DocPosition::new(1, 1, 1)),
+        );
+        assert_eq!(d.blocks.len(), 1);
+        assert_eq!(d.blocks[0].plain_text(), "ab\nch\nij");
+        // Everything, leaving the paragraph a document always has.
+        let mut d = doc(vec![Block::divider(), lines(&["ab"]), Block::divider()]);
+        let end = DocPosition::end_of(&d, 2);
+        delete_selection(&mut d, select(DocPosition::ZERO, end));
+        assert_eq!(d.blocks.len(), 1);
+        assert_eq!(d.blocks[0].kind, BlockKind::Paragraph);
+        assert!(d.blocks[0].is_empty());
     }
 }
