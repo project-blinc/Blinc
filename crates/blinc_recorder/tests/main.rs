@@ -52,6 +52,7 @@ mod code_editor_diagnostics;
 mod code_editor_hscroll;
 mod code_editor_minimap;
 mod code_editor_on_change;
+mod code_editor_scroll;
 mod code_editor_selection_drag;
 mod code_folding;
 mod css_late_mount_layout;

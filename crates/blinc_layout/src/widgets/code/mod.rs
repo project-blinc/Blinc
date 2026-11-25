@@ -901,7 +901,7 @@ impl CodeEditorData {
             self.selection_start = None;
         }
         let line_height = self.config.font_size * self.config.line_height;
-        let page_lines = (self.viewport_height / line_height).floor() as usize;
+        let page_lines = (self.view_height() / line_height).floor() as usize;
         let row = self.row_of(self.cursor.line);
         self.cursor.line = self.line_at_row(row.saturating_sub(page_lines.max(1)));
         let line_len = self.lines[self.cursor.line].chars().count();
@@ -916,7 +916,7 @@ impl CodeEditorData {
             self.selection_start = None;
         }
         let line_height = self.config.font_size * self.config.line_height;
-        let page_lines = (self.viewport_height / line_height).floor() as usize;
+        let page_lines = (self.view_height() / line_height).floor() as usize;
         let row = self.row_of(self.cursor.line);
         self.cursor.line = self.line_at_row(row + page_lines.max(1));
         let line_len = self.lines[self.cursor.line].chars().count();
@@ -1025,6 +1025,19 @@ impl CodeEditorData {
         self.visible_lines().len() as f32 * line_height + pad * 2.0
     }
 
+    /// The height of the view: the box as laid out, or the height asked for before that.
+    fn view_height(&self) -> f32 {
+        let laid_out = self
+            .scroll_physics
+            .lock()
+            .map_or(0.0, |p| p.viewport_height);
+        if laid_out > 0.0 {
+            laid_out
+        } else {
+            self.viewport_height
+        }
+    }
+
     /// Ensure cursor is within the visible scroll viewport.
     /// Only scrolls when cursor would be outside the visible area.
     pub fn ensure_cursor_visible(&mut self) {
@@ -1033,7 +1046,8 @@ impl CodeEditorData {
         self.keep_caret_in_view_x();
         let line_height = self.config.font_size * self.config.line_height;
         let pad = self.config.padding;
-        if self.viewport_height <= 0.0 {
+        let viewport = self.view_height();
+        if viewport <= 0.0 {
             return;
         }
 
@@ -1043,7 +1057,7 @@ impl CodeEditorData {
 
         let mut physics = self.scroll_physics.lock().unwrap();
         let current_offset = -physics.offset_y;
-        let visible_bottom = current_offset + self.viewport_height;
+        let visible_bottom = current_offset + viewport;
 
         // Only scroll if cursor is outside the visible range
         if cursor_y >= current_offset && cursor_bottom <= visible_bottom {
@@ -1055,10 +1069,11 @@ impl CodeEditorData {
             new_offset = cursor_y;
         }
         if cursor_bottom > visible_bottom {
-            new_offset = cursor_bottom - self.viewport_height;
+            new_offset = cursor_bottom - viewport;
         }
 
-        let max_scroll = (self.content_height() - self.viewport_height).max(0.0);
+        let content = physics.fitted_height(self.content_height(), viewport);
+        let max_scroll = (content - viewport).max(0.0);
         new_offset = new_offset.clamp(0.0, max_scroll);
         physics.offset_y = -new_offset;
     }
@@ -2160,15 +2175,14 @@ impl CodeEditor {
     }
     pub fn h(mut self, px: f32) -> Self {
         self.inner = self.inner.h(px);
-        // Update viewport height for scroll calculations
-        let (vh, physics) = {
+        // The view's height until layout reports it
+        let physics = {
             let mut d = self.state.lock().unwrap();
-            let vh = (px - d.config.padding * 2.0).max(0.0);
-            d.viewport_height = vh;
-            (vh, Arc::clone(&d.scroll_physics))
+            d.viewport_height = px;
+            Arc::clone(&d.scroll_physics)
         };
         if let Ok(mut p) = physics.lock() {
-            p.viewport_height = vh;
+            p.viewport_height = px;
         }
         self
     }
@@ -2575,6 +2589,10 @@ fn build_editor_content(
 ) -> Div {
     data.settle_folds();
     data.reveal_cursor();
+    // A box that cuts only the padding under the text has nothing to scroll.
+    if let Ok(mut physics) = data.scroll_physics.lock() {
+        physics.fit_slack = data.config.padding;
+    }
     let styled = data.get_styled_content();
     let (content_w, h_scroll) = (data.content_width(), Arc::clone(&data.h_scroll));
     // Diagnostics measure text, which needs the editor mutably, before its config is borrowed.

@@ -333,6 +333,9 @@ pub struct ScrollPhysics {
     pub state: ScrollState,
     /// Content height (calculated from children)
     pub content_height: f32,
+    /// How much taller than the viewport content can be and still count as fitting, for content
+    /// that ends in room a widget can do without
+    pub(crate) fit_slack: f32,
     /// Viewport height
     pub viewport_height: f32,
     /// Content width (calculated from children)
@@ -392,6 +395,7 @@ impl Default for ScrollPhysics {
             spring_x: None,
             state: ScrollState::Idle,
             content_height: 0.0,
+            fit_slack: 0.0,
             viewport_height: 0.0,
             content_width: 0.0,
             viewport_width: 0.0,
@@ -435,6 +439,16 @@ impl ScrollPhysics {
         Self {
             config,
             ..Default::default()
+        }
+    }
+
+    /// The height to scroll `content` as, in a viewport `viewport` tall: the viewport's own when
+    /// the content overflows it by no more than the slack.
+    pub(crate) fn fitted_height(&self, content: f32, viewport: f32) -> f32 {
+        if content > viewport && content - viewport <= self.fit_slack {
+            viewport
+        } else {
+            content
         }
     }
 

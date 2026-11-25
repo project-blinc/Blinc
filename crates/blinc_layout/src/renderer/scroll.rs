@@ -67,7 +67,7 @@ impl RenderTree {
                 p.viewport_width = viewport_width;
                 p.viewport_height = viewport_height;
                 p.content_width = content_width;
-                p.content_height = content_height;
+                p.content_height = p.fitted_height(content_height, viewport_height);
             }
         }
     }

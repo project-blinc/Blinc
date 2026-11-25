@@ -58,10 +58,10 @@ Create the state once, outside the builder, so that edits survive a resize or a 
 
 With `.h(pixels)`, the editor has that height and scrolls its text. Without a height, it is as tall
 as its text. A long line scrolls sideways, and the gutter stays in place. A scroll bar shows only
-while the text is taller or wider than its box, and only during a scroll.
+during a scroll, and only when the editor has something to scroll.
 
-The text is as tall as its lines plus the padding above and below. At the default sizes, 15 lines
-need 325 pixels.
+The text is as tall as its lines plus the padding above and below. The editor does not scroll when
+the box cuts off only the padding below the last line.
 
 ## Editing
 

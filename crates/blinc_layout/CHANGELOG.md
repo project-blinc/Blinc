@@ -90,6 +90,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- A code editor whose box cuts off only the padding below the text does not scroll or show a scroll bar. Moving the cursor to the last lines no longer scrolls a text that is all in view, a longer text scrolls its last line to the foot of the box, and the page keys move by the box's height.
 - The code minimap shows its box over the part in view only when the text is taller than the view.
 - Selection highlights in the code editor, text inputs and text areas have square corners.
 - A node mounted after the first frame with a reactive attribute or class took no `align-items`, `justify-content`, `align-self`, `flex-direction`, `flex-wrap` or `overflow` rules, and state and reactive class rules could not set them. They apply now.
