@@ -234,10 +234,8 @@ pub(super) fn generate_text_decoration_primitives_by_layer(
                 glyph_top + text.ascender
             }
             TextVerticalAlign::Baseline => {
-                // GPU: y_pos = text.y + ascender, y_offset = y_pos - ascender = text.y
-                // Glyph top is at: text.y
-                // Baseline is at: text.y + ascender
-                text.y + text.ascender
+                // Where the glyphs are drawn.
+                text.y + text.half_leading + text.ascender
             }
         };
 

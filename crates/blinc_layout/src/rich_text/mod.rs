@@ -100,6 +100,8 @@ pub struct RichText {
     /// Measured ascender from font metrics
     ascender: f32,
     half_leading: f32,
+    /// Where the first line's baseline is, below the box's top, if set.
+    baseline: Option<f32>,
     /// Cursor style when hovering
     cursor: Option<crate::element::CursorStyle>,
     /// Word spacing
@@ -153,6 +155,7 @@ impl RichText {
             measured_width: 0.0,
             ascender: 14.0 * 0.8,
             half_leading: 0.0,
+            baseline: None,
             cursor: has_links.then_some(crate::element::CursorStyle::Pointer),
             word_spacing: 0.0,
             event_handlers: EventHandlers::new(),
@@ -219,6 +222,7 @@ impl RichText {
             measured_width: 0.0,
             ascender: 14.0 * 0.8,
             half_leading: 0.0,
+            baseline: None,
             cursor: has_links.then_some(crate::element::CursorStyle::Pointer),
             word_spacing: 0.0,
             event_handlers: EventHandlers::new(),
@@ -356,6 +360,14 @@ impl RichText {
         self.v_align = TextVerticalAlign::Baseline;
         self.line_height = 1.0;
         self.update_size_estimate();
+        self
+    }
+
+    /// Put the first line's baseline `y` pixels below the top of the box, so texts in different
+    /// faces placed side by side can share one.
+    pub fn baseline(mut self, y: f32) -> Self {
+        self.v_align = TextVerticalAlign::Baseline;
+        self.baseline = Some(y);
         self
     }
 
@@ -699,7 +711,10 @@ impl ElementBuilder for RichText {
             weight: self.weight,
             italic: self.italic,
             ascender: self.ascender,
-            half_leading: self.half_leading,
+            // The paint path puts the baseline at the two together.
+            half_leading: self
+                .baseline
+                .map_or(self.half_leading, |baseline| baseline - self.ascender),
         })
     }
 }

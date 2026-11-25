@@ -1,8 +1,8 @@
 //! Collect the content channels of a node using its resolved inherited state.
 use super::{
     Arc, ElementType, FontWeight, ImageElement, LayoutNodeId, RenderContext, RenderLayer,
-    RenderTree, SvgElement, TextAlign, TextElement, Transform3DLayerInfo, effective_single_clip,
-    text_clip,
+    RenderTree, SvgElement, TextAlign, TextElement, TextVerticalAlign, Transform3DLayerInfo,
+    effective_single_clip, text_clip,
 };
 use blinc_layout::ElementBounds;
 
@@ -915,9 +915,50 @@ impl RenderContext {
                     ) * scale
                         * effective_motion_scale.1;
 
+                    // Runs in other faces than the element's are put on its baseline:
+                    // centred on the line by their own metrics, they would each have one.
+                    let mixed_faces = styled_data.v_align != TextVerticalAlign::Baseline
+                        && segments
+                            .iter()
+                            .any(|s| s.3 != default_bold || s.4 != default_italic);
+                    let face = mixed_faces.then(|| {
+                        let mut options = wrap_options.clone();
+                        options.font_weight = if default_bold { 700 } else { 400 };
+                        options.max_width = None;
+                        let m = blinc_layout::text_measure::measure_text_with_options(
+                            "x",
+                            base_styled_font_size,
+                            &options,
+                        );
+                        let to_device = scale * effective_motion_scale.1;
+                        (m.ascender * to_device, m.descender * to_device)
+                    });
+
                     // Calculate x offsets for each segment and push as TextElements
                     for (row, line) in lines.iter().enumerate() {
                         let line_y = scaled_y + row as f32 * scaled_line_height;
+                        // One line keeps the node's full height so existing
+                        // vertical centring is untouched; wrapped text bands
+                        // each run to its own line.
+                        let line_h = if lines.len() > 1 {
+                            scaled_line_height
+                        } else {
+                            scaled_height
+                        };
+                        let (run_y, run_v_align, run_ascender, run_half_leading) = match face {
+                            Some((ascender, descender)) => (
+                                line_y + (line_h - (ascender - descender)) / 2.0,
+                                TextVerticalAlign::Baseline,
+                                ascender,
+                                0.0,
+                            ),
+                            None => (
+                                line_y,
+                                styled_data.v_align,
+                                scaled_ascender * effective_motion_scale.1,
+                                scaled_half_leading * effective_motion_scale.1,
+                            ),
+                        };
                         let mut x_offset = 0.0f32;
 
                         for &(start, end, color, bold, italic, underline, strikethrough) in
@@ -956,16 +997,9 @@ impl RenderContext {
                                 content: segment_text.to_string(),
                                 path_clip: text_path.clone(),
                                 x: scaled_x + x_offset,
-                                y: line_y,
+                                y: run_y,
                                 width: segment_width,
-                                // One line keeps the node's full height so
-                                // existing vertical centring is untouched;
-                                // wrapped text bands each run to its own line.
-                                height: if lines.len() > 1 {
-                                    scaled_line_height
-                                } else {
-                                    scaled_height
-                                },
+                                height: line_h,
                                 font_size: scaled_font_size,
                                 color,
                                 align: TextAlign::Left, // Always left-align segments
@@ -975,7 +1009,7 @@ impl RenderContext {
                                     FontWeight::Normal
                                 },
                                 italic,
-                                v_align: styled_data.v_align,
+                                v_align: run_v_align,
                                 clip_bounds: scaled_clip,
                                 clip_fade: text_fade.map(|distance| distance * scale),
                                 split_clip: split_text_clip(
@@ -1004,8 +1038,8 @@ impl RenderContext {
                                     * scale
                                     * effective_motion_scale.1,
                                 z_index: *z_layer,
-                                ascender: scaled_ascender * effective_motion_scale.1, // Scale ascender with motion
-                                half_leading: scaled_half_leading * effective_motion_scale.1,
+                                ascender: run_ascender,
+                                half_leading: run_half_leading,
                                 strikethrough,
                                 underline,
                                 decoration_color: render_node.props.text_decoration_color,
