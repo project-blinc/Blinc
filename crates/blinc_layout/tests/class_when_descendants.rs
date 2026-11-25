@@ -308,3 +308,70 @@ fn class_layers_apply_in_cascade_order_not_arrival_order() {
         drop(guard);
     }
 }
+
+/// A rule that needs an attribute of the parent and one of the child stops applying when either
+/// goes, whichever came last.
+#[test]
+fn a_rule_for_a_parent_and_a_child_attribute_stops_when_either_is_removed() {
+    for parent_first in [true, false] {
+        let guard = LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = blinc_layout::stateful::take_pending_partial_prop_updates();
+        let _ = blinc_layout::stateful::take_pending_subtree_rebuilds();
+        with_registry(|_| {});
+        let graph = Arc::new(Mutex::new(ReactiveGraph::new()));
+        let (x, y) = {
+            let mut g = graph.lock().unwrap();
+            (g.create_signal(false), g.create_signal(false))
+        };
+        let dirty = Arc::new(AtomicBool::new(false));
+        let x = State::new(x, graph.clone(), dirty.clone());
+        let y = State::new(y, graph, dirty);
+        let ui = div().w(200.0).h(100.0).child(
+            div()
+                .class("p")
+                .w(80.0)
+                .h(40.0)
+                .attr_when("data-x", "", &x)
+                .child(
+                    div()
+                        .class("c")
+                        .w(20.0)
+                        .h(20.0)
+                        .attr_when("data-y", "", &y)
+                        .bg(Color::rgb(0.0, 0.0, 1.0)),
+                ),
+        );
+        let mut tree = RenderTree::from_element(&ui);
+        tree.set_stylesheet(
+            Stylesheet::parse(".p[data-x] .c[data-y] { background: #ff0000 }").expect("css"),
+        );
+        tree.apply_stylesheet_layout_overrides();
+        tree.apply_stylesheet_base_styles();
+        tree.compute_layout(200.0, 100.0);
+        let parent = tree.layout_tree.children(tree.root().unwrap())[0];
+        let child = tree.layout_tree.children(parent)[0];
+        let mut s = Scene {
+            tree,
+            parent,
+            child,
+            _guard: guard,
+        };
+        for on in if parent_first { [&x, &y] } else { [&y, &x] } {
+            on.set(true);
+            s.frame();
+        }
+        assert_eq!(s.red(s.child), 1.0);
+        for (off, what) in [(&x, "the parent's"), (&y, "the child's")] {
+            off.set(false);
+            s.frame();
+            assert_eq!(
+                s.red(s.child),
+                0.0,
+                "parent_first {parent_first}: {what} went"
+            );
+            off.set(true);
+            s.frame();
+            assert_eq!(s.red(s.child), 1.0);
+        }
+    }
+}

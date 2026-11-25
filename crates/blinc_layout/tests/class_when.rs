@@ -603,3 +603,59 @@ fn a_bound_class_that_sets_display_none_takes_the_box_out_and_back() {
     s.frame();
     assert!(!s.tree.layout_tree.is_display_none(s.node));
 }
+
+/// Two flags on one graph: each [`flag`] has a graph of its own, whose ids start at zero.
+fn two_flags() -> (State<bool>, State<bool>) {
+    let graph = Arc::new(Mutex::new(ReactiveGraph::new()));
+    let (a, b) = {
+        let mut g = graph.lock().unwrap();
+        (g.create_signal(false), g.create_signal(false))
+    };
+    let dirty = Arc::new(AtomicBool::new(false));
+    (
+        State::new(a, graph.clone(), dirty.clone()),
+        State::new(b, graph, dirty),
+    )
+}
+
+const EITHER_AND_BOTH: &str = ".t[data-a] { background: #ff0000 }\n\
+     .t[data-b] { width: 150px }\n\
+     .t[data-a][data-b] { background: #00ff00; width: 200px }";
+
+/// A rule that needs two attributes stops applying when either goes, whichever came last.
+#[test]
+fn a_rule_for_two_attributes_stops_when_either_is_removed() {
+    for a_first in [true, false] {
+        let (a, b) = two_flags();
+        let mut s = scene(Some(EITHER_AND_BOTH), |d| {
+            d.attr_when("data-a", "", &a).attr_when("data-b", "", &b)
+        });
+        let order = if a_first { [&a, &b] } else { [&b, &a] };
+        for on in order {
+            on.set(true);
+            s.frame();
+        }
+        assert_eq!((s.fill(s.node), s.width(s.node)), (GREEN, 200.0));
+
+        b.set(false);
+        s.frame();
+        assert_eq!(
+            (s.fill(s.node), s.width(s.node)),
+            (RED, 100.0),
+            "a_first {a_first}: b went"
+        );
+        b.set(true);
+        s.frame();
+        assert_eq!((s.fill(s.node), s.width(s.node)), (GREEN, 200.0));
+        a.set(false);
+        s.frame();
+        assert_eq!(
+            (s.fill(s.node), s.width(s.node)),
+            (BLUE, 150.0),
+            "a_first {a_first}: a went"
+        );
+        b.set(false);
+        s.frame();
+        assert_eq!((s.fill(s.node), s.width(s.node)), (BLUE, 100.0));
+    }
+}

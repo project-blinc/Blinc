@@ -80,6 +80,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- A CSS rule that needs two classes or attributes following signals, on one element or on an element and its ancestor, stops applying when either goes. It stayed until the one that came last went.
 - The momentum after a trackpad scroll stays with the scroll container the fingers scrolled. Before, moving the pointer off an inner scroll, such as a code editor, while it glided handed the rest of the glide to the container under the pointer.
 - Dragging a scroll container's scrollbar thumb repaints on every move. The window does not repaint for a drag event by itself, and the thumb's drag handler moved the offset without asking for a frame, so the thumb and content moved only when something else drew.
 - A press or a drag on a code editor's scrollbar scrolls it without placing the caret or selecting text.

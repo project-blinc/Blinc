@@ -55,6 +55,30 @@ impl DynamicClasses {
         all.sort_by_key(|(order, _)| *order);
         all.into_iter().map(|(_, style)| style)
     }
+
+    /// The stylesheet index of every rule in the layers.
+    fn rule_indices(&self) -> impl Iterator<Item = usize> + '_ {
+        self.applied
+            .iter()
+            .flat_map(|(_, rules)| rules)
+            .chain(self.inherited.iter().flat_map(|(_, rules)| rules))
+            .map(|((_, _, index), _)| *index)
+    }
+
+    /// Take the rules with these indices out of every layer.
+    fn drop_rules(&mut self, indices: &HashSet<usize>) {
+        if indices.is_empty() {
+            return;
+        }
+        let layers = self
+            .applied
+            .iter_mut()
+            .map(|(_, rules)| rules)
+            .chain(self.inherited.iter_mut().map(|(_, rules)| rules));
+        for rules in layers {
+            rules.retain(|((_, _, index), _)| !indices.contains(index));
+        }
+    }
 }
 
 impl RenderTree {
@@ -364,29 +388,60 @@ impl RenderTree {
         ease: bool,
     ) {
         let key = (node, Arc::clone(class));
-        let descendants: Vec<LayoutNodeId> = self
+        let layered: Vec<LayoutNodeId> = self
             .descendants_of(node)
             .into_iter()
             .filter(|d| {
                 self.dynamic_classes
                     .get(d)
-                    .is_some_and(|e| e.inherited.iter().any(|(k, _)| *k == key))
+                    .is_some_and(|e| !e.applied.is_empty() || !e.inherited.is_empty())
             })
             .collect();
 
         let own = node;
         let class_for_node = Arc::clone(class);
         self.eased(own, stylesheet, ease, |tree| {
-            tree.remove_class_layer(own, &class_for_node)
+            tree.remove_class_layer(own, &class_for_node, stylesheet)
         });
-        for descendant in descendants {
+        for descendant in layered {
+            let stale = self.stale_rules(descendant, stylesheet);
+            let brought = self
+                .dynamic_classes
+                .get(&descendant)
+                .is_some_and(|e| e.inherited.iter().any(|(k, _)| *k == key));
+            if !brought && stale.is_empty() {
+                continue;
+            }
             self.eased(descendant, stylesheet, ease, |tree| {
                 if let Some(entry) = tree.dynamic_classes.get_mut(&descendant) {
                     entry.inherited.retain(|(k, _)| *k != key);
+                    entry.drop_rules(&stale);
                 }
                 tree.refold_node(descendant);
             });
         }
+    }
+
+    /// The rules in a node's layers that do not match it now. A rule that names two classes is
+    /// held by whichever came last, and stops matching when either goes.
+    fn stale_rules(
+        &self,
+        node: LayoutNodeId,
+        stylesheet: &crate::css_parser::Stylesheet,
+    ) -> HashSet<usize> {
+        let Some(entry) = self.dynamic_classes.get(&node) else {
+            return HashSet::new();
+        };
+        let none: NodeSet = HashSet::default();
+        let rules = stylesheet.complex_rules();
+        entry
+            .rule_indices()
+            .filter(|i| {
+                !rules.get(*i).is_some_and(|(selector, _)| {
+                    self.complex_selector_matches(selector, node, &none, &none, None)
+                })
+            })
+            .collect()
     }
 
     /// What the node is without any class's rules, kept so it can be put back.
@@ -529,13 +584,22 @@ impl RenderTree {
         self.refold_node(node);
     }
 
-    fn remove_class_layer(&mut self, node: LayoutNodeId, class: &Arc<str>) {
+    fn remove_class_layer(
+        &mut self,
+        node: LayoutNodeId,
+        class: &Arc<str>,
+        stylesheet: &crate::css_parser::Stylesheet,
+    ) {
         let mut classes = self.element_registry.get_classes(node).unwrap_or_default();
         classes.retain(|c| c != class);
         self.set_registered_classes(node, classes);
 
         if let Some(entry) = self.dynamic_classes.get_mut(&node) {
             entry.applied.retain(|(c, _)| c != class);
+        }
+        let stale = self.stale_rules(node, stylesheet);
+        if let Some(entry) = self.dynamic_classes.get_mut(&node) {
+            entry.drop_rules(&stale);
         }
         self.refold_node(node);
     }
