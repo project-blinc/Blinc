@@ -2311,6 +2311,13 @@ pub const CN_STYLES: &str = concat!(
 .blinc-rte-lane[data-more-start][data-more-end] { overflow-fade: 0px 24px 0px 24px; }
 /* The floating toolbar's short block names sit in the middle of their rows. */
 .blinc-rte-heading--compact .cn-select-item { justify-content: center; }
+.blinc-rte-floating-toolbar {
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+}
 .blinc-rte-fixed-toolbar {
     background: var(--surface-elevated);
     color: var(--text-primary);

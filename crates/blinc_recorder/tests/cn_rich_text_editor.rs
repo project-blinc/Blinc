@@ -271,11 +271,25 @@ fn selected_editor(
     Headless,
     blinc_cn::components::rich_text_editor::RichTextState,
 )> {
+    selected_editor_styled(placement, "")
+}
+
+/// [`selected_editor`] under the application stylesheet `css`.
+fn selected_editor_styled(
+    placement: blinc_cn::components::rich_text_editor::ToolbarPlacement,
+    css: &str,
+) -> Option<(
+    Headless,
+    blinc_cn::components::rich_text_editor::RichTextState,
+)> {
     use blinc_cn::components::rich_text_editor::{
         DocPosition, RichDocument, RichTextTheme, Selection, rich_text_editor, rich_text_state,
     };
     // Wide enough that the floating toolbar's controls fit without scrolling.
     let mut ui = session_sized(ColorScheme::Light, WIDE)?;
+    if !css.is_empty() {
+        ui.css(css);
+    }
     let state = rich_text_state(RichDocument::from_markdown(
         "Select this text",
         Color::TRANSPARENT,
@@ -1440,5 +1454,38 @@ fn the_faces_of_a_rich_text_share_a_baseline() {
             ink.iter().rev().take(ink.len() / 4).max(),
         );
         assert_eq!(higher, (Some(row), Some(row)), "size {size}");
+    }
+}
+
+#[test]
+fn a_stylesheet_restyles_both_toolbars() {
+    use blinc_cn::components::rich_text_editor::ToolbarPlacement;
+    for (placement, class) in [
+        (ToolbarPlacement::Floating, "blinc-rte-floating-toolbar"),
+        (ToolbarPlacement::Fixed, "blinc-rte-fixed-toolbar"),
+    ] {
+        let rule = format!(
+            ".{class} {{ background: #ff0000; border: 3px solid #0000ff; border-radius: 0px;
+               box-shadow: none; }}"
+        );
+        let Some((mut ui, _)) = selected_editor_styled(placement, &rule) else {
+            return;
+        };
+        ui.leave().settle();
+        ui.advance(500);
+        ui.settle();
+        let b = ui.tree().get_absolute_bounds(one(&ui, class)).unwrap();
+        let frame = ui.snapshot().unwrap();
+        // Along the left edge, at the corner too: the corner is square.
+        let body = b.y + b.height - 2.0;
+        let at = |x: f32, y: f32| {
+            let p = frame.get_pixel(x as u32, y as u32).unwrap();
+            [p[0], p[1], p[2]]
+        };
+        assert_eq!(at(b.x + 1.0, body), [0, 0, 255], "{placement:?} border");
+        assert_eq!(at(b.x + 4.0, body - 4.0), [255, 0, 0], "{placement:?} fill");
+        let below = at(b.x + b.width / 2.0, b.y + b.height + 3.0);
+        let page = at(b.x + b.width / 2.0, b.y + b.height + 60.0);
+        assert_eq!(below, page, "{placement:?} shadow");
     }
 }

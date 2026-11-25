@@ -17,13 +17,12 @@ mod table;
 use std::sync::Arc;
 
 use blinc_core::reactive::computed;
-use blinc_core::{Color, Shadow, Signal};
+use blinc_core::{Color, Signal};
 use blinc_icons::icons;
 use blinc_layout::div::{Div, div};
 use blinc_layout::notch::notch;
 use blinc_layout::selector::ScrollBehavior;
 use blinc_layout::widgets::scroll::scroll as scroll_view;
-use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
 use controls::{BUTTON, DIVIDER, GAP, MARKS, Target};
 
@@ -268,8 +267,8 @@ impl Look {
 /// The floating toolbar over the selection, or `None` without a non-empty selection or when the
 /// toolbar is placed elsewhere.
 ///
-/// It is a notch whose peak points at the middle of the selection. A notch draws its own fill, so
-/// it takes the theme's tokens rather than a stylesheet rule.
+/// It is a notch whose peak points at the middle of the selection, styled by the
+/// `.blinc-rte-floating-toolbar` rule.
 pub fn selection_toolbar(
     state: &RichTextState,
     version: &Signal<u32>,
@@ -319,23 +318,15 @@ pub fn selection_toolbar(
         &scroll,
     );
 
-    let tokens = ThemeState::get();
-    let radius = tokens.radius(RadiusToken::Lg).min(body * 0.5);
-    // The peak's base stays on the straight part of the edge.
-    let reach = (width * 0.5 - radius - PEAK_W * 0.5).max(0.0);
-    let offset = (center - left - width * 0.5).clamp(-reach, reach);
+    // The peak points at the middle of the selection, as far as the corners let it.
+    let offset = center - left - width * 0.5;
     let mut shape = notch()
+        .class("blinc-rte-floating-toolbar")
         .w_full()
         .h_full()
-        .rounded(radius)
-        .bg(tokens.color(ColorToken::SurfaceElevated))
-        .border(1.0, tokens.color(ColorToken::Border))
         .px(PAD_X)
         .flex_col()
         .justify_center();
-    if let Some(s) = tokens.shadows().shadow_lg.first() {
-        shape = shape.shadow(Shadow::new(s.offset_x, s.offset_y, s.blur, s.color));
-    }
     shape = if above {
         shape
             .peak_bottom_at(offset, PEAK_W, PEAK_H)

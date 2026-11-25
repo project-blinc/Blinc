@@ -44,7 +44,7 @@ let hidden = RichTextTheme::default().toolbar(ToolbarPlacement::Hidden);
 
 With a collapsed cursor, a mark button applies to the text typed next. The floating toolbar appears when the press that made the selection is released, and its close button collapses the selection. The fixed toolbar holds a select for the paragraph or heading level. In an editor narrower than its controls, they scroll between two buttons.
 
-The floating toolbar is a notch, so it takes its fill, border and shadow from the theme tokens. The fixed toolbar takes the `.blinc-rte-fixed-toolbar` rule. Both mark a pressed button with `.blinc-rte-button--active`.
+Both toolbars are styled from CSS. The floating toolbar takes the `.blinc-rte-floating-toolbar` rule: its `background`, `border`, `border-radius` and `box-shadow` apply to the notch and its peak. The fixed toolbar takes `.blinc-rte-fixed-toolbar`. Both mark a pressed button with `.blinc-rte-button--active`.
 
 The floating toolbar's heading select shows short names, P and H1 to H6; the fixed toolbar's shows them in full. Where controls scroll, an edge with more beyond it fades.
 
