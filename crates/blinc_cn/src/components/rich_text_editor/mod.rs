@@ -52,7 +52,8 @@ pub use editor::rich_text_editor;
 pub use format::{Mark, apply_mark_to_selection};
 pub use render::{RichTextTheme, compute_line_geometry, render_document};
 pub use state::{
-    LineGeometry, PickerState, RichTextData, RichTextState, RunGeometry, UndoEntry, rich_text_state,
+    LineGeometry, RichTextData, RichTextState, RichTextStateExt, RunGeometry, UndoEntry,
+    rich_text_state,
 };
 pub use toolbar::{ToolbarPlacement, selection_toolbar};
 pub use wrap::{WrappedLine, wrap_styled_line};

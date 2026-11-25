@@ -2,7 +2,8 @@
 
 use blinc_core::Color;
 
-use crate::components::rich_text_editor::cursor::ActiveFormat;
+use crate::components::rich_text_editor::cursor::{ActiveFormat, DocPosition, Selection};
+use crate::components::rich_text_editor::edit::{delete_selection, insert_text};
 use crate::components::rich_text_editor::format::{Mark, apply_mark_to_selection};
 use crate::components::rich_text_editor::state::RichTextData;
 
@@ -49,13 +50,64 @@ pub(super) fn set_color(data: &mut RichTextData, color: Color) {
     data.active_format.color = Some(color);
 }
 
-/// Link the selection to `url`, or remove its link with `None`.
-pub(super) fn set_link(data: &mut RichTextData, url: Option<String>) {
-    if let Some(sel) = data.selection.filter(|s| !s.is_empty()) {
-        data.push_undo();
-        apply_mark_to_selection(&mut data.document, sel, Mark::Link(url));
-        data.active_format = ActiveFormat::from_position(&data.document, data.cursor);
+/// The link popover's fields: the selected text and the link under it.
+pub(super) fn link_fields(data: &RichTextData) -> (String, String) {
+    let text = data
+        .selection
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            let (start, end) = s.ordered();
+            data.document.plain_text_range(start, end)
+        })
+        .unwrap_or_default();
+    (text, existing_link(data).unwrap_or_default())
+}
+
+/// Give the selection `text` and link it to `url`; an empty URL removes the link. With a
+/// collapsed cursor, insert `text` there, linked. The linked text stays selected.
+pub(super) fn apply_link(data: &mut RichTextData, text: &str, url: &str) {
+    let text = text.replace(['\n', '\r'], " ");
+    let text = text.trim();
+    let url = url.trim();
+    let sel = data.selection.unwrap_or(Selection::empty(data.cursor));
+    let (start, end) = sel.ordered();
+    let current = data.document.plain_text_range(start, end);
+    let retext = !text.is_empty() && text != current;
+    if !retext && start == end {
+        return;
     }
+    data.push_undo();
+    let mut range = Selection {
+        anchor: start,
+        head: end,
+    };
+    if retext {
+        // The new text keeps the marks of the text it replaces, or of the cursor.
+        let mut format = if start == end {
+            data.active_format.clone()
+        } else {
+            ActiveFormat::from_position(
+                &data.document,
+                DocPosition::new(start.block, start.line, start.col + 1),
+            )
+        };
+        format.link = None;
+        let at = if start == end {
+            start
+        } else {
+            delete_selection(&mut data.document, range)
+        };
+        let after = insert_text(&mut data.document, at, text, &format);
+        range = Selection {
+            anchor: at,
+            head: after,
+        };
+    }
+    let link = (!url.is_empty()).then(|| url.to_string());
+    apply_mark_to_selection(&mut data.document, range, Mark::Link(link));
+    data.selection = Some(range);
+    data.cursor = range.head;
+    data.active_format = ActiveFormat::from_position(&data.document, data.cursor);
 }
 
 /// The link under the start of the selection, to edit it without typing it again.
@@ -76,7 +128,6 @@ pub(super) fn close(data: &mut RichTextData) {
     if let Some(sel) = data.selection.take() {
         data.set_cursor(sel.head);
     }
-    data.picker = Default::default();
 }
 
 /// The colour picker's swatches: the text colour (transparent), then a few highlight colours.

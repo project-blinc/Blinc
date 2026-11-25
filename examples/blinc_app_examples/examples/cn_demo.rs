@@ -8,7 +8,7 @@ use blinc_app::prelude::*;
 use blinc_app::windowed::WindowedApp;
 use blinc_app::windowed::WindowedContext;
 use blinc_cn::prelude::*;
-use blinc_core::Color;
+use blinc_core::{Color, computed};
 use blinc_layout::widgets::text_input::text_input_data;
 use blinc_theme::{ColorToken, ThemeBundle, ThemeState};
 
@@ -147,6 +147,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                         .child(misc_section())
                         .child(tree_view_section())
                         .child(table_section())
+                        .child(rich_text_section(ctx))
                         .child(charts_section(ctx)),
                 ),
         )
@@ -3953,6 +3954,101 @@ fn tree_view_section() -> impl ElementBuilder + use<> {
 // ============================================================================
 // Table Section
 // ============================================================================
+
+thread_local! {
+    /// The documents of the rich text examples, kept across rebuilds so edits survive a resize.
+    static RICH_TEXT_DOCS: [blinc_cn::components::rich_text_editor::RichTextState; 2] = {
+        use blinc_cn::components::rich_text_editor::{RichDocument, rich_text_state};
+        [
+            rich_text_state(RichDocument::from_markdown(
+                "## Floating toolbar\n\nSelect some text to **format** it. The toolbar points at the selection.",
+                Color::TRANSPARENT,
+            )),
+            rich_text_state(RichDocument::from_markdown(
+                "## Fixed toolbar\n\nThe toolbar stays above the text. Turn on a mark, then type.",
+                Color::TRANSPARENT,
+            )),
+        ]
+    };
+}
+
+fn rich_text_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
+    use blinc_cn::components::rich_text_editor::{
+        RichTextStateExt, RichTextTheme, ToolbarPlacement, rich_text_editor,
+    };
+    // The width the text wraps to until the editors are laid out, and the space around it.
+    const TEXT_W: f32 = 380.0;
+    const PAD: f32 = 16.0;
+    let theme = ThemeState::get();
+    let (border, radius) = (theme.color(ColorToken::Border), theme.radii().radius_lg);
+    let [floating, fixed] = RICH_TEXT_DOCS.with(|docs| docs.clone());
+    // The character count follows the fixed editor's edits.
+    let length = |state: &blinc_cn::components::rich_text_editor::RichTextState| {
+        state
+            .lock()
+            .map_or(0, |d| d.document.plain_text().chars().count())
+    };
+    let characters = ctx.use_signal(length(&fixed));
+    fixed.on_change(move |doc| characters.set(doc.plain_text().chars().count()));
+    // Each editor in its own frame, sharing the row; the editor fills its frame, so a press on the
+    // empty space below the text still lands in the editor.
+    let example = |name: &str, editor: Div| {
+        // No `h_fit`: it would clear the `flex_1` growth and leave the column no width.
+        div()
+            .flex_1()
+            .min_w(0.0)
+            .flex_col()
+            .gap_px(8.0)
+            .child(cn::label(name))
+            .child(
+                div()
+                    .w_full()
+                    .min_h(200.0)
+                    .flex_col()
+                    .border(1.0, border)
+                    .rounded(radius)
+                    // Inside the border, which takes no space of its own.
+                    .padding_x_px(1.0)
+                    .padding_y_px(1.0)
+                    .child(editor.flex_grow()),
+            )
+    };
+    section_container()
+        .id("rich-text-editor-examples")
+        .child(section_title("Rich Text Editor"))
+        .child(
+            div()
+                .w_full()
+                .flex_row()
+                .items_start()
+                .gap_px(24.0)
+                .child(example(
+                    "Floating toolbar",
+                    rich_text_editor(&floating, RichTextTheme::default().padding(PAD), TEXT_W),
+                ))
+                .child(example(
+                    "Fixed toolbar",
+                    rich_text_editor(
+                        &fixed,
+                        RichTextTheme::default()
+                            .toolbar(ToolbarPlacement::Fixed)
+                            .padding(PAD),
+                        TEXT_W,
+                    ),
+                )),
+        )
+        .child(
+            blinc_layout::text::Text::bound(blinc_layout::binding::IntoReactive::into_reactive(
+                computed(move |g| {
+                    format!(
+                        "{} characters in the fixed editor",
+                        g.get(characters).unwrap_or(0)
+                    )
+                }),
+            ))
+            .size(12.0),
+        )
+}
 
 fn table_section() -> impl ElementBuilder + use<> {
     section_container().child(section_title("Table")).child(

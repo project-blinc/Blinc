@@ -32,7 +32,7 @@ use super::edit::{
 };
 use super::format::{Mark, apply_mark_to_selection};
 use super::render::RichTextTheme;
-use super::state::RichTextState;
+use super::state::{RichTextState, report_change};
 
 /// Build an interactive rich text editor element.
 ///
@@ -55,19 +55,27 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
 
     // Pre-populate the line index so the very first frame can already
     // hit-test clicks before any state mutation has happened.
-    ensure_geometry(state, &theme, content_width, version.try_get().unwrap_or(0));
+    // The given width until the editor has been laid out; its own width after.
+    if let Ok(mut data) = state.lock()
+        && data.wrap_width <= 0.0
+    {
+        data.wrap_width = content_width;
+    }
+    ensure_geometry(state, &theme, version.try_get().unwrap_or(0));
 
     // Clones for the various closures
     let state_for_click = Arc::clone(state);
     let state_for_drag = Arc::clone(state);
     let state_for_key = Arc::clone(state);
     let state_for_text = Arc::clone(state);
+    let state_for_release = Arc::clone(state);
+    let version_for_release = version;
     let version_for_click = version;
     let version_for_drag = version;
     let version_for_key = version;
     let version_for_text = version;
 
-    let content = content(state, &version, &theme, content_width);
+    let content = content(state, &version, &theme);
 
     div()
         .w_full()
@@ -77,13 +85,6 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
             if data.ime.original.is_some() {
                 data.finish_ime();
                 data.ime.blur();
-            }
-            // A press in the toolbar's link field leaves the focus with the field.
-            if data.suppress_next_outer_click
-                && data.link_input.lock().is_ok_and(|f| f.visual.is_focused())
-            {
-                data.suppress_next_outer_click = false;
-                return;
             }
             data.set_focus(true);
             data.editor_bounds = (
@@ -137,6 +138,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                 data.suppress_next_outer_click = false;
                 return;
             }
+            data.pressing = true;
 
             // Detect double-click within the standard 400ms window.
             let now = web_time::Instant::now();
@@ -148,8 +150,10 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
 
             let touch = blinc_layout::widgets::text_input::is_touch_input();
 
-            if let Some(pos) = data.position_from_click(ctx.local_x, ctx.local_y - data.content_top)
-            {
+            if let Some(pos) = data.position_from_click(
+                ctx.local_x - data.content_left,
+                ctx.local_y - data.content_top,
+            ) {
                 if is_double {
                     // Double-click — select the word under the cursor.
                     if let Some(line) = data
@@ -261,6 +265,16 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
             drop(data);
             version_for_click.set(version_for_click.get().wrapping_add(1));
         })
+        .on_mouse_up(move |_| {
+            // The release reveals the floating toolbar over what the press selected.
+            let released = state_for_release
+                .lock()
+                .map(|mut d| std::mem::take(&mut d.pressing))
+                .unwrap_or(false);
+            if released {
+                version_for_release.update(|n| n.wrapping_add(1));
+            }
+        })
         .on_drag(move |ctx| {
             let mut data = state_for_drag.lock().unwrap();
             if !data.focused {
@@ -270,8 +284,10 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
             // a subtle haptic per character boundary.
             // Mouse drag = extend selection from anchor to pointer.
             let touch = blinc_layout::widgets::text_input::is_touch_input();
-            if let Some(pos) = data.position_from_click(ctx.local_x, ctx.local_y - data.content_top)
-            {
+            if let Some(pos) = data.position_from_click(
+                ctx.local_x - data.content_left,
+                ctx.local_y - data.content_top,
+            ) {
                 if touch {
                     // Drift-cancel any armed long-press so a real
                     // cursor drag doesn't also fire the paste menu.
@@ -326,6 +342,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
             data.set_cursor(new_pos);
             drop(data);
             version_for_text.set(version_for_text.get().wrapping_add(1));
+            report_change(&state_for_text);
         })
         .on_key_down(move |ctx| {
             let mut data = state_for_key.lock().unwrap();
@@ -480,6 +497,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                 if changed {
                     drop(data);
                     version_for_key.set(version_for_key.get().wrapping_add(1));
+                    report_change(&state_for_key);
                     return;
                 }
             }
@@ -614,6 +632,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
             drop(data);
             if changed {
                 version_for_key.set(version_for_key.get().wrapping_add(1));
+                report_change(&state_for_key);
             }
         })
         .child(content)

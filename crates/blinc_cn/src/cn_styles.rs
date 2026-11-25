@@ -2292,16 +2292,40 @@ pub const CN_STYLES: &str = concat!(
 .blinc-rich-text-divider { background: var(--border); }
 .blinc-rich-text-code { color: var(--warning); }
 .blinc-rich-text-selection { background: var(--selection); }
+/* The floating toolbar fades in and grows out of the side that faces the selection. */
+.blinc-rte-toolbar--enter { animation: blinc-rte-toolbar-enter var(--duration-fast) var(--ease-out); }
+.blinc-rte-toolbar--above { transform-origin: bottom center; }
+.blinc-rte-toolbar--below { transform-origin: top center; }
+@keyframes blinc-rte-toolbar-enter {
+    from { opacity: 0; transform: scale(0.92); }
+    to   { opacity: 1; transform: scale(1); }
+}
+/* A narrow toolbar's controls scroll; an edge with more beyond it fades. */
+.blinc-rte-lane { overflow-fade: 0px; transition: overflow-fade var(--duration-fast) var(--ease-out); }
+.blinc-rte-lane[data-more-start] { overflow-fade: 0px 0px 0px 24px; }
+.blinc-rte-lane[data-more-end] { overflow-fade: 0px 24px 0px 0px; }
+.blinc-rte-lane[data-more-start][data-more-end] { overflow-fade: 0px 24px 0px 24px; }
+/* The floating toolbar's short block names sit in the middle of their rows. */
+.blinc-rte-heading--compact .cn-select-item { justify-content: center; }
 .blinc-rte-fixed-toolbar {
-    background: var(--surface);
+    background: var(--surface-elevated);
     color: var(--text-primary);
     border-bottom: 1px solid var(--border);
+    /* Rounded on top, as the header of a framed editor. */
+    border-radius: var(--radius-lg) var(--radius-lg) 0px 0px;
+    /* Lifts the bar over the text that scrolls under it. */
+    box-shadow: var(--shadow-sm);
 }
 .blinc-rte-separator { background: var(--border); }
 /* A mark that is on under the cursor. */
 .blinc-rte-button--active { background: var(--surface-overlay); }
 /* The colour control is the cn colour picker reduced to its swatch. */
-.blinc-rte-color { border-width: 0; padding: 0 6px; background: transparent; }
+/* The colour control is sized and lit like the icon buttons beside it. */
+.blinc-rte-color {
+    border-width: 0; padding: 6px; background: transparent;
+    border-radius: var(--radius-default);
+}
+.blinc-rte-color:hover { background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
 .blinc-rte-color .cn-color-picker-value { display: none; }
 .blinc-rte-color .cn-color-picker-swatch { width: 18px; height: 18px; border-radius: var(--radius-full); }
 "#,

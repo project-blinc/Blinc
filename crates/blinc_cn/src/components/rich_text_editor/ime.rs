@@ -144,6 +144,7 @@ pub(super) fn binding(
                 d.reset_cursor_blink();
             }
             version.update(|n| n.wrapping_add(1));
+            super::state::report_change(&target);
             blinc_layout::stateful::request_redraw();
             true
         }),

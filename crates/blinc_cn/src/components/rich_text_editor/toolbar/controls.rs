@@ -10,11 +10,11 @@ use blinc_layout::div::{Div, div};
 use super::actions;
 use crate::components::button::{ButtonSize, ButtonVariant, button};
 use crate::components::color_picker::color_picker;
-use crate::components::dropdown_menu::DropdownMenuBuilder;
 use crate::components::rich_text_editor::cursor::ActiveFormat;
 use crate::components::rich_text_editor::document::BlockKind;
 use crate::components::rich_text_editor::format::Mark;
-use crate::components::rich_text_editor::state::{PickerState, RichTextData, RichTextState};
+use crate::components::rich_text_editor::state::{RichTextData, RichTextState, report_change};
+use crate::components::select::{SelectSize, select};
 use crate::components::tooltip::{TooltipSide, tooltip};
 
 /// The side of an icon button.
@@ -38,6 +38,7 @@ impl Target {
             f(&mut data);
         }
         self.version.update(|n| n.wrapping_add(1));
+        report_change(&self.state);
     }
 }
 
@@ -65,7 +66,9 @@ pub(super) fn icon_button(
         }
         div().child(b)
     };
-    div().child(tooltip(trigger).text(label).side(TooltipSide::Top))
+    div()
+        .flex_shrink_0()
+        .child(tooltip(trigger).text(label).side(TooltipSide::Top))
 }
 
 /// The boolean marks, in toolbar order.
@@ -94,46 +97,14 @@ pub(super) fn marks(target: &Target, format: &ActiveFormat) -> Vec<Div> {
 
 /// The cn colour picker, shown as a swatch of the colour under the cursor; picking colours the
 /// selection.
-pub(super) fn color(target: &Target, current: Color) -> Div {
+pub(super) fn color(target: &Target, swatch: Signal<Color>) -> Div {
     let target = target.clone();
-    // Transparent text takes the theme's text colour, so the swatch shows that.
-    let current = if current.a == 0.0 {
-        blinc_theme::ThemeState::get().color(blinc_theme::ColorToken::TextPrimary)
-    } else {
-        current
-    };
-    div().child(
-        color_picker(signal(current))
+    div().flex_shrink_0().child(
+        color_picker(swatch)
             .swatches(actions::palette())
             .on_change(move |c| target.act(|d| actions::set_color(d, c)))
             .class("blinc-rte-color"),
     )
-}
-
-/// The link button, which opens or closes the link field.
-pub(super) fn link(target: &Target, open: bool) -> Div {
-    icon_button(target, icons::LINK, "Link", open, |t| {
-        let field = t.state.lock().ok().map(|d| Arc::clone(&d.link_input));
-        let mut opened = false;
-        t.act(|d| {
-            if d.picker == PickerState::Link {
-                d.picker = PickerState::None;
-            } else {
-                d.picker = PickerState::Link;
-                opened = true;
-                // The field takes the keys; the selection stays shown while it is open.
-                d.set_focus(false);
-                let url = actions::existing_link(d).unwrap_or_default();
-                if let Ok(mut f) = d.link_input.lock() {
-                    f.value = url;
-                    f.cursor = f.value.chars().count();
-                }
-            }
-        });
-        if let Some(field) = field.filter(|_| opened) {
-            blinc_layout::widgets::text_input::focus_text_input_deferred(&field);
-        }
-    })
 }
 
 /// The close button, which collapses the selection and so closes the floating toolbar.
@@ -145,34 +116,52 @@ pub(super) fn close(target: &Target) -> Div {
 pub(super) fn divider() -> Div {
     div()
         .class("blinc-rte-separator")
+        .flex_shrink_0()
         .w(1.0)
         .h(18.0)
         // 4px units: 6px each side.
         .mx(1.5)
 }
 
-/// The name of a block kind in the heading menu.
-fn kind_label(kind: &BlockKind) -> &'static str {
-    match kind {
-        BlockKind::Heading(1) => "Heading 1",
-        BlockKind::Heading(2) => "Heading 2",
-        BlockKind::Heading(3) => "Heading 3",
-        BlockKind::Heading(4) => "Heading 4",
-        BlockKind::Heading(5) => "Heading 5",
-        BlockKind::Heading(_) => "Heading 6",
-        _ => "Paragraph",
+/// The name of a block kind in the heading menu: in full, or as P and H with the level.
+fn kind_label(kind: &BlockKind, compact: bool) -> String {
+    match (kind, compact) {
+        (BlockKind::Heading(level), true) => format!("H{}", level.clamp(&1, &6)),
+        (BlockKind::Heading(level), false) => format!("Heading {}", level.clamp(&1, &6)),
+        (_, true) => "P".to_string(),
+        (_, false) => "Paragraph".to_string(),
     }
 }
 
-/// The heading menu, labelled with the block under the cursor's kind.
-pub(super) fn heading(target: &Target, kind: &BlockKind) -> Div {
-    let mut menu = DropdownMenuBuilder::new(kind_label(kind)).class("blinc-rte-heading");
-    for level in [None, Some(1), Some(2), Some(3), Some(4), Some(5), Some(6)] {
-        let label = kind_label(&level.map_or(BlockKind::Paragraph, BlockKind::Heading));
-        let target = target.clone();
-        menu = menu.item(label, move || {
+/// The heading menu's width, fixed so the toolbar knows its own width: in full, and compact.
+pub(super) const HEADING: f32 = 120.0;
+pub(super) const HEADING_COMPACT: f32 = 64.0;
+
+/// The heading menu: a cn select of the block under the cursor's kind, `compact` with short
+/// names, centred.
+pub(super) fn heading(target: &Target, kind: &BlockKind, compact: bool) -> Div {
+    let current = match kind {
+        BlockKind::Heading(level) => level.to_string(),
+        _ => "p".to_string(),
+    };
+    let target = target.clone();
+    let mut menu = select(signal(current))
+        .size(SelectSize::Small)
+        .w(if compact { HEADING_COMPACT } else { HEADING })
+        .option("p", kind_label(&BlockKind::Paragraph, compact))
+        .on_change(move |value| {
+            let level = value.parse::<u8>().ok();
             target.act(|d| actions::apply_heading_level(d, level));
         });
+    for level in 1..=6u8 {
+        menu = menu.option(
+            level.to_string(),
+            kind_label(&BlockKind::Heading(level), compact),
+        );
     }
-    div().child(menu)
+    let mut wrapper = div().class("blinc-rte-heading").flex_shrink_0();
+    if compact {
+        wrapper = wrapper.class("blinc-rte-heading--compact");
+    }
+    wrapper.child(menu)
 }

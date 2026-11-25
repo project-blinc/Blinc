@@ -53,12 +53,20 @@ pub struct RichTextTheme {
     pub line_height: f32,
     /// Where the formatting toolbar sits: floating over the selection, or fixed above the text.
     pub toolbar: super::toolbar::ToolbarPlacement,
+    /// Space around the text inside the editor, in pixels. The fixed toolbar spans the full width.
+    pub padding: f32,
 }
 
 impl RichTextTheme {
     /// Place the formatting toolbar: over the selection (the default), or above the text.
     pub fn toolbar(mut self, placement: super::toolbar::ToolbarPlacement) -> Self {
         self.toolbar = placement;
+        self
+    }
+
+    /// Set the space around the text inside the editor, in pixels.
+    pub fn padding(mut self, padding: f32) -> Self {
+        self.padding = padding;
         self
     }
 
@@ -106,6 +114,7 @@ impl Default for RichTextTheme {
             bullet_column_width: 18.0,
             line_height: 1.45,
             toolbar: Default::default(),
+            padding: 0.0,
         }
     }
 }

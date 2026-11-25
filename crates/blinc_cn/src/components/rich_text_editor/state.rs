@@ -113,17 +113,6 @@ pub struct UndoEntry {
     pub selection: Option<Selection>,
 }
 
-/// Which (if any) inline picker the selection toolbar is currently
-/// showing.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub enum PickerState {
-    /// No picker open.
-    #[default]
-    None,
-    /// The link field is open under the toolbar's buttons.
-    Link,
-}
-
 /// Editor data that survives across UI rebuilds.
 ///
 /// Held inside `RichTextState = Arc<Mutex<RichTextData>>`. Public fields
@@ -148,6 +137,9 @@ pub struct RichTextData {
     pub line_index: Vec<LineGeometry>,
     /// The editor version the line index was computed for.
     pub(crate) geometry_stamp: Option<u32>,
+    /// The width the text wraps to: the editor's laid-out text width, or the width it was built
+    /// with until it has been laid out.
+    pub(super) wrap_width: f32,
     /// Shared cursor blink state — used by the canvas-based cursor
     /// overlay so blinking doesn't require tree rebuilds.
     pub cursor_state: SharedCursorState,
@@ -162,14 +154,26 @@ pub struct RichTextData {
     /// captured from the most recent pointer event. The selection
     /// toolbar uses this to position itself in absolute space.
     pub editor_bounds: (f32, f32, f32, f32),
-    /// Which inline picker (if any) is currently open inside the
-    /// selection toolbar. Mutually exclusive — opening one closes the
-    /// other.
-    pub picker: PickerState,
-    /// How far below the editor's top the text starts: the fixed toolbar's height, or zero.
+    /// How far below the editor's top the text starts: the padding, and the fixed toolbar's height.
     pub(super) content_top: f32,
-    /// The link field's text, kept while the toolbar is rebuilt around it.
-    pub link_input: blinc_layout::widgets::text_input::SharedTextInputData,
+    /// How far right of the editor's left edge the text starts: the padding.
+    pub(super) content_left: f32,
+    /// A press on the text is held: the floating toolbar waits for the release.
+    pub(super) pressing: bool,
+    /// The fixed toolbar's scroll position, kept while the toolbar is rebuilt.
+    pub(super) bar_scroll: blinc_layout::selector::ScrollRef,
+    /// Called after an edit changes the document; set by [`RichTextStateExt::on_change`].
+    on_change: Option<ChangeCallback>,
+    /// The document `on_change` last saw.
+    reported: Option<RichDocument>,
+    /// The link popover's text and URL fields, kept while the toolbar is rebuilt.
+    pub(super) link_text: blinc_layout::widgets::text_input::SharedTextInputData,
+    pub(super) link_url: blinc_layout::widgets::text_input::SharedTextInputData,
+    /// The link popover is open: the selection stays shown while its fields have the focus.
+    pub(super) link_open: bool,
+    /// The colour the toolbar's picker shows, made on first use and owned by no build, so the
+    /// picker keeps it while the toolbar is rebuilt around it.
+    swatch: Option<blinc_core::Signal<blinc_core::Color>>,
     /// Timestamp of the most recent mouse-down (used for double-click
     /// detection in the editor's click handler).
     pub last_click_time: Option<Instant>,
@@ -226,14 +230,24 @@ impl RichTextData {
             ime: Default::default(),
             line_index: Vec::new(),
             geometry_stamp: None,
+            wrap_width: 0.0,
             cursor_state: cursor_state(),
             tick_callback_id: None,
             editor_bounds: (0.0, 0.0, 0.0, 0.0),
-            picker: PickerState::None,
             content_top: 0.0,
-            link_input: Arc::new(Mutex::new(
-                blinc_layout::widgets::text_input::TextInputData::with_placeholder("https://"),
+            content_left: 0.0,
+            pressing: false,
+            bar_scroll: blinc_layout::selector::ScrollRef::new(),
+            link_text: Arc::new(Mutex::new(
+                blinc_layout::widgets::text_input::TextInputData::with_placeholder("Text"),
             )),
+            link_url: Arc::new(Mutex::new(
+                blinc_layout::widgets::text_input::TextInputData::with_placeholder("Paste a link"),
+            )),
+            link_open: false,
+            on_change: None,
+            reported: None,
+            swatch: None,
             last_click_time: None,
             toolbar_rect: None,
             suppress_next_outer_click: false,
@@ -412,6 +426,7 @@ impl RichTextData {
         self.cursor = entry.cursor.clamp(&self.document);
         self.selection = entry.selection;
         self.active_format = ActiveFormat::from_position(&self.document, self.cursor);
+        self.sync_swatch();
         self.reset_cursor_blink();
         true
     }
@@ -430,8 +445,36 @@ impl RichTextData {
         self.cursor = entry.cursor.clamp(&self.document);
         self.selection = entry.selection;
         self.active_format = ActiveFormat::from_position(&self.document, self.cursor);
+        self.sync_swatch();
         self.reset_cursor_blink();
         true
+    }
+
+    /// The colour under the caret, as the picker shows it: text without its own colour takes the
+    /// theme's text colour.
+    pub(super) fn caret_color(&self) -> blinc_core::Color {
+        match self.active_format.color {
+            Some(c) if c.a > 0.0 => c,
+            _ => blinc_theme::ThemeState::get().color(blinc_theme::ColorToken::TextPrimary),
+        }
+    }
+
+    /// The picker's colour signal, made on first use.
+    pub(super) fn swatch(&mut self) -> blinc_core::Signal<blinc_core::Color> {
+        let color = self.caret_color();
+        *self.swatch.get_or_insert_with(|| {
+            blinc_core::owner::Owner::detached(|| blinc_core::reactive::signal(color))
+        })
+    }
+
+    /// Show the caret's colour in the picker.
+    fn sync_swatch(&self) {
+        if let Some(swatch) = self.swatch {
+            let color = self.caret_color();
+            if swatch.get() != color {
+                swatch.set(color);
+            }
+        }
     }
 
     /// Set the cursor position (clamped to valid bounds).
@@ -439,6 +482,7 @@ impl RichTextData {
         let clamped = pos.clamp(&self.document);
         self.cursor = clamped;
         self.active_format = ActiveFormat::from_position(&self.document, clamped);
+        self.sync_swatch();
         self.reset_cursor_blink();
     }
 
@@ -457,6 +501,7 @@ impl RichTextData {
         }
         self.cursor = clamped;
         self.active_format = ActiveFormat::from_position(&self.document, clamped);
+        self.sync_swatch();
         self.reset_cursor_blink();
     }
 
@@ -585,6 +630,55 @@ impl RichTextData {
 
 /// Shared handle to editor state.
 pub type RichTextState = Arc<Mutex<RichTextData>>;
+
+#[derive(Clone)]
+struct ChangeCallback(Arc<dyn Fn(&RichDocument) + Send + Sync>);
+
+impl std::fmt::Debug for ChangeCallback {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ChangeCallback")
+    }
+}
+
+/// Callbacks on the shared editor state.
+pub trait RichTextStateExt {
+    /// Call `f` with the document after an edit made in the editor changes it: typing, formatting,
+    /// paste, undo and redo. Moving the cursor, selecting and focus do not. Replaces an earlier
+    /// callback. The state is unlocked while `f` runs, so it may read or change the document.
+    fn on_change(&self, f: impl Fn(&RichDocument) + Send + Sync + 'static);
+}
+
+impl RichTextStateExt for RichTextState {
+    fn on_change(&self, f: impl Fn(&RichDocument) + Send + Sync + 'static) {
+        if let Ok(mut data) = self.lock() {
+            data.reported = Some(data.document.clone());
+            data.on_change = Some(ChangeCallback(Arc::new(f)));
+        }
+    }
+}
+
+/// Report the document to `on_change` if it differs from the one last reported.
+///
+/// Called by the edit handlers with the state unlocked and outside any reactive computation, as
+/// the callback may lock the state and set signals.
+pub(in crate::components::rich_text_editor) fn report_change(state: &RichTextState) {
+    let changed = state.lock().ok().and_then(|mut data| {
+        let f = data.on_change.clone()?;
+        if data.reported.as_ref() == Some(&data.document) {
+            return None;
+        }
+        let document = data.document.clone();
+        data.reported = Some(document.clone());
+        Some((f, document))
+    });
+    if let Some((ChangeCallback(f), document)) = changed {
+        f(&document);
+        // What the callback itself changed is known to it.
+        if let Ok(mut data) = state.lock() {
+            data.reported = Some(data.document.clone());
+        }
+    }
+}
 
 /// Convenience: create a new shared state from a document.
 pub fn rich_text_state(document: RichDocument) -> RichTextState {

@@ -6,7 +6,9 @@ All notable changes to `blinc_cn` will be documented in this file.
 
 - The rich text editor is a cn component, `blinc_cn::components::rich_text_editor`, moved from `blinc_layout` with its tests. Its CSS rules are part of `CN_STYLES`.
 
-- The rich text editor's toolbar is built from cn components: icon buttons with tooltips, the cn colour picker, and a link field with a cn input. `RichTextTheme::toolbar` takes a `ToolbarPlacement`: `Floating`, the default, shows it over the selection as a notch pointing at it, with a close button; `Fixed` shows it above the text with a menu for the block's kind; `Hidden` shows none. `PickerState` has `None` and `Link` only.
+- The rich text editor's toolbar is built from cn components: a cn select for the block's kind, icon buttons with tooltips, the cn colour picker, and a link button that opens a popover with Text and Link fields. `RichTextTheme::toolbar` takes a `ToolbarPlacement`: `Floating`, the default, shows it over the selection once the press that made it is released, as a notch pointing at the selection that fades in, with a close button; `Fixed` shows it above the text; in an editor narrower than its controls, either toolbar's other controls scroll, easing, between two buttons beside the select, and fade at an edge with more beyond it; `Hidden` shows none. `PickerState` is removed.
+- `RichTextStateExt::on_change` calls back with the document after an edit made in the rich text editor changes it, and not for cursor moves, selection or focus.
+- The rich text editor wraps its text to the width it is laid out at, so it follows its parent; the width given to `rich_text_editor` is used until the first layout. `RichTextTheme::padding` sets the space around the text, and the fixed toolbar spans the full width.
 
 - Dialog, alert-dialog, popover, tooltip and toast builders register their own accessibility descriptions. Dialog names follow their titles. Toasts expose polite status updates or assertive error alerts, and their dismiss control accepts assistive actions.
 
@@ -30,8 +32,8 @@ All notable changes to `blinc_cn` will be documented in this file.
 
 ### Fixed
 - A colour picker's swatch draws its checkerboard only under a translucent colour.
-- A tooltip is centred on its trigger whatever its width. It was centred as if it were 100 px wide, and kept inside the window as if it were 280 px wide, which moved it off its trigger.
 - In the rich text editor, a mark turned on with a collapsed cursor applies to the text typed next, and a caret at the boundary of two runs takes the marks of the run before it.
+- A tooltip is centred on its trigger whatever its width. It was centred as if it were 100 px wide, and kept inside the window as if it were 280 px wide, which moved it off its trigger.
 - In a container narrower than they are, the menubar, navigation menu, breadcrumb and pagination wrap onto more lines instead of running past its edge, and pagination buttons keep their size instead of being squeezed. A progress bar or chart with a set width shrinks to such a container; the chart draws at the width it gets.
 - The pill behind the active tab takes no pointer input, so the desktop runner hovers what is drawn over it, such as a closable tab's close button, however the pointer arrives.
 - A tooltip opens on the side of its trigger that has room in the window, instead of being clamped back over the trigger, and takes no pointer input, so its trigger keeps the hover and the click and leaving it closes the tooltip.

@@ -52,11 +52,14 @@ fn scene() -> Scene {
     let editor = rich_text_editor(&state, RichTextTheme::dark(), 400.0);
     let mut tree = RenderTree::from_element(&editor);
     tree.compute_layout(500.0, 400.0);
-    Scene {
+    let mut scene = Scene {
         tree,
         editor,
         state,
-    }
+    };
+    // The first layout gives the editor its width, and the text re-wraps to it.
+    scene.frame();
+    scene
 }
 
 impl Scene {
@@ -93,13 +96,15 @@ impl Scene {
         self.frame();
     }
 
-    /// Press at `(x, y)` in the editor's own coordinates.
+    /// Press and release at `(x, y)` in the editor's own coordinates.
     fn click(&mut self, x: f32, y: f32) {
-        let ctx = EventContext::new(event_types::POINTER_DOWN, self.root())
-            .with_bounds(400.0, 300.0)
-            .with_mouse_pos(x, y)
-            .with_local_pos(x, y);
-        self.dispatch(ctx);
+        for kind in [event_types::POINTER_DOWN, event_types::POINTER_UP] {
+            let ctx = EventContext::new(kind, self.root())
+                .with_bounds(400.0, 300.0)
+                .with_mouse_pos(x, y)
+                .with_local_pos(x, y);
+            self.dispatch(ctx);
+        }
     }
 
     fn type_text(&mut self, text: &str) {
@@ -136,8 +141,10 @@ impl Scene {
     /// The nodes that make up the document's blocks: the root's first
     /// child's children.
     fn blocks(&self) -> Vec<LayoutNodeId> {
-        let content = self.tree.layout_tree.children(self.root())[0];
-        let document = self.tree.layout_tree.children(content)[0];
+        // The padding, then the text, then the document.
+        let padding = self.tree.layout_tree.children(self.root())[0];
+        let text = self.tree.layout_tree.children(padding)[0];
+        let document = self.tree.layout_tree.children(text)[0];
         self.tree.layout_tree.children(document)
     }
 
@@ -276,4 +283,45 @@ fn the_cursor_shows_while_focused_and_not_after() {
     blinc_layout::widgets::text_input::blur_all_text_inputs();
     s.frame();
     assert_eq!(s.cursor_rects(), 0, "the cursor stayed after blur");
+}
+
+#[test]
+fn on_change_hears_edits_and_nothing_else() {
+    use blinc_cn::components::rich_text_editor::RichTextStateExt;
+    use std::sync::Mutex;
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = scene();
+    let seen = Arc::new(Mutex::new(Vec::<String>::new()));
+    let edits = blinc_core::reactive::signal(0u32);
+    {
+        let (seen, state) = (seen.clone(), s.state.clone());
+        s.state.on_change(move |doc| {
+            seen.lock().unwrap().push(doc.plain_text());
+            // The state is unlocked and signals can be set.
+            assert!(
+                state.try_lock().is_ok(),
+                "the state is locked during the callback"
+            );
+            edits.update(|n| n + 1);
+        });
+    }
+    let y = s.line_y(0);
+    s.click(1000.0, y);
+    let left = EventContext::new(event_types::KEY_DOWN, s.root()).with_key_code(37);
+    s.dispatch(left);
+    s.bump();
+    s.frame();
+    assert!(
+        seen.lock().unwrap().is_empty(),
+        "a cursor move was reported"
+    );
+
+    s.type_text("!?");
+    let enter = EventContext::new(event_types::KEY_DOWN, s.root()).with_key_code(13);
+    s.dispatch(enter);
+    let seen = seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 3, "{seen:?}");
+    assert!(seen[0].contains('!') && !seen[0].contains('?'), "{seen:?}");
+    assert!(seen[1].contains("!?"), "{seen:?}");
+    assert_eq!(edits.get(), 3);
 }

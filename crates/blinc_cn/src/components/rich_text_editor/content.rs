@@ -12,27 +12,24 @@ use blinc_layout::widgets::cursor::SharedCursorState;
 
 use super::cursor::Selection;
 use super::render::{RichTextTheme, compute_line_geometry, render_block};
-use super::state::{PickerState, RichTextData, RichTextState};
-use super::toolbar::{ToolbarPlacement, fixed_height, fixed_toolbar, selection_toolbar, signature};
+use super::state::{RichTextData, RichTextState};
+use super::toolbar::{
+    ToolbarPlacement, fixed_height, fixed_overflows, fixed_toolbar, selection_toolbar, signature,
+};
 
 /// Bring the line index up to date with the document, once per version.
 ///
 /// Everything bound below reads it, and so do the editor's key handlers
 /// after an edit, so it is recomputed whenever the version moves rather than
 /// where the edit is made.
-pub(super) fn ensure_geometry(
-    state: &RichTextState,
-    theme: &RichTextTheme,
-    content_width: f32,
-    version: u32,
-) {
+pub(super) fn ensure_geometry(state: &RichTextState, theme: &RichTextTheme, version: u32) {
     let Ok(mut data) = state.lock() else {
         return;
     };
     if data.geometry_stamp == Some(version) {
         return;
     }
-    let geometry = compute_line_geometry(&data.document, theme, content_width);
+    let geometry = compute_line_geometry(&data.document, theme, data.wrap_width);
     data.set_line_index(geometry);
     // The blink state follows focus.
     data.set_cursor_visible(data.focused);
@@ -74,24 +71,28 @@ fn digest(data: &RichTextData, index: usize) -> u64 {
     format!("{:?}", data.document.blocks[index]).hash(&mut hasher);
     // A numbered item's number depends on the blocks before it.
     data.document.numbered_ordinal(index).hash(&mut hasher);
+    // A block wraps to the editor's width.
+    data.wrap_width.to_bits().hash(&mut hasher);
     hasher.finish()
 }
 
 /// The editor's content: the document's blocks, the selection's highlight,
 /// the cursor and the floating toolbar.
-pub(super) fn content(
-    state: &RichTextState,
-    version: &Signal<u32>,
-    theme: &RichTextTheme,
-    content_width: f32,
-) -> Div {
+pub(super) fn content(state: &RichTextState, version: &Signal<u32>, theme: &RichTextTheme) -> Div {
     let signal = *version;
+    let pad = theme.padding;
+    // Clicks and the floating toolbar measure from the text's corner. Set first: the toolbar's
+    // `for_each` builds while this function runs.
+    if let Ok(mut data) = state.lock() {
+        data.content_left = pad;
+        data.content_top = pad;
+    }
     // A value read from the editor, with its geometry current.
 
     let blocks = {
         let (state, theme) = (Arc::clone(state), theme.clone());
         computed(move |g: &ReactiveGraph| {
-            ensure_geometry(&state, &theme, content_width, g.get(signal).unwrap_or(0));
+            ensure_geometry(&state, &theme, g.get(signal).unwrap_or(0));
             let data = state.lock().unwrap();
             (0..data.document.blocks.len())
                 .map(|index| BlockKey {
@@ -107,7 +108,7 @@ pub(super) fn content(
             let data = state.lock().unwrap();
             match data.document.blocks.get(key.index) {
                 Some(block) => {
-                    render_block(&data.document, key.index, block, &theme, content_width)
+                    render_block(&data.document, key.index, block, &theme, data.wrap_width)
                 }
                 None => div(),
             }
@@ -123,13 +124,11 @@ pub(super) fn content(
     let spans = {
         let (state, theme) = (Arc::clone(state), theme.clone());
         computed(move |g: &ReactiveGraph| {
-            ensure_geometry(&state, &theme, content_width, g.get(signal).unwrap_or(0));
+            ensure_geometry(&state, &theme, g.get(signal).unwrap_or(0));
             let data = state.lock().unwrap();
             match data.selection {
                 // Also while a toolbar field has the focus, so the text it acts on stays marked.
-                Some(sel)
-                    if (data.focused || data.picker != PickerState::None) && !sel.is_empty() =>
-                {
+                Some(sel) if (data.focused || data.link_open) && !sel.is_empty() => {
                     selection_spans(&data, sel)
                 }
                 _ => Vec::new(),
@@ -163,20 +162,22 @@ pub(super) fn content(
     );
 
     let cursor_state = state.lock().unwrap().cursor_state.clone();
-    let cursor = cursor_overlay_canvas(Arc::clone(state), cursor_state, theme.text, content_width);
+    let cursor = cursor_overlay_canvas(Arc::clone(state), cursor_state, theme.text);
 
     let toolbars = {
         let (state, theme) = (Arc::clone(state), theme.clone());
         computed(move |g: &ReactiveGraph| {
-            ensure_geometry(&state, &theme, content_width, g.get(signal).unwrap_or(0));
+            ensure_geometry(&state, &theme, g.get(signal).unwrap_or(0));
             let mut data = state.lock().unwrap();
-            let Some((x, y, w, h)) = data.selection_bounds() else {
+            let bounds = data.selection_bounds().filter(|_| !data.pressing);
+            let Some((x, y, w, h)) = bounds else {
                 data.toolbar_rect = None;
                 return Vec::new();
             };
             vec![ToolbarKey {
                 bounds: [x.to_bits(), y.to_bits(), w.to_bits(), h.to_bits()],
-                look: signature(&data),
+                // The toolbar fits itself to the editor's width.
+                look: format!("{}|{}", signature(&data), data.wrap_width.round()),
             }]
         })
     };
@@ -190,7 +191,23 @@ pub(super) fn content(
     };
 
     // Relative, so the cursor, highlight and floating toolbar are placed against the text.
-    let body = div()
+    // The text wraps to the width the editor is given: a new width re-wraps it.
+    let text = {
+        let (state, version) = (Arc::clone(state), *version);
+        div().on_layout_change(move |bounds| {
+            let changed = state.lock().is_ok_and(|mut d| {
+                let changed = (d.wrap_width - bounds.width).abs() > 0.5;
+                if changed {
+                    d.wrap_width = bounds.width;
+                }
+                changed
+            });
+            if changed {
+                version.update(|n| n.wrapping_add(1));
+            }
+        })
+    };
+    let text = text
         .w_full()
         .relative()
         .cursor_text()
@@ -198,8 +215,13 @@ pub(super) fn content(
         .child(selection)
         .child(cursor)
         .child(toolbar);
+    let body = div()
+        .w_full()
+        .padding_x_px(pad)
+        .padding_y_px(pad)
+        .child(text);
     // The `blinc-rich-text-editor` class is the canonical CSS hook for stylesheet overrides
-    // (background, padding, font).
+    // (background, font).
     if theme.toolbar != ToolbarPlacement::Fixed {
         return body.class("blinc-rich-text-editor");
     }
@@ -209,8 +231,9 @@ pub(super) fn content(
             g.get(signal);
             let mut data = state.lock().unwrap();
             // Clicks on the text are measured below the toolbar.
-            data.content_top = fixed_height(&data);
-            vec![signature(&data)]
+            data.content_top = fixed_height(&data) + pad;
+            let overflows = fixed_overflows(data.wrap_width + 2.0 * pad);
+            vec![format!("{}|{overflows}", signature(&data))]
         })
     };
     let fixed = {
@@ -218,7 +241,7 @@ pub(super) fn content(
         div().w_full().for_each(
             &looks,
             |look| look.clone(),
-            move |_| fixed_toolbar(&state, &version),
+            move |_| fixed_toolbar(&state, &version, pad),
         )
     };
     div()
@@ -237,7 +260,6 @@ fn cursor_overlay_canvas(
     state: RichTextState,
     cursor_state: SharedCursorState,
     color: Option<Color>,
-    width: f32,
 ) -> Canvas {
     let (state_for_frames, cursor_for_frames) = (state.clone(), cursor_state.clone());
     canvas(move |ctx: &mut dyn DrawContext, _bounds: CanvasBounds| {
@@ -280,7 +302,7 @@ fn cursor_overlay_canvas(
     .absolute()
     .left(0.0)
     .top(0.0)
-    .w(width)
+    .w_full()
     .h_full()
 }
 
