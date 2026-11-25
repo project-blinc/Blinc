@@ -1189,15 +1189,22 @@ fn keys_move_between_cells() {
     ui.mouse_up();
     ui.settle();
     assert_eq!(at(&state), (0, 0));
-    // Down, into the table and out of it, through the wrapped cell's two lines.
+    // Down, into the table and out of it. How many lines the long cell wraps to depends on the
+    // face, and each is a stop.
     let mut seen = Vec::new();
-    for _ in 0..5 {
+    while at(&state) != (2, 0) && seen.len() < 12 {
         ui.key(DOWN);
         ui.settle();
         seen.push(at(&state));
     }
-    assert_eq!(seen, [(1, 0), (1, 3), (1, 3), (1, 6), (2, 0)]);
-    for want in [(1, 6), (1, 3), (1, 3), (1, 0), (0, 0)] {
+    let wrapped = seen.iter().filter(|&&stop| stop == (1, 3)).count();
+    assert!(wrapped >= 2, "the long cell did not wrap: {seen:?}");
+    let mut stops = vec![(1, 0)];
+    stops.extend(std::iter::repeat_n((1, 3), wrapped));
+    stops.extend([(1, 6), (2, 0)]);
+    assert_eq!(seen, stops);
+    // Up goes back through the same lines.
+    for want in stops.iter().rev().skip(1).copied().chain([(0, 0)]) {
         ui.key(UP);
         ui.settle();
         assert_eq!(at(&state), want);
