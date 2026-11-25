@@ -11,7 +11,7 @@ use super::actions;
 use crate::components::button::{ButtonSize, ButtonVariant, button};
 use crate::components::color_picker::color_picker;
 use crate::components::rich_text_editor::cursor::ActiveFormat;
-use crate::components::rich_text_editor::document::BlockKind;
+use crate::components::rich_text_editor::document::{BlockAlign, BlockKind};
 use crate::components::rich_text_editor::format::Mark;
 use crate::components::rich_text_editor::state::{RichTextData, RichTextState, report_change};
 use crate::components::select::{SelectSize, select};
@@ -60,7 +60,8 @@ pub(super) fn icon_button(
             .icon_size(16.0)
             .on_click(move |_| on_click(&target))
             .build_component()
-            .class("blinc-rte-button");
+            .class("blinc-rte-button")
+            .attr("aria-label", label);
         if active {
             b = b.class("blinc-rte-button--active");
         }
@@ -90,6 +91,28 @@ pub(super) fn marks(target: &Target, format: &ActiveFormat) -> Vec<Div> {
             icon_button(target, icon, label, on, move |t| {
                 let mark = mark.clone();
                 t.act(|d| actions::toggle_mark(d, mark));
+            })
+        })
+        .collect()
+}
+
+/// The alignments, in toolbar order.
+pub(super) const ALIGNS: [(BlockAlign, &str, &str); 4] = [
+    (BlockAlign::Start, icons::TEXT_ALIGN_START, "Align left"),
+    (BlockAlign::Center, icons::TEXT_ALIGN_CENTER, "Align centre"),
+    (BlockAlign::End, icons::TEXT_ALIGN_END, "Align right"),
+    (BlockAlign::Justify, icons::TEXT_ALIGN_JUSTIFY, "Justify"),
+];
+
+/// One button per alignment, pressed for the one of the block under the cursor.
+pub(super) fn aligns(target: &Target, current: BlockAlign) -> Vec<Div> {
+    ALIGNS
+        .iter()
+        .map(|&(align, icon, label)| {
+            icon_button(target, icon, label, align == current, move |t| {
+                t.act(|d| {
+                    d.set_align(align);
+                });
             })
         })
         .collect()

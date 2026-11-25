@@ -421,6 +421,13 @@ impl Button {
         self
     }
 
+    /// Set an attribute, such as the `aria-label` that names an icon-only button.
+    pub fn attr(mut self, name: &str, value: &str) -> Self {
+        // Attributes travel as `name=value` classes.
+        self.inner = self.inner.class(&format!("{name}={value}"));
+        self
+    }
+
     /// Set the element ID for CSS selector matching
     pub fn id(mut self, id: &str) -> Self {
         self.inner = self.inner.id(id);

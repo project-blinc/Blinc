@@ -5,7 +5,7 @@ use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 use blinc_layout::styled_text::{StyledLine, TextSpan};
 
-use crate::components::rich_text_editor::document::{Block, BlockKind, RichDocument};
+use crate::components::rich_text_editor::document::{Block, BlockAlign, BlockKind, RichDocument};
 
 impl RichDocument {
     /// Parse `markdown` (CommonMark and strikethrough, with the inline HTML the module lists) into
@@ -60,6 +60,7 @@ struct Pending {
     kind: BlockKind,
     indent: u8,
     lines: Vec<StyledLine>,
+    align: BlockAlign,
 }
 
 impl Pending {
@@ -75,6 +76,8 @@ struct Importer {
     frames: Vec<Frame>,
     /// The marks in force, each with the HTML tag that opened it, or none for Markdown's own.
     marks: Vec<(Option<String>, Inline)>,
+    /// The alignments of the `<div>`s around the current text.
+    aligns: Vec<BlockAlign>,
 }
 
 fn empty_line() -> StyledLine {
@@ -92,6 +95,7 @@ impl Importer {
             pending: None,
             frames: Vec::new(),
             marks: Vec::new(),
+            aligns: Vec::new(),
         }
     }
 
@@ -109,6 +113,7 @@ impl Importer {
             kind,
             indent,
             lines: vec![empty_line()],
+            align: self.aligns.last().copied().unwrap_or_default(),
         });
     }
 
@@ -118,6 +123,7 @@ impl Importer {
                 kind: pending.kind,
                 lines: pending.lines,
                 indent: pending.indent,
+                align: pending.align,
             });
         }
     }
@@ -358,9 +364,31 @@ impl Importer {
     }
 
     fn html_block(&mut self, html: &str) {
-        if HtmlTag::parse(html).is_some_and(|tag| tag.name == "br") {
-            self.open(BlockKind::Paragraph, 0);
-            self.flush();
+        let Some(tag) = HtmlTag::parse(html) else {
+            return;
+        };
+        match (tag.name.as_str(), tag.closing) {
+            ("br", _) => {
+                self.open(BlockKind::Paragraph, 0);
+                self.flush();
+            }
+            ("div", false) => {
+                let align = match tag.attribute("align").as_deref() {
+                    Some("center") => BlockAlign::Center,
+                    Some("right") => BlockAlign::End,
+                    Some("justify") => BlockAlign::Justify,
+                    _ => BlockAlign::Start,
+                };
+                self.aligns.push(align);
+                // An item's own `<div>` comes after the item opened.
+                if let Some(pending) = self.pending.as_mut().filter(|p| p.is_empty()) {
+                    pending.align = align;
+                }
+            }
+            ("div", true) => {
+                self.aligns.pop();
+            }
+            _ => {}
         }
     }
 }

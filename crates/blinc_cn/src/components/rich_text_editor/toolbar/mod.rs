@@ -16,7 +16,7 @@ mod link;
 use std::sync::Arc;
 
 use blinc_core::reactive::computed;
-use blinc_core::{Shadow, Signal};
+use blinc_core::{Color, Shadow, Signal};
 use blinc_icons::icons;
 use blinc_layout::div::{Div, div};
 use blinc_layout::notch::notch;
@@ -24,9 +24,10 @@ use blinc_layout::selector::ScrollBehavior;
 use blinc_layout::widgets::scroll::scroll as scroll_view;
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
-use controls::{BUTTON, DIVIDER, GAP, MARKS, Target};
+use controls::{ALIGNS, BUTTON, DIVIDER, GAP, MARKS, Target};
 
-use super::document::BlockKind;
+use super::cursor::ActiveFormat;
+use super::document::{BlockAlign, BlockKind};
 use super::render::RichTextTheme;
 use super::state::{RichTextData, RichTextState};
 
@@ -64,7 +65,7 @@ const MIN_FLOATING: f32 = 200.0;
 /// out for the same reason.
 pub(super) fn signature(data: &RichTextData) -> String {
     let f = &data.active_format;
-    let kind = data.document.blocks.get(data.cursor.block).map(|b| &b.kind);
+    let block = data.document.blocks.get(data.cursor.block);
     format!(
         "{}{}{}{}{}{}|{:?}",
         f.bold as u8,
@@ -73,7 +74,7 @@ pub(super) fn signature(data: &RichTextData) -> String {
         f.strikethrough as u8,
         f.code as u8,
         f.link.is_some() as u8,
-        kind
+        block.map(|b| (&b.kind, b.align))
     )
 }
 
@@ -183,6 +184,56 @@ fn row_width(buttons: usize, dividers: usize) -> f32 {
     buttons as f32 * BUTTON + dividers as f32 * DIVIDER + (buttons + dividers - 1) as f32 * GAP
 }
 
+/// The controls after the block kind's menu, and their width: the marks, the alignments, colour
+/// and link, and in the floating toolbar, the close button.
+fn rest(target: &Target, look: &Look, close: bool) -> (Div, f32) {
+    let mut row = div().flex_row().items_center().gap_px(GAP);
+    for button in controls::marks(target, &look.format) {
+        row = row.child(button);
+    }
+    row = row.child(controls::divider());
+    for button in controls::aligns(target, look.align) {
+        row = row.child(button);
+    }
+    row = row
+        .child(controls::divider())
+        .child(controls::color(target, look.swatch))
+        .child(link::link_button(target, look.format.link.is_some()));
+    if close {
+        row = row
+            .child(controls::divider())
+            .child(controls::close(target));
+    }
+    (row, rest_width(close))
+}
+
+/// The width of [`rest`].
+fn rest_width(close: bool) -> f32 {
+    let buttons = MARKS.len() + ALIGNS.len() + 2 + close as usize;
+    row_width(buttons, 2 + close as usize)
+}
+
+/// What a toolbar shows of the editor's state.
+struct Look {
+    format: ActiveFormat,
+    kind: BlockKind,
+    align: BlockAlign,
+    swatch: Signal<Color>,
+}
+
+impl Look {
+    fn of(data: &mut RichTextData) -> Self {
+        let swatch = data.swatch();
+        let block = data.document.blocks.get(data.cursor.block);
+        Self {
+            format: data.active_format.clone(),
+            kind: block.map_or(BlockKind::Paragraph, |b| b.kind.clone()),
+            align: block.map_or(BlockAlign::Start, |b| b.align),
+            swatch,
+        }
+    }
+}
+
 /// The floating toolbar over the selection, or `None` without a non-empty selection or when the
 /// toolbar is placed elsewhere.
 ///
@@ -198,17 +249,8 @@ pub fn selection_toolbar(
     }
     let mut data = state.lock().ok()?;
     let (x, y, w, h) = data.selection_bounds()?;
-    let format = data.active_format.clone();
-    let swatch = data.swatch();
-    let kind = data
-        .document
-        .blocks
-        .get(data.cursor.block)
-        .map_or(BlockKind::Paragraph, |b| b.kind.clone());
-
-    // The block kind's menu, then the marks, colour, link and close, with dividers after the marks
-    // and before close.
-    let rest_w = row_width(MARKS.len() + 3, 2);
+    let look = Look::of(&mut data);
+    let rest_w = rest_width(true);
     let lead_w = controls::HEADING_COMPACT + GAP + DIVIDER;
     let row_w = lead_w + GAP + rest_w;
     // As wide as its controls, or as the editor when that is narrower.
@@ -238,20 +280,10 @@ pub fn selection_toolbar(
         state: Arc::clone(state),
         version: *version,
     };
-    let mut rest = div().flex_row().items_center().gap_px(GAP);
-    for button in controls::marks(&target, &format) {
-        rest = rest.child(button);
-    }
-    rest = rest
-        .child(controls::divider())
-        .child(controls::color(&target, swatch))
-        .child(link::link_button(&target, format.link.is_some()))
-        .child(controls::divider())
-        .child(controls::close(&target));
     let row = controls_lane(
         &target,
-        lead(&target, &kind, true),
-        (rest, rest_w),
+        lead(&target, &look.kind, true),
+        rest(&target, &look, true),
         width - 2.0 * PAD_X,
         &scroll,
     );
@@ -311,15 +343,9 @@ pub(super) fn fixed_height(_data: &RichTextData) -> f32 {
     ROW + 2.0 * PAD_Y + 1.0
 }
 
-/// The width of the fixed toolbar's controls other than the block kind's menu: the marks, a
-/// divider, colour and link.
-fn fixed_rest_width() -> f32 {
-    row_width(MARKS.len() + 2, 1)
-}
-
 /// Whether the fixed toolbar's controls overflow an editor `width` wide, and so scroll.
 pub(super) fn fixed_overflows(width: f32) -> bool {
-    controls::HEADING + GAP + DIVIDER + GAP + fixed_rest_width() > width - 2.0 * PAD_X
+    controls::HEADING + GAP + DIVIDER + GAP + rest_width(false) > width - 2.0 * PAD_X
 }
 
 /// The fixed toolbar above the text: the block kind's menu, the marks, colour and link. When the
@@ -328,13 +354,7 @@ pub(super) fn fixed_toolbar(state: &RichTextState, version: &Signal<u32>, pad: f
     let Ok(mut data) = state.lock() else {
         return div();
     };
-    let format = data.active_format.clone();
-    let swatch = data.swatch();
-    let kind = data
-        .document
-        .blocks
-        .get(data.cursor.block)
-        .map_or(BlockKind::Paragraph, |b| b.kind.clone());
+    let look = Look::of(&mut data);
     let height = fixed_height(&data);
     let data_width = data.wrap_width + 2.0 * pad;
     let scroll = data.bar_scroll.clone();
@@ -344,18 +364,10 @@ pub(super) fn fixed_toolbar(state: &RichTextState, version: &Signal<u32>, pad: f
         state: Arc::clone(state),
         version: *version,
     };
-    let mut rest = div().flex_row().items_center().gap_px(GAP);
-    for button in controls::marks(&target, &format) {
-        rest = rest.child(button);
-    }
-    rest = rest
-        .child(controls::divider())
-        .child(controls::color(&target, swatch))
-        .child(link::link_button(&target, format.link.is_some()));
     let controls_row = controls_lane(
         &target,
-        lead(&target, &kind, false),
-        (rest, fixed_rest_width()),
+        lead(&target, &look.kind, false),
+        rest(&target, &look, false),
         data_width - 2.0 * PAD_X,
         &scroll,
     );

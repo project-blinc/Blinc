@@ -39,6 +39,20 @@ pub enum BlockKind {
     Divider,
 }
 
+/// How a block's lines are placed across its width.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BlockAlign {
+    /// Against the left edge.
+    #[default]
+    Start,
+    /// In the middle.
+    Center,
+    /// Against the right edge.
+    End,
+    /// Against both edges, the spaces taking up the slack, but for the last line.
+    Justify,
+}
+
 /// A block in the document — paragraph, heading, list item, quote, divider.
 ///
 /// Public fields by design: every edit op in [`super::edit`] is a free
@@ -53,6 +67,8 @@ pub struct Block {
     /// Indentation level — used by list items for nesting and by other
     /// blocks for indented content.
     pub indent: u8,
+    /// How the lines are placed across the block.
+    pub align: BlockAlign,
 }
 
 impl Block {
@@ -65,6 +81,7 @@ impl Block {
                 spans: Vec::new(),
             }],
             indent: 0,
+            align: BlockAlign::Start,
         }
     }
 
@@ -74,6 +91,7 @@ impl Block {
             kind: BlockKind::Paragraph,
             lines: vec![StyledLine::plain(text, color)],
             indent: 0,
+            align: BlockAlign::Start,
         }
     }
 
@@ -83,6 +101,7 @@ impl Block {
             kind: BlockKind::Heading(level.clamp(1, 6)),
             lines: vec![StyledLine::plain(text, color)],
             indent: 0,
+            align: BlockAlign::Start,
         }
     }
 
@@ -92,6 +111,7 @@ impl Block {
             kind: BlockKind::BulletItem,
             lines: vec![StyledLine::plain(text, color)],
             indent: 0,
+            align: BlockAlign::Start,
         }
     }
 
@@ -101,6 +121,7 @@ impl Block {
             kind: BlockKind::NumberedItem,
             lines: vec![StyledLine::plain(text, color)],
             indent: 0,
+            align: BlockAlign::Start,
         }
     }
 
@@ -110,6 +131,7 @@ impl Block {
             kind: BlockKind::Quote,
             lines: vec![StyledLine::plain(text, color)],
             indent: 0,
+            align: BlockAlign::Start,
         }
     }
 
@@ -122,6 +144,7 @@ impl Block {
                 spans: Vec::new(),
             }],
             indent: 0,
+            align: BlockAlign::Start,
         }
     }
 
@@ -466,6 +489,7 @@ mod tests {
                 StyledLine::plain("second line", Color::WHITE),
             ],
             indent: 0,
+            align: BlockAlign::Start,
         }]);
         let s = DocPosition::new(0, 0, 6);
         let e = DocPosition::new(0, 1, 6);

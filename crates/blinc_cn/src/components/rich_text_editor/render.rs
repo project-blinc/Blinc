@@ -14,7 +14,8 @@
 //! them; [`RichTextTheme::dark`] and [`RichTextTheme::light`] are fixed
 //! palettes.
 
-use super::document::{Block, BlockKind, RichDocument};
+use super::document::{Block, BlockAlign, BlockKind, RichDocument};
+use super::line::{LineBox, LineFont};
 use blinc_core::Color;
 use blinc_layout::div::{Div, FontWeight, div};
 use blinc_layout::rich_text::{RichText, rich_text_styled};
@@ -221,23 +222,6 @@ fn indented_block(inner: Div, indent_px: f32) -> Div {
 }
 
 /// Build a paragraph-style div containing one row per visual line.
-///
-/// Each source `StyledLine` is pre-wrapped to `line_width` via
-/// [`super::wrap::wrap_styled_line_with_offsets`] and the resulting
-/// chunks become rows. Each row is a fixed-height `relative()`
-/// container that hosts its runs as **absolutely-positioned children**
-/// at the exact pixel `x_in_line` computed by
-/// [`build_runs_for_visual_line`]. This bypasses flex layout entirely
-/// for the runs themselves so the rendered glyphs align with the
-/// geometry the cursor uses for hit-testing.
-///
-/// NOTE: there's a known interaction with `wrap_styled_line` where the
-/// chip on a wrapped paragraph appears visually adjacent to neighbour
-/// text without a space. The bug is in the pre-wrap step (or in how
-/// `RichText` measures the wrapped chunk's text), not in the run
-/// positioning itself — putting the chip line on its own paragraph
-/// renders correctly. Tracking under "DEFERRED: monospace inline-code
-/// chip rendering".
 fn paragraph_div(
     block: &Block,
     theme: &RichTextTheme,
@@ -247,31 +231,26 @@ fn paragraph_div(
     line_width: f32,
 ) -> Div {
     let line_height_px = font_size * theme.line_height;
+    let font = LineFont {
+        size: font_size,
+        weight,
+        italic,
+    };
     let mut col = div().w_full().flex_col();
     for source_line in &block.lines {
-        let visual_lines = if line_width > 0.0 {
-            super::wrap::wrap_styled_line_with_offsets(
-                source_line,
-                line_width,
-                font_size,
-                weight,
-                italic,
-            )
-        } else {
-            vec![super::wrap::WrappedLine {
-                line: source_line.clone(),
-                source_start_col: 0,
-                source_end_col: source_line.text.chars().count(),
-            }]
-        };
-        for visual in &visual_lines {
+        let visual_lines = super::geometry::wrap_source_line(source_line, line_width, &font);
+        let count = visual_lines.len();
+        for (i, visual) in visual_lines.iter().enumerate() {
+            let line_box = LineBox {
+                width: line_width,
+                align: block.align,
+                last: i + 1 == count,
+            };
             col = col.child(absolute_positioned_line(
                 visual,
                 theme,
-                font_size,
-                weight,
-                italic,
-                line_width,
+                &font,
+                &line_box,
                 line_height_px,
             ));
         }
@@ -279,83 +258,55 @@ fn paragraph_div(
     col
 }
 
-/// Build a single visual line as an absolute-positioned container.
-/// Each run's `RichText` sits at the geometry's exact `x_in_line`, so
-/// flex layout never gets a chance to shrink the body run away from
-/// its measured width.
+/// Build a single visual line, its text where [`super::line::runs`] places it, so the drawn glyphs
+/// sit where the cursor and the selection measure them.
 fn absolute_positioned_line(
     visual: &super::wrap::WrappedLine,
     theme: &RichTextTheme,
-    font_size: f32,
-    weight: FontWeight,
-    italic: bool,
-    line_width: f32,
+    font: &LineFont,
+    line_box: &LineBox,
     line_height_px: f32,
 ) -> Div {
     let visual_line = &visual.line;
-    let len = visual_line.text.len();
+    let runs = super::line::runs(visual, font, line_box);
+    let has_code = visual_line.spans.iter().any(|s| s.code);
+    let justified = line_box.align == BlockAlign::Justify && !line_box.last;
+    let (font_size, weight, italic) = (font.size, font.weight, font.italic);
+    let line_width = line_box.width;
 
-    // Per-byte boolean: which bytes are code-flagged?
-    let mut code_at: Vec<bool> = vec![false; len];
-    for span in &visual_line.spans {
-        if !span.code {
-            continue;
-        }
-        let s = span.start.min(len);
-        let e = span.end.min(len);
-        for b in code_at.iter_mut().take(e).skip(s) {
-            *b = true;
-        }
-    }
-
-    // Walk byte-by-byte and emit (byte_start, byte_end, is_code) ranges
-    // at every transition. Mirrors `build_runs_for_visual_line` so the
-    // renderer's runs align 1:1 with the geometry's runs.
-    let mut byte_ranges: Vec<(usize, usize, bool)> = Vec::new();
-    if len > 0 {
-        let mut seg_start = 0usize;
-        let mut current_is_code = code_at[0];
-        let mut byte = 0usize;
-        while byte < len {
-            let here = code_at[byte];
-            if here != current_is_code {
-                byte_ranges.push((seg_start, byte, current_is_code));
-                seg_start = byte;
-                current_is_code = here;
-            }
-            let ch_len = visual_line.text[byte..]
-                .chars()
-                .next()
-                .map(|c| c.len_utf8())
-                .unwrap_or(1);
-            byte += ch_len;
-        }
-        byte_ranges.push((seg_start, len, current_is_code));
-    }
-
-    // Hot path: single non-code run — emit a single RichText without
-    // any absolute positioning. The line container still gets an
-    // explicit width.
-    if byte_ranges.len() == 1 && !byte_ranges[0].2 {
+    // One RichText draws a line that has no code and keeps its own spacing.
+    if !has_code && !justified {
         // The child needs the width as well as the container: a
         // content-sized child is handed min-content and wraps inside a
         // box that is already the right size, so a heading broke across
         // two lines inside a one-line box and overlapped what followed.
-        return div()
-            .w(line_width)
-            .h(line_height_px)
-            .child(make_rich_text(visual_line, theme, font_size, weight, italic).w(line_width));
+        let x = runs.first().map_or(0.0, |(_, run)| run.x_in_line);
+        let text = make_rich_text(visual_line, theme, font_size, weight, italic);
+        if x <= 0.0 {
+            return div()
+                .w(line_width)
+                .h(line_height_px)
+                .child(text.w(line_width));
+        }
+        // A pixel spare, so rounding does not wrap the last word.
+        let width = (line_width - x).ceil() + 1.0;
+        return div().w(line_width).h(line_height_px).relative().child(
+            div()
+                .absolute()
+                .left(x)
+                .top(0.0)
+                .w(width)
+                .h(line_height_px)
+                .child(text.w(width)),
+        );
     }
-
-    // Multiple runs OR a code-only run — use a relative container with
-    // absolute children at the precomputed x positions.
-    let body_font = blinc_layout::div::FontFamily::default();
-    let code_font = blinc_layout::div::FontFamily::monospace();
 
     // Put every run on one baseline. Each is otherwise centred in its own
     // box by half-leading, so the monospace of an inline code run draws
     // above the prose beside it. `make_code_run` pins the weight to
     // Normal, so its baseline is computed that way.
+    let body_font = blinc_layout::div::FontFamily::default();
+    let code_font = blinc_layout::div::FontFamily::monospace();
     let body_baseline = run_baseline(font_size, theme.line_height, weight, italic, &body_font);
     let code_baseline = run_baseline(
         font_size,
@@ -364,58 +315,43 @@ fn absolute_positioned_line(
         false,
         &code_font,
     );
-    let line_baseline = body_baseline.max(code_baseline);
+    let line_baseline = if has_code {
+        body_baseline.max(code_baseline)
+    } else {
+        body_baseline
+    };
 
-    let mut x_cursor = 0.0_f32;
     let mut container = div().w(line_width).h(line_height_px).relative();
-    for (bstart, bend, is_code) in byte_ranges {
-        if bstart >= bend {
-            continue;
-        }
-        let font_family = if is_code { &code_font } else { &body_font };
-        // Advance by the run's FULL width, spaces included, so the next
-        // run starts where this one really ends.
-        let full = slice_styled_line(visual_line, bstart, bend);
-        let width =
-            super::state::measure_width(&full.text, font_size, weight, italic, Some(font_family));
-
+    for (bytes, run) in runs {
+        let is_code = run.font_family.generic == code_font.generic;
         // Draw the run without its edge spaces, and shift it right by
         // the leading space's width. Text rendering drops a leading or
         // trailing space, so a run whose box merely reserved room for
         // one came out butted against its neighbour: "a`code`via". The
         // space is now spent on position rather than left to the
         // renderer to honour.
-        let lead = bstart + (full.text.len() - full.text.trim_start().len());
-        let trail = bend - (full.text.len() - full.text.trim_end().len());
-        let (draw_start, draw_end) = if lead < trail {
-            (lead, trail)
-        } else {
-            // All whitespace: nothing to draw, but still advance.
-            (bstart, bstart)
-        };
-        if draw_start >= draw_end {
-            x_cursor += width;
+        let lead = run.text.len() - run.text.trim_start().len();
+        let drawn = run.text.trim();
+        if drawn.is_empty() {
             continue;
         }
-        let run_line = slice_styled_line(visual_line, draw_start, draw_end);
-        let lead_w = if draw_start > bstart {
+        let measure = |text: &str| {
             super::state::measure_width(
-                &visual_line.text[bstart..draw_start],
-                font_size,
-                weight,
-                italic,
-                Some(font_family),
+                text,
+                run.font_size,
+                run.weight,
+                run.italic,
+                Some(&run.font_family),
             )
+        };
+        let lead_w = if lead > 0 {
+            measure(&run.text[..lead])
         } else {
             0.0
         };
-        let draw_w = super::state::measure_width(
-            &run_line.text,
-            font_size,
-            weight,
-            italic,
-            Some(font_family),
-        );
+        let start = bytes.start + lead;
+        let run_line = slice_styled_line(visual_line, start, start + drawn.len());
+        let draw_w = measure(drawn).ceil();
         // Drop the run so its own baseline meets the line's.
         let own_baseline = if is_code {
             code_baseline
@@ -426,21 +362,21 @@ fn absolute_positioned_line(
         if is_code {
             positioned = positioned.class("blinc-rich-text-code");
         }
-        let positioned = positioned
-            .absolute()
-            .left(x_cursor + lead_w)
-            // Rounded: an absolute top lands on a whole pixel anyway,
-            // and letting it round implicitly left the run a pixel off.
-            .top((line_baseline - own_baseline).round())
-            .w(draw_w.ceil())
-            .h(line_height_px)
-            .child(if is_code {
-                make_code_run(&run_line, theme, font_size, weight, italic).w(draw_w.ceil())
-            } else {
-                make_rich_text(&run_line, theme, font_size, weight, italic).w(draw_w.ceil())
-            });
-        container = container.child(positioned);
-        x_cursor += width;
+        container = container.child(
+            positioned
+                .absolute()
+                .left(run.x_in_line + lead_w)
+                // Rounded: an absolute top lands on a whole pixel anyway,
+                // and letting it round implicitly left the run a pixel off.
+                .top((line_baseline - own_baseline).round())
+                .w(draw_w)
+                .h(line_height_px)
+                .child(if is_code {
+                    make_code_run(&run_line, theme, font_size, weight, italic).w(draw_w)
+                } else {
+                    make_rich_text(&run_line, theme, font_size, weight, italic).w(draw_w)
+                }),
+        );
     }
     container
 }
@@ -541,53 +477,6 @@ fn quote_div(block: &Block, theme: &RichTextTheme, indent_px: f32, inner_width: 
     indented_block(row, indent_px)
 }
 
-/// Render a single (already pre-wrapped) styled line as a `flex_row`
-/// of `RichText` siblings, one per run.
-///
-/// A "run" is a contiguous slice of the line where every character
-/// shares the same font (family + weight + italic + size). Currently
-/// we only split on inline code (body text vs monospace), but the
-/// machinery generalizes to any per-span font override.
-///
-/// The cursor / hit-test path in [`super::state`] uses the matching
-/// `RunGeometry` produced by [`build_runs_for_visual_line`] for pixel
-/// measurement, so the runs rendered here and the runs measured there
-/// stay in lockstep — every run's pixel left edge in the rendered
-/// flex row equals its `RunGeometry.x_in_line`, and every run's pixel
-/// width matches the geometry's `width`. That's why the cursor lands
-/// on the right character even when a line mixes proportional and
-/// monospace text.
-fn render_line_row(
-    line: &blinc_layout::styled_text::StyledLine,
-    theme: &RichTextTheme,
-    font_size: f32,
-    weight: FontWeight,
-    italic: bool,
-) -> Div {
-    let segments = split_line_by_code(line);
-    if segments.len() == 1 && !segments[0].is_code {
-        // Hot path: no inline code at all — emit a single RichText so
-        // the row layout cost matches the pre-Phase-5 baseline.
-        return div().w_full().child(make_rich_text(
-            &segments[0].line,
-            theme,
-            font_size,
-            weight,
-            italic,
-        ));
-    }
-
-    let mut row = div().w_full().flex_row().items_start();
-    for seg in segments {
-        if seg.is_code {
-            row = row.child(make_code_run(&seg.line, theme, font_size, weight, italic));
-        } else {
-            row = row.child(make_rich_text(&seg.line, theme, font_size, weight, italic));
-        }
-    }
-    row
-}
-
 /// Distance from a run box's top down to the baseline the text is drawn
 /// on, for one face at one size.
 ///
@@ -641,110 +530,6 @@ fn make_code_run(
         .weight(FontWeight::Normal)
         .line_height(theme.line_height)
         .monospace()
-}
-
-/// One slice of a line, either a normal styled run or a code run.
-struct LineSegment {
-    line: blinc_layout::styled_text::StyledLine,
-    is_code: bool,
-}
-
-/// Walk a `StyledLine`'s spans and split its text at every transition
-/// between "any code" and "no code" coverage. Each segment's spans are
-/// rebased so `start` is `0`-relative.
-fn split_line_by_code(line: &blinc_layout::styled_text::StyledLine) -> Vec<LineSegment> {
-    use blinc_layout::styled_text::{StyledLine, TextSpan};
-
-    let len = line.text.len();
-    if len == 0 {
-        return vec![LineSegment {
-            line: line.clone(),
-            is_code: false,
-        }];
-    }
-
-    // Build a per-byte boolean: is this byte covered by a `code` span?
-    let mut code_at: Vec<bool> = vec![false; len];
-    for span in &line.spans {
-        if !span.code {
-            continue;
-        }
-        let s = span.start.min(len);
-        let e = span.end.min(len);
-        for b in code_at.iter_mut().take(e).skip(s) {
-            *b = true;
-        }
-    }
-
-    // Walk byte-by-byte and emit segments at every transition. Use
-    // char boundaries — a transition mid-codepoint is impossible
-    // because spans are stored on byte boundaries that match char
-    // boundaries (the editor only inserts at char boundaries).
-    let mut segments = Vec::new();
-    let mut seg_start = 0usize;
-    let mut current_is_code = code_at[0];
-    let mut byte = 0usize;
-    while byte < len {
-        let here = code_at[byte];
-        if here != current_is_code {
-            segments.push(slice_segment(line, seg_start, byte, current_is_code));
-            seg_start = byte;
-            current_is_code = here;
-        }
-        // Advance by one char to stay on UTF-8 boundaries.
-        let ch_len = line.text[byte..]
-            .chars()
-            .next()
-            .map(|c| c.len_utf8())
-            .unwrap_or(1);
-        byte += ch_len;
-    }
-    segments.push(slice_segment(line, seg_start, len, current_is_code));
-    segments.retain(|s| !s.line.text.is_empty());
-    if segments.is_empty() {
-        return vec![LineSegment {
-            line: line.clone(),
-            is_code: false,
-        }];
-    }
-    segments
-}
-
-/// Build a `LineSegment` covering byte range `[start, end)` of `source`
-/// with the given code flag.
-fn slice_segment(
-    source: &blinc_layout::styled_text::StyledLine,
-    start: usize,
-    end: usize,
-    is_code: bool,
-) -> LineSegment {
-    use blinc_layout::styled_text::{StyledLine, TextSpan};
-
-    let text = source.text[start..end].to_string();
-    let mut spans = Vec::new();
-    for span in &source.spans {
-        let s = span.start.max(start);
-        let e = span.end.min(end);
-        if s >= e {
-            continue;
-        }
-        spans.push(TextSpan {
-            start: s - start,
-            end: e - start,
-            color: span.color,
-            bold: span.bold,
-            italic: span.italic,
-            underline: span.underline,
-            strikethrough: span.strikethrough,
-            code: span.code,
-            link_url: span.link_url.clone(),
-            token_type: span.token_type.clone(),
-        });
-    }
-    LineSegment {
-        line: StyledLine { text, spans },
-        is_code,
-    }
 }
 
 /// Build a `RichText` for a wrapped line. Each line goes into its own

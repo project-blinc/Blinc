@@ -15,7 +15,7 @@
 use blinc_layout::styled_text::StyledLine;
 
 use super::cursor::{DocPosition, Selection};
-use super::document::{Block, BlockKind, RichDocument, char_to_byte};
+use super::document::{Block, BlockAlign, BlockKind, RichDocument, char_to_byte};
 use super::edit::split_spans;
 
 // =============================================================================
@@ -105,6 +105,22 @@ pub fn toggle_block_kind(doc: &mut RichDocument, range: Selection, kind: BlockKi
         kind
     };
     set_block_kind(doc, range, target)
+}
+
+/// Align every block touched by `range`, dividers aside. Returns whether any changed.
+pub fn set_block_align(doc: &mut RichDocument, range: Selection, align: BlockAlign) -> bool {
+    let (start, end) = range.ordered();
+    let Some((first, last)) = block_range(start, end, doc.blocks.len()) else {
+        return false;
+    };
+    let mut changed = false;
+    for block in &mut doc.blocks[first..=last] {
+        if block.kind != BlockKind::Divider && block.align != align {
+            block.align = align;
+            changed = true;
+        }
+    }
+    changed
 }
 
 /// Increase the `indent` of every block touched by `range` by one.
@@ -250,6 +266,7 @@ pub fn convert_selection_to_block(
                 spans: prefix_spans,
             }],
             indent: original_indent,
+            align: block.align,
         });
         middle_offset = 1;
     }
@@ -260,6 +277,7 @@ pub fn convert_selection_to_block(
             spans: middle_spans,
         }],
         indent: middle_indent,
+        align: block.align,
     });
     if !suffix_text.is_empty() {
         replacement.push(Block {
@@ -269,6 +287,7 @@ pub fn convert_selection_to_block(
                 spans: suffix_spans,
             }],
             indent: original_indent,
+            align: block.align,
         });
     }
 

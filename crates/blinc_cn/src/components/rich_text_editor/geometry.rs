@@ -3,9 +3,12 @@
 
 use super::cursor::DocPosition;
 use super::document::{Block, BlockKind, RichDocument};
+use super::line::{LineBox, LineFont};
 use super::render::RichTextTheme;
 use super::state::LineGeometry;
+use super::wrap::WrappedLine;
 use blinc_layout::div::FontWeight;
+use blinc_layout::styled_text::StyledLine;
 
 /// Compute the line-geometry index for `doc` at the given `content_width`,
 /// matching the layout that [`render_document`](super::render::render_document) produces. Walks every
@@ -117,32 +120,23 @@ fn emit_paragraph_geometry(
 ) {
     let line_height_px = font_size * theme.line_height;
     for (source_line_idx, source_line) in block.lines.iter().enumerate() {
-        let visual_lines = if line_width > 0.0 {
-            super::wrap::wrap_styled_line_with_offsets(
-                source_line,
-                line_width,
-                font_size,
-                weight,
-                italic,
-            )
-        } else {
-            vec![super::wrap::WrappedLine {
-                line: source_line.clone(),
-                source_start_col: 0,
-                source_end_col: source_line.text.chars().count(),
-            }]
+        let font = LineFont {
+            size: font_size,
+            weight,
+            italic,
         };
-        let to_emit: Vec<_> = if visual_lines.is_empty() {
-            vec![super::wrap::WrappedLine {
-                line: source_line.clone(),
-                source_start_col: 0,
-                source_end_col: 0,
-            }]
-        } else {
-            visual_lines
-        };
-        for visual in to_emit {
-            let runs = build_runs_for_visual_line(&visual, font_size, weight, italic);
+        let visual_lines = wrap_source_line(source_line, line_width, &font);
+        let count = visual_lines.len();
+        for (i, visual) in visual_lines.into_iter().enumerate() {
+            let line_box = LineBox {
+                width: line_width,
+                align: block.align,
+                last: i + 1 == count,
+            };
+            let runs = super::line::runs(&visual, &font, &line_box)
+                .into_iter()
+                .map(|(_, run)| run)
+                .collect();
             out.push(LineGeometry {
                 start: DocPosition::new(block_idx, source_line_idx, visual.source_start_col),
                 x: line_x,
@@ -156,137 +150,21 @@ fn emit_paragraph_geometry(
     }
 }
 
-/// Decompose a wrapped visual line into `RunGeometry` runs, splitting
-/// at every transition between code and non-code coverage. Each run is
-/// measured with its own font so the cursor x stays correct on
-/// mixed-font lines.
-fn build_runs_for_visual_line(
-    visual: &super::wrap::WrappedLine,
-    font_size: f32,
-    weight: FontWeight,
-    italic: bool,
-) -> Vec<super::state::RunGeometry> {
-    use super::state::{RunGeometry, measure_width};
-
-    let line = &visual.line;
-    let text = &line.text;
-    let len = text.len();
-    let body_font = blinc_layout::div::FontFamily::default();
-    let code_font = blinc_layout::div::FontFamily::monospace();
-
-    // Empty visual line — emit one zero-width run so the cursor has a
-    // valid landing spot.
-    if len == 0 {
-        return vec![RunGeometry {
-            source_col: visual.source_start_col,
-            text: String::new(),
-            x_in_line: 0.0,
-            width: 0.0,
-            font_family: body_font,
-            font_size,
-            weight,
-            italic,
-        }];
-    }
-
-    // Build a per-byte boolean: is this byte covered by a `code` span?
-    let mut code_at: Vec<bool> = vec![false; len];
-    for span in &line.spans {
-        if !span.code {
-            continue;
-        }
-        let s = span.start.min(len);
-        let e = span.end.min(len);
-        for b in code_at.iter_mut().take(e).skip(s) {
-            *b = true;
-        }
-    }
-
-    // Walk byte-by-byte and emit one run per code/non-code transition.
-    let mut runs: Vec<RunGeometry> = Vec::new();
-    let mut x_cursor = 0.0_f32;
-    let mut seg_start_byte = 0usize;
-    let mut seg_start_char_offset = 0usize;
-    let mut current_is_code = code_at.first().copied().unwrap_or(false);
-
-    let mut byte = 0usize;
-    let mut char_offset = 0usize;
-    while byte < len {
-        let here = code_at[byte];
-        if here != current_is_code {
-            push_run(
-                &mut runs,
-                &mut x_cursor,
-                visual.source_start_col + seg_start_char_offset,
-                &text[seg_start_byte..byte],
-                current_is_code,
-                font_size,
-                weight,
-                italic,
-                &body_font,
-                &code_font,
-            );
-            seg_start_byte = byte;
-            seg_start_char_offset = char_offset;
-            current_is_code = here;
-        }
-        let ch_len = text[byte..]
-            .chars()
-            .next()
-            .map(|c| c.len_utf8())
-            .unwrap_or(1);
-        byte += ch_len;
-        char_offset += 1;
-    }
-    push_run(
-        &mut runs,
-        &mut x_cursor,
-        visual.source_start_col + seg_start_char_offset,
-        &text[seg_start_byte..len],
-        current_is_code,
-        font_size,
-        weight,
-        italic,
-        &body_font,
-        &code_font,
-    );
-
-    let _ = measure_width; // silence unused-import warning if there are no runs
-    runs
-}
-
-#[allow(clippy::too_many_arguments)]
-fn push_run(
-    runs: &mut Vec<super::state::RunGeometry>,
-    x_cursor: &mut f32,
-    source_col: usize,
-    text: &str,
-    is_code: bool,
-    body_font_size: f32,
-    weight: FontWeight,
-    italic: bool,
-    body_font: &blinc_layout::div::FontFamily,
-    code_font: &blinc_layout::div::FontFamily,
-) {
-    if text.is_empty() {
-        return;
-    }
-    let font_family = if is_code {
-        code_font.clone()
-    } else {
-        body_font.clone()
-    };
-    let font_size = body_font_size;
-    let width = super::state::measure_width(text, font_size, weight, italic, Some(&font_family));
-    runs.push(super::state::RunGeometry {
-        source_col,
-        text: text.to_string(),
-        x_in_line: *x_cursor,
+/// The visual lines of a source line in `width`, at least one.
+pub(super) fn wrap_source_line(line: &StyledLine, width: f32, font: &LineFont) -> Vec<WrappedLine> {
+    let mut lines = super::wrap::wrap_styled_line_with_offsets(
+        line,
         width,
-        font_family,
-        font_size,
-        weight,
-        italic,
-    });
-    *x_cursor += width;
+        font.size,
+        font.weight,
+        font.italic,
+    );
+    if lines.is_empty() {
+        lines.push(WrappedLine {
+            line: line.clone(),
+            source_start_col: 0,
+            source_end_col: line.text.chars().count(),
+        });
+    }
+    lines
 }

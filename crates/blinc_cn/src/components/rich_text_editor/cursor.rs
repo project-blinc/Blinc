@@ -301,6 +301,7 @@ mod tests {
             kind: BlockKind::Paragraph,
             lines: vec![line],
             indent: 0,
+            align: Default::default(),
         }]);
         // Cursor inside the bold run
         let fmt = ActiveFormat::from_position(&doc, DocPosition::new(0, 0, 1));
@@ -318,6 +319,7 @@ mod tests {
             kind: BlockKind::Paragraph,
             lines: vec![line],
             indent: 0,
+            align: Default::default(),
         }]);
         // Cursor at end of bold run — typing here should still be bold
         let fmt = ActiveFormat::from_position(&doc, DocPosition::new(0, 0, 2));

@@ -255,6 +255,7 @@ pub fn split_block(doc: &mut RichDocument, pos: DocPosition) -> DocPosition {
         kind: next_kind,
         lines: next_lines,
         indent: block.indent,
+        align: block.align,
     };
     doc.blocks.insert(pos.block + 1, next_block);
     DocPosition::new(pos.block + 1, 0, 0)
@@ -602,6 +603,7 @@ mod tests {
                 StyledLine::plain("cd", Color::WHITE),
             ],
             indent: 0,
+            align: Default::default(),
         }]);
         delete_forward(&mut d, DocPosition::new(0, 0, 2));
         assert_eq!(d.blocks[0].lines.len(), 1);

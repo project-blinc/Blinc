@@ -3,7 +3,7 @@
 use blinc_core::Color;
 
 use super::inline::{self, Breaks, Emphasis};
-use crate::components::rich_text_editor::document::{Block, BlockKind, RichDocument};
+use crate::components::rich_text_editor::document::{Block, BlockAlign, BlockKind, RichDocument};
 
 impl RichDocument {
     /// The document as Markdown, which [`RichDocument::from_markdown`] reads back as it was, but
@@ -22,28 +22,52 @@ impl RichDocument {
     pub fn to_markdown(&self, default_color: Color) -> String {
         let mut out = String::new();
         let mut items = ItemIndents::default();
+        let mut aligned = BlockAlign::Start;
         for (i, block) in self.blocks.iter().enumerate() {
-            let text = match block.kind {
-                BlockKind::BulletItem | BlockKind::NumberedItem => {
-                    let marker = match self.numbered_ordinal(i) {
-                        Some(ordinal) => format!("{ordinal}. "),
-                        None => "- ".to_string(),
-                    };
-                    let (indent, content) = items.enter(block.indent, marker.len());
-                    let continued = " ".repeat(content);
-                    let body = write_block(block, default_color, Breaks::Lines(&continued));
-                    format!("{}{marker}{body}", " ".repeat(indent))
-                }
-                _ => {
-                    items = ItemIndents::default();
-                    write_block(block, default_color, Breaks::Lines(""))
-                }
+            let listed = is_item(block);
+            // Items say their alignment themselves, so a list is not cut up by it.
+            let align = if listed {
+                BlockAlign::Start
+            } else {
+                block.align
             };
             if i > 0 {
-                let listed = is_item(block) && is_item(&self.blocks[i - 1]);
-                out.push_str(if listed { "\n" } else { "\n\n" });
+                let before = &self.blocks[i - 1];
+                // An item's `</div>` runs on to the next blank line.
+                let tight = listed && is_item(before) && before.align == BlockAlign::Start;
+                out.push_str(if tight { "\n" } else { "\n\n" });
             }
+            if align != aligned {
+                if aligned != BlockAlign::Start {
+                    out.push_str("</div>\n\n");
+                }
+                if let Some(open) = open_div(align) {
+                    out.push_str(&open);
+                    out.push_str("\n\n");
+                }
+                aligned = align;
+            }
+            let text = if listed {
+                let marker = match self.numbered_ordinal(i) {
+                    Some(ordinal) => format!("{ordinal}. "),
+                    None => "- ".to_string(),
+                };
+                let (indent, content) = items.enter(block.indent, marker.len());
+                let margin = " ".repeat(content);
+                let body = write_block(block, default_color, Breaks::Lines(&margin));
+                let body = match open_div(block.align) {
+                    Some(open) => format!("{open}\n\n{margin}{body}\n\n{margin}</div>"),
+                    None => body,
+                };
+                format!("{}{marker}{body}", " ".repeat(indent))
+            } else {
+                items = ItemIndents::default();
+                write_block(block, default_color, Breaks::Lines(""))
+            };
             out.push_str(text.trim_end());
+        }
+        if aligned != BlockAlign::Start {
+            out.push_str("\n\n</div>");
         }
         // A document with nothing in it is an empty file.
         if out == EMPTY_PARAGRAPH && self.blocks.len() == 1 {
@@ -56,6 +80,17 @@ impl RichDocument {
 
 /// How an empty paragraph is written: Markdown drops blank lines.
 const EMPTY_PARAGRAPH: &str = "<br>";
+
+/// The tag that aligns what follows it, up to its close.
+fn open_div(align: BlockAlign) -> Option<String> {
+    let value = match align {
+        BlockAlign::Start => return None,
+        BlockAlign::Center => "center",
+        BlockAlign::End => "right",
+        BlockAlign::Justify => "justify",
+    };
+    Some(format!("<div align=\"{value}\">"))
+}
 
 fn is_item(block: &Block) -> bool {
     matches!(block.kind, BlockKind::BulletItem | BlockKind::NumberedItem)

@@ -10,7 +10,7 @@ use blinc_theme::{ColorScheme, ColorToken, HybridTheme, ThemeState};
 
 const W: u32 = 420;
 /// The width of the toolbar tests' window.
-const WIDE: u32 = 520;
+const WIDE: u32 = 720;
 const H: u32 = 420;
 
 fn session(scheme: ColorScheme) -> Option<Headless> {
@@ -240,8 +240,8 @@ fn the_rich_text_toolbar_and_a_fixed_palette() {
         background(&ui, one(&ui, "blinc-rich-text-selection")),
         theme.color(ColorToken::Selection)
     ));
-    // Five marks, link and close, and the colour picker's swatch beside them.
-    assert_eq!(all(&ui, "blinc-rte-button").len(), 7);
+    // Five marks, four alignments, link and close, and the colour picker's swatch beside them.
+    assert_eq!(all(&ui, "blinc-rte-button").len(), 11);
     assert_eq!(all(&ui, "blinc-rte-color").len(), 1);
 
     // The dark palette's near-white text, on the light theme.
@@ -323,7 +323,7 @@ fn the_floating_toolbar_bolds_the_selection_and_shows_the_mark_on() {
     blinc_cn::components::rich_text_editor::RichTextStateExt::on_change(&state, move |_| {
         count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     });
-    let bold = all(&ui, "blinc-rte-button")[0];
+    let bold = tool(&ui, "Bold");
     press(&mut ui, bold);
     let span = first_span(&state);
     assert!(span.bold && span.end == 6, "{span:?}");
@@ -332,11 +332,13 @@ fn the_floating_toolbar_bolds_the_selection_and_shows_the_mark_on() {
         1,
         "formatting from the toolbar is one change"
     );
-    assert_eq!(
-        all(&ui, "blinc-rte-button--active").len(),
-        1,
-        "Bold shows on"
-    );
+    let pressed = |ui: &Headless, label| {
+        ui.tree()
+            .element_registry()
+            .has_class(tool(ui, label), "blinc-rte-button--active")
+    };
+    assert!(pressed(&ui, "Bold"), "Bold shows on");
+    assert!(pressed(&ui, "Align left") && !pressed(&ui, "Italic"));
     // The press kept the selection, so the toolbar is still there.
     assert!(
         state
@@ -347,10 +349,18 @@ fn the_floating_toolbar_bolds_the_selection_and_shows_the_mark_on() {
     );
 }
 
+/// The toolbar button named `label`.
+fn tool(ui: &Headless, label: &str) -> LayoutNodeId {
+    let registry = ui.tree().element_registry().clone();
+    all(ui, "blinc-rte-button")
+        .into_iter()
+        .find(|n| registry.attribute(*n, "aria-label").as_deref() == Some(label))
+        .unwrap_or_else(|| panic!("no {label} button"))
+}
+
 /// Opens the link popover from the floating toolbar's link button.
 fn open_link_popover(ui: &mut Headless) {
-    // Bold, italic, underline, strikethrough, code, then link.
-    let link = all(ui, "blinc-rte-button")[5];
+    let link = tool(ui, "Link");
     press(ui, link);
     assert_eq!(
         all(ui, "blinc-rte-link").len(),
@@ -418,7 +428,7 @@ fn the_close_button_collapses_the_selection() {
     let Some((mut ui, state)) = selected_editor(ToolbarPlacement::Floating) else {
         return;
     };
-    let close = *all(&ui, "blinc-rte-button").last().unwrap();
+    let close = tool(&ui, "Close");
     press(&mut ui, close);
     assert!(state.lock().unwrap().selection.is_none());
     assert!(all(&ui, "blinc-rte-toolbar").is_empty());
@@ -454,7 +464,7 @@ fn the_fixed_toolbar_sits_above_the_text_and_marks_what_is_typed_next() {
     assert_eq!(state.lock().unwrap().cursor, DocPosition::new(0, 0, 0));
 
     // Bold with a collapsed caret marks what is typed next, and the editor keeps the focus.
-    let bold = all(&ui, "blinc-rte-button")[0];
+    let bold = tool(&ui, "Bold");
     press(&mut ui, bold);
     assert!(state.lock().unwrap().focused);
     ui.type_text("x");
@@ -469,7 +479,7 @@ fn a_toolbar_tooltip_is_centred_over_its_button() {
     let Some((mut ui, _state)) = selected_editor(ToolbarPlacement::Fixed) else {
         return;
     };
-    let bold = all(&ui, "blinc-rte-button")[0];
+    let bold = tool(&ui, "Bold");
     let b = ui.tree().get_absolute_bounds(bold).unwrap();
     ui.move_to(b.x + b.width / 2.0, b.y + b.height / 2.0);
     ui.advance(600);
@@ -625,7 +635,7 @@ fn a_narrow_fixed_toolbar_scrolls_between_two_buttons() {
     ui.key(27);
     ui.settle();
     // Scroll left, the marks, link and scroll right; the right one is last.
-    let right = *all(&ui, "blinc-rte-button").last().unwrap();
+    let right = tool(&ui, "Scroll right");
     let row = |ui: &mut Headless| {
         let frame = ui.snapshot().unwrap();
         let y = (bar.y + bar.height / 2.0) as u32;
@@ -772,12 +782,7 @@ fn the_fade_leaves_the_first_and_last_controls_clear() {
         (fade.left > 0.0, fade.right > 0.0)
     };
     let step = |ui: &mut Headless, right: bool| {
-        let buttons = all(ui, "blinc-rte-button");
-        let chevron = if right {
-            *buttons.last().unwrap()
-        } else {
-            buttons[0]
-        };
+        let chevron = tool(ui, if right { "Scroll right" } else { "Scroll left" });
         press(ui, chevron);
         ui.advance(1500);
         ui.leave().settle();
@@ -785,10 +790,154 @@ fn the_fade_leaves_the_first_and_last_controls_clear() {
     assert_eq!(fades(&ui), (false, true), "at rest");
     step(&mut ui, true);
     assert_eq!(fades(&ui), (true, true), "in the middle");
-    step(&mut ui, true);
+    for _ in 0..4 {
+        step(&mut ui, true);
+    }
     assert_eq!(fades(&ui), (true, false), "at the end");
     step(&mut ui, false);
     assert_eq!(fades(&ui), (true, true), "in the middle again");
-    step(&mut ui, false);
+    for _ in 0..4 {
+        step(&mut ui, false);
+    }
     assert_eq!(fades(&ui), (false, true), "back at the start");
+}
+
+/// Text is drawn where its block's alignment puts it, bold and code included, and a click lands on
+/// the character under it.
+#[test]
+fn aligned_text_is_drawn_and_clicked_where_it_is_placed() {
+    use blinc_cn::components::rich_text_editor::{
+        BlockAlign, RichDocument, RichTextTheme, ToolbarPlacement, rich_text_editor,
+        rich_text_state,
+    };
+    let Some(mut ui) = session_sized(ColorScheme::Light, WIDE) else {
+        return;
+    };
+    let text = "Plain, **bold words** and `code`.";
+    let long = "A justified paragraph with **bold**, *italic* and `code` runs reaches both edges of the editor on every line but its last.";
+    let mut doc = RichDocument::from_markdown(
+        &format!("{text}\n\n{text}\n\n{text}\n\n# Heading\n\n- an item\n\n{long}"),
+        Color::TRANSPARENT,
+    );
+    let aligns = [
+        BlockAlign::Start,
+        BlockAlign::Center,
+        BlockAlign::End,
+        BlockAlign::Center,
+        BlockAlign::End,
+        BlockAlign::Justify,
+    ];
+    for (block, align) in doc.blocks.iter_mut().zip(aligns) {
+        block.align = align;
+    }
+    let state = rich_text_state(doc);
+    let e = state.clone();
+    ui.mount(move |_| {
+        div()
+            .w(WIDE as f32)
+            .h(H as f32)
+            .p(5.0)
+            .child(div().w(400.0).child(rich_text_editor(
+                &e,
+                RichTextTheme::default().toolbar(ToolbarPlacement::Hidden),
+                400.0,
+            )))
+    });
+    ui.leave().settle();
+    let origin = ui
+        .tree()
+        .get_absolute_bounds(one(&ui, "blinc-rich-text"))
+        .unwrap();
+    let lines: Vec<(usize, f32, f32)> = state
+        .lock()
+        .unwrap()
+        .line_index
+        .iter()
+        .map(|g| (g.start.block, g.y, g.height))
+        .collect();
+    let frame = ui.snapshot().unwrap();
+    // The leftmost and rightmost dark pixels of a line, from the editor's left edge.
+    let ink = |(_, y, h): (usize, f32, f32)| {
+        let rows = (origin.y + y) as u32..(origin.y + y + h) as u32;
+        let dark = |x: u32| {
+            rows.clone().any(|y| {
+                let p = frame.get_pixel(x, y).unwrap();
+                p[0] as u32 + p[1] as u32 + (p[2] as u32) < 380
+            })
+        };
+        let columns = origin.x as u32..(origin.x + 400.0) as u32;
+        let first = columns.clone().find(|x| dark(*x)).unwrap();
+        let last = columns.rev().find(|x| dark(*x)).unwrap();
+        (first as f32 - origin.x, last as f32 - origin.x)
+    };
+    let of = |block: usize| lines.iter().copied().filter(move |l| l.0 == block);
+    let (start, center, end) = (
+        ink(of(0).next().unwrap()),
+        ink(of(1).next().unwrap()),
+        ink(of(2).next().unwrap()),
+    );
+    assert!(start.0 < 3.0, "start {start:?}");
+    assert!(end.1 > 395.0, "end {end:?}");
+    let width = start.1 - start.0;
+    assert!(
+        (center.0 - (400.0 - center.1)).abs() < 3.0,
+        "centre {center:?}"
+    );
+    for other in [center, end] {
+        assert!(
+            (other.1 - other.0 - width).abs() < 2.0,
+            "{other:?} as wide as {start:?}"
+        );
+    }
+    let justified: Vec<_> = of(5).map(ink).collect();
+    assert!(justified.len() >= 2, "{justified:?}");
+    let (last, full) = justified.split_last().unwrap();
+    for line in full {
+        assert!(line.0 < 3.0 && line.1 > 394.0, "justified {line:?}");
+    }
+    assert!(last.1 < 390.0, "the last line was stretched: {last:?}");
+
+    // A click just inside the first character of the line at the end.
+    let (_, y, h) = of(2).next().unwrap();
+    ui.move_to(origin.x + end.0 + 1.0, origin.y + y + h / 2.0);
+    ui.mouse_down();
+    ui.mouse_up();
+    ui.settle();
+    let cursor = state.lock().unwrap().cursor;
+    assert_eq!((cursor.block, cursor.col), (2, 0));
+    let (x, ..) = state.lock().unwrap().cursor_geometry().unwrap();
+    assert!(
+        (x - end.0).abs() < 3.0,
+        "the caret is at {x}, the text at {end:?}"
+    );
+    ui.leave();
+    ui.assert_snapshot("cn_rich_text_alignment");
+}
+
+#[test]
+fn an_alignment_button_aligns_the_selected_blocks() {
+    use blinc_cn::components::rich_text_editor::{BlockAlign, ToolbarPlacement};
+    let Some((mut ui, state)) = selected_editor(ToolbarPlacement::Fixed) else {
+        return;
+    };
+    let align = |s: &blinc_cn::components::rich_text_editor::RichTextState| {
+        s.lock().unwrap().document.blocks[0].align
+    };
+    for (label, expected) in [
+        ("Align centre", BlockAlign::Center),
+        ("Align right", BlockAlign::End),
+        ("Justify", BlockAlign::Justify),
+        ("Align left", BlockAlign::Start),
+    ] {
+        let button = tool(&ui, label);
+        press(&mut ui, button);
+        assert_eq!(align(&state), expected);
+        let on = ui
+            .tree()
+            .element_registry()
+            .has_class(tool(&ui, label), "blinc-rte-button--active");
+        assert!(on, "{label} does not show on");
+    }
+    assert!(state.lock().unwrap().undo());
+    assert_eq!(align(&state), BlockAlign::Justify);
 }

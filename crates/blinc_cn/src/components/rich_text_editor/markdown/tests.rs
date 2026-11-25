@@ -5,7 +5,7 @@ use blinc_core::Color;
 use blinc_layout::styled_text::{StyledLine, TextSpan};
 
 use super::inline::{runs, spaces_outside_emphasis};
-use crate::components::rich_text_editor::document::{Block, BlockKind, RichDocument};
+use crate::components::rich_text_editor::document::{Block, BlockAlign, BlockKind, RichDocument};
 
 #[test]
 fn parses_headings_and_paragraphs() {
@@ -101,7 +101,9 @@ fn empty_input_returns_empty_document() {
 
 /// A document as blocks of kind, indent and the runs of each line, which is what it says.
 /// Emphasis on the spaces at a run's ends says nothing.
-fn said(doc: &RichDocument) -> Vec<(BlockKind, u8, Vec<Vec<super::inline::Run>>)> {
+type Said = (BlockKind, u8, BlockAlign, Vec<Vec<super::inline::Run>>);
+
+fn said(doc: &RichDocument) -> Vec<Said> {
     doc.blocks
         .iter()
         .map(|b| {
@@ -110,7 +112,7 @@ fn said(doc: &RichDocument) -> Vec<(BlockKind, u8, Vec<Vec<super::inline::Run>>)
                 .iter()
                 .map(|l| spaces_outside_emphasis(runs(l, Color::TRANSPARENT)))
                 .collect();
-            (b.kind.clone(), b.indent, lines)
+            (b.kind.clone(), b.indent, b.align, lines)
         })
         .collect()
 }
@@ -163,6 +165,7 @@ fn block(kind: BlockKind, indent: u8, lines: Vec<StyledLine>) -> Block {
         kind,
         lines,
         indent,
+        align: Default::default(),
     }
 }
 
@@ -514,4 +517,43 @@ fn common_text_needs_no_tags() {
     ] {
         assert_eq!(round_trips(&paragraph(&parts)), markdown);
     }
+}
+
+#[test]
+fn alignment_round_trips_for_every_kind_of_block() {
+    use BlockAlign::{Center, End, Justify, Start};
+    use BlockKind::{BulletItem, Divider, Heading, NumberedItem, Paragraph, Quote};
+    let one = |kind, indent, align, t: &str| Block {
+        align,
+        ..block(kind, indent, vec![line(&[(t, P)])])
+    };
+    for a in [Start, Center, End, Justify] {
+        for b in [Start, Center, End, Justify] {
+            round_trips(&RichDocument::from_blocks(vec![
+                one(Heading(1), 0, a, "title"),
+                one(Paragraph, 0, a, "# text"),
+                one(Quote, 0, b, "quote"),
+                one(BulletItem, 0, a, "item"),
+                one(BulletItem, 1, b, "nested"),
+                one(NumberedItem, 2, a, "deeper"),
+                one(BulletItem, 0, b, "item"),
+                one(Paragraph, 0, b, "after"),
+                Block::divider(),
+                Block {
+                    align: a,
+                    ..Block::paragraph_empty()
+                },
+                one(Paragraph, 0, a, "end"),
+            ]));
+        }
+    }
+    let doc = RichDocument::from_blocks(vec![
+        one(Paragraph, 0, Center, "a"),
+        one(Paragraph, 0, Center, "b"),
+    ]);
+    assert_eq!(
+        round_trips(&doc),
+        "<div align=\"center\">\n\na\n\nb\n\n</div>\n"
+    );
+    assert_eq!(Divider, Block::divider().kind);
 }

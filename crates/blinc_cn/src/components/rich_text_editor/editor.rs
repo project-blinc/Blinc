@@ -25,7 +25,7 @@ use blinc_layout::div::{Div, div};
 use super::block_ops::{indent_blocks, outdent_blocks, toggle_block_kind};
 use super::content::{content, ensure_geometry};
 use super::cursor::{DocPosition, step_backward, step_forward};
-use super::document::BlockKind;
+use super::document::{BlockAlign, BlockKind};
 use super::edit::{
     delete_backward, delete_forward, delete_selection, insert_char, insert_text, soft_break,
     split_block,
@@ -404,6 +404,11 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                     88 if ctx.shift => {
                         changed |= toggle_mark(&mut data, Mark::Strikethrough);
                     }
+                    // Cmd+Shift+L, E, R, J — align to the start, the centre, the end, both
+                    76 if ctx.shift => changed |= data.set_align(BlockAlign::Start),
+                    69 if ctx.shift => changed |= data.set_align(BlockAlign::Center),
+                    82 if ctx.shift => changed |= data.set_align(BlockAlign::End),
+                    74 if ctx.shift => changed |= data.set_align(BlockAlign::Justify),
                     // Cmd+E — inline code
                     69 => {
                         changed |= toggle_mark(&mut data, Mark::Code);
@@ -604,27 +609,14 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                 // are affected; headings, dividers, and quotes are
                 // skipped by `indent_blocks` / `outdent_blocks`.
                 9 => {
-                    let range = block_selection(&data);
-                    let did_change = if ctx.shift {
-                        data.push_undo();
-                        let r = outdent_blocks(&mut data.document, range);
-                        if !r {
-                            data.undo_stack.pop();
+                    let range = data.block_range();
+                    changed |= data.change(|doc| {
+                        if ctx.shift {
+                            outdent_blocks(doc, range)
+                        } else {
+                            indent_blocks(doc, range)
                         }
-                        r
-                    } else {
-                        data.push_undo();
-                        let r = indent_blocks(&mut data.document, range);
-                        if !r {
-                            data.undo_stack.pop();
-                        }
-                        r
-                    };
-                    if did_change {
-                        let cursor = data.cursor;
-                        data.set_cursor(cursor);
-                        changed = true;
-                    }
+                    });
                 }
                 _ => {}
             }
@@ -638,36 +630,11 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
         .child(content)
 }
 
-/// Build a `Selection` covering whatever block range the editor's
-/// current cursor / selection covers — used by block-level ops that
-/// need a range even when the user has no explicit selection.
-fn block_selection(data: &super::state::RichTextData) -> super::cursor::Selection {
-    if let Some(sel) = data.selection
-        && !sel.is_empty()
-    {
-        return sel;
-    }
-    super::cursor::Selection {
-        anchor: data.cursor,
-        head: data.cursor,
-    }
-}
-
-/// Toggle every block in the editor's current cursor range to `kind`.
-/// If every block in the range already has `kind`, they all revert
-/// to `BlockKind::Paragraph`. Pushes undo before mutating; pops the
-/// undo entry if nothing actually changed.
+/// Toggle the blocks of the selection or the cursor to `kind`: where all have it, they become
+/// paragraphs.
 fn apply_block_kind(data: &mut super::state::RichTextData, kind: BlockKind) -> bool {
-    let range = block_selection(data);
-    data.push_undo();
-    let changed = toggle_block_kind(&mut data.document, range, kind);
-    if !changed {
-        data.undo_stack.pop();
-        return false;
-    }
-    let cursor = data.cursor;
-    data.set_cursor(cursor);
-    true
+    let range = data.block_range();
+    data.change(|doc| toggle_block_kind(doc, range, kind))
 }
 
 /// Toggle an inline `mark`.

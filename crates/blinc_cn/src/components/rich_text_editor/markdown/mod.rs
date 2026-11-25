@@ -17,6 +17,7 @@
 //! | `<span style="color:#rrggbb">` | `TextSpan.color` |
 //! | `\\` at a line's end, `<br>`  | a soft break: a new line in the block |
 //! | `<br>` alone                | an empty paragraph |
+//! | `<div align="center">` … `</div>` | `Block.align`, with a blank line inside each tag |
 //!
 //! Footnotes and other HTML are not mapped. Use `blinc_layout::markdown::markdown` for full
 //! CommonMark and GFM rendering.

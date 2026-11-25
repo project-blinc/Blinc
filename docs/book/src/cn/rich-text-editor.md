@@ -48,6 +48,10 @@ The floating toolbar is a notch, so it takes its fill, border and shadow from th
 
 The floating toolbar's heading select shows short names, P and H1 to H6; the fixed toolbar's shows them in full. Where controls scroll, an edge with more beyond it fades.
 
+## Alignment
+
+Each block has an `align`: `BlockAlign::Start`, `Center`, `End` or `Justify`. The toolbar's alignment buttons set it for the blocks of the selection, or the cursor's. So do Cmd+Shift+L, E, R and J, or Ctrl on other platforms. A new paragraph takes the alignment of the one it was split from. In your own code, `block_ops::set_block_align` sets it on a document.
+
 ## Markdown
 
 `RichDocument::from_markdown` reads Markdown and `to_markdown` writes it. A document comes back from its Markdown as it was, but for emphasis on the spaces at the ends of a run:
@@ -57,7 +61,7 @@ let markdown = document.lock().unwrap().document.to_markdown(Color::TRANSPARENT)
 let same = RichDocument::from_markdown(&markdown, Color::TRANSPARENT);
 ```
 
-Give both the same colour: it is the colour of text that has none of its own, and is not written. What Markdown has no syntax for is written as inline HTML, which `from_markdown` reads: `<u>` for underline, `<span style="color:#rrggbb">` for a colour, `<br>` for an empty paragraph, and tags for emphasis that Markdown's markers cannot mark beside punctuation.
+Give both the same colour: it is the colour of text that has none of its own, and is not written. What Markdown has no syntax for is written as inline HTML, which `from_markdown` reads: `<u>` for underline, `<span style="color:#rrggbb">` for a colour, `<br>` for an empty paragraph, `<div align="center">` around aligned blocks, and tags for emphasis that Markdown's markers cannot mark beside punctuation.
 
 ## Changes
 

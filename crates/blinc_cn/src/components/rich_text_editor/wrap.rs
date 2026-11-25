@@ -1,8 +1,7 @@
 //! Word-wrap a `StyledLine` into multiple lines that each fit a target width.
 //!
 //! This is a *build-time* wrap: we walk word boundaries inside the source
-//! line, measure each candidate prefix with the global `measure_text_with_options`
-//! routine, and emit a new `StyledLine` whenever adding the next word would
+//! line, measure each candidate prefix in the faces of its spans, and emit a new `StyledLine` whenever adding the next word would
 //! overflow `max_width`.
 //!
 //! Why pre-wrap instead of letting the styled-text render path do it: the
@@ -18,7 +17,8 @@
 
 use blinc_layout::div::FontWeight;
 use blinc_layout::styled_text::{StyledLine, TextSpan};
-use blinc_layout::text_measure::{TextLayoutOptions, measure_text_with_options};
+
+use super::line::{LineFont, width_of};
 
 /// One visual line produced by [`wrap_styled_line`].
 ///
@@ -40,12 +40,8 @@ pub struct WrappedLine {
 /// Wrap `line` into one or more `StyledLine`s that each fit within
 /// `max_width` pixels. Span attributes are preserved across the wrap.
 ///
-/// `font_size`, `weight`, and `italic` are used as the default font for
-/// measurement. Per-span weight/italic isn't honoured by measurement here —
-/// the resulting break points are an approximation that uses the block-
-/// level defaults. (For most prose this is good enough; bold runs measure
-/// slightly wider so wrapped lines may be a few pixels short. Phase 7
-/// could refine this with per-span measurement if it ever matters.)
+/// `font_size`, `weight`, and `italic` are the block's font; bold, italic and code spans are
+/// measured in their own.
 ///
 /// `max_width <= 0.0` is treated as "no wrapping" and returns the input
 /// unchanged.
@@ -88,10 +84,14 @@ pub fn wrap_styled_line_with_offsets(
         }];
     }
 
-    let options = base_options(weight, italic);
+    let font = LineFont {
+        size: font_size,
+        weight,
+        italic,
+    };
 
     // Fast path: whole line fits.
-    let total = measure_text_with_options(&line.text, font_size, &options).width;
+    let total = width_of(line, 0..line.text.len(), &font);
     if total <= max_width {
         let total_chars = line.text.chars().count();
         return vec![WrappedLine {
@@ -125,8 +125,7 @@ pub fn wrap_styled_line_with_offsets(
         // whitespace) for measurement, so trailing space at line end
         // doesn't push us over max_width.
         let candidate_end = word.end;
-        let candidate_text = &line.text[line_start..candidate_end];
-        let candidate_width = measure_text_with_options(candidate_text, font_size, &options).width;
+        let candidate_width = width_of(line, line_start..candidate_end, &font);
 
         if candidate_width > max_width && line_end > line_start {
             // Doesn't fit. Emit the current line (up to line_end) and
@@ -279,13 +278,6 @@ fn slice(source: &StyledLine, range: std::ops::Range<usize>) -> StyledLine {
         });
     }
     StyledLine { text, spans }
-}
-
-fn base_options(weight: FontWeight, italic: bool) -> TextLayoutOptions {
-    let mut options = TextLayoutOptions::new();
-    options.font_weight = weight.weight();
-    options.italic = italic;
-    options
 }
 
 #[cfg(test)]

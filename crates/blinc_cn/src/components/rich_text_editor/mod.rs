@@ -32,6 +32,7 @@ pub mod editor;
 pub mod format;
 mod geometry;
 mod ime;
+mod line;
 pub mod markdown;
 pub mod render;
 pub mod state;
@@ -43,7 +44,7 @@ pub use block_ops::{
     set_block_kind, toggle_block_kind,
 };
 pub use cursor::{ActiveFormat, DocPosition, Selection};
-pub use document::{Block, BlockKind, RichDocument};
+pub use document::{Block, BlockAlign, BlockKind, RichDocument};
 pub use edit::{
     delete_backward, delete_forward, delete_selection, insert_char, insert_text, soft_break,
     split_block,

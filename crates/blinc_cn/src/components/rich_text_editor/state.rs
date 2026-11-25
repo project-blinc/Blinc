@@ -450,6 +450,31 @@ impl RichTextData {
         true
     }
 
+    /// The blocks a block-level change applies to: those of the selection, or the cursor's.
+    pub(super) fn block_range(&self) -> Selection {
+        self.selection
+            .filter(|s| !s.is_empty())
+            .unwrap_or(Selection::empty(self.cursor))
+    }
+
+    /// Change the document with `op`, which says whether it did, as one undo step.
+    pub(super) fn change(&mut self, op: impl FnOnce(&mut RichDocument) -> bool) -> bool {
+        self.push_undo();
+        if !op(&mut self.document) {
+            self.undo_stack.pop();
+            return false;
+        }
+        let cursor = self.cursor;
+        self.set_cursor(cursor);
+        true
+    }
+
+    /// Align the blocks of the selection or the cursor.
+    pub(super) fn set_align(&mut self, align: super::document::BlockAlign) -> bool {
+        let range = self.block_range();
+        self.change(|doc| super::block_ops::set_block_align(doc, range, align))
+    }
+
     /// The colour under the caret, as the picker shows it: text without its own colour takes the
     /// theme's text colour.
     pub(super) fn caret_color(&self) -> blinc_core::Color {
