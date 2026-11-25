@@ -2284,41 +2284,44 @@ pub const CN_STYLES: &str = concat!(
 .cn-date-picker-clear:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .cn-date-picker-clear:disabled { opacity: 0.5; cursor: not-allowed; background: transparent; }
 
-/* The rich text editor. Text without a colour of its own takes the
-   document's; the caret is drawn in `--blinc-rich-text-caret`, the text
-   colour when unset. */
-.blinc-rich-text { color: var(--text-primary); }
-.blinc-rich-text-marker { color: var(--text-tertiary); }
-.blinc-rich-text-quote-bar { background: var(--border-secondary); }
-.blinc-rich-text-divider { background: var(--border); }
-.blinc-rich-text-code { color: var(--warning); }
-.blinc-rich-text-table { border-color: var(--border); border-radius: var(--radius-md); }
-.blinc-rich-text-table-header { background: var(--surface-overlay); }
-.blinc-rich-text-table-rule { background: var(--border); }
-.blinc-rich-text-selection { background: var(--selection); }
+/* ============================================================================
+   Rich Text Editor
+
+   Text without a colour of its own takes the document's; the caret is drawn
+   in `--cn-rich-text-editor-caret`, the text colour when unset.
+   ============================================================================ */
+.cn-rich-text-editor-document { color: var(--text-primary); }
+.cn-rich-text-editor-marker { color: var(--text-tertiary); }
+.cn-rich-text-editor-quote-bar { background: var(--border-secondary); }
+.cn-rich-text-editor-divider { background: var(--border); }
+.cn-rich-text-editor-code { color: var(--warning); }
+.cn-rich-text-editor-table { border-color: var(--border); border-radius: var(--radius-md); }
+.cn-rich-text-editor-table-header { background: var(--surface-overlay); }
+.cn-rich-text-editor-table-rule { background: var(--border); }
+.cn-rich-text-editor-selection { background: var(--selection); }
 /* The floating toolbar fades in and grows out of the side that faces the selection. */
-.blinc-rte-toolbar--enter { animation: blinc-rte-toolbar-enter var(--duration-fast) var(--ease-out); }
-.blinc-rte-toolbar--above { transform-origin: bottom center; }
-.blinc-rte-toolbar--below { transform-origin: top center; }
-@keyframes blinc-rte-toolbar-enter {
+.cn-rich-text-editor-toolbar--enter { animation: cn-rich-text-editor-toolbar-enter var(--duration-fast) var(--ease-out); }
+.cn-rich-text-editor-toolbar--above { transform-origin: bottom center; }
+.cn-rich-text-editor-toolbar--below { transform-origin: top center; }
+@keyframes cn-rich-text-editor-toolbar-enter {
     from { opacity: 0; transform: scale(0.92); }
     to   { opacity: 1; transform: scale(1); }
 }
 /* A narrow toolbar's controls scroll; an edge with more beyond it fades. */
-.blinc-rte-lane { overflow-fade: 0px; transition: overflow-fade var(--duration-fast) var(--ease-out); }
-.blinc-rte-lane[data-more-start] { overflow-fade: 0px 0px 0px 24px; }
-.blinc-rte-lane[data-more-end] { overflow-fade: 0px 24px 0px 0px; }
-.blinc-rte-lane[data-more-start][data-more-end] { overflow-fade: 0px 24px 0px 24px; }
+.cn-rich-text-editor-lane { overflow-fade: 0px; transition: overflow-fade var(--duration-fast) var(--ease-out); }
+.cn-rich-text-editor-lane[data-more-start] { overflow-fade: 0px 0px 0px 24px; }
+.cn-rich-text-editor-lane[data-more-end] { overflow-fade: 0px 24px 0px 0px; }
+.cn-rich-text-editor-lane[data-more-start][data-more-end] { overflow-fade: 0px 24px 0px 24px; }
 /* The floating toolbar's short block names sit in the middle of their rows. */
-.blinc-rte-heading--compact .cn-select-item { justify-content: center; }
-.blinc-rte-floating-toolbar {
+.cn-rich-text-editor-heading--compact .cn-select-item { justify-content: center; }
+.cn-rich-text-editor-floating-toolbar {
     background: var(--surface-elevated);
     color: var(--text-primary);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-md);
 }
-.blinc-rte-fixed-toolbar {
+.cn-rich-text-editor-fixed-toolbar {
     background: var(--surface-elevated);
     color: var(--text-primary);
     border-bottom: 1px solid var(--border);
@@ -2328,30 +2331,30 @@ pub const CN_STYLES: &str = concat!(
     box-shadow: var(--shadow-sm);
 }
 /* The list and table menus are lit like the icon buttons beside them. */
-.blinc-rte-list .cn-dropdown-trigger, .blinc-rte-table .cn-dropdown-trigger { border-width: 0; background: transparent; box-shadow: none; border-radius: var(--radius-default); }
-.blinc-rte-list .cn-dropdown-trigger:hover, .blinc-rte-table .cn-dropdown-trigger:hover { background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
+.cn-rich-text-editor-list-menu .cn-dropdown-trigger, .cn-rich-text-editor-table-menu .cn-dropdown-trigger { border-width: 0; background: transparent; box-shadow: none; border-radius: var(--radius-default); }
+.cn-rich-text-editor-list-menu .cn-dropdown-trigger:hover, .cn-rich-text-editor-table-menu .cn-dropdown-trigger:hover { background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
 /* The squares a new table's size is picked from. */
-.blinc-rte-grid-square {
+.cn-rich-text-editor-grid-square {
     border-width: 1px; border-color: var(--border); border-radius: var(--radius-sm);
     background: transparent; cursor: pointer;
     transition: background 120ms ease, border-color 120ms ease;
 }
-.blinc-rte-grid-square[data-within] {
+.cn-rich-text-editor-grid-square[data-within] {
     background: color-mix(in srgb, var(--primary) 18%, transparent);
     border-color: var(--primary);
 }
-.blinc-rte-separator { background: var(--border); }
+.cn-rich-text-editor-separator { background: var(--border); }
 /* A mark that is on under the cursor. */
-.blinc-rte-button--active { background: var(--surface-overlay); }
+.cn-rich-text-editor-button--active { background: var(--surface-overlay); }
 /* The colour control is the cn colour picker reduced to its swatch. */
 /* The colour control is sized and lit like the icon buttons beside it. */
-.blinc-rte-color {
+.cn-rich-text-editor-color {
     border-width: 0; padding: 6px; background: transparent;
     border-radius: var(--radius-default);
 }
-.blinc-rte-color:hover { background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
-.blinc-rte-color .cn-color-picker-value { display: none; }
-.blinc-rte-color .cn-color-picker-swatch { width: 18px; height: 18px; border-radius: var(--radius-full); }
+.cn-rich-text-editor-color:hover { background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
+.cn-rich-text-editor-color .cn-color-picker-value { display: none; }
+.cn-rich-text-editor-color .cn-color-picker-swatch { width: 18px; height: 18px; border-radius: var(--radius-full); }
 "#,
     "\n}\n"
 );

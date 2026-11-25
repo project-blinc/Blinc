@@ -131,7 +131,7 @@ fn form(target: &Target, active: Signal<Option<u64>>) -> Div {
 
     let state = Arc::clone(&target.state);
     div()
-        .class("blinc-rte-link")
+        .class("cn-rich-text-editor-link")
         .w(WIDTH)
         .flex_col()
         .gap_px(10.0)
@@ -162,7 +162,7 @@ fn form(target: &Target, active: Signal<Option<u64>>) -> Div {
 
 /// The link button, which opens the link popover. `linked` shows it pressed.
 pub(super) fn link_button(target: &Target, linked: bool) -> Div {
-    let id = format!("blinc-rte-link-{:p}", Arc::as_ptr(&target.state));
+    let id = format!("cn-rich-text-editor-link-{:p}", Arc::as_ptr(&target.state));
     let trigger = controls::icon_button(target, icons::LINK, "Link", linked, open);
     let target = target.clone();
     picker_popover(

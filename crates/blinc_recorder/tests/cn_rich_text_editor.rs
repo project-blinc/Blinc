@@ -143,28 +143,28 @@ fn rich_text_follows_the_theme_in_both_schemes() {
 
         let rules = |ui: &Headless, class| background(ui, one(ui, class));
         assert!(close(
-            rules(&ui, "blinc-rich-text-quote-bar"),
+            rules(&ui, "cn-rich-text-editor-quote-bar"),
             theme.color(ColorToken::BorderSecondary)
         ));
         assert!(close(
-            rules(&ui, "blinc-rich-text-divider"),
+            rules(&ui, "cn-rich-text-editor-divider"),
             theme.color(ColorToken::Border)
         ));
         // The document's most contrasting ink is its body text.
         for (what, node, want) in [
             (
                 "prose",
-                one(&ui, "blinc-rich-text"),
+                one(&ui, "cn-rich-text-editor-document"),
                 ColorToken::TextPrimary,
             ),
             (
                 "marker",
-                one(&ui, "blinc-rich-text-marker"),
+                one(&ui, "cn-rich-text-editor-marker"),
                 ColorToken::TextTertiary,
             ),
             (
                 "code",
-                one(&ui, "blinc-rich-text-code"),
+                one(&ui, "cn-rich-text-editor-code"),
                 ColorToken::Warning,
             ),
         ] {
@@ -217,7 +217,7 @@ fn the_rich_text_toolbar_and_a_fixed_palette() {
     ui.leave().settle();
 
     // The toolbar is a notch filled with the elevated surface, its peak toward the selection.
-    let toolbar = one(&ui, "blinc-rte-toolbar");
+    let toolbar = one(&ui, "cn-rich-text-editor-toolbar");
     let b = ui.tree().get_absolute_bounds(toolbar).unwrap();
     let fill = ui
         .snapshot()
@@ -237,16 +237,16 @@ fn the_rich_text_toolbar_and_a_fixed_palette() {
         "toolbar fill {fill:?}"
     );
     assert!(close(
-        background(&ui, one(&ui, "blinc-rich-text-selection")),
+        background(&ui, one(&ui, "cn-rich-text-editor-selection")),
         theme.color(ColorToken::Selection)
     ));
     // Five marks, four alignments, quote, insert table, link and close, and the colour picker's
     // swatch beside them.
-    assert_eq!(all(&ui, "blinc-rte-button").len(), 13);
-    assert_eq!(all(&ui, "blinc-rte-color").len(), 1);
+    assert_eq!(all(&ui, "cn-rich-text-editor-button").len(), 13);
+    assert_eq!(all(&ui, "cn-rich-text-editor-color").len(), 1);
 
     // The dark palette's near-white text, on the light theme.
-    let documents = all(&ui, "blinc-rich-text");
+    let documents = all(&ui, "cn-rich-text-editor-document");
     let (brightest, _) = ink(&mut ui, documents[1], true);
     assert!(
         brightest.iter().all(|&c| c > 220),
@@ -350,7 +350,7 @@ fn the_floating_toolbar_bolds_the_selection_and_shows_the_mark_on() {
     let pressed = |ui: &Headless, label| {
         ui.tree()
             .element_registry()
-            .has_class(tool(ui, label), "blinc-rte-button--active")
+            .has_class(tool(ui, label), "cn-rich-text-editor-button--active")
     };
     assert!(pressed(&ui, "Bold"), "Bold shows on");
     assert!(pressed(&ui, "Align left") && !pressed(&ui, "Italic"));
@@ -367,7 +367,7 @@ fn the_floating_toolbar_bolds_the_selection_and_shows_the_mark_on() {
 /// The toolbar button named `label`.
 fn tool(ui: &Headless, label: &str) -> LayoutNodeId {
     let registry = ui.tree().element_registry().clone();
-    all(ui, "blinc-rte-button")
+    all(ui, "cn-rich-text-editor-button")
         .into_iter()
         .find(|n| registry.attribute(*n, "aria-label").as_deref() == Some(label))
         .unwrap_or_else(|| panic!("no {label} button"))
@@ -378,7 +378,7 @@ fn open_link_popover(ui: &mut Headless) {
     let link = tool(ui, "Link");
     press(ui, link);
     assert_eq!(
-        all(ui, "blinc-rte-link").len(),
+        all(ui, "cn-rich-text-editor-link").len(),
         1,
         "the link popover did not open"
     );
@@ -404,7 +404,7 @@ fn the_link_popover_links_the_selection_on_enter() {
     );
     assert_eq!(span.end, 6, "{span:?}");
     assert!(
-        all(&ui, "blinc-rte-link").is_empty(),
+        all(&ui, "cn-rich-text-editor-link").is_empty(),
         "the popover stayed open"
     );
 }
@@ -446,7 +446,7 @@ fn the_close_button_collapses_the_selection() {
     let close = tool(&ui, "Close");
     press(&mut ui, close);
     assert!(state.lock().unwrap().selection.is_none());
-    assert!(all(&ui, "blinc-rte-toolbar").is_empty());
+    assert!(all(&ui, "cn-rich-text-editor-toolbar").is_empty());
 }
 
 #[test]
@@ -456,11 +456,11 @@ fn the_fixed_toolbar_sits_above_the_text_and_marks_what_is_typed_next() {
         return;
     };
     assert!(
-        all(&ui, "blinc-rte-toolbar").is_empty(),
+        all(&ui, "cn-rich-text-editor-toolbar").is_empty(),
         "no floating toolbar"
     );
-    let bar = one(&ui, "blinc-rte-fixed-toolbar");
-    let text = one(&ui, "blinc-rich-text");
+    let bar = one(&ui, "cn-rich-text-editor-fixed-toolbar");
+    let text = one(&ui, "cn-rich-text-editor-document");
     let (bb, tb) = (
         ui.tree().get_absolute_bounds(bar).unwrap(),
         ui.tree().get_absolute_bounds(text).unwrap(),
@@ -469,7 +469,7 @@ fn the_fixed_toolbar_sits_above_the_text_and_marks_what_is_typed_next() {
         bb.y + bb.height <= tb.y + 0.5,
         "toolbar {bb:?} above text {tb:?}"
     );
-    assert_eq!(all(&ui, "blinc-rte-heading").len(), 1);
+    assert_eq!(all(&ui, "cn-rich-text-editor-heading").len(), 1);
 
     // A click on the text, below the toolbar, puts the caret where it lands.
     ui.move_to(tb.x + 2.0, tb.y + 6.0);
@@ -577,7 +577,7 @@ fn a_dragged_selection_shows_the_floating_toolbar_in_a_scroll() {
             )
     });
     ui.leave().settle();
-    let text = all(&ui, "blinc-rich-text")[0];
+    let text = all(&ui, "cn-rich-text-editor-document")[0];
     let b = ui.tree().get_absolute_bounds(text).unwrap();
     // Drag across the start of the paragraph, the second line.
     let y = b.y + b.height - 10.0;
@@ -593,7 +593,7 @@ fn a_dragged_selection_shows_the_floating_toolbar_in_a_scroll() {
         "no selection: {selection:?}"
     );
     assert_eq!(
-        all(&ui, "blinc-rte-toolbar").len(),
+        all(&ui, "cn-rich-text-editor-toolbar").len(),
         1,
         "no floating toolbar"
     );
@@ -601,7 +601,7 @@ fn a_dragged_selection_shows_the_floating_toolbar_in_a_scroll() {
     // It fades in: one frame after it appears, the pill is not yet its settled colour.
     let t = ui
         .tree()
-        .get_absolute_bounds(one(&ui, "blinc-rte-toolbar"))
+        .get_absolute_bounds(one(&ui, "cn-rich-text-editor-toolbar"))
         .unwrap();
     let (px, py) = ((t.x + 6.0) as u32, (t.y + t.height * 0.6) as u32);
     let early = ui.snapshot().unwrap().get_pixel(px, py).unwrap();
@@ -636,7 +636,7 @@ fn a_narrow_fixed_toolbar_scrolls_between_two_buttons() {
     ui.leave().settle();
     let bar = ui
         .tree()
-        .get_absolute_bounds(one(&ui, "blinc-rte-fixed-toolbar"))
+        .get_absolute_bounds(one(&ui, "cn-rich-text-editor-fixed-toolbar"))
         .unwrap();
     assert!(bar.width <= 260.5, "the toolbar overflows: {bar:?}");
     // The heading select works inside the scroll.
@@ -723,7 +723,7 @@ fn the_editor_wraps_to_the_width_it_is_given() {
         ui.leave().settle();
         let text = ui
             .tree()
-            .get_absolute_bounds(one(&ui, "blinc-rich-text"))
+            .get_absolute_bounds(one(&ui, "cn-rich-text-editor-document"))
             .unwrap();
         let lines = state.lock().unwrap().line_index.len();
         Some((lines, text.width))
@@ -745,7 +745,7 @@ fn the_heading_select_opens_and_sets_the_block_kind() {
         return;
     };
     // A press on the text gives the editor the focus, as a person would before choosing a kind.
-    let text = one(&ui, "blinc-rich-text");
+    let text = one(&ui, "cn-rich-text-editor-document");
     press(&mut ui, text);
     let trigger = one(&ui, "cn-select-trigger");
     // The window blurs every text input before it routes a press.
@@ -792,7 +792,7 @@ fn the_fade_leaves_the_first_and_last_controls_clear() {
     ui.leave().settle();
     // Whether the start and the end of the lane fade.
     let fades = |ui: &Headless| {
-        let lane = one(ui, "blinc-rte-lane");
+        let lane = one(ui, "cn-rich-text-editor-lane");
         let fade = ui.tree().get_render_node(lane).unwrap().props.overflow_fade;
         (fade.left > 0.0, fade.right > 0.0)
     };
@@ -861,7 +861,7 @@ fn aligned_text_is_drawn_and_clicked_where_it_is_placed() {
     ui.leave().settle();
     let origin = ui
         .tree()
-        .get_absolute_bounds(one(&ui, "blinc-rich-text"))
+        .get_absolute_bounds(one(&ui, "cn-rich-text-editor-document"))
         .unwrap();
     let lines: Vec<(usize, f32, f32)> = state
         .lock()
@@ -967,7 +967,7 @@ fn an_alignment_button_aligns_the_selected_blocks() {
         let on = ui
             .tree()
             .element_registry()
-            .has_class(tool(&ui, label), "blinc-rte-button--active");
+            .has_class(tool(&ui, label), "cn-rich-text-editor-button--active");
         assert!(on, "{label} does not show on");
     }
     assert!(state.lock().unwrap().undo());
@@ -1003,7 +1003,7 @@ fn checklist_boxes_tick_in_place_and_follow_undo() {
             )))
     });
     ui.leave().settle();
-    let boxes = all(&ui, "blinc-rte-task");
+    let boxes = all(&ui, "cn-rich-text-editor-task");
     assert_eq!(boxes.len(), 3);
     let checked = |block: usize| match state.lock().unwrap().document.blocks[block].kind {
         BlockKind::TaskItem { checked } => checked,
@@ -1011,7 +1011,7 @@ fn checklist_boxes_tick_in_place_and_follow_undo() {
     };
     let shown = |ui: &Headless| {
         let registry = ui.tree().element_registry().clone();
-        all(ui, "blinc-rte-task")
+        all(ui, "cn-rich-text-editor-task")
             .into_iter()
             .map(|n| {
                 let mut stack = vec![n];
@@ -1026,12 +1026,12 @@ fn checklist_boxes_tick_in_place_and_follow_undo() {
             .collect::<Vec<_>>()
     };
     assert_eq!(shown(&ui), [false, true, false]);
-    let before = all(&ui, "blinc-rte-task");
+    let before = all(&ui, "cn-rich-text-editor-task");
     press(&mut ui, boxes[0]);
     assert!(checked(0));
     assert_eq!(shown(&ui), [true, true, false]);
     assert_eq!(
-        all(&ui, "blinc-rte-task"),
+        all(&ui, "cn-rich-text-editor-task"),
         before,
         "a tick rebuilt its block"
     );
@@ -1043,7 +1043,7 @@ fn checklist_boxes_tick_in_place_and_follow_undo() {
 
     // Undo, through the editor's shortcut path, unticks the box shown.
     ui.move_to(200.0, 200.0);
-    let text = one(&ui, "blinc-rich-text");
+    let text = one(&ui, "cn-rich-text-editor-document");
     press(&mut ui, text);
     assert!(state.lock().unwrap().undo());
     blinc_cn::components::rich_text_editor::RichTextStateExt::on_change(&state, |_| {});
@@ -1125,7 +1125,7 @@ fn a_table_is_drawn_in_cells_and_clicked_there() {
     ui.assert_snapshot("cn_rich_text_table");
     let table = ui
         .tree()
-        .get_absolute_bounds(one(&ui, "blinc-rich-text-table"))
+        .get_absolute_bounds(one(&ui, "cn-rich-text-editor-table"))
         .unwrap();
     // A press in the middle of each cell puts the cursor in it, below the text too.
     let column = table.width / 3.0;
@@ -1182,7 +1182,7 @@ fn keys_move_between_cells() {
     // The focused editor hears keys once pressed.
     let b = ui
         .tree()
-        .get_absolute_bounds(one(&ui, "blinc-rich-text"))
+        .get_absolute_bounds(one(&ui, "cn-rich-text-editor-document"))
         .unwrap();
     ui.move_to(b.x + 3.0, b.y + 8.0);
     ui.mouse_down();
@@ -1245,7 +1245,7 @@ fn the_grid_inserts_a_table_and_its_menu_changes_it() {
     press(&mut ui, insert);
     let square = |ui: &Headless, label: &str| {
         let registry = ui.tree().element_registry().clone();
-        all(ui, "blinc-rte-grid-square")
+        all(ui, "cn-rich-text-editor-grid-square")
             .into_iter()
             .find(|n| registry.attribute(*n, "aria-label").as_deref() == Some(label))
             .unwrap_or_else(|| panic!("no {label}"))
@@ -1256,7 +1256,7 @@ fn the_grid_inserts_a_table_and_its_menu_changes_it() {
     ui.settle();
     let lit = {
         let registry = ui.tree().element_registry().clone();
-        all(&ui, "blinc-rte-grid-square")
+        all(&ui, "cn-rich-text-editor-grid-square")
             .into_iter()
             .filter(|n| registry.attribute(*n, "data-within").is_some())
             .count()
@@ -1265,7 +1265,10 @@ fn the_grid_inserts_a_table_and_its_menu_changes_it() {
     press(&mut ui, pick);
     ui.advance(400);
     ui.settle();
-    assert!(all(&ui, "blinc-rte-grid").is_empty(), "a pick closes it");
+    assert!(
+        all(&ui, "cn-rich-text-editor-grid").is_empty(),
+        "a pick closes it"
+    );
     let shape = || {
         let d = state.lock().unwrap();
         let table = &d.document.blocks[1];
@@ -1279,10 +1282,10 @@ fn the_grid_inserts_a_table_and_its_menu_changes_it() {
     assert_eq!(shape(), (3, 6, 1, 0));
     assert_eq!(state.lock().unwrap().document.blocks.len(), 3);
     // In a table the menu takes the place of the lists, and columns are not justified.
-    assert!(all(&ui, "blinc-rte-list").is_empty());
+    assert!(all(&ui, "cn-rich-text-editor-list-menu").is_empty());
     let registry = ui.tree().element_registry().clone();
     assert!(
-        !all(&ui, "blinc-rte-button")
+        !all(&ui, "cn-rich-text-editor-button")
             .iter()
             .any(|n| registry.attribute(*n, "aria-label").as_deref() == Some("Justify"))
     );
@@ -1327,7 +1330,7 @@ fn the_caret_moves_through_wrapped_lines() {
     };
     let b = ui
         .tree()
-        .get_absolute_bounds(one(&ui, "blinc-rich-text"))
+        .get_absolute_bounds(one(&ui, "cn-rich-text-editor-document"))
         .unwrap();
     ui.move_to(b.x + 1.0, b.y + 8.0);
     ui.mouse_down();
@@ -1393,7 +1396,7 @@ fn the_runs_of_a_line_share_a_baseline() {
         ui.leave().settle();
         let b = ui
             .tree()
-            .get_absolute_bounds(one(&ui, "blinc-rich-text"))
+            .get_absolute_bounds(one(&ui, "cn-rich-text-editor-document"))
             .unwrap();
         let frame = ui.snapshot().unwrap();
         let d = state.lock().unwrap();
@@ -1461,8 +1464,11 @@ fn the_faces_of_a_rich_text_share_a_baseline() {
 fn a_stylesheet_restyles_both_toolbars() {
     use blinc_cn::components::rich_text_editor::ToolbarPlacement;
     for (placement, class) in [
-        (ToolbarPlacement::Floating, "blinc-rte-floating-toolbar"),
-        (ToolbarPlacement::Fixed, "blinc-rte-fixed-toolbar"),
+        (
+            ToolbarPlacement::Floating,
+            "cn-rich-text-editor-floating-toolbar",
+        ),
+        (ToolbarPlacement::Fixed, "cn-rich-text-editor-fixed-toolbar"),
     ] {
         let rule = format!(
             ".{class} {{ background: #ff0000; border: 3px solid #0000ff; border-radius: 0px;
@@ -1520,7 +1526,7 @@ fn the_quote_button_shows_a_quote_and_toggles_it() {
     let pressed = |ui: &Headless| {
         ui.tree()
             .element_registry()
-            .has_class(tool(ui, "Quote"), "blinc-rte-button--active")
+            .has_class(tool(ui, "Quote"), "cn-rich-text-editor-button--active")
     };
     assert!(!pressed(&ui), "a paragraph is not a quote");
     // Into the quote, from the keyboard, where the toolbar follows the cursor.
@@ -1554,11 +1560,11 @@ fn a_quote_is_a_heading_too_and_keeps_its_button() {
     let pressed = |ui: &Headless| {
         ui.tree()
             .element_registry()
-            .has_class(tool(ui, "Quote"), "blinc-rte-button--active")
+            .has_class(tool(ui, "Quote"), "cn-rich-text-editor-button--active")
     };
     assert!(pressed(&ui));
     // The select has a paragraph, and it takes headings.
-    let text = one(&ui, "blinc-rich-text");
+    let text = one(&ui, "cn-rich-text-editor-document");
     press(&mut ui, text);
     let trigger = one(&ui, "cn-select-trigger");
     blinc_layout::widgets::blur_all_text_inputs();

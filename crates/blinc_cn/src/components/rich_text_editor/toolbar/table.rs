@@ -34,7 +34,7 @@ const PAD: f32 = 16.0;
 fn grid(target: &Target, active: Signal<Option<u64>>) -> Div {
     let size = signal((0usize, 0usize));
     let mut rows = div()
-        .class("blinc-rte-grid")
+        .class("cn-rich-text-editor-grid")
         .flex_col()
         .gap_px(SQUARE_GAP)
         .w(WIDTH)
@@ -50,7 +50,7 @@ fn grid(target: &Target, active: Signal<Option<u64>>) -> Div {
             });
             line = line.child(
                 div()
-                    .class("blinc-rte-grid-square")
+                    .class("cn-rich-text-editor-grid-square")
                     .attr("role", "button")
                     .attr("aria-label", format!("{row} by {column} table"))
                     .attr_when("data-within", "", within)
@@ -72,7 +72,7 @@ fn grid(target: &Target, active: Signal<Option<u64>>) -> Div {
         _ => "Insert table".to_string(),
     });
     div()
-        .class("blinc-rte-grid-panel")
+        .class("cn-rich-text-editor-grid-panel")
         .flex_col()
         .child(rows)
         .child(
@@ -88,7 +88,10 @@ fn grid(target: &Target, active: Signal<Option<u64>>) -> Div {
 
 /// The button that opens the grid.
 pub(super) fn insert(target: &Target) -> Div {
-    let id = format!("blinc-rte-table-{:p}", Arc::as_ptr(&target.state));
+    let id = format!(
+        "cn-rich-text-editor-table-menu-{:p}",
+        Arc::as_ptr(&target.state)
+    );
     let trigger = controls::icon_button(target, icons::TABLE, "Insert table", false, |_| {});
     let target = target.clone();
     picker_popover(
@@ -146,7 +149,7 @@ pub(super) fn menu(target: &Target) -> Div {
         }
     }
     div()
-        .class("blinc-rte-table")
+        .class("cn-rich-text-editor-table-menu")
         .flex_shrink_0()
         .w(controls::MENU)
         .child(menu)

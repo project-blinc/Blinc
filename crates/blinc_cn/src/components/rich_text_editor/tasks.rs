@@ -45,7 +45,7 @@ pub(super) fn task_box(
                     }
                 })
                 .build_component()
-                .class("blinc-rte-task"),
+                .class("cn-rich-text-editor-task"),
         )
 }
 

@@ -90,7 +90,7 @@ fn builtin_widgets_include_their_controls_and_leave_drawing_examples_without_css
     assert!(excerpt("link").contains("color: var(--text-link);"));
     assert!(excerpt("code-editor").contains(".blinc-find-input:focus"));
     assert!(excerpt("audio-player").contains(".blinc-media-play-btn"));
-    assert!(excerpt("rich-text-editor").contains(".blinc-rte-toolbar"));
+    assert!(excerpt("rich-text-editor").contains(".cn-rich-text-editor-toolbar"));
     assert!(excerpt("canvas").is_empty());
     assert!(excerpt("svg").is_empty());
     assert!(excerpt("waveform").is_empty());

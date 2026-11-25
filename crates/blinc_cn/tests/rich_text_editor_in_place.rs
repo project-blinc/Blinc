@@ -119,7 +119,7 @@ impl Scene {
         let registry = self.tree.element_registry();
         self.nodes()
             .into_iter()
-            .filter(|&n| registry.has_class(n, "blinc-rte-toolbar"))
+            .filter(|&n| registry.has_class(n, "cn-rich-text-editor-toolbar"))
             .count()
     }
 

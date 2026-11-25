@@ -10,7 +10,7 @@
 //! # Theme
 //!
 //! Sizes are passed in via [`RichTextTheme`]. Colours come from the
-//! `.blinc-rich-text` rules of the layout stylesheet unless the theme sets
+//! `.cn-rich-text-editor-document` rules of the layout stylesheet unless the theme sets
 //! them; [`RichTextTheme::dark`] and [`RichTextTheme::light`] are fixed
 //! palettes.
 
@@ -26,18 +26,18 @@ use blinc_theme::{RadiusToken, ThemeState};
 /// Visual configuration for the rich text renderer.
 ///
 /// Sizes are explicit. A colour left `None` comes from the stylesheet's
-/// `.blinc-rich-text` rules, so it follows the theme; one set here wins.
+/// `.cn-rich-text-editor-document` rules, so it follows the theme; one set here wins.
 #[derive(Clone, Debug)]
 pub struct RichTextTheme {
-    /// Text without a colour of its own, over the `.blinc-rich-text`
+    /// Text without a colour of its own, over the `.cn-rich-text-editor-document`
     /// rule's; also the caret and selection colour.
     pub text: Option<Color>,
-    /// List markers, over the `.blinc-rich-text-marker` rule's.
+    /// List markers, over the `.cn-rich-text-editor-marker` rule's.
     pub muted: Option<Color>,
-    /// The blockquote's left border, over the `.blinc-rich-text-quote-bar`
+    /// The blockquote's left border, over the `.cn-rich-text-editor-quote-bar`
     /// rule's.
     pub quote_border: Option<Color>,
-    /// The divider line, over the `.blinc-rich-text-divider` rule's.
+    /// The divider line, over the `.cn-rich-text-editor-divider` rule's.
     pub divider: Option<Color>,
     /// Base font size for paragraph text (px).
     pub font_size: f32,
@@ -143,7 +143,7 @@ impl Default for RichTextTheme {
 /// spacing scale used by the rest of the layout API.
 pub fn render_document(doc: &RichDocument, theme: &RichTextTheme, content_width: f32) -> Div {
     let mut root = div()
-        .class("blinc-rich-text")
+        .class("cn-rich-text-editor-document")
         .w_full()
         .flex_col()
         .gap_px(theme.block_gap);
@@ -231,7 +231,7 @@ pub(super) fn render_block(
         }
         BlockKind::Table { .. } => indented_block(table_div(block, theme, inner_width), indent_px),
         BlockKind::Divider => {
-            let line = div().class("blinc-rich-text-divider").w_full().h(1.0);
+            let line = div().class("cn-rich-text-editor-divider").w_full().h(1.0);
             let line = match theme.divider {
                 Some(c) => line.bg(c),
                 None => line,
@@ -372,7 +372,7 @@ fn absolute_positioned_line(
         let draw_w = measure(drawn).ceil();
         let mut positioned = div();
         if is_code {
-            positioned = positioned.class("blinc-rich-text-code");
+            positioned = positioned.class("cn-rich-text-editor-code");
         }
         container = container.child(
             positioned
@@ -435,10 +435,10 @@ fn list_item_div(
     indent_px: f32,
     inner_width: f32,
 ) -> Div {
-    // Transparent: the marker takes the `.blinc-rich-text-marker` colour.
+    // Transparent: the marker takes the `.cn-rich-text-editor-marker` colour.
     let ink = theme.muted.unwrap_or(Color::TRANSPARENT);
     let column = div()
-        .class("blinc-rich-text-marker")
+        .class("cn-rich-text-editor-marker")
         .flex_shrink_0()
         .w(theme.bullet_column_width);
     let column = match marker {
@@ -477,14 +477,14 @@ fn table_div(block: &Block, theme: &RichTextTheme, width: f32) -> Div {
     let (cells, height) = super::grid::layout(block, theme, width);
     let line_height = theme.font_size * theme.line_height;
     let rule = || {
-        let rule = div().class("blinc-rich-text-table-rule").absolute();
+        let rule = div().class("cn-rich-text-editor-table-rule").absolute();
         match theme.divider {
             Some(c) => rule.bg(c),
             None => rule,
         }
     };
     let mut table = div()
-        .class("blinc-rich-text-table")
+        .class("cn-rich-text-editor-table")
         .relative()
         .w(width)
         .h(height)
@@ -500,7 +500,7 @@ fn table_div(block: &Block, theme: &RichTextTheme, width: f32) -> Div {
         .unwrap_or_default();
     table = table.child(
         div()
-            .class("blinc-rich-text-table-header")
+            .class("cn-rich-text-editor-table-header")
             .absolute()
             .left(0.0)
             .top(0.0)
@@ -555,7 +555,7 @@ fn text_block(
     let line_width = (inner_width - theme.quote_inset()).max(0.0);
     let inner = paragraph_div(block, theme, font_size, weight, true, line_width);
     let bar = div()
-        .class("blinc-rich-text-quote-bar")
+        .class("cn-rich-text-editor-quote-bar")
         .w(theme.quote_border_width);
     let bar = match theme.quote_border {
         Some(c) => bar.bg(c),
@@ -590,7 +590,7 @@ fn run_baseline(font_size: f32, line_height: f32, weight: FontWeight, italic: bo
 /// Build a monospace `RichText` for a code run. No chip background or
 /// internal padding — purely a font + color change — so the rendered
 /// pixel width matches the geometry's `RunGeometry.width` exactly. Its
-/// colour is the `.blinc-rich-text-code` rule's, from the run's wrapper.
+/// colour is the `.cn-rich-text-editor-code` rule's, from the run's wrapper.
 fn make_code_run(
     line: &blinc_layout::styled_text::StyledLine,
     theme: &RichTextTheme,
@@ -618,7 +618,7 @@ fn make_code_run(
 /// shaper level — we already pre-wrap in `paragraph_div`.
 ///
 /// Spans without a colour of their own take the inherited
-/// `.blinc-rich-text` colour, or the theme's text colour when it sets one:
+/// `.cn-rich-text-editor-document` colour, or the theme's text colour when it sets one:
 /// a span's colour is the only one that wins over an inherited rule.
 fn make_rich_text(
     line: &blinc_layout::styled_text::StyledLine,

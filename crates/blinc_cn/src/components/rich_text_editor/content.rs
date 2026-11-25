@@ -135,7 +135,7 @@ pub(super) fn content(state: &RichTextState, version: &Signal<u32>, theme: &Rich
         }
     };
     let document = div()
-        .class("blinc-rich-text")
+        .class("cn-rich-text-editor-document")
         .w_full()
         .flex_col()
         .gap_px(theme.block_gap)
@@ -168,7 +168,7 @@ pub(super) fn content(state: &RichTextState, version: &Signal<u32>, theme: &Rich
         },
         move |span: Span| {
             let rect = div()
-                .class("blinc-rich-text-selection")
+                .class("cn-rich-text-editor-selection")
                 .absolute()
                 .left(span.x)
                 .top(span.y)
@@ -240,10 +240,10 @@ pub(super) fn content(state: &RichTextState, version: &Signal<u32>, theme: &Rich
         .padding_x_px(pad)
         .padding_y_px(pad)
         .child(text);
-    // The `blinc-rich-text-editor` class is the canonical CSS hook for stylesheet overrides
+    // The `cn-rich-text-editor` class is the canonical CSS hook for stylesheet overrides
     // (background, font).
     if theme.toolbar != ToolbarPlacement::Fixed {
-        return body.class("blinc-rich-text-editor");
+        return body.class("cn-rich-text-editor");
     }
     let looks = {
         let state = Arc::clone(state);
@@ -267,7 +267,7 @@ pub(super) fn content(state: &RichTextState, version: &Signal<u32>, theme: &Rich
     div()
         .w_full()
         .flex_col()
-        .class("blinc-rich-text-editor")
+        .class("cn-rich-text-editor")
         .child(fixed)
         .child(body)
 }
@@ -275,7 +275,7 @@ pub(super) fn content(state: &RichTextState, version: &Signal<u32>, theme: &Rich
 /// Canvas overlay that draws a blinking cursor at the current document
 /// position. It reads the cursor geometry from `state` on each paint, so the
 /// blink and a moved cursor need no rebuild. Without a `color` it is
-/// `--blinc-rich-text-caret`, else the text colour, read each paint.
+/// `--cn-rich-text-editor-caret`, else the text colour, read each paint.
 fn cursor_overlay_canvas(
     state: RichTextState,
     cursor_state: SharedCursorState,
@@ -304,7 +304,7 @@ fn cursor_overlay_canvas(
 
         let color = color.unwrap_or_else(|| {
             blinc_layout::ua_styles::stylesheet_color(
-                "var(--blinc-rich-text-caret, var(--text-primary))",
+                "var(--cn-rich-text-editor-caret, var(--text-primary))",
                 blinc_theme::ColorToken::TextPrimary,
             )
         });

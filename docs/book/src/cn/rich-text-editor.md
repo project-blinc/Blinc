@@ -44,7 +44,7 @@ let hidden = RichTextTheme::default().toolbar(ToolbarPlacement::Hidden);
 
 With a collapsed cursor, a mark button applies to the text typed next. The floating toolbar appears when the press that made the selection is released, and its close button collapses the selection. The fixed toolbar holds a select for the paragraph or heading level. In an editor narrower than its controls, they scroll between two buttons.
 
-Both toolbars are styled from CSS. The floating toolbar takes the `.blinc-rte-floating-toolbar` rule: its `background`, `border`, `border-radius` and `box-shadow` apply to the notch and its peak. The fixed toolbar takes `.blinc-rte-fixed-toolbar`. Both mark a pressed button with `.blinc-rte-button--active`.
+Both toolbars are styled from CSS. The floating toolbar takes the `.cn-rich-text-editor-floating-toolbar` rule: its `background`, `border`, `border-radius` and `box-shadow` apply to the notch and its peak. The fixed toolbar takes `.cn-rich-text-editor-fixed-toolbar`. Both mark a pressed button with `.cn-rich-text-editor-button--active`.
 
 The floating toolbar's heading select shows short names, P and H1 to H6; the fixed toolbar's shows them in full. Where controls scroll, an edge with more beyond it fades.
 
@@ -101,10 +101,10 @@ document.on_change(move |doc| characters.set(doc.plain_text().chars().count()));
 
 ## Styling
 
-Restyle `.blinc-rich-text` using application CSS after the widget layer:
+Restyle `.cn-rich-text-editor-document` using application CSS after the widget layer:
 
 ```css
-.blinc-rich-text {
+.cn-rich-text-editor-document {
   color: var(--text-primary);
   background: var(--surface-elevated);
   border: 1px solid var(--border);

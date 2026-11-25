@@ -48,7 +48,6 @@ fn families(component: &Component) -> BTreeSet<String> {
     for (widget, controls) in [
         ("blinc-media-controls", "blinc-media"),
         ("blinc-code", "blinc-find"),
-        ("blinc-rich-text", "blinc-rte"),
     ] {
         if names.contains(widget) {
             names.insert(controls.into());

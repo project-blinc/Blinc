@@ -61,10 +61,10 @@ pub(super) fn icon_button(
             .icon_size(16.0)
             .on_click(move |_| on_click(&target))
             .build_component()
-            .class("blinc-rte-button")
+            .class("cn-rich-text-editor-button")
             .attr("aria-label", label);
         if active {
-            b = b.class("blinc-rte-button--active");
+            b = b.class("cn-rich-text-editor-button--active");
         }
         div().child(b)
     };
@@ -160,7 +160,7 @@ pub(super) fn lists(target: &Target, current: &BlockKind) -> Div {
         });
     }
     div()
-        .class("blinc-rte-list")
+        .class("cn-rich-text-editor-list-menu")
         .flex_shrink_0()
         .w(MENU)
         .child(menu)
@@ -184,7 +184,7 @@ pub(super) fn color(target: &Target, swatch: Signal<Color>) -> Div {
         color_picker(swatch)
             .swatches(actions::palette())
             .on_change(move |c| target.act(|d| actions::set_color(d, c)))
-            .class("blinc-rte-color"),
+            .class("cn-rich-text-editor-color"),
     )
 }
 
@@ -196,7 +196,7 @@ pub(super) fn close(target: &Target) -> Div {
 /// A thin vertical rule between groups of controls.
 pub(super) fn divider() -> Div {
     div()
-        .class("blinc-rte-separator")
+        .class("cn-rich-text-editor-separator")
         .flex_shrink_0()
         .w(1.0)
         .h(18.0)
@@ -242,9 +242,9 @@ pub(super) fn heading(target: &Target, kind: &BlockKind, compact: bool) -> Div {
             kind_label(&BlockKind::Heading(level), compact),
         );
     }
-    let mut wrapper = div().class("blinc-rte-heading").flex_shrink_0();
+    let mut wrapper = div().class("cn-rich-text-editor-heading").flex_shrink_0();
     if compact {
-        wrapper = wrapper.class("blinc-rte-heading--compact");
+        wrapper = wrapper.class("cn-rich-text-editor-heading--compact");
     }
     wrapper.child(menu)
 }

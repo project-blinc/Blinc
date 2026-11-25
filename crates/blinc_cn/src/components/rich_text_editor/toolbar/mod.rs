@@ -155,7 +155,7 @@ fn controls_lane(
         // The lane takes the width between the buttons, whatever the toolbar's width.
         .child(
             div()
-                .class("blinc-rte-lane")
+                .class("cn-rich-text-editor-lane")
                 .attr_when("data-more-start", "", more_start)
                 .attr_when("data-more-end", "", more_end)
                 .flex_grow()
@@ -272,7 +272,7 @@ impl Look {
 /// toolbar is placed elsewhere.
 ///
 /// It is a notch whose peak points at the middle of the selection, styled by the
-/// `.blinc-rte-floating-toolbar` rule.
+/// `.cn-rich-text-editor-floating-toolbar` rule.
 pub fn selection_toolbar(
     state: &RichTextState,
     version: &Signal<u32>,
@@ -325,7 +325,7 @@ pub fn selection_toolbar(
     // The peak points at the middle of the selection, as far as the corners let it.
     let offset = center - left - width * 0.5;
     let mut shape = notch()
-        .class("blinc-rte-floating-toolbar")
+        .class("cn-rich-text-editor-floating-toolbar")
         .w_full()
         .h_full()
         .px(PAD_X)
@@ -343,14 +343,16 @@ pub fn selection_toolbar(
             .pb(PAD_Y)
     };
     shape = shape.child(row);
-    let mut toolbar = div().class("blinc-rte-toolbar");
+    let mut toolbar = div().class("cn-rich-text-editor-toolbar");
     if appearing {
         // Fades in and grows out of the side that faces the selection.
-        toolbar = toolbar.class("blinc-rte-toolbar--enter").class(if above {
-            "blinc-rte-toolbar--above"
-        } else {
-            "blinc-rte-toolbar--below"
-        });
+        toolbar = toolbar
+            .class("cn-rich-text-editor-toolbar--enter")
+            .class(if above {
+                "cn-rich-text-editor-toolbar--above"
+            } else {
+                "cn-rich-text-editor-toolbar--below"
+            });
     }
     let toolbar = toolbar
         .absolute()
@@ -400,7 +402,7 @@ pub(super) fn fixed_toolbar(state: &RichTextState, version: &Signal<u32>, pad: f
     );
 
     let bar = div()
-        .class("blinc-rte-fixed-toolbar")
+        .class("cn-rich-text-editor-fixed-toolbar")
         .w_full()
         .h(height)
         .padding_x_px(PAD_X)
