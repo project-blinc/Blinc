@@ -198,8 +198,8 @@ fn row_width(buttons: usize, dividers: usize) -> f32 {
 }
 
 /// The controls after the block kind's menu, and their width: the marks, the alignments, the
-/// lists and tables, colour and link, and in the floating toolbar, the close button. In a table,
-/// its menu takes the place of the lists, which its cells cannot be.
+/// lists, quote and tables, colour and link, and in the floating toolbar, the close button. In a
+/// table, its menu takes the place of the lists, which its cells cannot be.
 fn rest(target: &Target, look: &Look, close: bool) -> (Div, f32) {
     let mut row = div().flex_row().items_center().gap_px(GAP);
     for button in controls::marks(target, &look.format) {
@@ -214,6 +214,7 @@ fn rest(target: &Target, look: &Look, close: bool) -> (Div, f32) {
         row.child(table::menu(target))
     } else {
         row.child(controls::lists(target, &look.kind))
+            .child(controls::quote(target, &look.kind))
             .child(table::insert(target))
     };
     row = row
@@ -230,12 +231,12 @@ fn rest(target: &Target, look: &Look, close: bool) -> (Div, f32) {
 
 /// The width of [`rest`].
 fn rest_width(in_table: bool, close: bool) -> f32 {
-    // Colour and link, then the close button, and outside a table the one that inserts one.
+    // Colour and link, then the close button, and outside a table the quote and table buttons.
     let buttons = MARKS.len()
         + controls::aligns_for(in_table).len()
         + 2
         + close as usize
-        + !in_table as usize;
+        + 2 * !in_table as usize;
     row_width(buttons, 2 + close as usize) + controls::MENU + GAP
 }
 

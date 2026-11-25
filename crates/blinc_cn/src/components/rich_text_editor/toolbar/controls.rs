@@ -166,6 +166,17 @@ pub(super) fn lists(target: &Target, current: &BlockKind) -> Div {
         .child(menu)
 }
 
+/// The quote button, pressed where the block under the cursor is a quote. Pressing it makes the
+/// blocks of the selection quotes, or, where all are, paragraphs.
+pub(super) fn quote(target: &Target, current: &BlockKind) -> Div {
+    let active = *current == BlockKind::Quote;
+    icon_button(target, icons::TEXT_QUOTE, "Quote", active, |t| {
+        t.act(|d| {
+            d.toggle_kind(BlockKind::Quote);
+        });
+    })
+}
+
 /// The cn colour picker, shown as a swatch of the colour under the cursor; picking colours the
 /// selection.
 pub(super) fn color(target: &Target, swatch: Signal<Color>) -> Div {

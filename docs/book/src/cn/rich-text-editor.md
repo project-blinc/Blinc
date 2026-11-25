@@ -52,6 +52,10 @@ The floating toolbar's heading select shows short names, P and H1 to H6; the fix
 
 Blocks can be items of a bulleted list, a numbered list or a checklist. The toolbar's list menu toggles them, and so do Cmd+Shift+8, 7 and 6, or Ctrl on other platforms. Tab nests an item and Shift+Tab takes it out. Enter starts a new item. On an empty item it steps out a level, and out of the list from the first; Backspace at the start of an item does the same. Press a checklist's box to tick it, or use Cmd+Enter for the item under the cursor.
 
+## Quotes
+
+The toolbar's quote button makes the blocks of the selection quotes, or paragraphs where all of them are. It shows pressed while the cursor is in a quote. Cmd+Shift+9, or Ctrl on other platforms, does the same. In a table the button gives way to the table menu.
+
 ## Tables
 
 The toolbar's table button opens a grid to pick a new table's size from. The first row is the header, and the columns share the table's width. A cell holds one line of text, which wraps, and takes every mark.

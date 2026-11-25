@@ -240,9 +240,9 @@ fn the_rich_text_toolbar_and_a_fixed_palette() {
         background(&ui, one(&ui, "blinc-rich-text-selection")),
         theme.color(ColorToken::Selection)
     ));
-    // Five marks, four alignments, insert table, link and close, and the colour picker's swatch
-    // beside them.
-    assert_eq!(all(&ui, "blinc-rte-button").len(), 12);
+    // Five marks, four alignments, quote, insert table, link and close, and the colour picker's
+    // swatch beside them.
+    assert_eq!(all(&ui, "blinc-rte-button").len(), 13);
     assert_eq!(all(&ui, "blinc-rte-color").len(), 1);
 
     // The dark palette's near-white text, on the light theme.
@@ -1488,4 +1488,61 @@ fn a_stylesheet_restyles_both_toolbars() {
         let page = at(b.x + b.width / 2.0, b.y + b.height + 60.0);
         assert_eq!(below, page, "{placement:?} shadow");
     }
+}
+
+#[test]
+fn the_quote_button_shows_a_quote_and_toggles_it() {
+    use blinc_cn::components::rich_text_editor::{
+        BlockKind, DocPosition, RichDocument, RichTextTheme, ToolbarPlacement, rich_text_editor,
+        rich_text_state,
+    };
+    let Some(mut ui) = session_sized(ColorScheme::Light, WIDE) else {
+        return;
+    };
+    let state = rich_text_state(RichDocument::from_markdown(
+        "plain\n\n> quoted",
+        Color::TRANSPARENT,
+    ));
+    state.lock().unwrap().set_focus(true);
+    let editor = state.clone();
+    ui.mount(move |_| {
+        div()
+            .w(WIDE as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(12.0))
+            .child(rich_text_editor(
+                &editor,
+                RichTextTheme::default().toolbar(ToolbarPlacement::Fixed),
+                WIDE as f32 - 24.0,
+            ))
+    });
+    ui.settle();
+    let pressed = |ui: &Headless| {
+        ui.tree()
+            .element_registry()
+            .has_class(tool(ui, "Quote"), "blinc-rte-button--active")
+    };
+    assert!(!pressed(&ui), "a paragraph is not a quote");
+    // Into the quote, from the keyboard, where the toolbar follows the cursor.
+    state
+        .lock()
+        .unwrap()
+        .move_cursor(DocPosition::new(1, 0, 2), false);
+    ui.key(39);
+    ui.settle();
+    assert!(pressed(&ui), "the quote shows pressed");
+    let quote = tool(&ui, "Quote");
+    press(&mut ui, quote);
+    assert_eq!(
+        state.lock().unwrap().document.blocks[1].kind,
+        BlockKind::Paragraph
+    );
+    assert!(!pressed(&ui));
+    let quote = tool(&ui, "Quote");
+    press(&mut ui, quote);
+    assert_eq!(
+        state.lock().unwrap().document.blocks[1].kind,
+        BlockKind::Quote
+    );
+    assert!(pressed(&ui));
 }
