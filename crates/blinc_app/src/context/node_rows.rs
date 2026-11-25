@@ -863,8 +863,13 @@ impl NodeRows {
 
     /// A primitive standing for an SVG's clip, so the clip is followed as a primitive's is.
     fn svg_clip_proxy(svg: &SvgElement) -> GpuPrimitive {
+        Self::svg_proxy(svg, svg.clip_bounds)
+    }
+
+    /// A primitive in an SVG's place with `clip` for its clip.
+    fn svg_proxy(svg: &SvgElement, clip: Option<[f32; 4]>) -> GpuPrimitive {
         let proxy = GpuPrimitive::rect(svg.x, svg.y, svg.width, svg.height);
-        match svg.clip_bounds {
+        match clip {
             Some([x, y, w, h]) => proxy.with_clip_rect(x, y, w, h),
             None => proxy,
         }
@@ -997,6 +1002,13 @@ impl NodeRows {
             proxy.set_node_clip_from(svg.clip_from);
             let proxy = blinc_gpu::node_table::resolve_primitive(&self.rows, &proxy);
             out.clip_bounds = Some(proxy.clip_bounds);
+        }
+        // The fade's clip goes with the rows as the clip does.
+        if let Some((rect, _)) = &mut out.fade {
+            let mut proxy = Self::svg_proxy(svg, Some(*rect));
+            proxy.set_node_slot(Some(row));
+            proxy.set_node_clip_from(svg.clip_from);
+            *rect = blinc_gpu::node_table::resolve_primitive(&self.rows, &proxy).clip_bounds;
         }
         out
     }

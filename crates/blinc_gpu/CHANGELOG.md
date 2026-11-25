@@ -53,6 +53,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 
 ### Fixed
 - A rounded clip keeps its corners inside another rounded clip with larger ones. Each corner took the largest radius of any clip, and lost its rounding when that clip's own corner was elsewhere.
+- A shape with a clip of its own inside an overflow fade fades at the fading clip's edges, not at its own.
 - A notch composites its border by the border colour's alpha, as a rect does. A translucent border drew darker and uneven on a notch than on a rect.
 - A frame with more glyphs than `max_glyphs`, or more glass primitives than `max_glass_primitives`, is truncated with a warning instead of aborting on a buffer overrun, as primitives already were.
 - Grayscale text drawn through a transform no longer samples the neighbouring glyphs in the atlas. The quad of a turned glyph is larger than the glyph, and only colour glyphs discarded what lay outside its rectangle, so rotated text drew stray fragments around its letters and its ink grew with the angle.

@@ -156,6 +156,7 @@ impl RenderContext {
                 None, // No composite-promoted ancestor at root
                 None, // No inherited text path at root
                 [0.0; 4],
+                None, // No overflow fade at the root
                 None, // No culling scroll container above the root
             );
         }
@@ -225,6 +226,8 @@ impl RenderContext {
         nearest_composite_ancestor: Option<blinc_layout::tree::StableNodeId>,
         inherited_text_path: Option<Arc<text_clip::CollectedTextPath>>,
         inherited_text_fade: [f32; 4],
+        // The clip of the node `inherited_text_fade` comes from, in layout pixels.
+        inherited_fade_rect: Option<[f32; 4]>,
         // The on-screen rect of the nearest culling scroll container, in the space of `bounds`;
         // `None` where culling is off.
         cull_view: Option<[f32; 4]>,
@@ -574,6 +577,7 @@ impl RenderContext {
                 current_scroll_clip,
                 current_clip_radius,
                 text_fade: inherited_text_fade,
+                fade_rect: inherited_fade_rect,
                 effective_text_color,
                 effective_motion_opacity,
                 inherited_css_opacity,
@@ -674,6 +678,21 @@ impl RenderContext {
         } else {
             tree.layout().children(node)
         };
+        // A node that clips with an overflow fade fades what it holds at its own edges, inside its
+        // border.
+        let (child_fade, child_fade_rect) = tree
+            .get_render_node(node)
+            .filter(|n| should_clip && !n.props.overflow_fade.is_none())
+            .map_or((inherited_text_fade, inherited_fade_rect), |n| {
+                let bw = n.props.border_width;
+                let rect = [
+                    abs_x + bw,
+                    abs_y + bw,
+                    (bounds.width - bw * 2.0).max(0.0),
+                    (bounds.height - bw * 2.0).max(0.0),
+                ];
+                (n.props.overflow_fade.to_array(), Some(rect))
+            });
         for child_id in children {
             self.collect_elements_recursive(
                 tree,
@@ -705,9 +724,8 @@ impl RenderContext {
                 effective_composite_layer_opacity,
                 nearest_composite_ancestor,
                 text_path.clone(),
-                tree.get_render_node(node)
-                    .filter(|n| should_clip && !n.props.overflow_fade.is_none())
-                    .map_or(inherited_text_fade, |n| n.props.overflow_fade.to_array()),
+                child_fade,
+                child_fade_rect,
                 children_cull_view,
             );
         }

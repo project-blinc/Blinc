@@ -269,6 +269,13 @@ impl RenderContext {
                 instance = instance.with_clip2_rect(x, y, w, h);
             }
 
+            if let Some((rect, fade)) = svg.fade
+                && let Some((params, info)) = fade_mask(rect, fade, drawn_bounds(svg, scale_factor))
+            {
+                instance.mask_params = params;
+                instance.mask_info = info;
+            }
+
             instances.push(instance);
         }
 
@@ -297,6 +304,51 @@ fn drawn_bounds(svg: &SvgElement, scale_factor: f32) -> [f32; 4] {
     let half_w = (a.abs() * svg.width + c.abs() * svg.height) * 0.5;
     let half_h = (b.abs() * svg.width + d.abs() * svg.height) * 0.5;
     [x - half_w, y - half_h, x + half_w, y + half_h]
+}
+
+/// The linear mask that fades an SVG drawn over `bounds` (left, top, right, bottom) at the edges
+/// of `rect`, as (`mask_params`, `mask_info`) in the SVG's own 0 to 1 space. `None` where no fade
+/// reaches it. An SVG two fades reach takes the one that hides more of its middle.
+fn fade_mask(
+    rect: [f32; 4],
+    [top, right, bottom, left]: [f32; 4],
+    [x0, y0, x1, y1]: [f32; 4],
+) -> Option<([f32; 4], [f32; 4])> {
+    let (w, h) = (x1 - x0, y1 - y0);
+    if w <= 0.0 || h <= 0.0 {
+        return None;
+    }
+    let [rx, ry, rw, rh] = rect;
+    // Each edge: where its ramp starts, hidden, and ends, shown, along the SVG; and its axis.
+    let ramps = [
+        (top, (ry - y0) / h, (ry + top - y0) / h, false),
+        (right, (rx + rw - x0) / w, (rx + rw - right - x0) / w, true),
+        (
+            bottom,
+            (ry + rh - y0) / h,
+            (ry + rh - bottom - y0) / h,
+            false,
+        ),
+        (left, (rx - x0) / w, (rx + left - x0) / w, true),
+    ];
+    let reaches = |hidden: f32, shown: f32| {
+        if hidden < shown {
+            shown > 0.0
+        } else {
+            shown < 1.0
+        }
+    };
+    let middle = |hidden: f32, shown: f32| ((0.5 - hidden) / (shown - hidden)).clamp(0.0, 1.0);
+    let (_, hidden, shown, across) = ramps
+        .into_iter()
+        .filter(|&(distance, hidden, shown, _)| distance > 0.0 && reaches(hidden, shown))
+        .min_by(|a, b| middle(a.1, a.2).total_cmp(&middle(b.1, b.2)))?;
+    let params = if across {
+        [hidden, 0.0, shown, 0.0]
+    } else {
+        [0.0, hidden, 0.0, shown]
+    };
+    Some((params, [1.0, 0.0, 1.0, 0.0]))
 }
 
 /// Scale and translate a path for SVG rendering with tint

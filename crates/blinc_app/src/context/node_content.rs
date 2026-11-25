@@ -24,6 +24,8 @@ pub(super) struct NodeContent<'a> {
     pub(super) current_scroll_clip: Option<[f32; 4]>,
     pub(super) current_clip_radius: Option<[f32; 4]>,
     pub(super) text_fade: [f32; 4],
+    /// The clip of the node the fade comes from, in layout pixels.
+    pub(super) fade_rect: Option<[f32; 4]>,
     pub(super) effective_text_color: Option<[f32; 4]>,
     pub(super) effective_motion_opacity: f32,
     pub(super) inherited_css_opacity: f32,
@@ -110,6 +112,7 @@ impl RenderContext {
             current_scroll_clip,
             current_clip_radius,
             text_fade,
+            fade_rect,
             effective_text_color,
             effective_motion_opacity,
             inherited_css_opacity,
@@ -442,6 +445,9 @@ impl RenderContext {
                         svg_path_data: render_node.props.svg_path_data.clone(),
                         clip_bounds: svg_clip.0,
                         scroll_clip: svg_clip.1,
+                        fade: fade_rect
+                            .filter(|_| text_fade != [0.0; 4])
+                            .map(|rect| (rect.map(|v| v * scale), text_fade.map(|v| v * scale))),
                         split_clip: current_clip
                             .zip(current_scroll_clip)
                             .map(|(inner, scroll)| {

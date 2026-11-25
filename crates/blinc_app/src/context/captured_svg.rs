@@ -43,6 +43,10 @@ impl RenderContext {
             }
             paint
         };
+        if let Some(([x, y, w, h], [top, right, bottom, left])) = svg.fade {
+            paint.set_overflow_fade([top, right, bottom, left]);
+            paint.push_clip(ClipShape::rect(Rect::new(x, y, w, h)));
+        }
         paint.set_motion_node_ordinal(ordinal);
         let (x, y) = if let Some([a, b, c, d, tx, ty]) = svg.css_affine {
             paint.push_transform(Transform::Affine2D(Affine2D {

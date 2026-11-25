@@ -33,6 +33,24 @@ impl GpuPaintContext<'_> {
         [0.0; 4]
     }
 
+    /// The screen rect the current fade is measured from, where a clip inside the fading one
+    /// narrows `clip_bounds`; zero where `clip_bounds` is the fading clip itself.
+    pub(super) fn get_clip_fade_bounds(&self) -> [f32; 4] {
+        let fading = self
+            .clip_stack
+            .iter()
+            .rposition(|(_, _, fade)| fade.iter().any(|f| *f > 0.0));
+        match fading {
+            Some(i) if i + 1 < self.clip_stack.len() => match &self.clip_stack[i].0 {
+                ClipShape::Rect(rect) | ClipShape::RoundedRect { rect, .. } => {
+                    [rect.x(), rect.y(), rect.width(), rect.height()]
+                }
+                _ => [0.0; 4],
+            },
+            _ => [0.0; 4],
+        }
+    }
+
     /// Transform a clip shape by the current transform
     /// Note: For rotated transforms, this computes the axis-aligned bounding box
     pub(super) fn transform_clip_shape(&self, shape: ClipShape) -> ClipShape {

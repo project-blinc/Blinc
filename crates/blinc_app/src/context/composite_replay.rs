@@ -583,6 +583,10 @@ impl RenderContext {
                     clip[0] -= lx;
                     clip[1] -= ly;
                 }
+                if let Some((rect, _)) = &mut svg.fade {
+                    rect[0] -= lx;
+                    rect[1] -= ly;
+                }
             }
             self.render_rasterized_svgs(&layer_tex.view, &offset_svgs, scale_factor);
         }
