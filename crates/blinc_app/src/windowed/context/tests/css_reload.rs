@@ -150,9 +150,17 @@ mod desktop {
         for width in 130..140 {
             files.write("app.css", &format!(".card {{ width: {width}px; }}"));
         }
-        assert!(reload(&mut ctx, &wake));
-        assert_eq!(source(&ctx, "app"), ".card { width: 139px; }");
-        files.write("app.css", ".card { width: 139px; }");
+        // A save empties the file before writing it, so a slow machine can see one half way and
+        // reload twice. The last save is what stays.
+        let last = ".card { width: 139px; }";
+        while source(&ctx, "app") != last {
+            reload(&mut ctx, &wake);
+        }
+        while wake.recv_timeout(Duration::from_millis(300)).is_ok() {
+            ctx.reload_changed_css();
+        }
+        assert_eq!(source(&ctx, "app"), last);
+        files.write("app.css", last);
         assert!(wake.recv_timeout(Duration::from_millis(250)).is_err());
         assert!(!ctx.reload_changed_css());
         assert_eq!(ctx.css_overrides.len(), 1);
