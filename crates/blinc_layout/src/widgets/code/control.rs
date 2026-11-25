@@ -78,6 +78,13 @@ fn after_replace(state: &SharedCodeEditorState, changed: bool) {
     }
 }
 
+/// [`focus_code_editor`] once the key or press being handled has reached every handler, which a
+/// toolbar's own handlers need: a field handling the same key may let everything go after them.
+pub fn focus_code_editor_deferred(state: &SharedCodeEditorState) {
+    let state = Arc::clone(state);
+    crate::widgets::text_input::run_after_event(move || focus_code_editor(&state));
+}
+
 /// Give the editor the keyboard, as a press on it does, taking it from any text field.
 pub fn focus_code_editor(state: &SharedCodeEditorState) {
     // The fields let go first: their blur must not undo this focus.

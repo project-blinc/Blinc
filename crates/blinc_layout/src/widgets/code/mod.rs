@@ -74,8 +74,8 @@ mod hscroll;
 mod ime;
 mod minimap;
 pub use control::{
-    focus_code_editor, refresh_code_editor, replace_all_code_matches, replace_code_match,
-    set_code_value,
+    focus_code_editor, focus_code_editor_deferred, refresh_code_editor, replace_all_code_matches,
+    replace_code_match, set_code_value,
 };
 pub use minimap::code_minimap;
 mod control;
@@ -1921,6 +1921,8 @@ impl CodeEditor {
                             }
                             text_changed = true;
                         }
+                        // A find bar of its owner's is open: Esc closes that, not the editor.
+                        27 if d.find_open => cursor_changed = false,
                         27 => {
                             // Escape — blur editor
                             d.focused = false;
@@ -1970,10 +1972,7 @@ impl CodeEditor {
                                         } else {
                                             d.search_active = true;
                                             // A one-line selection is what to look for.
-                                            if let Some(picked) = d
-                                                .selected_text()
-                                                .filter(|t| !t.is_empty() && !t.contains('\n'))
-                                            {
+                                            if let Some(picked) = d.take_search_seed() {
                                                 if let Ok(mut field) = d.search_input_state.lock() {
                                                     field.cursor = picked.chars().count();
                                                     field.selection_start = Some(0);

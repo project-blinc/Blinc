@@ -110,6 +110,19 @@ pub fn focus_text_input_deferred(state: &SharedTextInputData) {
     crate::stateful::request_redraw();
 }
 
+/// What was asked for while an event was being handled, to run once every handler has seen it.
+static PENDING_AFTER_EVENT: Mutex<Vec<Box<dyn FnOnce() + Send>>> = Mutex::new(Vec::new());
+
+/// Run `action` after the event being handled has reached every handler, with the other pending
+/// focus requests. A change of focus made inside a handler can be undone by a handler that runs
+/// later, as a text field that blurs everything on Escape does.
+pub fn run_after_event(action: impl FnOnce() + Send + 'static) {
+    if let Ok(mut pending) = PENDING_AFTER_EVENT.lock() {
+        pending.push(Box::new(action));
+    }
+    crate::stateful::request_redraw();
+}
+
 /// Drain the pending-focus queue, applying focus to entries whose
 /// widget has been built. Entries whose widget
 /// hasn't built yet are re-queued for the next frame. Entries with a
@@ -120,6 +133,13 @@ pub fn focus_text_input_deferred(state: &SharedTextInputData) {
 /// state flip is visible on the same frame the popover paints — no
 /// visual delay between popover appearance and focus indicator.
 pub fn process_pending_input_focus() {
+    let actions = PENDING_AFTER_EVENT
+        .lock()
+        .map(|mut pending| std::mem::take(&mut *pending))
+        .unwrap_or_default();
+    for action in actions {
+        action();
+    }
     let drained: Vec<(u64, Weak<Mutex<TextInputData>>)> = {
         match PENDING_FOCUS_INPUT.lock() {
             Ok(mut p) => std::mem::take(&mut *p),

@@ -918,6 +918,19 @@ impl Headless {
 
     /// [`Self::key`] with Shift held.
     pub fn key_with_shift(&mut self, key_code: u32, shift: bool) -> &mut Self {
+        self.key_with_modifiers(key_code, shift, false, false, false)
+    }
+
+    /// [`Self::key`] with the modifiers held. `ctrl` and `meta` together are the platform's
+    /// command key on every platform.
+    pub fn key_with_modifiers(
+        &mut self,
+        key_code: u32,
+        shift: bool,
+        ctrl: bool,
+        alt: bool,
+        meta: bool,
+    ) -> &mut Self {
         if key_code == 27 {
             let consumed = blinc_layout::overlay_state::overlay_stack()
                 .lock()
@@ -940,9 +953,9 @@ impl Headless {
                 blinc_core::events::event_types::KEY_DOWN,
                 key_code,
                 shift,
-                false,
-                false,
-                false,
+                ctrl,
+                alt,
+                meta,
             );
         }
         self.frame(0);

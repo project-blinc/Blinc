@@ -25,6 +25,23 @@ impl CodeEditorData {
         Some(regex::Regex::new(&pattern))
     }
 
+    /// The one-line selection to search for, with the cursor moved to its start, so the search
+    /// lands on it rather than on the match after.
+    pub fn take_search_seed(&mut self) -> Option<String> {
+        let seed = self
+            .selected_text()
+            .filter(|t| !t.is_empty() && !t.contains('\n'))?;
+        if let Some(anchor) = self.selection_start.take() {
+            let start = if (anchor.line, anchor.column) < (self.cursor.line, self.cursor.column) {
+                anchor
+            } else {
+                self.cursor
+            };
+            self.cursor = start;
+        }
+        Some(seed)
+    }
+
     /// Execute search: find all matches of the query in the lines.
     ///
     /// The query is plain text, or a regex in regex mode. A regex that does not compile finds

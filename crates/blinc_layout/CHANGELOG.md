@@ -8,7 +8,8 @@ All notable changes to `blinc_layout` will be documented in this file.
 - The rich text editor moved to `blinc_cn` as `blinc_cn::components::rich_text_editor`, so that its toolbar can use the cn components. Its CSS rules moved to `CN_STYLES`.
 
 ### Added
-- Code editors take `.read_only(true)`, `.tab_size(n)` and `.placeholder(text)`, and can be driven from outside: `set_code_value`, `refresh_code_editor`, `focus_code_editor`, `replace_code_match`, `replace_all_code_matches`, `CodeEditorData::set_value` and `find_open`, which marks the search matches while a find bar of your own is open.
+- Code editors take `.read_only(true)`, `.tab_size(n)` and `.placeholder(text)`, and can be driven from outside: `set_code_value`, `refresh_code_editor`, `focus_code_editor`, `replace_code_match`, `replace_all_code_matches`, `CodeEditorData::set_value` and `find_open`, which marks the search matches while a find bar of your own is open and keeps Esc from taking the focus off the editor. `CodeEditorData::take_search_seed` gives such a bar the selection to search for, and `focus_code_editor_deferred` hands the editor the focus once the event being handled is over.
+- `text_input::run_after_event` runs a closure once the current event has reached every handler, for a focus change that a later handler would undo.
 - `ScrollRef::scroll_by_with_behavior` and `set_scroll_offset_with_behavior` with `ScrollBehavior::Smooth` spring to the new offset instead of jumping to it.
 - `Canvas::pointer_events_none` lets presses and hovers through to what is under the canvas.
 - A `Notch` is styled like any box: a rule on its class or id sets its `background`, `border`, `border-radius`, `box-shadow` and `opacity`, and `Notch::class` and `Notch::attr` add classes and attributes. The notch is a `Div` with a `RenderProps::notch` outline, and the painters draw its fill, border and shadows around that outline.

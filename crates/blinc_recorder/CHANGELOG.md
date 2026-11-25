@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- `Headless::key_with_modifiers` presses a key with Shift, Control, Alt and Command held as given.
 - `Headless::scroll_physics` advances scroll momentum, edge springs, animated scrolls and scrollbar fades each frame, as a window does. It is off by default.
 - Headless sessions expose `accessibility_action` to test assistive activation, editing and focus through the shared semantic routing.
 
