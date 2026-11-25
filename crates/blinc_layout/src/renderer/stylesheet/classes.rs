@@ -634,6 +634,14 @@ impl RenderTree {
                 Self::apply_element_style_to_taffy(&mut style, layer);
             }
             self.layout_tree.set_style(node, style);
+            // An `align-self` a rule writes outranks the parent, as in the layout pass.
+            if class_layers
+                .iter()
+                .chain(state_layers.iter())
+                .any(|l| l.align_self.is_some())
+            {
+                self.layout_tree.clear_incidental_align_self(node);
+            }
         }
     }
 

@@ -658,6 +658,68 @@ impl RenderTree {
         if let Some(v) = es.flex_shrink {
             taffy_style.flex_shrink = v;
         }
+        if let Some(direction) = es.flex_direction {
+            use crate::element_style::StyleFlexDirection;
+            taffy_style.flex_direction = match direction {
+                StyleFlexDirection::Row => FlexDirection::Row,
+                StyleFlexDirection::Column => FlexDirection::Column,
+                StyleFlexDirection::RowReverse => FlexDirection::RowReverse,
+                StyleFlexDirection::ColumnReverse => FlexDirection::ColumnReverse,
+            };
+        }
+        if let Some(wrap) = es.flex_wrap {
+            taffy_style.flex_wrap = if wrap {
+                FlexWrap::Wrap
+            } else {
+                FlexWrap::NoWrap
+            };
+        }
+        {
+            use crate::element_style::{StyleAlign, StyleJustify, StyleOverflow};
+            if let Some(align) = es.align_items {
+                taffy_style.align_items = Some(match align {
+                    StyleAlign::Start => AlignItems::START,
+                    StyleAlign::Center => AlignItems::CENTER,
+                    StyleAlign::End => AlignItems::END,
+                    StyleAlign::Stretch => AlignItems::STRETCH,
+                    StyleAlign::Baseline => AlignItems::BASELINE,
+                });
+            }
+            if let Some(justify) = es.justify_content {
+                taffy_style.justify_content = Some(match justify {
+                    StyleJustify::Start => JustifyContent::START,
+                    StyleJustify::Center => JustifyContent::CENTER,
+                    StyleJustify::End => JustifyContent::END,
+                    StyleJustify::SpaceBetween => JustifyContent::SPACE_BETWEEN,
+                    StyleJustify::SpaceAround => JustifyContent::SPACE_AROUND,
+                    StyleJustify::SpaceEvenly => JustifyContent::SPACE_EVENLY,
+                });
+            }
+            if let Some(align) = es.align_self {
+                taffy_style.align_self = Some(match align {
+                    StyleAlign::Start => AlignSelf::START,
+                    StyleAlign::Center => AlignSelf::CENTER,
+                    StyleAlign::End => AlignSelf::END,
+                    StyleAlign::Stretch => AlignSelf::STRETCH,
+                    StyleAlign::Baseline => AlignSelf::BASELINE,
+                });
+            }
+            let overflow = |value| match value {
+                StyleOverflow::Visible => taffy::Overflow::Visible,
+                StyleOverflow::Clip => taffy::Overflow::Clip,
+                StyleOverflow::Scroll => taffy::Overflow::Scroll,
+            };
+            if let Some(value) = es.overflow {
+                taffy_style.overflow.x = overflow(value);
+                taffy_style.overflow.y = overflow(value);
+            }
+            if let Some(value) = es.overflow_x {
+                taffy_style.overflow.x = overflow(value);
+            }
+            if let Some(value) = es.overflow_y {
+                taffy_style.overflow.y = overflow(value);
+            }
+        }
         if let Some(pos) = es.position {
             use crate::element_style::StylePosition;
             taffy_style.position = match pos {

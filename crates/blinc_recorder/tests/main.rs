@@ -52,6 +52,7 @@ mod code_editor_hscroll;
 mod code_editor_minimap;
 mod code_editor_on_change;
 mod code_editor_selection_drag;
+mod css_late_mount_layout;
 mod headless_button;
 mod headless_guards;
 mod hidden_content_culling;
