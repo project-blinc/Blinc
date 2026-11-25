@@ -496,6 +496,12 @@ impl RichTextData {
         }
     }
 
+    /// Quote the blocks of the selection or the cursor, or unquote them where all are quotes.
+    pub(super) fn toggle_quote(&mut self) -> bool {
+        let range = self.block_range();
+        self.change(|doc| super::block_ops::toggle_quote(doc, range))
+    }
+
     /// Put a table at the cursor, with the cursor in its first cell.
     pub(super) fn insert_table(&mut self, rows: usize, columns: usize) {
         let here = self.cursor;

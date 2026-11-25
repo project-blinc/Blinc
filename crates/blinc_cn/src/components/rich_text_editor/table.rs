@@ -356,13 +356,12 @@ mod tests {
         let here = Selection::empty(at(1, 0));
         set_block_kind(&mut d, here, BlockKind::Heading(1));
         toggle_block_kind(&mut d, here, BlockKind::BulletItem);
-        convert_selection_to_block(
+        toggle_quote(
             &mut d,
             Selection {
                 anchor: at(0, 0),
                 head: at(0, 1),
             },
-            BlockKind::Quote,
         );
         indent_blocks(&mut d, here);
         set_block_align(&mut d, here, BlockAlign::Justify);

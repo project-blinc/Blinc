@@ -4,7 +4,7 @@
 //! |---|---|
 //! | `# H1` to `###### H6`       | `BlockKind::Heading(n)` |
 //! | Paragraph                   | `BlockKind::Paragraph` |
-//! | `> quote`                   | `BlockKind::Quote` |
+//! | `> quote`                   | `Block::quote`, on a paragraph or a heading |
 //! | `- item`, `* item`          | `BlockKind::BulletItem` (`indent` follows nesting) |
 //! | `1. item`                   | `BlockKind::NumberedItem` |
 //! | `- [ ] item`, `- [x] item`  | `BlockKind::TaskItem` |

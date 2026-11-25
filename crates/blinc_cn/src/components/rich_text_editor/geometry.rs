@@ -57,30 +57,26 @@ pub fn compute_line_geometry(
                 }
                 y += height;
             }
-            BlockKind::Paragraph => {
+            BlockKind::Paragraph | BlockKind::Heading(_) => {
+                let (size, weight) = match &block.kind {
+                    BlockKind::Heading(level) => (theme.heading_size(*level), FontWeight::Bold),
+                    _ => (theme.font_size, FontWeight::Normal),
+                };
+                // A quote's text sits beside its bar, in italics.
+                let inset = if block.quote {
+                    theme.quote_inset()
+                } else {
+                    0.0
+                };
                 emit_paragraph_geometry(
                     &mut out,
                     block_idx,
                     block,
-                    indent_px,
-                    inner_width,
-                    theme.font_size,
-                    FontWeight::Normal,
-                    false,
-                    theme,
-                    &mut y,
-                );
-            }
-            BlockKind::Heading(level) => {
-                emit_paragraph_geometry(
-                    &mut out,
-                    block_idx,
-                    block,
-                    indent_px,
-                    inner_width,
-                    theme.heading_size(*level),
-                    FontWeight::Bold,
-                    false,
+                    indent_px + inset,
+                    (inner_width - inset).max(0.0),
+                    size,
+                    weight,
+                    block.quote,
                     theme,
                     &mut y,
                 );
@@ -98,23 +94,6 @@ pub fn compute_line_geometry(
                     theme.font_size,
                     FontWeight::Normal,
                     false,
-                    theme,
-                    &mut y,
-                );
-            }
-            BlockKind::Quote => {
-                let border_total = theme.quote_border_width + 12.0;
-                let line_x = indent_px + border_total;
-                let line_w = (inner_width - border_total).max(0.0);
-                emit_paragraph_geometry(
-                    &mut out,
-                    block_idx,
-                    block,
-                    line_x,
-                    line_w,
-                    theme.font_size,
-                    FontWeight::Normal,
-                    true,
                     theme,
                     &mut y,
                 );

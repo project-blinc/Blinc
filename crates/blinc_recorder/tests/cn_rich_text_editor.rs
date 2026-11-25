@@ -1540,9 +1540,48 @@ fn the_quote_button_shows_a_quote_and_toggles_it() {
     assert!(!pressed(&ui));
     let quote = tool(&ui, "Quote");
     press(&mut ui, quote);
-    assert_eq!(
-        state.lock().unwrap().document.blocks[1].kind,
-        BlockKind::Quote
-    );
+    assert!(state.lock().unwrap().document.blocks[1].quote);
     assert!(pressed(&ui));
+}
+
+#[test]
+fn a_quote_is_a_heading_too_and_keeps_its_button() {
+    use blinc_cn::components::rich_text_editor::{BlockKind, DocPosition};
+    let Some((mut ui, state)) = fixed_editor("> quoted words here", DocPosition::new(0, 0, 3))
+    else {
+        return;
+    };
+    let pressed = |ui: &Headless| {
+        ui.tree()
+            .element_registry()
+            .has_class(tool(ui, "Quote"), "blinc-rte-button--active")
+    };
+    assert!(pressed(&ui));
+    // The select has a paragraph, and it takes headings.
+    let text = one(&ui, "blinc-rich-text");
+    press(&mut ui, text);
+    let trigger = one(&ui, "cn-select-trigger");
+    blinc_layout::widgets::blur_all_text_inputs();
+    press(&mut ui, trigger);
+    let items = all(&ui, "cn-select-item");
+    press(&mut ui, items[1]);
+    {
+        let d = state.lock().unwrap();
+        assert_eq!(d.document.blocks[0].kind, BlockKind::Heading(1));
+        assert!(d.document.blocks[0].quote, "a heading is still a quote");
+    }
+    ui.advance(400);
+    ui.settle();
+    assert!(pressed(&ui), "the quote stays pressed over a heading");
+    ui.assert_snapshot("cn_rich_text_quoted_heading");
+    // Backspace at the start steps out of the quote first.
+    state
+        .lock()
+        .unwrap()
+        .move_cursor(DocPosition::new(0, 0, 0), false);
+    ui.key(8);
+    ui.settle();
+    let d = state.lock().unwrap();
+    assert_eq!(d.document.blocks[0].kind, BlockKind::Heading(1));
+    assert!(!d.document.blocks[0].quote);
 }

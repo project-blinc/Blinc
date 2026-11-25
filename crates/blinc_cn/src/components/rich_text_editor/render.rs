@@ -60,7 +60,15 @@ pub struct RichTextTheme {
     pub padding: f32,
 }
 
+/// The space between a quote's bar and its text.
+pub(super) const QUOTE_GAP: f32 = 12.0;
+
 impl RichTextTheme {
+    /// The width a quote's bar and its gap take.
+    pub(super) fn quote_inset(&self) -> f32 {
+        self.quote_border_width + QUOTE_GAP
+    }
+
     /// Place the formatting toolbar: over the selection (the default), or above the text.
     pub fn toolbar(mut self, placement: super::toolbar::ToolbarPlacement) -> Self {
         self.toolbar = placement;
@@ -202,33 +210,26 @@ pub(super) fn render_block(
     let inner_width = (content_width - indent_px).max(0.0);
 
     match &block.kind {
-        BlockKind::Paragraph => indented_block(
-            paragraph_div(
-                block,
-                theme,
-                theme.font_size,
-                FontWeight::Normal,
-                false,
-                inner_width,
-            ),
+        BlockKind::Paragraph => text_block(
+            block,
+            theme,
+            theme.font_size,
+            FontWeight::Normal,
             indent_px,
+            inner_width,
         ),
-        BlockKind::Heading(level) => indented_block(
-            paragraph_div(
-                block,
-                theme,
-                theme.heading_size(*level),
-                FontWeight::Bold,
-                false,
-                inner_width,
-            ),
+        BlockKind::Heading(level) => text_block(
+            block,
+            theme,
+            theme.heading_size(*level),
+            FontWeight::Bold,
             indent_px,
+            inner_width,
         ),
         BlockKind::BulletItem | BlockKind::NumberedItem | BlockKind::TaskItem { .. } => {
             list_item_div(block, theme, marker, indent_px, inner_width)
         }
         BlockKind::Table { .. } => indented_block(table_div(block, theme, inner_width), indent_px),
-        BlockKind::Quote => quote_div(block, theme, indent_px, inner_width),
         BlockKind::Divider => {
             let line = div().class("blinc-rich-text-divider").w_full().h(1.0);
             let line = match theme.divider {
@@ -536,31 +537,35 @@ fn table_div(block: &Block, theme: &RichTextTheme, width: f32) -> Div {
     table
 }
 
-/// Build a blockquote div with a left border and muted italic text.
-fn quote_div(block: &Block, theme: &RichTextTheme, indent_px: f32, inner_width: f32) -> Div {
-    // Border + gap consume `quote_border_width + 12` of the inner width.
-    let line_width = (inner_width - theme.quote_border_width - 12.0).max(0.0);
-    let inner = paragraph_div(
-        block,
-        theme,
-        theme.font_size,
-        FontWeight::Normal,
-        true,
-        line_width,
-    );
+/// A paragraph or a heading: its lines, and beside them a bar where it is a quote, whose text is
+/// in italics.
+fn text_block(
+    block: &Block,
+    theme: &RichTextTheme,
+    font_size: f32,
+    weight: FontWeight,
+    indent_px: f32,
+    inner_width: f32,
+) -> Div {
+    if !block.quote {
+        let lines = paragraph_div(block, theme, font_size, weight, false, inner_width);
+        return indented_block(lines, indent_px);
+    }
+    // The bar and its gap take `quote_inset` of the width.
+    let line_width = (inner_width - theme.quote_inset()).max(0.0);
+    let inner = paragraph_div(block, theme, font_size, weight, true, line_width);
+    let bar = div()
+        .class("blinc-rich-text-quote-bar")
+        .w(theme.quote_border_width);
+    let bar = match theme.quote_border {
+        Some(c) => bar.bg(c),
+        None => bar,
+    };
     let row = div()
         .w_full()
         .flex_row()
-        .gap_px(12.0)
-        .child({
-            let bar = div()
-                .class("blinc-rich-text-quote-bar")
-                .w(theme.quote_border_width);
-            match theme.quote_border {
-                Some(c) => bar.bg(c),
-                None => bar,
-            }
-        })
+        .gap_px(QUOTE_GAP)
+        .child(bar)
         .child(inner);
     indented_block(row, indent_px)
 }

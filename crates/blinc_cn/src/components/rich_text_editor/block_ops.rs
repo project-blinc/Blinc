@@ -72,6 +72,8 @@ pub fn set_block_kind(doc: &mut RichDocument, range: Selection, kind: BlockKind)
             if matches!(kind, BlockKind::Heading(_)) {
                 block.indent = 0;
             }
+            // A list item is no quote; a paragraph and a heading keep theirs.
+            block.quote &= block.quotable();
             changed = true;
         }
     }
@@ -107,6 +109,39 @@ pub fn toggle_block_kind(doc: &mut RichDocument, range: Selection, kind: BlockKi
         kind
     };
     set_block_kind(doc, range, target)
+}
+
+/// Quote the blocks touched by `range`, or, where all of them are quotes, unquote them. Tables and
+/// dividers are left alone; a list item becomes a quoted paragraph. Returns whether any changed.
+pub fn toggle_quote(doc: &mut RichDocument, range: Selection) -> bool {
+    let (start, end) = range.ordered();
+    let Some((first, last)) = block_range(start, end, doc.blocks.len()) else {
+        return false;
+    };
+    let quotable = |b: &Block| !is_table(b) && b.kind != BlockKind::Divider;
+    let touched: Vec<usize> = (first..=last)
+        .filter(|i| quotable(&doc.blocks[*i]))
+        .collect();
+    let on = !touched.iter().all(|i| doc.blocks[*i].quote);
+    let mut changed = false;
+    for index in touched {
+        let block = &mut doc.blocks[index];
+        if on {
+            if !block.quotable() {
+                block.kind = BlockKind::Paragraph;
+            }
+            if !block.quote {
+                block.quote = true;
+                // A quote hangs from the bar, not from a list's level.
+                block.indent = 0;
+                changed = true;
+            }
+        } else {
+            block.quote = false;
+            changed = true;
+        }
+    }
+    changed
 }
 
 /// Align every block touched by `range`, dividers aside. Returns whether any changed.
@@ -152,7 +187,7 @@ pub fn indent_blocks(doc: &mut RichDocument, range: Selection) -> bool {
         let Some(block) = doc.blocks.get_mut(idx) else {
             break;
         };
-        if !block_supports_indent(&block.kind) {
+        if !block_supports_indent(block) {
             continue;
         }
         let next = block.indent.saturating_add(1);
@@ -176,7 +211,7 @@ pub fn outdent_blocks(doc: &mut RichDocument, range: Selection) -> bool {
         let Some(block) = doc.blocks.get_mut(idx) else {
             break;
         };
-        if !block_supports_indent(&block.kind) {
+        if !block_supports_indent(block) {
             continue;
         }
         if block.indent > 0 {
@@ -285,6 +320,7 @@ pub fn convert_selection_to_block(
             }],
             indent: original_indent,
             align: block.align,
+            quote: block.quote,
         });
         middle_offset = 1;
     }
@@ -296,6 +332,7 @@ pub fn convert_selection_to_block(
         }],
         indent: middle_indent,
         align: block.align,
+        quote: block.quote && matches!(kind, BlockKind::Paragraph | BlockKind::Heading(_)),
     });
     if !suffix_text.is_empty() {
         replacement.push(Block {
@@ -306,6 +343,7 @@ pub fn convert_selection_to_block(
             }],
             indent: original_indent,
             align: block.align,
+            quote: block.quote,
         });
     }
 
@@ -330,8 +368,8 @@ pub fn insert_divider_after(doc: &mut RichDocument, block_idx: usize) -> usize {
 // Internals
 // =============================================================================
 
-fn block_supports_indent(kind: &BlockKind) -> bool {
-    *kind == BlockKind::Paragraph || kind.is_list_item()
+fn block_supports_indent(block: &Block) -> bool {
+    !block.quote && (block.kind == BlockKind::Paragraph || block.kind.is_list_item())
 }
 
 #[cfg(test)]
@@ -597,9 +635,62 @@ mod tests {
     #[test]
     fn toggle_quote_sets_then_clears() {
         let mut d = doc(vec![Block::paragraph("hi", Color::WHITE)]);
-        toggle_block_kind(&mut d, sel(0, 0), BlockKind::Quote);
-        assert_eq!(d.blocks[0].kind, BlockKind::Quote);
-        toggle_block_kind(&mut d, sel(0, 0), BlockKind::Quote);
+        toggle_quote(&mut d, sel(0, 0));
+        assert!(d.blocks[0].quote);
+        toggle_quote(&mut d, sel(0, 0));
+        assert!(!d.blocks[0].quote);
         assert_eq!(d.blocks[0].kind, BlockKind::Paragraph);
+    }
+
+    #[test]
+    fn a_quote_is_a_paragraph_or_a_heading_at_the_same_time() {
+        let mut d = doc(vec![Block::quote("hi", Color::WHITE)]);
+        // Another kind of text keeps the quote.
+        assert!(set_block_kind(&mut d, sel(0, 0), BlockKind::Heading(2)));
+        assert_eq!(
+            (&d.blocks[0].kind, d.blocks[0].quote),
+            (&BlockKind::Heading(2), true)
+        );
+        // A list item is no quote.
+        assert!(set_block_kind(&mut d, sel(0, 0), BlockKind::BulletItem));
+        assert!(!d.blocks[0].quote);
+        // Quoting a list item makes it a quoted paragraph.
+        assert!(toggle_quote(&mut d, sel(0, 0)));
+        assert_eq!(
+            (&d.blocks[0].kind, d.blocks[0].quote),
+            (&BlockKind::Paragraph, true)
+        );
+        // Part of a quoted block, made a heading, is a quote still.
+        let part = Selection {
+            anchor: DocPosition::new(0, 0, 0),
+            head: DocPosition::new(0, 0, 1),
+        };
+        let at = convert_selection_to_block(&mut d, part, BlockKind::Heading(1));
+        assert_eq!(at, Some(0));
+        assert!(d.blocks.iter().all(|b| b.quote), "{d:?}");
+        // Quoting everything touched, or none of it: a mix is quoted first.
+        let mut d = doc(vec![
+            Block::quote("a", Color::WHITE),
+            Block::paragraph("b", Color::WHITE),
+            Block::divider(),
+        ]);
+        let all = Selection {
+            anchor: DocPosition::new(0, 0, 0),
+            head: DocPosition::new(2, 0, 0),
+        };
+        assert!(toggle_quote(&mut d, all));
+        assert_eq!(
+            d.blocks.iter().map(|b| b.quote).collect::<Vec<_>>(),
+            [true, true, false]
+        );
+        assert!(toggle_quote(&mut d, all));
+        assert!(d.blocks.iter().all(|b| !b.quote));
+    }
+
+    #[test]
+    fn a_quote_takes_no_indent() {
+        let mut d = doc(vec![Block::quote("a", Color::WHITE)]);
+        assert!(!indent_blocks(&mut d, sel(0, 0)));
+        assert_eq!(d.blocks[0].indent, 0);
     }
 }

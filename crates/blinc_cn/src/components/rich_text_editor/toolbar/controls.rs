@@ -166,13 +166,12 @@ pub(super) fn lists(target: &Target, current: &BlockKind) -> Div {
         .child(menu)
 }
 
-/// The quote button, pressed where the block under the cursor is a quote. Pressing it makes the
+/// The quote button, pressed where the block under the cursor is quoted, whatever else it is. Pressing it makes the
 /// blocks of the selection quotes, or, where all are, paragraphs.
-pub(super) fn quote(target: &Target, current: &BlockKind) -> Div {
-    let active = *current == BlockKind::Quote;
+pub(super) fn quote(target: &Target, active: bool) -> Div {
     icon_button(target, icons::TEXT_QUOTE, "Quote", active, |t| {
         t.act(|d| {
-            d.toggle_kind(BlockKind::Quote);
+            d.toggle_quote();
         });
     })
 }

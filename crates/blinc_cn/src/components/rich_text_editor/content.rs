@@ -76,7 +76,11 @@ fn digest(data: &RichTextData, index: usize) -> u64 {
         BlockKind::TaskItem { .. } => "task".hash(&mut hasher),
         ref kind => format!("{kind:?}").hash(&mut hasher),
     }
-    format!("{:?}{}{:?}", block.lines, block.indent, block.align).hash(&mut hasher);
+    format!(
+        "{:?}{}{:?}{}",
+        block.lines, block.indent, block.align, block.quote
+    )
+    .hash(&mut hasher);
     // A numbered item's number depends on the blocks before it.
     data.document.numbered_ordinal(index).hash(&mut hasher);
     // A block wraps to the editor's width.

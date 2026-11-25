@@ -154,14 +154,15 @@ fn write_block_as(
     match &block.kind {
         BlockKind::Divider => "---".into(),
         BlockKind::Heading(level) => {
+            let quote = if block.quote { "> " } else { "" };
             format!(
-                "{} {}",
+                "{quote}{} {}",
                 "#".repeat((*level).clamp(1, 6) as usize),
                 text(Breaks::Tags)
             )
         }
         BlockKind::Table { columns } => table(block, columns, default_color, emphasis),
-        BlockKind::Quote => format!("> {}", text(Breaks::Lines("> "))),
+        BlockKind::Paragraph if block.quote => format!("> {}", text(Breaks::Lines("> "))),
         BlockKind::Paragraph if block.is_empty() && block.lines.len() == 1 => {
             EMPTY_PARAGRAPH.into()
         }

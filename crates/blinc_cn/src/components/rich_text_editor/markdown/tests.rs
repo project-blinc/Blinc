@@ -77,7 +77,8 @@ fn parses_bullet_and_numbered_lists() {
 #[test]
 fn parses_blockquote() {
     let doc = RichDocument::from_markdown("> a wise quote", Color::WHITE);
-    assert_eq!(doc.blocks[0].kind, BlockKind::Quote);
+    assert!(doc.blocks[0].quote);
+    assert_eq!(doc.blocks[0].kind, BlockKind::Paragraph);
     assert_eq!(doc.blocks[0].lines[0].text, "a wise quote");
 }
 
@@ -101,7 +102,13 @@ fn empty_input_returns_empty_document() {
 
 /// A document as blocks of kind, indent and the runs of each line, which is what it says.
 /// Emphasis on the spaces at a run's ends says nothing.
-type Said = (BlockKind, u8, BlockAlign, Vec<Vec<super::inline::Run>>);
+type Said = (
+    BlockKind,
+    u8,
+    BlockAlign,
+    bool,
+    Vec<Vec<super::inline::Run>>,
+);
 
 fn said(doc: &RichDocument) -> Vec<Said> {
     doc.blocks
@@ -112,7 +119,7 @@ fn said(doc: &RichDocument) -> Vec<Said> {
                 .iter()
                 .map(|l| spaces_outside_emphasis(runs(l, Color::TRANSPARENT)))
                 .collect();
-            (b.kind.clone(), b.indent, b.align, lines)
+            (b.kind.clone(), b.indent, b.align, b.quote, lines)
         })
         .collect()
 }
@@ -166,6 +173,15 @@ fn block(kind: BlockKind, indent: u8, lines: Vec<StyledLine>) -> Block {
         lines,
         indent,
         align: Default::default(),
+        quote: false,
+    }
+}
+
+/// `block`, quoted.
+fn quoted(block: Block) -> Block {
+    Block {
+        quote: true,
+        ..block
     }
 }
 
@@ -302,7 +318,6 @@ fn text_that_looks_like_markdown_stays_text() {
         round_trips(&paragraph(&[("x ", P), (text, B)]));
         for kind in [
             BlockKind::Heading(2),
-            BlockKind::Quote,
             BlockKind::BulletItem,
             BlockKind::NumberedItem,
         ] {
@@ -311,6 +326,13 @@ fn text_that_looks_like_markdown_stays_text() {
                 0,
                 vec![line(&[(text, P)])],
             )]));
+        }
+        for kind in [BlockKind::Paragraph, BlockKind::Heading(2)] {
+            round_trips(&RichDocument::from_blocks(vec![quoted(block(
+                kind,
+                0,
+                vec![line(&[(text, P)])],
+            ))]));
         }
     }
 }
@@ -373,7 +395,6 @@ fn lines_and_empty_blocks_round_trip() {
     for kind in [
         BlockKind::Paragraph,
         BlockKind::Heading(1),
-        BlockKind::Quote,
         BlockKind::BulletItem,
         BlockKind::NumberedItem,
         BlockKind::TaskItem { checked: true },
@@ -388,6 +409,21 @@ fn lines_and_empty_blocks_round_trip() {
         ] {
             round_trips(&RichDocument::from_blocks(vec![
                 block(kind.clone(), 0, lines),
+                block(BlockKind::Paragraph, 0, vec![l("after")]),
+            ]));
+        }
+    }
+    for kind in [BlockKind::Paragraph, BlockKind::Heading(1)] {
+        for lines in [
+            vec![l("a"), l("b")],
+            vec![l("a"), empty(), l("b")],
+            vec![empty(), l("b")],
+            vec![l("a"), empty()],
+            vec![l("> a"), l("- b")],
+            vec![empty()],
+        ] {
+            round_trips(&RichDocument::from_blocks(vec![
+                quoted(block(kind.clone(), 0, lines)),
                 block(BlockKind::Paragraph, 0, vec![l("after")]),
             ]));
         }
@@ -523,7 +559,7 @@ fn common_text_needs_no_tags() {
 #[test]
 fn alignment_round_trips_for_every_kind_of_block() {
     use BlockAlign::{Center, End, Justify, Start};
-    use BlockKind::{BulletItem, Divider, Heading, NumberedItem, Paragraph, Quote};
+    use BlockKind::{BulletItem, Divider, Heading, NumberedItem, Paragraph};
     let one = |kind, indent, align, t: &str| Block {
         align,
         ..block(kind, indent, vec![line(&[(t, P)])])
@@ -533,7 +569,8 @@ fn alignment_round_trips_for_every_kind_of_block() {
             round_trips(&RichDocument::from_blocks(vec![
                 one(Heading(1), 0, a, "title"),
                 one(Paragraph, 0, a, "# text"),
-                one(Quote, 0, b, "quote"),
+                quoted(one(Paragraph, 0, b, "quote")),
+                quoted(one(Heading(2), 0, a, "quoted title")),
                 one(BulletItem, 0, a, "item"),
                 one(BulletItem, 1, b, "nested"),
                 one(NumberedItem, 2, a, "deeper"),

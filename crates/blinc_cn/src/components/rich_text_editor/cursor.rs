@@ -302,6 +302,7 @@ mod tests {
             lines: vec![line],
             indent: 0,
             align: Default::default(),
+            quote: false,
         }]);
         // Cursor inside the bold run
         let fmt = ActiveFormat::from_position(&doc, DocPosition::new(0, 0, 1));
@@ -320,6 +321,7 @@ mod tests {
             lines: vec![line],
             indent: 0,
             align: Default::default(),
+            quote: false,
         }]);
         // Cursor at end of bold run — typing here should still be bold
         let fmt = ActiveFormat::from_position(&doc, DocPosition::new(0, 0, 2));

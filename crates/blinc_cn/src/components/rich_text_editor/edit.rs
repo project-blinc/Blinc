@@ -118,7 +118,7 @@ pub fn delete_backward(doc: &mut RichDocument, pos: DocPosition) -> DocPosition 
     }
     // At the start of a list item or a quote: out a level, then out of it.
     let block = &mut doc.blocks[pos.block];
-    if block.kind.is_list_item() || block.kind == BlockKind::Quote {
+    if block.kind.is_list_item() || block.quote {
         step_out(block);
         return pos;
     }
@@ -135,9 +135,12 @@ pub fn delete_backward(doc: &mut RichDocument, pos: DocPosition) -> DocPosition 
     pos
 }
 
-/// Take a block out one level of nesting, or make it a paragraph at the first.
+/// Take a block out one level of nesting, or make it a paragraph at the first; a quote is
+/// unquoted first.
 fn step_out(block: &mut Block) {
-    if block.indent > 0 {
+    if block.quote {
+        block.quote = false;
+    } else if block.indent > 0 {
         block.indent -= 1;
     } else {
         block.kind = BlockKind::Paragraph;
@@ -393,6 +396,7 @@ pub fn split_block(doc: &mut RichDocument, pos: DocPosition) -> DocPosition {
         lines: next_lines,
         indent: block.indent,
         align: block.align,
+        quote: block.quote,
     };
     doc.blocks.insert(pos.block + 1, next_block);
     DocPosition::new(pos.block + 1, 0, 0)
@@ -741,6 +745,7 @@ mod tests {
             ],
             indent: 0,
             align: Default::default(),
+            quote: false,
         }]);
         delete_forward(&mut d, DocPosition::new(0, 0, 2));
         assert_eq!(d.blocks[0].lines.len(), 1);
@@ -947,7 +952,6 @@ mod tests {
             BlockKind::Heading(1),
             BlockKind::BulletItem,
             BlockKind::TaskItem { checked: true },
-            BlockKind::Quote,
         ] {
             let mut d = doc(vec![
                 item(kind.clone(), 0, "one"),

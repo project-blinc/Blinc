@@ -1,7 +1,7 @@
 //! Rich text document model
 //!
 //! A `RichDocument` is a flat list of `Block`s. Each block has a `BlockKind`
-//! (paragraph, heading, list item, quote, divider) and a small vector of
+//! (paragraph, heading, list item, divider, table) and a small vector of
 //! `StyledLine`s for its inline content (>1 line only after a soft break).
 //!
 //! Inline marks (bold, italic, underline, strikethrough, color, link, code)
@@ -35,8 +35,6 @@ pub enum BlockKind {
     NumberedItem,
     /// Item of a checklist, done or not.
     TaskItem { checked: bool },
-    /// Block quote.
-    Quote,
     /// Horizontal divider (no inline content).
     Divider,
     /// A table, whose first row is its header. The block's lines are its cells, row by row, so a
@@ -87,7 +85,7 @@ pub enum BlockAlign {
     Justify,
 }
 
-/// A block in the document — paragraph, heading, list item, quote, divider.
+/// A block in the document: paragraph, heading, list item, divider or table.
 ///
 /// Public fields by design: every edit op in [`super::edit`] is a free
 /// function over `&mut RichDocument`, and downstream users can build their
@@ -103,9 +101,17 @@ pub struct Block {
     pub indent: u8,
     /// How the lines are placed across the block.
     pub align: BlockAlign,
+    /// Whether the block is quoted: a bar beside it and its text in italics. Only a paragraph or
+    /// a heading is quoted, so it is both at once.
+    pub quote: bool,
 }
 
 impl Block {
+    /// Whether the block can be quoted: a paragraph or a heading.
+    pub fn quotable(&self) -> bool {
+        matches!(self.kind, BlockKind::Paragraph | BlockKind::Heading(_))
+    }
+
     /// Create an empty paragraph block.
     pub fn paragraph_empty() -> Self {
         Self {
@@ -116,6 +122,7 @@ impl Block {
             }],
             indent: 0,
             align: BlockAlign::Start,
+            quote: false,
         }
     }
 
@@ -126,6 +133,7 @@ impl Block {
             lines: vec![StyledLine::plain(text, color)],
             indent: 0,
             align: BlockAlign::Start,
+            quote: false,
         }
     }
 
@@ -136,6 +144,7 @@ impl Block {
             lines: vec![StyledLine::plain(text, color)],
             indent: 0,
             align: BlockAlign::Start,
+            quote: false,
         }
     }
 
@@ -146,6 +155,7 @@ impl Block {
             lines: vec![StyledLine::plain(text, color)],
             indent: 0,
             align: BlockAlign::Start,
+            quote: false,
         }
     }
 
@@ -156,16 +166,15 @@ impl Block {
             lines: vec![StyledLine::plain(text, color)],
             indent: 0,
             align: BlockAlign::Start,
+            quote: false,
         }
     }
 
-    /// Create a block quote.
+    /// Create a quoted paragraph.
     pub fn quote(text: impl Into<String>, color: Color) -> Self {
         Self {
-            kind: BlockKind::Quote,
-            lines: vec![StyledLine::plain(text, color)],
-            indent: 0,
-            align: BlockAlign::Start,
+            quote: true,
+            ..Self::paragraph(text, color)
         }
     }
 
@@ -179,6 +188,7 @@ impl Block {
             }],
             indent: 0,
             align: BlockAlign::Start,
+            quote: false,
         }
     }
 
@@ -196,6 +206,7 @@ impl Block {
             lines: vec![cell; rows * columns],
             indent: 0,
             align: BlockAlign::Start,
+            quote: false,
         }
     }
 
@@ -544,6 +555,7 @@ mod tests {
             ],
             indent: 0,
             align: BlockAlign::Start,
+            quote: false,
         }]);
         let s = DocPosition::new(0, 0, 6);
         let e = DocPosition::new(0, 1, 6);

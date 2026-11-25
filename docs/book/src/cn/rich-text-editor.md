@@ -54,7 +54,9 @@ Blocks can be items of a bulleted list, a numbered list or a checklist. The tool
 
 ## Quotes
 
-The toolbar's quote button makes the blocks of the selection quotes, or paragraphs where all of them are. It shows pressed while the cursor is in a quote. Cmd+Shift+9, or Ctrl on other platforms, does the same. In a table the button gives way to the table menu.
+A quote is not a kind of block of its own. A paragraph or a heading can be quoted, so a block is both at once: the select shows "Heading 2" and the quote button shows pressed. The button quotes the blocks of the selection, or unquotes them where all of them are quotes, and a list item it quotes becomes a quoted paragraph. Cmd+Shift+9, or Ctrl on other platforms, does the same. In a table the button gives way to the table menu.
+
+In your own code, `Block::quote` is the flag, `Block::quotable` says whether a block can have it, and `block_ops::toggle_quote` toggles it on a range. Backspace at the start of a quote takes the quote off first. In Markdown a quote is `>` before a paragraph or a heading.
 
 ## Tables
 

@@ -63,6 +63,7 @@ struct Pending {
     indent: u8,
     lines: Vec<StyledLine>,
     align: BlockAlign,
+    quote: bool,
 }
 
 impl Pending {
@@ -111,11 +112,15 @@ impl Importer {
 
     fn open(&mut self, kind: BlockKind, indent: u8) {
         self.flush();
+        // Directly in a quote, a paragraph or a heading is quoted; a list item is not.
+        let quote = matches!(self.frames.last(), Some(Frame::Quote(_)))
+            && matches!(kind, BlockKind::Paragraph | BlockKind::Heading(_));
         self.pending = Some(Pending {
             kind,
             indent,
             lines: vec![empty_line()],
             align: self.aligns.last().copied().unwrap_or_default(),
+            quote,
         });
     }
 
@@ -126,6 +131,7 @@ impl Importer {
                 lines: pending.lines,
                 indent: pending.indent,
                 align: pending.align,
+                quote: pending.quote,
             });
         }
     }
@@ -301,7 +307,7 @@ impl Importer {
 
     fn start_paragraph(&mut self) {
         match self.frames.last() {
-            Some(Frame::Quote(_)) => self.open(BlockKind::Quote, 0),
+            Some(Frame::Quote(_)) => self.open(BlockKind::Paragraph, 0),
             Some(Frame::Item(_)) => match &self.pending {
                 // An item's later paragraphs are lines of it, until a nested list closes it.
                 Some(pending) if pending.is_empty() => {}
@@ -328,7 +334,10 @@ impl Importer {
                 if let Some(Frame::Quote(before)) = self.frames.pop()
                     && before == self.blocks.len()
                 {
-                    self.open(BlockKind::Quote, 0);
+                    self.open(BlockKind::Paragraph, 0);
+                    if let Some(pending) = &mut self.pending {
+                        pending.quote = true;
+                    }
                     self.flush();
                 }
             }

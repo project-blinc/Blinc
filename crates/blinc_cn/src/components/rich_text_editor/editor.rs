@@ -496,7 +496,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                     13 => changed |= super::tasks::toggle_at_cursor(&mut data),
                     // Cmd+Shift+9 — toggle quote
                     57 if ctx.shift => {
-                        changed |= data.toggle_kind(BlockKind::Quote);
+                        changed |= data.toggle_quote();
                     }
                     _ => {}
                 }

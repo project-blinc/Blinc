@@ -66,7 +66,7 @@ const MIN_FLOATING: f32 = 200.0;
 /// out for the same reason.
 pub(super) fn signature(data: &RichTextData) -> String {
     let f = &data.active_format;
-    let (kind, align) = block_at(data);
+    let (kind, align, quote) = block_at(data);
     format!(
         "{}{}{}{}{}{}|{:?}",
         f.bold as u8,
@@ -75,20 +75,21 @@ pub(super) fn signature(data: &RichTextData) -> String {
         f.strikethrough as u8,
         f.code as u8,
         f.link.is_some() as u8,
-        (kind, align)
+        (kind, align, quote)
     )
 }
 
-/// The kind and alignment of the block under the cursor; in a table, the column's alignment.
-fn block_at(data: &RichTextData) -> (BlockKind, BlockAlign) {
+/// The kind, alignment and quote of the block under the cursor; in a table, the column's
+/// alignment.
+fn block_at(data: &RichTextData) -> (BlockKind, BlockAlign, bool) {
     let Some(block) = data.document.blocks.get(data.cursor.block) else {
-        return (BlockKind::Paragraph, BlockAlign::Start);
+        return (BlockKind::Paragraph, BlockAlign::Start, false);
     };
     let align = match (&block.kind, Cell::at(&data.document, data.cursor)) {
         (BlockKind::Table { columns }, Some(cell)) => columns[cell.column],
         _ => block.align,
     };
-    (block.kind.clone(), align)
+    (block.kind.clone(), align, block.quote)
 }
 
 /// A press inside the toolbar leaves the editor's selection where it is.
@@ -214,7 +215,7 @@ fn rest(target: &Target, look: &Look, close: bool) -> (Div, f32) {
         row.child(table::menu(target))
     } else {
         row.child(controls::lists(target, &look.kind))
-            .child(controls::quote(target, &look.kind))
+            .child(controls::quote(target, look.quote))
             .child(table::insert(target))
     };
     row = row
@@ -245,17 +246,19 @@ struct Look {
     format: ActiveFormat,
     kind: BlockKind,
     align: BlockAlign,
+    quote: bool,
     swatch: Signal<Color>,
 }
 
 impl Look {
     fn of(data: &mut RichTextData) -> Self {
         let swatch = data.swatch();
-        let (kind, align) = block_at(data);
+        let (kind, align, quote) = block_at(data);
         Self {
             format: data.active_format.clone(),
             kind,
             align,
+            quote,
             swatch,
         }
     }
