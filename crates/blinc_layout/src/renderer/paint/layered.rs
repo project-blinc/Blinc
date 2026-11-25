@@ -314,7 +314,7 @@ impl RenderTree {
             render_node.props.layer
         };
         let has_corner_shape_n = !resolved_corner_shape_n.is_round();
-        if has_corner_shape_n {
+        if has_corner_shape_n && render_node.props.notch.is_none() {
             ctx.set_corner_shape(resolved_corner_shape_n.to_array());
         }
 
@@ -325,6 +325,8 @@ impl RenderTree {
 
             if let Some(glass) = render_node.props.glass_style(glass_depth) {
                 ctx.fill_rect(rect, radius, Brush::Glass(glass));
+            } else if let Some(shape) = &render_node.props.notch {
+                shape.paint(ctx, rect, &render_node.props, 1.0);
             } else {
                 // Draw the shadow stack back-to-front (ambient first, key on top).
                 for shadow in render_node.props.shadow.iter().rev() {

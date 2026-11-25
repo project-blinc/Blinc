@@ -145,12 +145,14 @@ impl RenderTree {
             render_node.props.corner_shape_locked,
         );
         let has_corner_shape_l = !resolved_corner_shape.is_round();
-        if has_corner_shape_l {
+        if has_corner_shape_l && render_node.props.notch.is_none() {
             ctx.set_corner_shape(resolved_corner_shape.to_array());
         }
 
         if let Some(glass) = render_node.props.glass_style(0) {
             ctx.fill_rect(rect, radius, Brush::Glass(glass));
+        } else if let Some(shape) = &render_node.props.notch {
+            shape.paint(ctx, rect, &render_node.props, 1.0);
         } else {
             // For non-glass elements, draw shadow stack first (renders
             // behind the element). Iterate back-to-front so the outermost

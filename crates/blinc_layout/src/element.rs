@@ -244,6 +244,8 @@ pub struct RenderProps {
     /// squircle aesthetic. Default `false`: the paint walker is free
     /// to substitute per the theme.
     pub corner_shape_locked: bool,
+    /// The outline the box's fill, border and shadow follow, where it is not a rounded rectangle.
+    pub notch: Option<std::sync::Arc<crate::notch::NotchShape>>,
     /// Border color (None = no border) - used for uniform borders
     pub border_color: Option<Color>,
     /// Border width in pixels - used for uniform borders
@@ -466,6 +468,7 @@ impl Default for RenderProps {
             border_radius_explicit: false,
             corner_shape: CornerShape::default(),
             corner_shape_locked: false,
+            notch: None,
             border_color: None,
             border_width: 0.0,
             border_sides: BorderSides::default(),
@@ -767,6 +770,9 @@ impl RenderProps {
         if other.border_radius_explicit || other.border_radius != CornerRadius::default() {
             self.border_radius = other.border_radius;
             self.border_radius_explicit = other.border_radius_explicit;
+        }
+        if other.notch.is_some() {
+            self.notch = other.notch.clone();
         }
         // Override border_color if set
         if other.border_color.is_some() {

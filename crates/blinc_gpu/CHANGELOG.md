@@ -4,6 +4,9 @@ All notable changes to `blinc_gpu` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- A notch's shadow no longer drops out under the partly covered pixels of its edge, which drew a dotted line along a rounded corner.
+
 ### Added
 - The notch shader reads a peak's apex offset from the last lane of its edge modifier, which a peak did not use.
 - `GpuRenderer::overlay_divides_at` says whether a batch can be drawn in parts divided at given primitive indices, and `render_overlay_part` draws one part as `render_overlay_msaa` at one sample draws the whole batch, so content drawn apart from the batch can go between the parts.

@@ -37,6 +37,12 @@
 //!     .bg(Color::BLACK)
 //! ```
 //!
+//! # Styling
+//!
+//! The outline is the box's own, so a stylesheet reaches it: `background`, `border`,
+//! `border-radius` (of the corners that are not concave or stepped), `box-shadow` and `opacity`
+//! apply to a notch by its class or id as they do to a div.
+//!
 //! # Animation with Signed Radius
 //!
 //! Use `.corner_*()` methods with signed values for smooth morphing:
@@ -51,15 +57,12 @@
 //! })
 //! ```
 
-use std::rc::Rc;
+use std::sync::Arc;
 
-use blinc_core::{
-    Brush, Color, CornerRadius, DrawContext, Gradient, Path, Rect, Shadow, Transform,
-};
+use blinc_core::{Brush, Color, CornerRadius, DrawContext, Path, Rect, Shadow, Transform};
 use taffy::{Overflow, prelude::*};
 
 use crate::Div;
-use crate::canvas::{CanvasBounds, CanvasRenderFn};
 use crate::div::{ElementBuilder, ElementTypeId};
 use crate::element::{Material, RenderLayer, RenderProps};
 use crate::event_handler::EventHandlers;
@@ -278,6 +281,90 @@ pub struct CenterPeak {
 }
 
 // =============================================================================
+// Outline
+// =============================================================================
+
+/// The outline of a box that is not a rounded rectangle, which its fill, border and shadow follow.
+/// Kept apart from the styled properties, so rules apply to them as to any box.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NotchShape {
+    /// For each corner, clockwise from the top left, 1 where it is concave and 0 where not.
+    corner_types: [f32; 4],
+    /// The radius of each corner that is concave or stepped. The others take the border radius.
+    corner_radii: [Option<f32>; 4],
+    /// What the top and bottom edges carry: a kind, then its measures, as `fill_notch` takes them.
+    top: [f32; 4],
+    bottom: [f32; 4],
+}
+
+/// An edge modifier that is a peak, whose last slot is its apex's offset.
+const PEAK: f32 = 4.0;
+
+impl NotchShape {
+    /// The radii of the corners of a box with `radius` as its border radius.
+    fn radii(&self, radius: CornerRadius) -> [f32; 4] {
+        let own = [
+            radius.top_left,
+            radius.top_right,
+            radius.bottom_right,
+            radius.bottom_left,
+        ];
+        std::array::from_fn(|i| self.corner_radii[i].unwrap_or(own[i]))
+    }
+
+    /// An edge's modifier, a peak kept on the straight part of the edge, between corners of the
+    /// radii `left` and `right`.
+    fn on_edge(modifier: [f32; 4], width: f32, left: f32, right: f32) -> [f32; 4] {
+        let [kind, peak_width, height, offset] = modifier;
+        if kind != PEAK || offset == 0.0 {
+            return modifier;
+        }
+        let reach = |corner: f32| (width * 0.5 - corner - peak_width * 0.5).max(0.0);
+        let offset = offset.clamp(-reach(left), reach(right));
+        [kind, peak_width, height, offset]
+    }
+
+    /// Paint a box of this outline: its shadows, then its fill and border, `alpha` of each.
+    pub(crate) fn paint(
+        &self,
+        ctx: &mut dyn DrawContext,
+        rect: Rect,
+        props: &RenderProps,
+        alpha: f32,
+    ) {
+        let radii = self.radii(props.border_radius);
+        let width = rect.size.width;
+        let top = Self::on_edge(self.top, width, radii[0], radii[1]);
+        let bottom = Self::on_edge(self.bottom, width, radii[3], radii[2]);
+        let faded = |c: Color| c.with_alpha(c.a * alpha);
+        let mut draw = |border, shadow: Option<Shadow>, brush| {
+            let shadow = shadow.map(|s| Shadow {
+                color: faded(s.color),
+                ..s
+            });
+            let types = self.corner_types;
+            ctx.fill_notch(rect, radii, types, top, bottom, border, shadow, brush);
+        };
+        // The first shadow is on top, and goes with the fill.
+        let mut shadows = props.shadow.iter().copied();
+        let first = shadows.next();
+        for shadow in shadows.rev() {
+            draw(None, Some(shadow), Brush::Solid(Color::TRANSPARENT));
+        }
+        let border = props
+            .border_color
+            .filter(|_| props.border_width > 0.0)
+            .map(|c| (props.border_width, faded(c)));
+        let brush = match &props.background {
+            Some(brush) if alpha < 1.0 => crate::renderer::apply_opacity_to_brush(brush, alpha),
+            Some(brush) => brush.clone(),
+            None => Brush::Solid(Color::TRANSPARENT),
+        };
+        draw(border, first, brush);
+    }
+}
+
+// =============================================================================
 // Notch Element
 // =============================================================================
 
@@ -324,6 +411,8 @@ pub struct Notch {
     // Interaction
     pub(crate) event_handlers: EventHandlers,
     pub(crate) element_id: Option<String>,
+    /// CSS classes, and attributes as `name=value`
+    pub(crate) classes: Vec<Arc<str>>,
     /// When true, the notch's hit box is transparent to pointer
     /// events — hit-test passes through to whatever sits beneath it
     /// in z-order. Use when the notch is a decorative overlay (e.g.
@@ -358,6 +447,7 @@ impl Notch {
             render_layer: RenderLayer::default(),
             event_handlers: EventHandlers::default(),
             element_id: None,
+            classes: Vec::new(),
             pointer_events_none: false,
             inner: Div::new(),
         }
@@ -1500,6 +1590,17 @@ impl Notch {
         self.element_id = Some(id.into());
         self
     }
+
+    /// Add a CSS class for rules to match
+    pub fn class(mut self, name: impl AsRef<str>) -> Self {
+        self.classes.push(blinc_core::intern::intern(name.as_ref()));
+        self
+    }
+
+    /// Set an attribute that `[name]` and `[name="value"]` selectors match
+    pub fn attr(self, name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+        self.class(format!("{}={}", name.as_ref(), value.as_ref()))
+    }
 }
 
 impl Default for Notch {
@@ -1517,76 +1618,6 @@ impl Default for Notch {
 /// This handles convex (standard rounding), concave curves, step notches,
 /// center scoops (Dynamic Island-style centered indentations),
 /// center bulges (outward protrusions for active menu highlighting),
-/// Apply a uniform opacity multiplier to a brush.
-///
-/// Solid brushes get their alpha scaled directly; gradient brushes get a
-/// new `Gradient` with every stop's alpha scaled. Non-color brushes (glass,
-/// blur, image) pass through unchanged — their opacity is handled
-/// elsewhere in the pipeline.
-fn apply_brush_opacity(brush: Brush, opacity: f32) -> Brush {
-    if opacity >= 1.0 {
-        return brush;
-    }
-    match brush {
-        Brush::Solid(color) => Brush::Solid(color.with_alpha(color.a * opacity)),
-        Brush::Gradient(g) => {
-            let new_stops: Vec<_> = g
-                .stops()
-                .iter()
-                .map(|stop| {
-                    blinc_core::GradientStop::new(
-                        stop.offset,
-                        stop.color.with_alpha(stop.color.a * opacity),
-                    )
-                })
-                .collect();
-            let new_gradient = match g {
-                Gradient::Linear {
-                    start,
-                    end,
-                    space,
-                    spread,
-                    ..
-                } => Gradient::Linear {
-                    start,
-                    end,
-                    stops: new_stops,
-                    space,
-                    spread,
-                },
-                Gradient::Radial {
-                    center,
-                    radius,
-                    focal,
-                    space,
-                    spread,
-                    ..
-                } => Gradient::Radial {
-                    center,
-                    radius,
-                    focal,
-                    stops: new_stops,
-                    space,
-                    spread,
-                },
-                Gradient::Conic {
-                    center,
-                    start_angle,
-                    space,
-                    ..
-                } => Gradient::Conic {
-                    center,
-                    start_angle,
-                    stops: new_stops,
-                    space,
-                },
-            };
-            Brush::Gradient(new_gradient)
-        }
-        other => other,
-    }
-}
-
 /// center cuts (sharp V-shaped inward notches), and
 /// center peaks (sharp V-shaped outward points).
 /// The path is built clockwise starting from the top-left corner.
@@ -2351,29 +2382,6 @@ fn draw_path_shadow(ctx: &mut dyn DrawContext, path: &Path, bounds: Rect, shadow
 }
 
 // =============================================================================
-// Notch Render Data
-// =============================================================================
-
-/// Data for rendering a shape element
-#[derive(Clone)]
-pub struct NotchRenderData {
-    pub corners: CornersConfig,
-    pub background: Option<Brush>,
-    pub border_color: Option<Color>,
-    pub border_width: f32,
-    /// Drop shadow stack
-    pub shadow: Vec<Shadow>,
-}
-
-impl std::fmt::Debug for NotchRenderData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("NotchRenderData")
-            .field("has_concave_curves", &self.corners.has_concave_curves())
-            .finish()
-    }
-}
-
-// =============================================================================
 // ElementBuilder Implementation
 // =============================================================================
 
@@ -2410,6 +2418,55 @@ impl Notch {
     }
 }
 
+impl Notch {
+    /// The outline, unless it is a rounded rectangle.
+    fn shape(&self) -> Option<NotchShape> {
+        let edge = |scoop: &Option<CenterScoop>,
+                    bulge: &Option<CenterBulge>,
+                    cut: &Option<CenterCut>,
+                    peak: &Option<CenterPeak>| {
+            if let Some(s) = scoop {
+                [1.0, s.width, s.depth, s.corner_radius]
+            } else if let Some(b) = bulge {
+                [2.0, b.width, b.height, b.corner_radius]
+            } else if let Some(c) = cut {
+                [3.0, c.width, c.depth, 0.0]
+            } else if let Some(p) = peak {
+                [PEAK, p.width, p.height, p.offset]
+            } else {
+                [0.0; 4]
+            }
+        };
+        let top = edge(
+            &self.top_center_scoop,
+            &self.top_center_bulge,
+            &self.top_center_cut,
+            &self.top_center_peak,
+        );
+        let bottom = edge(
+            &self.bottom_center_scoop,
+            &self.bottom_center_bulge,
+            &self.bottom_center_cut,
+            &self.bottom_center_peak,
+        );
+        if !self.corners.needs_custom_rendering() && top[0] == 0.0 && bottom[0] == 0.0 {
+            return None;
+        }
+        let corners = [
+            self.corners.top_left,
+            self.corners.top_right,
+            self.corners.bottom_right,
+            self.corners.bottom_left,
+        ];
+        Some(NotchShape {
+            corner_types: corners.map(|c| if c.is_concave() { 1.0 } else { 0.0 }),
+            corner_radii: corners.map(|c| (c.is_concave() || c.is_step()).then_some(c.radius)),
+            top,
+            bottom,
+        })
+    }
+}
+
 impl ElementBuilder for Notch {
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
         let mut style = self.style.clone();
@@ -2433,77 +2490,21 @@ impl ElementBuilder for Notch {
     }
 
     fn render_props(&self) -> RenderProps {
-        // If we have concave curves, step corners, center scoops, bulges, cuts, or peaks,
-        // we need custom canvas rendering. Otherwise use standard div rendering.
-        let has_center_scoop =
-            self.top_center_scoop.is_some() || self.bottom_center_scoop.is_some();
-        let has_center_bulge =
-            self.top_center_bulge.is_some() || self.bottom_center_bulge.is_some();
-        let has_center_cut = self.top_center_cut.is_some() || self.bottom_center_cut.is_some();
-        let has_center_peak = self.top_center_peak.is_some() || self.bottom_center_peak.is_some();
-        let needs_custom = self.corners.needs_custom_rendering()
-            || has_center_scoop
-            || has_center_bulge
-            || has_center_cut
-            || has_center_peak;
-
-        if needs_custom {
-            // Shape fill AND drop shadow are both rendered via the
-            // canvas path (`fill_notch`). The shadow is carried on
-            // the PRIM_NOTCH primitive itself so the shader can trace
-            // the notch's actual outer outline via `sd_notch` — a
-            // standard `draw_shadow` would use a rect SDF and miss
-            // the concave arcs / modifiers.
-            //
-            // The renderer's canvas clip is opt-in (only when the
-            // element sets `overflow_clip`), so the shadow's blur
-            // expansion can render past the element's layout box.
-            RenderProps {
-                background: None, // Rendered via canvas
-                border_radius: CornerRadius::ZERO,
-                border_color: None,
-                border_width: 0.0,
-                border_sides: Default::default(),
-                layer: self.render_layer,
-                material: self.material.clone(),
-                shadow: Vec::new(), // Rendered via canvas
-                transform: None,
-                opacity: self.opacity,
-                pointer_events_none: self.pointer_events_none,
-                ..Default::default()
-            }
-        } else {
-            // Standard rendering path - use div-like rendering
-            RenderProps {
-                background: self.background.clone(),
-                border_radius: self.corners.to_corner_radius(),
-                border_color: self.border_color,
-                border_width: self.border_width,
-                border_sides: Default::default(),
-                layer: self.render_layer,
-                material: self.material.clone(),
-                shadow: self.shadow.clone(),
-                transform: None,
-                opacity: self.opacity,
-                pointer_events_none: self.pointer_events_none,
-                ..Default::default()
-            }
+        let border_radius = self.corners.to_corner_radius();
+        RenderProps {
+            background: self.background.clone(),
+            border_radius,
+            border_radius_explicit: border_radius != CornerRadius::ZERO,
+            border_color: self.border_color,
+            border_width: self.border_width,
+            layer: self.render_layer,
+            material: self.material.clone(),
+            shadow: self.shadow.clone(),
+            opacity: self.opacity,
+            pointer_events_none: self.pointer_events_none,
+            notch: self.shape().map(Arc::new),
+            ..Default::default()
         }
-    }
-
-    fn is_static_canvas(&self) -> bool {
-        // The notch's canvas closure captures all shape parameters
-        // (corner radii, scoop / bulge / cut / peak configs, brush,
-        // shadow, opacity) at construction. The only runtime input
-        // is `bounds.width / height` from layout, and any layout
-        // change forces a full repaint that refreshes the static
-        // cache. So the canvas overlay's per-frame re-invocation of
-        // `render_fn` produces the same output as the static-cache
-        // entry — except it overdraws any children the walker
-        // layered on top. Opting out of the overlay keeps the
-        // children visible and lets the compositor fast-path engage
-        // on frames where the only canvases are notches.
-        true
     }
 
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
@@ -2511,173 +2512,19 @@ impl ElementBuilder for Notch {
     }
 
     fn element_type_id(&self) -> ElementTypeId {
-        // If we have custom corners, center scoops, bulges, cuts, or peaks, use Canvas type
-        // Otherwise, use Div for standard rendering
-        let has_center_scoop =
-            self.top_center_scoop.is_some() || self.bottom_center_scoop.is_some();
-        let has_center_bulge =
-            self.top_center_bulge.is_some() || self.bottom_center_bulge.is_some();
-        let has_center_cut = self.top_center_cut.is_some() || self.bottom_center_cut.is_some();
-        let has_center_peak = self.top_center_peak.is_some() || self.bottom_center_peak.is_some();
-        let needs_custom = self.corners.needs_custom_rendering()
-            || has_center_scoop
-            || has_center_bulge
-            || has_center_cut
-            || has_center_peak;
-        if needs_custom {
-            ElementTypeId::Canvas
-        } else {
-            ElementTypeId::Div
-        }
+        ElementTypeId::Div
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        self.element_id.as_deref()
+    }
+
+    fn element_classes(&self) -> &[Arc<str>] {
+        &self.classes
     }
 
     fn layout_style(&self) -> Option<&taffy::Style> {
         Some(&self.style)
-    }
-
-    fn canvas_render_info(&self) -> Option<CanvasRenderFn> {
-        // Only provide canvas render if we have custom corners, scoops, bulges, cuts, or peaks
-        let has_center_scoop =
-            self.top_center_scoop.is_some() || self.bottom_center_scoop.is_some();
-        let has_center_bulge =
-            self.top_center_bulge.is_some() || self.bottom_center_bulge.is_some();
-        let has_center_cut = self.top_center_cut.is_some() || self.bottom_center_cut.is_some();
-        let has_center_peak = self.top_center_peak.is_some() || self.bottom_center_peak.is_some();
-        let needs_custom = self.corners.needs_custom_rendering()
-            || has_center_scoop
-            || has_center_bulge
-            || has_center_cut
-            || has_center_peak;
-        if !needs_custom {
-            return None;
-        }
-
-        let corners = self.corners;
-        let top_center_scoop = self.top_center_scoop;
-        let bottom_center_scoop = self.bottom_center_scoop;
-        let top_center_bulge = self.top_center_bulge;
-        let bottom_center_bulge = self.bottom_center_bulge;
-        let top_center_cut = self.top_center_cut;
-        let bottom_center_cut = self.bottom_center_cut;
-        let top_center_peak = self.top_center_peak;
-        let bottom_center_peak = self.bottom_center_peak;
-        let background = self.background.clone();
-        let border_color = self.border_color;
-        let border_width = self.border_width;
-        // The notch canvas path emits a single fill_notch call. Compound
-        // shadow stacks degrade to the topmost layer here; full multi-layer
-        // support would need fill_notch to grow a per-shadow iteration.
-        let shadow = self.shadow.first().copied();
-        let opacity = self.opacity;
-
-        Some(Rc::new(
-            move |ctx: &mut dyn DrawContext, bounds: CanvasBounds| {
-                // Every notch variant — concave corners, bulge, peak, cut,
-                // scoop, plus step corners (treated as sharp until the SDF
-                // gains a dedicated step case) — runs entirely through the
-                // SDF pipeline via `ctx.fill_notch`. No CPU tessellation,
-                // no separate vertex buffer, no layer-composition detour:
-                // the fragment shader's PRIM_NOTCH branch evaluates every
-                // shape via unions and subtractions of existing 2D SDFs.
-                let corner_types_arr = [
-                    if corners.top_left.is_concave() {
-                        1.0
-                    } else {
-                        0.0
-                    },
-                    if corners.top_right.is_concave() {
-                        1.0
-                    } else {
-                        0.0
-                    },
-                    if corners.bottom_right.is_concave() {
-                        1.0
-                    } else {
-                        0.0
-                    },
-                    if corners.bottom_left.is_concave() {
-                        1.0
-                    } else {
-                        0.0
-                    },
-                ];
-                let corner_radii_arr = [
-                    corners.top_left.radius,
-                    corners.top_right.radius,
-                    corners.bottom_right.radius,
-                    corners.bottom_left.radius,
-                ];
-
-                // Pack top/bottom edge modifiers. Each slot carries
-                // (type, width, height_or_depth, corner_radius).
-                //
-                // Modifier precedence (top edge): scoop > bulge > cut > peak.
-                // Only one modifier applies per edge — matches the `if ...
-                // else if ...` chain in `build_shape_path` so mixed-config
-                // notches behave identically to the legacy renderer.
-                let top_mod = if let Some(s) = &top_center_scoop {
-                    [1.0, s.width, s.depth, s.corner_radius]
-                } else if let Some(b) = &top_center_bulge {
-                    [2.0, b.width, b.height, b.corner_radius]
-                } else if let Some(c) = &top_center_cut {
-                    [3.0, c.width, c.depth, 0.0]
-                } else if let Some(p) = &top_center_peak {
-                    // A peak has no corner radius, so its last slot carries the apex offset.
-                    [4.0, p.width, p.height, p.offset]
-                } else {
-                    [0.0; 4]
-                };
-                let bottom_mod = if let Some(s) = &bottom_center_scoop {
-                    [1.0, s.width, s.depth, s.corner_radius]
-                } else if let Some(b) = &bottom_center_bulge {
-                    [2.0, b.width, b.height, b.corner_radius]
-                } else if let Some(c) = &bottom_center_cut {
-                    [3.0, c.width, c.depth, 0.0]
-                } else if let Some(p) = &bottom_center_peak {
-                    [4.0, p.width, p.height, p.offset]
-                } else {
-                    [0.0; 4]
-                };
-
-                let outer_rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
-
-                let fill_brush = if opacity < 1.0 {
-                    background.clone().map(|b| apply_brush_opacity(b, opacity))
-                } else {
-                    background.clone()
-                };
-
-                let border_arg = if let (Some(c), w) = (border_color, border_width) {
-                    if w > 0.0 {
-                        let stroked_color = if opacity < 1.0 {
-                            c.with_alpha(c.a * opacity)
-                        } else {
-                            c
-                        };
-                        Some((w, stroked_color))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-
-                // Always emit via the SDF pipeline. Border-only notches go
-                // out as a fully transparent fill so the fragment shader
-                // still evaluates the shape for the stroke.
-                let brush = fill_brush.unwrap_or(Brush::Solid(Color::rgba(0.0, 0.0, 0.0, 0.0)));
-                ctx.fill_notch(
-                    outer_rect,
-                    corner_radii_arr,
-                    corner_types_arr,
-                    top_mod,
-                    bottom_mod,
-                    border_arg,
-                    shadow,
-                    brush,
-                );
-            },
-        ))
     }
 
     fn event_handlers(&self) -> Option<&EventHandlers> {
@@ -2771,18 +2618,30 @@ mod tests {
     }
 
     #[test]
-    fn test_element_type_changes() {
-        // Without custom corners -> Div
-        let s1 = notch().rounded(8.0);
-        assert_eq!(s1.element_type_id(), ElementTypeId::Div);
+    fn an_outline_is_kept_only_where_it_is_not_a_rounded_rectangle() {
+        assert_eq!(notch().rounded(8.0).render_props().notch, None);
+        for shaped in [
+            notch().concave_top(24.0),
+            notch().step_top(20.0),
+            notch().center_peak_top(10.0, 5.0),
+        ] {
+            assert!(shaped.render_props().notch.is_some());
+        }
+    }
 
-        // With concave curves -> Canvas
-        let s2 = notch().concave_top(24.0);
-        assert_eq!(s2.element_type_id(), ElementTypeId::Canvas);
+    #[test]
+    fn a_peak_stays_on_the_straight_part_of_its_edge() {
+        let peak = |offset| NotchShape::on_edge([PEAK, 20.0, 8.0, offset], 200.0, 30.0, 10.0);
+        assert_eq!(peak(-500.0)[3], -60.0);
+        assert_eq!(peak(500.0)[3], 80.0);
+        assert_eq!(peak(12.0)[3], 12.0);
+    }
 
-        // With step corners -> Canvas
-        let s3 = notch().step_top(20.0);
-        assert_eq!(s3.element_type_id(), ElementTypeId::Canvas);
+    #[test]
+    fn border_radius_rounds_the_corners_that_are_not_concave() {
+        let props = notch().concave_top(24.0).rounded_bottom(6.0).render_props();
+        let radii = props.notch.unwrap().radii(CornerRadius::uniform(12.0));
+        assert_eq!(radii, [24.0, 24.0, 12.0, 12.0]);
     }
 
     #[test]

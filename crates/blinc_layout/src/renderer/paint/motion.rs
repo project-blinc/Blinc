@@ -1161,7 +1161,8 @@ impl RenderTree {
             radius_full_m,
             render_node.props.corner_shape_locked,
         );
-        let has_corner_shape = !resolved_corner_shape_m.is_round();
+        let has_corner_shape =
+            !resolved_corner_shape_m.is_round() && render_node.props.notch.is_none();
         if has_corner_shape {
             ctx.set_corner_shape(resolved_corner_shape_m.to_array());
         }
@@ -1172,7 +1173,8 @@ impl RenderTree {
         let radius = render_node.props.border_radius;
         if effective_layer == target_layer {
             // Glass elements have shadows handled by the GPU glass system
-            if !render_node.props.is_glass() {
+            // A notch draws its own, around its outline.
+            if !render_node.props.is_glass() && render_node.props.notch.is_none() {
                 // Iterate the shadow stack back-to-front so the ambient layer
                 // paints first and the tight key-light layer lands on top.
                 for shadow in render_node.props.shadow.iter().rev() {
@@ -1447,6 +1449,22 @@ impl RenderTree {
 
             if let Some(glass) = render_node.props.glass_style(glass_depth) {
                 ctx.fill_rect(rect, radius, Brush::Glass(glass));
+            } else if let Some(shape) = &render_node.props.notch {
+                let alpha = if !has_opacity_layer && motion_opacity < 1.0 {
+                    motion_opacity
+                } else {
+                    1.0
+                };
+                let shadows =
+                    ctx.bg_primitive_count() + render_node.props.shadow.len().saturating_sub(1);
+                shape.paint(ctx, rect, &render_node.props, alpha);
+                if effective_layer == RenderLayer::Background
+                    && render_node.props.background.is_some()
+                {
+                    // The fill is the last primitive; the others hold shadows alone.
+                    let fill = shadows.min(ctx.bg_primitive_count());
+                    self.record_css_background(ctx, node, fill, alpha);
+                }
             } else {
                 // Shadow already drawn before clip was pushed
 

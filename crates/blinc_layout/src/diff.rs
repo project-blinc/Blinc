@@ -868,6 +868,7 @@ fn hash_render_props(props: &RenderProps, hasher: &mut impl Hasher) {
         border_radius_explicit,
         corner_shape,
         corner_shape_locked,
+        notch,
         border_color,
         border_width,
         border_sides,
@@ -960,6 +961,7 @@ fn hash_render_props(props: &RenderProps, hasher: &mut impl Hasher) {
     border_radius_explicit.hash(hasher);
     hash_corner_shape(corner_shape, hasher);
     corner_shape_locked.hash(hasher);
+    hash_debug(notch, hasher);
     hash_option_color(border_color, hasher);
     hash_f32(*border_width, hasher);
     hash_border_sides(border_sides, hasher);

@@ -10,6 +10,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ### Added
 - `ScrollRef::scroll_by_with_behavior` and `set_scroll_offset_with_behavior` with `ScrollBehavior::Smooth` spring to the new offset instead of jumping to it.
 - `Canvas::pointer_events_none` lets presses and hovers through to what is under the canvas.
+- A `Notch` is styled like any box: a rule on its class or id sets its `background`, `border`, `border-radius`, `box-shadow` and `opacity`, and `Notch::class` and `Notch::attr` add classes and attributes. The notch is a `Div` with a `RenderProps::notch` outline, and the painters draw its fill, border and shadows around that outline.
 - `RichText::baseline` puts a rich text's first baseline at a given distance from the top of its box.
 - `ScrollRef::watch_x` is the horizontal offset as a signal that outlasts the build that asks for it.
 - `Div::on_layout_change` calls back with the element's laid-out bounds after a layout that changes its size, for content that wraps to the width it is given.

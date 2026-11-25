@@ -58,6 +58,7 @@ mod held_scrollbars;
 mod keyboard_nav;
 mod owners;
 mod paint;
+pub(crate) use paint::helpers::apply_opacity_to_brush;
 mod property_rows;
 mod queries;
 mod registries;

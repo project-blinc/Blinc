@@ -378,10 +378,7 @@ russl::russl! {
                 }
             }
 
-            let shadow_color = prim.shadow_color * shadow_alpha;
-
-            // Premultiply and blend
-            result = shadow_color;
+            result = Vec4::new(prim.shadow_color.rgb, prim.shadow_color.a * shadow_alpha * clip_alpha);
         }
 
         // Calculate main shape SDF — always notch
@@ -589,26 +586,13 @@ russl::russl! {
             }
         }
 
-        // Apply clip alpha to shadow
-        result.a *= clip_alpha;
-
-        // Mask shadow strictly outside the shape boundary
-        // Use the same aa_width as fill_alpha to prevent gaps at corners
-        // The shadow should render only where d > 0 (outside the shape)
-        if result.a > 0.0 {
-            // Use matching AA width to ensure shadow and fill meet seamlessly
-            let shadow_mask = smoothstep(-aa_width, aa_width, d);
-            result.a *= shadow_mask;
-        }
-
-        // Blend fill over shadow at FULL opacity first (fill fully covers shadow)
-        // This ensures no shadow bleeds through the shape regardless of edge AA
-        let full_fill = Vec4::new(fill_color.rgb, fill_color.a * clip_alpha);
-        result = full_fill + result * (1.0 - full_fill.a);
-
-        // NOW apply outer edge anti-aliasing to the combined result
-        // This gives smooth edges against the background without shadow bleed
-        result.a *= fill_alpha;
+        // The shadow is drawn outside the shape only. On an edge pixel the fill and the shadow cover
+        // what is left of it by the other, so their shares of it add up.
+        let fill_share = fill_color.a * clip_alpha * fill_alpha;
+        let shadow_share = result.a * (1.0 - fill_alpha);
+        let share = fill_share + shadow_share;
+        let mixed = fill_color.rgb * fill_share + result.rgb * shadow_share;
+        result = Vec4::new(mixed / max(share, 0.0001), share);
 
         // Apply mask gradient (mask-image: linear-gradient / radial-gradient)
         // mask_info.x: 0=none, 1=linear, 2=radial
