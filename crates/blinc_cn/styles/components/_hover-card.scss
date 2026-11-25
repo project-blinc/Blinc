@@ -1,0 +1,21 @@
+/* ============================================================================
+   Hover Card
+   ============================================================================ */
+
+.cn-hover-card-content {
+    /* Floating overlay → elevation 2 */
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-md);
+    padding: var(--space-4);
+    /* CSS-driven enter — same approach as cn-tooltip / cn-popover. */
+    animation: cn-hover-card-enter var(--duration-normal) var(--ease-spring);
+    transform-origin: top center;
+}
+
+@keyframes cn-hover-card-enter {
+    from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}

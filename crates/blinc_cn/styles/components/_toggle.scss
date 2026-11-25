@@ -1,0 +1,16 @@
+/* ============================================================================
+   Toggle (binary on/off button — shadcn `<Toggle>`)
+   ============================================================================ */
+
+/* The look is the layout toggle's `.blinc-toggle` rules (fill by state, the
+   outline variant, the size ladder), selected by `data-state`, `data-variant`
+   and `data-size`. `.cn-toggle` and its variant and size classes are hooks for
+   an app's own rules. */
+
+.cn-toggle[data-state="on"] {
+    background: var(--cn-toggle-selected-bg, color-mix(in srgb, var(--text-primary) 10%, var(--background))) !important;
+    color: var(--cn-toggle-selected-color, var(--text-primary)) !important;
+}
+.cn-toggle[data-state="on"]:hover:not(:disabled) {
+    background: var(--cn-toggle-selected-hover-bg, color-mix(in srgb, var(--text-primary) 14%, var(--background))) !important;
+}

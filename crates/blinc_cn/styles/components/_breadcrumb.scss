@@ -1,0 +1,18 @@
+/* ============================================================================
+   Breadcrumb
+   ============================================================================ */
+
+.cn-breadcrumb {
+    gap: var(--space-2);
+    color: var(--text-secondary);
+    /* A trail longer than its container wraps onto the next line. */
+    flex-wrap: wrap;
+    max-width: 100%;
+}
+.cn-breadcrumb-item { color: var(--text-secondary); }
+.cn-breadcrumb-item[data-link]:hover { color: var(--text-primary); }
+.cn-breadcrumb-item[aria-current="page"] {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+.cn-breadcrumb-separator { color: var(--text-tertiary); }

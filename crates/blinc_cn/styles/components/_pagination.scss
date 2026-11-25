@@ -1,0 +1,36 @@
+/* ============================================================================
+   Pagination
+   ============================================================================ */
+
+.cn-pagination {
+    gap: var(--space-1);
+    /* Narrower than its buttons, the row wraps them rather than squeezing them. */
+    flex-wrap: wrap;
+    max-width: 100%;
+}
+.cn-pagination-btn {
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-default);
+    cursor: pointer;
+    color: var(--text-primary);
+    transition: background var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state);
+}
+.cn-pagination-btn:hover { background: var(--surface-elevated); }
+/* The current page keeps its fill under the pointer; a button with nowhere
+   to go keeps its dimmed look. */
+.cn-pagination-btn[aria-current="page"],
+.cn-pagination-btn[aria-current="page"]:hover {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--text-inverse);
+    cursor: default;
+}
+.cn-pagination-btn:disabled,
+.cn-pagination-btn:disabled:hover {
+    background: transparent;
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.cn-pagination-ellipsis { color: var(--text-secondary); }

@@ -101,7 +101,6 @@ fn fixture_digest(root: &Path, component: &Component) -> Result<String> {
         "examples/blinc_component_demos/assets/night-drive.flac",
         "examples/blinc_component_demos/assets/night-drive-waveform.json",
         "examples/blinc_component_demos/demo.css",
-        "crates/blinc_cn/src/cn_styles.rs",
         "examples/blinc_component_demos/src/lib.rs",
         "examples/blinc_component_demos/assets/NotoSans-Regular.ttf",
         "examples/blinc_component_demos/assets/NotoSans-Bold.ttf",
@@ -110,6 +109,10 @@ fn fixture_digest(root: &Path, component: &Component) -> Result<String> {
         hash.update(fs::read(root.join(file))?);
         hash.update([0]);
     }
+    // The compiled cn stylesheet, not its sources: a change to how it is written that leaves the
+    // CSS alone leaves the previews alone.
+    hash.update(super::cn_css(root)?.as_bytes());
+    hash.update([0]);
     // Fixture-specific pictures are fingerprinted here, so the shared list above stays stable
     // and only the fixture that shows one needs re-recording.
     if component.slug == "image" {

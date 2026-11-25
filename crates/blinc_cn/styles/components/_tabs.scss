@@ -1,0 +1,138 @@
+/* ============================================================================
+   Tabs
+   ============================================================================ */
+
+.cn-tabs-list {
+    /* Tonal tray for the trigger row — uses surface-overlay so the
+       active trigger (raised to --surface) reads as elevated. */
+    background: var(--cn-tabs-list-bg, var(--surface-overlay));
+    border-radius: var(--radius-md);
+    padding: var(--space-1);
+    gap: var(--space-1);
+}
+.cn-tabs-trigger {
+    border-radius: var(--radius-default);
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: color var(--duration-fast) var(--ease-state);
+}
+.cn-tabs-trigger:hover:not(.cn-tabs-trigger--active) {
+    color: var(--text-primary);
+}
+.cn-tabs-trigger--active {
+    color: var(--text-primary) !important;
+    font-weight: 500;
+}
+/* In a reorderable strip a trigger the held one passes slides into its new place. */
+.cn-tabs-list--reorderable > .cn-tabs-trigger {
+    transition: color var(--duration-fast) var(--ease-state), transform var(--duration-normal) var(--ease-out);
+}
+/* A trigger being dragged into a new place: lifted above the ones sliding aside. */
+.cn-tabs-trigger--dragging {
+    z-index: 1;
+    color: var(--text-primary);
+    background: var(--surface);
+    border-radius: var(--radius-default);
+    box-shadow: var(--shadow-md);
+    cursor: grabbing;
+}
+/* A closable trigger's close button: shown on the active trigger and while a trigger is hovered. */
+.cn-tabs-close {
+    /* Centred on the label's lowercase letters rather than its line box. */
+    position: relative;
+    top: 2px;
+    margin-left: var(--space-1);
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-state);
+}
+.cn-tabs-trigger:hover > .cn-tabs-close,
+.cn-tabs-trigger--active > .cn-tabs-close { opacity: 1; }
+.cn-tabs-close:hover {
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--text-primary) 18%, transparent);
+}
+/* The pill behind the active trigger, raised to --surface over the
+   --surface-overlay tray. It slides to the next trigger on a switch. */
+.cn-tabs-indicator {
+    background: var(--cn-tabs-active-bg, var(--surface)) !important;
+    border-radius: var(--radius-default);
+    box-shadow: var(--shadow-sm);
+}
+.cn-tabs-trigger--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* A panel enters and leaves by its `data-transition`: it fades, or slides a
+   little from a side as it fades. `slide` goes the way the active tab moved,
+   by `data-direction`: to a tab further along, the new panel comes from the
+   right and the old one leaves to the left. */
+@keyframes cn-tab-from-left {
+    from { opacity: 0; transform: translateX(-20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+@keyframes cn-tab-to-left {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(-20px); }
+}
+@keyframes cn-tab-from-right {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+@keyframes cn-tab-to-right {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(20px); }
+}
+@keyframes cn-tab-from-top {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes cn-tab-to-top {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-20px); }
+}
+@keyframes cn-tab-from-bottom {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes cn-tab-to-bottom {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(20px); }
+}
+.cn-tabs-panel[data-transition="fade"][data-motion="enter"] { animation: cn-fade-in var(--duration-normal) var(--ease-out); }
+.cn-tabs-panel[data-transition="fade"][data-motion="exit"] { animation: cn-fade-out var(--duration-fast) var(--ease-in) forwards; }
+.cn-tabs-panel[data-transition="slide"][data-direction="next"][data-motion="enter"] { animation: cn-tab-from-right var(--duration-normal) var(--ease-out); }
+.cn-tabs-panel[data-transition="slide"][data-direction="next"][data-motion="exit"] { animation: cn-tab-to-left var(--duration-fast) var(--ease-in) forwards; }
+.cn-tabs-panel[data-transition="slide"][data-direction="prev"][data-motion="enter"] { animation: cn-tab-from-left var(--duration-normal) var(--ease-out); }
+.cn-tabs-panel[data-transition="slide"][data-direction="prev"][data-motion="exit"] { animation: cn-tab-to-right var(--duration-fast) var(--ease-in) forwards; }
+.cn-tabs-panel[data-transition="slide-left"][data-motion="enter"] { animation: cn-tab-from-left var(--duration-normal) var(--ease-out); }
+.cn-tabs-panel[data-transition="slide-left"][data-motion="exit"] { animation: cn-tab-to-left var(--duration-fast) var(--ease-in) forwards; }
+.cn-tabs-panel[data-transition="slide-right"][data-motion="enter"] { animation: cn-tab-from-right var(--duration-normal) var(--ease-out); }
+.cn-tabs-panel[data-transition="slide-right"][data-motion="exit"] { animation: cn-tab-to-right var(--duration-fast) var(--ease-in) forwards; }
+.cn-tabs-panel[data-transition="slide-up"][data-motion="enter"] { animation: cn-tab-from-top var(--duration-normal) var(--ease-out); }
+.cn-tabs-panel[data-transition="slide-up"][data-motion="exit"] { animation: cn-tab-to-top var(--duration-fast) var(--ease-in) forwards; }
+.cn-tabs-panel[data-transition="slide-down"][data-motion="enter"] { animation: cn-tab-from-bottom var(--duration-normal) var(--ease-out); }
+.cn-tabs-panel[data-transition="slide-down"][data-motion="exit"] { animation: cn-tab-to-bottom var(--duration-fast) var(--ease-in) forwards; }
+
+/* A panel leaving after a switch overlays the new one instead of sitting
+   above it, so the content does not jump while it fades out. */
+.cn-tabs-panel--leaving {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
+/* Tab trigger sizes — content + padding determines height (no fixed
+   heights). Vertical padding kept tight to keep the tray compact. */
+.cn-tabs-trigger--sm { padding: var(--space-1) var(--space-3); font-size: var(--text-sm); }
+.cn-tabs-trigger--md { padding: var(--space-1-5) var(--space-4); font-size: var(--text-sm); }
+.cn-tabs-trigger--lg { padding: var(--space-2) var(--space-5); font-size: var(--text-lg); }
+/* A closable trigger ends at its close button, which carries its own padding. */
+.cn-tabs-trigger--sm.cn-tabs-trigger--closable { padding: var(--space-1) var(--space-1-5) var(--space-1) var(--space-3); }
+.cn-tabs-trigger--md.cn-tabs-trigger--closable { padding: var(--space-1-5) var(--space-1-5) var(--space-1-5) var(--space-4); }
+.cn-tabs-trigger--lg.cn-tabs-trigger--closable { padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5); }

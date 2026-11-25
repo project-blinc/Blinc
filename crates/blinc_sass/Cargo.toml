@@ -1,0 +1,16 @@
+[package]
+name = "blinc_sass"
+description = "Compile Blinc's component stylesheets from SCSS at build time, with shared mixins"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/blinc_sass"
+rust-version.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+# The compiler: pure Rust, no node or C++ toolchain.
+grass = { version = "0.13.4", default-features = false }

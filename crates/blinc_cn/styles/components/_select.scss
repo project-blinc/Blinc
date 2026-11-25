@@ -1,0 +1,109 @@
+/* ============================================================================
+   Select
+   ============================================================================ */
+
+/* The caret of a trigger turns half a turn while its list is open, eased by a
+   transition so it spins rather than flips. */
+.cn-chevron {
+    transition: transform var(--duration-normal) var(--ease-state);
+}
+.cn-select-trigger[data-state="open"] > .cn-chevron,
+.cn-combobox-trigger[data-state="open"] > .cn-chevron,
+.cn-dropdown-trigger[data-state="open"] > .cn-chevron,
+.cn-collapsible-trigger[data-state="open"] > .cn-chevron,
+.cn-accordion-trigger[data-state="open"] > .cn-chevron {
+    transform: rotate(180deg);
+}
+
+.cn-select-trigger {
+    color: var(--text-primary);
+    background: transparent;
+    box-shadow: var(--shadow-sm);
+    border-color: var(--border);
+    border-radius: var(--radius-default);
+    cursor: pointer;
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state);
+}
+/* Hover and press tint as the outline button's do; the border darkens while
+   the list is open. */
+.cn-select-trigger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+.cn-select-trigger:active:not(:disabled) {
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+.cn-select-trigger[data-state="open"]:not(:disabled) {
+    border-color: var(--border-hover);
+}
+.cn-combobox-box:disabled { opacity: 0.5; }
+/* No value chosen, or disabled: the shown text, which inherits, dims. */
+.cn-select-trigger[data-placeholder] { color: var(--text-tertiary); }
+.cn-select-trigger:disabled {
+    color: var(--text-tertiary);
+    box-shadow: none;
+    background: var(--input-bg-disabled);
+    border-color: var(--border-secondary);
+    cursor: not-allowed;
+}
+
+.cn-select-content {
+    /* Floating dropdown panel → elevation 2.
+       Shared overlay-menu chrome — keep `.cn-dropdown-menu`,
+       `.cn-context-menu`, and `.cn-combobox-content` in sync.
+       No outer padding: items extend edge-to-edge and the rounded
+       overflow_clip on the panel (see `ClipShape::rounded_rect_shaped`)
+       trims their hover bg to the panel's outer curve, so the
+       highlight follows the rounded corner instead of leaving a
+       gap between the item's small radius and the panel's larger
+       one. */
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-default);
+    /* Reuse the dropdown keyframes — same top-anchored slide/fade. */
+    animation: cn-dropdown-menu-enter var(--duration-fast) var(--ease-state);
+    transform-origin: top center;
+    color: var(--text-primary);
+    box-shadow: var(--shadow-md);
+}
+
+.cn-select-item {
+    padding: var(--space-2) var(--space-3);
+    cursor: pointer;
+    color: var(--text-primary);
+    /* No `border-radius` — item bg is a clean rectangle so the
+       panel's rounded clip can shape the first/last items into the
+       outer curve. A small radius here would leave a visible band
+       between the item's curve and the panel's curve. */
+    /* No CSS `transition` here — same rationale as cn-menubar-item:
+       when the cursor slides across rows quickly the bg transition
+       leaves multiple rows partially highlighted (each at a different
+       point in the fade-out) and reads as a stuck-hover bug. Instant
+       on/off matches the HID. */
+}
+/* Item hover uses `--accent-subtle` because the parent panel is
+   already at `--surface-elevated`; hovering to the same colour
+   would be invisible. `--accent-subtle` is a low-alpha accent
+   tint specifically designed for this use. */
+.cn-select-item:hover:not(:disabled) {
+    background: var(--accent-subtle);
+}
+/* `--selection` (~24 % alpha accent on Hybrid, 20 % on macOS) vs hover's
+   `--accent-subtle` (~10 % alpha) so the currently-chosen row is
+   visibly distinct from hovered rows and from the panel itself. */
+.cn-select-item--selected {
+    background: var(--selection) !important;
+    color: var(--accent) !important;
+}
+.cn-select-item--selected:disabled {
+    color: var(--text-tertiary) !important;
+    background: transparent !important;
+}
+.cn-select-item:disabled {
+    color: var(--text-tertiary);
+    background: transparent;
+    cursor: not-allowed;
+}
+.cn-select-trigger > .cn-chevron { color: var(--text-tertiary); }
+.cn-dropdown-trigger > .cn-chevron { color: var(--text-secondary); }

@@ -1,0 +1,41 @@
+/* ============================================================================
+   Alert
+   ============================================================================ */
+
+.cn-alert {
+    background: var(--cn-alert-bg, var(--surface));
+    border: 1px solid var(--cn-alert-border, var(--border));
+    border-radius: var(--radius-default);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    padding: var(--space-4);
+}
+.cn-alert-box {
+    background: var(--cn-alert-bg, var(--surface));
+    border: 1px solid var(--cn-alert-border, var(--border));
+    border-radius: var(--radius-default);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    padding: var(--space-4);
+    gap: var(--space-3);
+}
+.cn-alert--success {
+    background: var(--success-bg);
+    border-color: var(--success);
+    color: var(--success);
+}
+.cn-alert--warning {
+    background: var(--warning-bg);
+    border-color: var(--warning);
+    color: var(--warning);
+}
+.cn-alert--error {
+    background: var(--error-bg);
+    border-color: var(--error);
+    color: var(--error);
+}
+.cn-alert--info {
+    background: var(--info-bg);
+    border-color: var(--info);
+    color: var(--info);
+}

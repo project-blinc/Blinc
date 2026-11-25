@@ -1,0 +1,92 @@
+/* ============================================================================
+   Combobox
+   ============================================================================ */
+
+/* The dropdown menu's default trigger: filled as the outline button is,
+   tinted on hover and press. */
+.cn-dropdown-trigger {
+    color: var(--text-primary);
+    background: transparent;
+    border-width: 1px;
+    border-color: var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    transition: background-color var(--duration-fast) var(--ease-state);
+}
+.cn-dropdown-trigger:hover {
+    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+.cn-dropdown-trigger:active {
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+.cn-combobox-trigger {
+    color: var(--text-primary);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    border-color: var(--border);
+    border-radius: var(--radius-default);
+    cursor: pointer;
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state);
+}
+.cn-combobox-trigger:hover:not(:disabled) { border-color: var(--border-hover); }
+/* Open wins over hover; the hover variant is listed because rules with a
+   pointer pseudo-class apply after plain ones. */
+.cn-combobox-trigger[data-state="open"]:not(:disabled),
+.cn-combobox-trigger[data-state="open"]:hover:not(:disabled) { border-color: var(--border-focus); }
+/* Nothing chosen, or disabled: the shown text, which inherits, dims. */
+.cn-combobox-trigger[data-placeholder] { color: var(--text-tertiary); }
+.cn-combobox-trigger:disabled {
+    color: var(--text-tertiary);
+    box-shadow: none;
+    background: var(--input-bg-disabled);
+    border-color: var(--border-secondary);
+    cursor: not-allowed;
+}
+.cn-combobox-content {
+    /* Shared overlay-menu chrome with select / dropdown / context.
+       No outer padding — see `.cn-select-content`. */
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-default);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-md);
+    /* Reuse the dropdown keyframes — same top-anchored slide/fade. */
+    animation: cn-dropdown-menu-enter var(--duration-fast) var(--ease-state);
+    transform-origin: top center;
+}
+.cn-combobox-item {
+    padding: var(--space-2) var(--space-3);
+    /* No `border-radius` — see `.cn-select-item`. */
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    /* No transition — see cn-menubar-item rationale. */
+}
+/* Hover uses `--accent-subtle`. The selected state uses `--selection`,
+   which carries roughly 2× the alpha (~20% vs ~10%) on most themes so
+   the currently-chosen row is visibly distinct against the panel
+   background even when Surface is pure white — `accent-subtle` alone
+   on `Surface = #FFFFFF` (macOS light) renders as a ~5 % blue tint
+   that's effectively invisible. */
+.cn-combobox-item:hover:not(:disabled) {
+    background: var(--accent-subtle);
+}
+.cn-combobox-item--selected {
+    background: var(--selection) !important;
+    color: var(--accent) !important;
+}
+.cn-combobox-item--selected:disabled {
+    color: var(--text-tertiary) !important;
+    background: transparent !important;
+}
+.cn-combobox-item:disabled {
+    color: var(--text-tertiary);
+    background: transparent;
+    cursor: not-allowed;
+}
+.cn-combobox-empty { color: var(--text-tertiary); }
+.cn-combobox-search-row { border-bottom: 1px solid var(--border); }
+.cn-combobox-trigger > .cn-chevron { color: var(--text-tertiary); }

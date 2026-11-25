@@ -1,0 +1,36 @@
+/* ============================================================================
+   Drawer
+   ============================================================================ */
+
+.cn-drawer {
+    /* Modal overlay → elevation 2. Enter/exit motion is driven by the
+       DrawerBuilder motion_enter / motion_exit. */
+    background: var(--cn-drawer-bg, var(--surface-elevated));
+    border: 1px solid var(--cn-drawer-border, var(--border));
+}
+.cn-drawer, .cn-sheet {
+    color: var(--text-primary);
+    box-shadow: var(--shadow-xl);
+}
+.cn-drawer-title, .cn-sheet-title { color: var(--text-primary); }
+.cn-sheet-description { color: var(--text-secondary); }
+.cn-drawer-separator, .cn-sheet-separator { background: var(--border); }
+/* The close button: quiet until hovered. */
+.cn-drawer-close, .cn-sheet-close {
+    color: var(--text-secondary);
+    border-radius: var(--radius-md);
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        color var(--duration-fast) var(--ease-state);
+}
+.cn-drawer-close:hover, .cn-sheet-close:hover {
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    color: var(--text-primary);
+}
+.cn-drawer-header {
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-4);
+}
+.cn-drawer-footer {
+    padding: var(--space-4);
+}

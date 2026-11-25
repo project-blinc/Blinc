@@ -1,0 +1,53 @@
+// The default look of every cn component. One partial per component, in the order its rules
+// apply; `build.rs` compiles this with the `blinc_sass` crate and wraps the result in
+// `@layer components`, so every rule sits below an application's own.
+//
+// Colours, radii, durations and easings are `var(--theme-token)` references. A component that
+// can be restyled one property at a time reads `var(--cn-component-prop, var(--fallback))`.
+@use "components/base";
+@use "components/button";
+@use "components/card";
+@use "components/badge";
+@use "components/alert";
+@use "components/separator";
+@use "components/skeleton";
+@use "components/input";
+@use "components/textarea";
+@use "components/label";
+@use "components/kbd";
+@use "components/checkbox";
+@use "components/switch";
+@use "components/toggle";
+@use "components/radio";
+@use "components/tabs";
+@use "components/select";
+@use "components/slider";
+@use "components/progress";
+@use "components/chart";
+@use "components/avatar";
+@use "components/spinner";
+@use "components/tooltip";
+@use "components/dialog";
+@use "components/drawer";
+@use "components/sheet";
+@use "components/toast";
+@use "components/accordion";
+@use "components/breadcrumb";
+@use "components/pagination";
+@use "components/navigation-menu";
+@use "components/sidebar";
+@use "components/scroll-area";
+@use "components/menus";
+@use "components/dropdown-menu";
+@use "components/context-menu";
+@use "components/menubar";
+@use "components/popover";
+@use "components/hover-card";
+@use "components/tree-view";
+@use "components/overlay-motion";
+@use "components/calendar";
+@use "components/resizable";
+@use "components/collapsible";
+@use "components/combobox";
+@use "components/table";
+@use "components/rich-text-editor";

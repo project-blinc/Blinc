@@ -364,19 +364,22 @@ fn validate(root: &Path, catalog: &Catalog) -> Result<()> {
     Ok(())
 }
 
+/// The cn stylesheet, compiled from its SCSS sources, with `\n` line ends whatever the checkout's.
+fn cn_css(root: &Path) -> Result<String> {
+    let css = blinc_sass::compile(root.join("crates/blinc_cn/styles/index.scss"), None)?;
+    Ok(css.replace("\r\n", "\n"))
+}
+
 fn default_css(root: &Path) -> Result<String> {
-    let mut output = String::new();
-    for path in [
-        "crates/blinc_layout/src/ua_styles.rs",
-        "crates/blinc_cn/src/cn_styles.rs",
-    ] {
-        let source = fs::read_to_string(root.join(path))?.replace("\r\n", "\n");
-        let (_, body) = source
-            .split_once("    r#\"\n")
-            .ok_or("stylesheet literal missing")?;
-        let (body, _) = body.rsplit_once("\"#,").ok_or("stylesheet end missing")?;
-        output.push_str(body);
-        output.push('\n');
-    }
+    let source = fs::read_to_string(root.join("crates/blinc_layout/src/ua_styles.rs"))?
+        .replace("\r\n", "\n");
+    let (_, body) = source
+        .split_once("    r#\"\n")
+        .ok_or("stylesheet literal missing")?;
+    let (body, _) = body.rsplit_once("\"#,").ok_or("stylesheet end missing")?;
+    let mut output = String::from(body);
+    output.push('\n');
+    output.push_str(&cn_css(root)?);
+    output.push('\n');
     Ok(format!("@layer components {{\n{output}\n}}\n"))
 }

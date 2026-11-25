@@ -172,3 +172,4 @@
 
 - [Writing Examples](./contributing/examples.md)
 - [Testing](./contributing/testing.md)
+- [Writing Component Styles](./contributing/styles.md)

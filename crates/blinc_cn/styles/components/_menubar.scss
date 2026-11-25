@@ -1,0 +1,47 @@
+/* ============================================================================
+   Menubar
+   ============================================================================ */
+
+.cn-menubar {
+    /* Elevated container → elevation 2 */
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-1);
+    gap: var(--space-1);
+    /* Narrower than its triggers, the bar wraps them rather than running past its container. */
+    flex-wrap: wrap;
+    max-width: 100%;
+}
+.cn-menubar-trigger {
+    padding: var(--space-1-5) var(--space-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    background: transparent;
+}
+.cn-menubar-trigger:hover {
+    background: var(--surface-elevated);
+}
+/* Dropdown panel that opens when a menubar trigger is activated.
+   Shared chrome with .cn-dropdown-menu / .cn-context-menu so the
+   File / Edit / View popups read as elevation-2 floating surfaces
+   instead of the pure-white `Surface` the Rust-side `.bg(...)`
+   fallback was painting. */
+.cn-menubar-content {
+    /* Reuse the dropdown keyframes — same top-anchored slide/fade. */
+    animation: cn-dropdown-menu-enter var(--duration-fast) var(--ease-state);
+    transform-origin: top center;
+}
+/* Belt-and-braces — same as `.cn-context-menu:has(...)`. Real
+   suppression now lives in `RenderTree::sweep_stale_css_animations`,
+   which keeps the parent panel's ActiveCssAnimation alive across the
+   submenu's OverlayStack-driven Structural rebuild so the enter
+   keyframe never restarts. */
+.cn-menubar-content:has(.cn-menubar-item--has-submenu:hover) {
+    animation: none;
+}
+.cn-menubar-item {
+    padding: var(--space-2) var(--space-3);
+}

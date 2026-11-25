@@ -1,0 +1,51 @@
+/* ============================================================================
+   Slider
+   ============================================================================ */
+
+/* A fill, the thumb and the rest of the track in a row. The thumb grows
+   under the pointer and more while held; a disabled slider mutes every part
+   instead of fading. */
+.cn-slider {
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+}
+.cn-slider[data-focus-visible] { outline-color: var(--focus-ring); }
+.cn-slider-fill {
+    background: var(--cn-slider-fill-bg, var(--primary));
+    border-radius: var(--radius-full) 0 0 var(--radius-full);
+}
+.cn-slider-rest {
+    background: var(--cn-slider-track-bg, var(--border));
+    border-radius: 0 var(--radius-full) var(--radius-full) 0;
+}
+.cn-slider-thumb {
+    background: var(--cn-slider-thumb-bg, var(--text-inverse));
+    border: 2px solid var(--primary);
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state);
+}
+.cn-slider:hover:not(:disabled) > .cn-slider-thumb {
+    transform: scale(1.1);
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary-hover);
+}
+.cn-slider:active:not(:disabled) > .cn-slider-thumb,
+.cn-slider[data-state="dragging"] > .cn-slider-thumb {
+    transform: scale(1.2);
+}
+.cn-slider:disabled { cursor: not-allowed; }
+.cn-slider:disabled > .cn-slider-rest { background: var(--input-bg-disabled); }
+.cn-slider:disabled > .cn-slider-fill { background: var(--border-secondary); }
+.cn-slider:disabled > .cn-slider-thumb {
+    background: var(--input-bg-disabled);
+    border: 1px solid var(--border-secondary);
+    box-shadow: none;
+}
+.cn-slider-label { color: var(--text-primary); }
+.cn-slider-value { color: var(--text-secondary); }
+.cn-slider-field[data-disabled] .cn-slider-label,
+.cn-slider-field[data-disabled] .cn-slider-value { color: var(--text-tertiary); }

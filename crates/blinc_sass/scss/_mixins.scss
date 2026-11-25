@@ -1,0 +1,29 @@
+// Shared by the component stylesheets: `@use "blinc/mixins" as *;`.
+@use "sass:list";
+
+// A `transition` over `$props`, each at the standard duration and easing.
+@mixin transition($props...) {
+  $parts: ();
+  @each $prop in $props {
+    $parts: list.append($parts, unquote("#{$prop} var(--duration-fast) var(--ease-state)"), comma);
+  }
+  transition: $parts;
+}
+
+// The text colour mixed into the background by `$percent`, as hover and press tints are.
+@function tint($percent, $into: transparent) {
+  @return color-mix(in srgb, var(--text-primary) $percent, $into);
+}
+
+// `@keyframes $name` from a map of steps to maps of properties.
+@mixin keyframes($name, $steps) {
+  @keyframes #{$name} {
+    @each $at, $props in $steps {
+      #{$at} {
+        @each $prop, $value in $props {
+          #{$prop}: $value;
+        }
+      }
+    }
+  }
+}

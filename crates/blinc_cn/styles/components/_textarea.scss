@@ -1,0 +1,121 @@
+/* ============================================================================
+   Textarea
+   ============================================================================ */
+
+.cn-textarea {
+    box-shadow: var(--shadow-sm);
+    background: var(--cn-textarea-bg, var(--input-bg));
+    border-color: var(--border);
+    border-radius: var(--radius-default);
+    color: var(--text-primary);
+    outline: 2px solid transparent;
+    outline-offset: 1px;
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state),
+        outline-color var(--duration-fast) var(--ease-state),
+        outline-offset var(--duration-fast) var(--ease-out);
+}
+/* The border and fill per state are the layout input's `.blinc-input`
+   rules, which these sit beside at the same specificity. */
+.cn-textarea:focus:not(:disabled) {
+    /* HID focus ring — see `.cn-input:focus` for rationale. */
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+.cn-textarea[data-invalid]:not(:disabled),
+.cn-textarea[data-invalid]:hover:not(:disabled),
+.cn-textarea[data-invalid]:focus:not(:disabled) {
+    border-color: var(--border-error);
+}
+.cn-textarea[data-invalid]:focus:not(:disabled) {
+    outline: 2px solid var(--focus-ring-error);
+}
+.cn-textarea.cn-textarea--success:not(:disabled),
+.cn-textarea.cn-textarea--success:hover:not(:disabled),
+.cn-textarea.cn-textarea--success:focus:not(:disabled) {
+    border-color: var(--success);
+}
+.cn-textarea.cn-textarea--success:focus:not(:disabled) {
+    outline: 2px solid var(--focus-ring-success);
+}
+
+/* Number input: a number between a - and a +, one bordered
+   piece. The steps are transparent and tint on hover and press; the field is
+   borderless and clear (set in Rust, so the input rules give way to it). */
+.cn-number-input-group {
+    box-shadow: var(--shadow-sm);
+    background: var(--input-bg);
+    border-color: var(--border);
+}
+.cn-number-input-group:disabled {
+    background: var(--input-bg-disabled);
+    box-shadow: none;
+}
+.cn-number-input-step {
+    background: transparent;
+    color: var(--text-secondary);
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        color var(--duration-fast) var(--ease-state);
+}
+.cn-number-input-step--dec { border-right: 1px solid var(--border); }
+.cn-number-input-step--inc { border-left: 1px solid var(--border); }
+.cn-number-input-step:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+    color: var(--text-primary);
+}
+.cn-number-input-step:active:not(:disabled) {
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+.cn-number-input-step:disabled { color: var(--text-tertiary); }
+
+/* Number gauge: a number over a range as a fill tinted from
+   the primary, the value centred on it and a six-dot grip at the fill's edge.
+   The grip deepens while the gauge is hovered, pressed, dragged or keyed. */
+.cn-number-gauge {
+    border-color: var(--border);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    cursor: ew-resize;
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    transition: border-color var(--duration-fast) var(--ease-state);
+}
+.cn-number-gauge--sm { border-radius: var(--radius-sm); }
+.cn-number-gauge--md, .cn-number-gauge--lg { border-radius: var(--radius-default); }
+.cn-number-gauge:hover:not(:disabled) { border-color: var(--border-hover); }
+.cn-number-gauge[data-focus-visible] { outline-color: var(--focus-ring); }
+.cn-number-gauge-fill { background: color-mix(in srgb, var(--primary) 22%, var(--input-bg)); }
+.cn-number-gauge-rest { background: transparent; }
+.cn-number-gauge-thumb {
+    background: color-mix(in srgb, var(--primary) 30%, var(--input-bg));
+    color: var(--primary);
+    transition: background-color var(--duration-fast) var(--ease-state);
+}
+.cn-number-gauge:hover:not(:disabled) > .cn-number-gauge-thumb,
+.cn-number-gauge:active:not(:disabled) > .cn-number-gauge-thumb,
+.cn-number-gauge[data-state="dragging"] > .cn-number-gauge-thumb,
+.cn-number-gauge[data-focus-visible] > .cn-number-gauge-thumb {
+    background: color-mix(in srgb, var(--primary) 44%, var(--input-bg));
+}
+.cn-number-gauge:disabled { color: var(--text-tertiary); cursor: default; }
+.cn-number-gauge:disabled > .cn-number-gauge-fill { background: var(--input-bg-disabled); }
+.cn-number-gauge:disabled > .cn-number-gauge-thumb {
+    background: var(--border-secondary);
+    color: var(--text-tertiary);
+}
+/* A range gauge stacks two faces: the upper paints the interval, the lower
+   covers what lies before its grip with the track. */
+.cn-number-gauge-layer[data-endpoint="lower"] > .cn-number-gauge-fill { background: var(--input-bg); }
+.cn-number-gauge:hover:not(:disabled) > .cn-number-gauge-layer > .cn-number-gauge-thumb,
+.cn-number-gauge:active:not(:disabled) > .cn-number-gauge-layer > .cn-number-gauge-thumb,
+.cn-number-gauge[data-state="dragging"] > .cn-number-gauge-layer > .cn-number-gauge-thumb,
+.cn-number-gauge[data-focus-visible] > .cn-number-gauge-layer > .cn-number-gauge-thumb {
+    background: color-mix(in srgb, var(--primary) 44%, var(--input-bg));
+}
+.cn-number-gauge:disabled > .cn-number-gauge-layer > .cn-number-gauge-fill { background: var(--input-bg-disabled); }
+.cn-number-gauge:disabled > .cn-number-gauge-layer > .cn-number-gauge-thumb {
+    background: var(--border-secondary);
+    color: var(--text-tertiary);
+}

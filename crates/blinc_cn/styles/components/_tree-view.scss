@@ -1,0 +1,38 @@
+/* ============================================================================
+   Tree View
+   ============================================================================ */
+
+/* A closed group is at no height, the change eased by its layout animation,
+   and its item's chevron turns down while open. Guides show along groups
+   while the tree has `data-guides`. */
+.cn-tree { font-size: var(--text-sm); }
+.cn-tree-row {
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    background: transparent;
+    cursor: pointer;
+    outline: 0 solid var(--focus-ring);
+    outline-offset: -2px;
+    transition: background var(--duration-fast) var(--ease-state),
+        color var(--duration-fast) var(--ease-state);
+}
+.cn-tree-row:hover { background: var(--accent-subtle); color: var(--text-primary); }
+.cn-tree-row[data-selected], .cn-tree-row[data-selected]:hover {
+    background: color-mix(in srgb, var(--primary) 24%, transparent) !important;
+    color: var(--text-primary) !important;
+}
+.cn-tree-row[data-focus-visible] { outline-width: 2px; }
+.cn-tree-row[data-diff="added"] { color: var(--success); }
+.cn-tree-row[data-diff="removed"] { color: var(--error); }
+.cn-tree-row[data-diff="modified"] { color: var(--warning); }
+.cn-tree-chevron {
+    color: var(--text-tertiary);
+    transition: transform var(--duration-normal) var(--ease-state);
+}
+.cn-tree-item[data-state="open"] > .cn-tree-row > .cn-tree-chevron { transform: rotate(90deg); }
+.cn-tree-icon { color: var(--text-tertiary); }
+.cn-tree-row[data-selected] > .cn-tree-icon { color: var(--primary) !important; }
+.cn-tree-group { overflow: hidden; }
+.cn-tree-group[data-state="closed"] { height: 0; }
+.cn-tree-guide { background: transparent; }
+.cn-tree[data-guides] .cn-tree-guide { background: var(--border); }

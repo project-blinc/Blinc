@@ -1,0 +1,16 @@
+/* ============================================================================
+   Skeleton
+   ============================================================================ */
+
+/* A placeholder that pulses while content loads. */
+.cn-skeleton {
+    background: var(--cn-skeleton-bg, var(--surface-elevated));
+    border-radius: var(--radius-sm);
+    animation: cn-skeleton-pulse 1500ms var(--ease-in-out) infinite;
+}
+.cn-skeleton--circle { border-radius: var(--radius-full); }
+@keyframes cn-skeleton-pulse {
+    from { opacity: 1; }
+    50%  { opacity: 0.4; }
+    to   { opacity: 1; }
+}

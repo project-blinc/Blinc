@@ -1,0 +1,17 @@
+/* ============================================================================
+   Checkbox
+   ============================================================================ */
+
+/* The look is the layout checkbox's `.blinc-checkbox` rules. These are cn's
+   hooks on top of them: the custom properties a theme can set, and the
+   disabled class. */
+.cn-checkbox:checked {
+    background: var(--cn-checkbox-checked-bg, var(--primary)) !important;
+    border-color: var(--cn-checkbox-checked-border, var(--primary)) !important;
+    color: var(--cn-checkbox-checked-color, var(--text-inverse)) !important;
+}
+
+.cn-checkbox:checked:disabled {
+    background: var(--input-bg-disabled) !important;
+    border-color: var(--border-secondary) !important;
+}

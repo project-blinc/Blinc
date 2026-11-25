@@ -1,0 +1,49 @@
+/* ============================================================================
+   Switch
+   ============================================================================ */
+
+/* The track is the element; its fill follows hover, `checked` and disabled,
+   and the thumb slides by a transform per size (track - thumb - 4px). */
+.cn-switch {
+    background: var(--border-secondary);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: background-color var(--duration-normal) var(--ease-state);
+}
+/* A wash of the text colour over the idle track, so hovering moves it the same
+   way in either scheme (`--border-hover` is translucent and reads darker than
+   this solid track on a dark theme). */
+.cn-switch:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--text-primary) 10%, var(--border-secondary));
+}
+.cn-switch:checked { background: var(--primary) !important; }
+.cn-switch:checked:hover:not(:disabled) { background: var(--primary-hover) !important; }
+/* A disabled track takes the disabled-button palette, with a thin outline so
+   it keeps a silhouette. */
+.cn-switch:disabled {
+    background: var(--input-bg-disabled);
+    border: 1px solid var(--border-secondary);
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.cn-switch:checked:disabled { background: var(--input-bg-disabled) !important; }
+.cn-switch:checked > .cn-switch-thumb { background: var(--cn-switch-checked-thumb, var(--text-inverse)) !important; }
+.cn-switch-thumb {
+    background: var(--text-inverse);
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--duration-normal) var(--ease-state);
+}
+.cn-switch:disabled > .cn-switch-thumb {
+    box-shadow: none;
+    border: 1px solid var(--border-secondary);
+}
+.cn-switch--sm:checked > .cn-switch-thumb { transform: translateX(14px); }
+.cn-switch--md:checked > .cn-switch-thumb { transform: translateX(20px); }
+.cn-switch--lg:checked > .cn-switch-thumb { transform: translateX(24px); }
+.cn-switch:active:not(:disabled) > .cn-switch-thumb { transform: scale(0.9); }
+.cn-switch--sm:checked:active:not(:disabled) > .cn-switch-thumb { transform: translateX(14px) scale(0.9); }
+.cn-switch--md:checked:active:not(:disabled) > .cn-switch-thumb { transform: translateX(20px) scale(0.9); }
+.cn-switch--lg:checked:active:not(:disabled) > .cn-switch-thumb { transform: translateX(24px) scale(0.9); }
+.cn-switch-label { color: var(--text-primary); }
+.cn-switch-row:disabled > .cn-switch-label { color: var(--text-tertiary); }

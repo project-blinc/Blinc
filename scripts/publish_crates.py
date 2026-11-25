@@ -14,7 +14,7 @@ import time
 RELEASE_CRATES = (
     "blinc_macros", "blinc_flow", "blinc_platform", "blinc_icons", "blinc_core",
     "blinc_animation", "blinc_paint", "blinc_svg", "blinc_text",
-    "blinc_theme", "blinc_css", "blinc_image", "blinc_media", "blinc_layout",
+    "blinc_theme", "blinc_css", "blinc_sass", "blinc_image", "blinc_media", "blinc_layout",
     "blinc_noto_emoji", "blinc_noto_symbols", "blinc_gpu", "blinc_cn",
     "blinc_tabler_icons", "blinc_router", "blinc_platform_desktop",
     "blinc_platform_android", "blinc_platform_ios", "blinc_platform_web",

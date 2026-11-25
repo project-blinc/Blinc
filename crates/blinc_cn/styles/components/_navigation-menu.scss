@@ -1,0 +1,52 @@
+/* ============================================================================
+   Navigation Menu
+   ============================================================================ */
+
+.cn-nav-menu {
+    gap: var(--space-1);
+    /* Narrower than its links, the bar wraps them rather than running past its container. */
+    flex-wrap: wrap;
+    max-width: 100%;
+}
+.cn-nav-link {
+    padding: var(--space-2) var(--space-3);
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+.cn-nav-link:hover {
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+}
+.cn-nav-link--active {
+    background: var(--surface-elevated) !important;
+    color: var(--text-primary) !important;
+}
+/* The dropdown panel (`.cn-nav-menu-content`) is itself painted at
+   `--surface-elevated`, so the generic `.cn-nav-link:hover` rule
+   above (which sets the same fill) leaves items inside the panel
+   with no visible hover affordance. Override with `--accent-subtle`
+   for the descendant case — same convention combobox / select /
+   dropdown-menu items use against their own surface-elevated panels. */
+.cn-nav-menu-content .cn-nav-link:hover {
+    background: var(--accent-subtle);
+}
+/* Inside the panel a link's title is primary and its description secondary. */
+.cn-nav-menu-content .cn-nav-link { color: var(--text-primary); }
+.cn-nav-link-description { color: var(--text-secondary); }
+
+.cn-nav-menu-content {
+    /* Floating overlay → elevation 2 */
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-md);
+    /* CSS-driven enter — slide down + fade. Motion FSM workaround. */
+    animation: cn-nav-menu-enter var(--duration-fast) var(--ease-state);
+    transform-origin: top center;
+}
+
+@keyframes cn-nav-menu-enter {
+    from { opacity: 0; transform: scale(0.98) translateY(-4px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}

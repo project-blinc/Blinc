@@ -1,0 +1,12 @@
+/* ============================================================================
+   Radio
+   ============================================================================ */
+
+/* The look is the layout radio's `.blinc-radio` rules. These are cn's hooks on
+   top of them: the custom properties a theme can set. */
+.cn-radio { border-color: var(--cn-radio-border, var(--border-secondary)); }
+.cn-radio:hover:not(:disabled) { border-color: var(--cn-radio-hover-border, var(--primary)); }
+.cn-radio:checked { border-color: var(--cn-radio-selected, var(--primary)) !important; }
+.cn-radio:checked:disabled { border-color: var(--border-secondary) !important; }
+.cn-radio:checked > .cn-radio-dot { background: var(--cn-radio-dot, var(--primary)) !important; }
+.cn-radio-dot { background: var(--cn-radio-dot, var(--primary)); }

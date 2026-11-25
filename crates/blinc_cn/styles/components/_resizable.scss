@@ -1,0 +1,22 @@
+/* ============================================================================
+   Resizable
+   ============================================================================ */
+
+/* `.cn-resizable-handle` is the wide HIT AREA wrapper (thickness +
+   hit padding on each side). The actual visible thin handle line
+   is the Rust-side inner div whose background is theme-driven —
+   `--border` at rest, `--primary` while dragging. Painting the
+   wrapper background would fill the entire hit zone with that
+   colour, making the handle read 2-3× wider than its actual
+   visual stripe. Keep the wrapper transparent. */
+.cn-resizable-handle {
+    background: transparent;
+}
+.cn-resizable-line {
+    background: var(--border);
+    transition: background var(--duration-fast) var(--ease-state);
+}
+.cn-resizable-handle:hover > .cn-resizable-line,
+.cn-resizable-handle[data-state="dragging"] > .cn-resizable-line {
+    background: var(--primary);
+}

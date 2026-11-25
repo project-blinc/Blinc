@@ -1,0 +1,26 @@
+/* ============================================================================
+   Toast
+   ============================================================================ */
+
+/* A notification: success, warning and destructive toasts colour their
+   border and icon by `data-variant`. */
+.cn-toast {
+    background: var(--cn-toast-bg, var(--surface));
+    border: 1px solid var(--cn-toast-border, var(--border));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    color: var(--text-primary);
+}
+.cn-toast[data-variant="success"] { border-color: var(--success); }
+.cn-toast[data-variant="warning"] { border-color: var(--warning); }
+.cn-toast[data-variant="destructive"] { border-color: var(--error); }
+.cn-toast[data-variant="success"] .cn-toast-icon { color: var(--success); }
+.cn-toast[data-variant="warning"] .cn-toast-icon { color: var(--warning); }
+.cn-toast[data-variant="destructive"] .cn-toast-icon { color: var(--error); }
+.cn-toast-title { color: var(--text-primary); }
+.cn-toast-description { color: var(--text-secondary); }
+.cn-toast-close {
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+}
+.cn-toast-close:hover { color: var(--text-primary); }

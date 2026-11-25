@@ -1,0 +1,137 @@
+/* ============================================================================
+   Badge
+   ============================================================================ */
+
+.cn-badge {
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    /* `2 10` doesn't have an exact spacing token (space-0-5 = 2,
+       space-2-5 = 10) — use the closest matching pair. */
+    padding: var(--space-0-5) var(--space-2-5);
+}
+
+/* Soft (default) — pale tinted bg + 1px same-hue border + same-hue
+   text. The thin colored border gives the pill more definition
+   against neutral surfaces; without it the soft fill alone reads
+   as a weak smudge on light themes. Mirrors the Alert component's
+   family so a `Success` badge sits next to a `Success` alert and
+   reads as part of the same status system. */
+.cn-badge--soft-default {
+    background: var(--accent-subtle);
+    border: 1px solid var(--primary);
+    color: var(--primary);
+}
+.cn-badge--soft-secondary {
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+}
+.cn-badge--soft-success {
+    background: var(--success-bg);
+    border: 1px solid var(--success);
+    color: var(--success);
+}
+.cn-badge--soft-warning {
+    background: var(--warning-bg);
+    border: 1px solid var(--warning);
+    color: var(--warning);
+}
+.cn-badge--soft-destructive {
+    background: var(--error-bg);
+    border: 1px solid var(--error);
+    color: var(--error);
+}
+
+/* Solid — legacy filled style. Useful when the badge sits on a
+   page-tinted surface and a soft variant would disappear. */
+.cn-badge--solid-default {
+    background: var(--primary);
+    color: var(--text-inverse);
+}
+.cn-badge--solid-secondary {
+    background: var(--secondary);
+    color: var(--text-inverse);
+}
+.cn-badge--solid-success {
+    background: var(--success);
+    color: var(--text-inverse);
+}
+.cn-badge--solid-warning {
+    background: var(--warning);
+    color: var(--text-inverse);
+}
+.cn-badge--solid-destructive {
+    background: var(--error);
+    color: var(--text-inverse);
+}
+
+/* Outline — transparent + variant-coloured border + variant-
+   coloured text. Quietest of the three when used in a dense set. */
+.cn-badge--outline-default {
+    background: transparent;
+    border: 1px solid var(--primary);
+    color: var(--primary);
+}
+.cn-badge--outline-secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+}
+.cn-badge--outline-success {
+    background: transparent;
+    border: 1px solid var(--success);
+    color: var(--success);
+}
+.cn-badge--outline-warning {
+    background: transparent;
+    border: 1px solid var(--warning);
+    color: var(--warning);
+}
+.cn-badge--outline-destructive {
+    background: transparent;
+    border: 1px solid var(--error);
+    color: var(--error);
+}
+
+/* Icon tint — target the inner SVG shape elements (`path`,
+   `circle`, …) directly instead of the `<svg>` wrapper. The
+   `blinc_icons` / `blinc_tabler_icons` generators emit paths with
+   only the `d` attribute and rely on `stroke="currentColor"` on
+   the outer `<svg>` for the tint. Blinc's CSS engine doesn't
+   propagate `stroke` from `<svg>` down to child paths, so a rule
+   on `svg { stroke: … }` has no effect; the path needs its own
+   matching selector. Listing each SVG shape tag covers both
+   line-style icons (Lucide / Tabler outline — stroke-driven) and
+   filled icons (Tabler filled — fill-driven). Setting both stroke
+   and fill is safe because each shape carries `fill="none"` in
+   the outline sets, which the per-shape CSS rule overrides only
+   for shapes that actually fill.
+   Inline `.color(...)` on the icon element wins via specificity
+   for one-off overrides. */
+.cn-badge--soft-default :is(path, circle, rect, ellipse, line, polygon, polyline, g),
+.cn-badge--outline-default :is(path, circle, rect, ellipse, line, polygon, polyline, g) {
+    stroke: var(--primary);
+}
+.cn-badge--soft-secondary :is(path, circle, rect, ellipse, line, polygon, polyline, g),
+.cn-badge--outline-secondary :is(path, circle, rect, ellipse, line, polygon, polyline, g) {
+    stroke: var(--text-secondary);
+}
+.cn-badge--soft-success :is(path, circle, rect, ellipse, line, polygon, polyline, g),
+.cn-badge--outline-success :is(path, circle, rect, ellipse, line, polygon, polyline, g) {
+    stroke: var(--success);
+}
+.cn-badge--soft-warning :is(path, circle, rect, ellipse, line, polygon, polyline, g),
+.cn-badge--outline-warning :is(path, circle, rect, ellipse, line, polygon, polyline, g) {
+    stroke: var(--warning);
+}
+.cn-badge--soft-destructive :is(path, circle, rect, ellipse, line, polygon, polyline, g),
+.cn-badge--outline-destructive :is(path, circle, rect, ellipse, line, polygon, polyline, g) {
+    stroke: var(--error);
+}
+.cn-badge--solid-default :is(path, circle, rect, ellipse, line, polygon, polyline, g),
+.cn-badge--solid-secondary :is(path, circle, rect, ellipse, line, polygon, polyline, g),
+.cn-badge--solid-success :is(path, circle, rect, ellipse, line, polygon, polyline, g),
+.cn-badge--solid-warning :is(path, circle, rect, ellipse, line, polygon, polyline, g),
+.cn-badge--solid-destructive :is(path, circle, rect, ellipse, line, polygon, polyline, g) {
+    stroke: var(--text-inverse);
+}

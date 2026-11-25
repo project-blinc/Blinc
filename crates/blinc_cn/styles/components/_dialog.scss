@@ -1,0 +1,18 @@
+/* ============================================================================
+   Dialog
+   ============================================================================ */
+
+.cn-dialog {
+    /* Modal → elevation 2 (lifts above surrounding cards) */
+    background: var(--cn-dialog-bg, var(--surface-elevated));
+    border: 1px solid var(--cn-dialog-border, var(--border));
+    border-radius: var(--radius-xl);
+    color: var(--text-primary);
+    box-shadow: var(--cn-dialog-shadow, var(--shadow-xl));
+    padding: var(--space-6);
+    gap: var(--space-4);
+    /* Enter/exit motion is driven by the OverlayBuilder motion_enter /
+       motion_exit; no CSS keyframe here. */
+}
+.cn-dialog-title { color: var(--text-primary); }
+.cn-dialog-description { color: var(--text-secondary); }

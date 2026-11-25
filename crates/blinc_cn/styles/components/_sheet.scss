@@ -1,0 +1,10 @@
+/* ============================================================================
+   Sheet
+   ============================================================================ */
+
+.cn-sheet {
+    /* Modal overlay → elevation 2. Enter/exit motion is driven by the
+       SheetBuilder motion_enter / motion_exit. */
+    background: var(--cn-sheet-bg, var(--surface-elevated));
+    border: 1px solid var(--cn-sheet-border, var(--border));
+}

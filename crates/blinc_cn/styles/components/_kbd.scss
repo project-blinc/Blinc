@@ -1,0 +1,12 @@
+/* ============================================================================
+   Kbd
+   ============================================================================ */
+
+.cn-kbd {
+    background: var(--cn-kbd-bg, var(--surface));
+    border: 1px solid var(--cn-kbd-border, var(--border));
+    border-bottom-width: 3px;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
+    color: var(--text-secondary);
+}

@@ -1,0 +1,33 @@
+/* ============================================================================
+   Menus: the panel, rows, shortcuts, submenu chevrons and separators every
+   cn menu is built from. The dropdown, context and menubar menus add their
+   own class for their enter animation and row padding.
+   ============================================================================ */
+
+/* No padding: rows run to the rounded edge, which clips their highlight. */
+.cn-menu {
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-default);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-md);
+}
+/* No transition on rows: sweeping the pointer across them would leave several
+   half-lit at once. */
+.cn-menu-item {
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    cursor: pointer;
+}
+/* `--accent-subtle`, since the panel already sits at `--surface-elevated`. */
+.cn-menu-item:hover:not(:disabled),
+.cn-menu-item:focus-visible:not(:disabled) {
+    background: var(--accent-subtle);
+}
+.cn-menu-item:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.cn-menu-shortcut { color: var(--text-secondary); letter-spacing: 0.05em; }
+.cn-menu-chevron { color: var(--text-tertiary); }
+.cn-menu-separator { background: var(--border); margin: var(--space-1) 0; }

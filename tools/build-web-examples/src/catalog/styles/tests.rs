@@ -28,15 +28,14 @@ fn default_stylesheets_match_across_checkout_line_endings() {
         .parent()
         .unwrap();
     let checkout = std::env::temp_dir().join(format!("blinc-css-crlf-{}", std::process::id()));
-    for file in [
-        "crates/blinc_layout/src/ua_styles.rs",
-        "crates/blinc_cn/src/cn_styles.rs",
-    ] {
-        let source = std::fs::read_to_string(root.join(file))
+    let mut files = vec![root.join("crates/blinc_layout/src/ua_styles.rs")];
+    files.extend(blinc_sass::sources(root.join("crates/blinc_cn/styles")).unwrap());
+    for file in files {
+        let source = std::fs::read_to_string(&file)
             .unwrap()
             .replace("\r\n", "\n")
             .replace('\n', "\r\n");
-        let path = checkout.join(file);
+        let path = checkout.join(file.strip_prefix(root).unwrap());
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, source).unwrap();
     }

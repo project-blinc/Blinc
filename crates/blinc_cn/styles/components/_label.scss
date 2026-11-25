@@ -1,0 +1,10 @@
+/* ============================================================================
+   Label
+   ============================================================================ */
+
+.cn-label {
+    color: var(--cn-label-color, var(--text-primary));
+}
+.cn-label-text { color: var(--cn-label-color, var(--text-primary)); }
+.cn-label:disabled > .cn-label-text { color: var(--text-tertiary); }
+.cn-label-required { color: var(--error); }

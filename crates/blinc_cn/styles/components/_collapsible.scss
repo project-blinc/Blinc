@@ -1,0 +1,23 @@
+/* ============================================================================
+   Collapsible
+   ============================================================================ */
+
+/* Closed, the content is laid out at no height; opening and closing are a
+   change of size, which the content's layout animation eases. */
+.cn-collapsible-content { overflow: hidden; }
+.cn-collapsible-content[data-state="closed"] { height: 0; }
+.cn-collapsible-section {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+.cn-collapsible-trigger {
+    cursor: pointer;
+    color: var(--text-primary);
+    border-radius: var(--radius-md);
+    transition: background-color var(--duration-fast) var(--ease-state);
+}
+.cn-collapsible-trigger:hover,
+.cn-collapsible-trigger:active {
+    background: color-mix(in srgb, var(--surface-elevated) 50%, transparent);
+}
+.cn-collapsible-trigger > .cn-chevron { color: var(--text-secondary); }

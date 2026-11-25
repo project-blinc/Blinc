@@ -1,0 +1,21 @@
+/* ============================================================================
+   Card
+   ============================================================================ */
+
+.cn-card {
+    background: var(--cn-card-bg, var(--surface));
+    border: 1px solid var(--cn-card-border, var(--border));
+    border-radius: var(--cn-card-radius, var(--radius-xl));
+    padding: var(--space-6);
+    gap: var(--space-4);
+}
+
+.cn-card-header {
+    gap: var(--space-1-5);
+}
+
+.cn-card-footer {
+    gap: var(--space-2);
+}
+.cn-card-title { color: var(--text-primary); }
+.cn-card-description { color: var(--text-secondary); }

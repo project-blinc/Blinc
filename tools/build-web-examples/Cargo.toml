@@ -22,3 +22,5 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 pulldown-cmark = "0.10"
 sha2 = "0.10"
+# Compiles the cn stylesheet for the component pages and the preview digest.
+blinc_sass = { path = "../../crates/blinc_sass", version = "0.6.0" }

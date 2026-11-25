@@ -1,0 +1,24 @@
+/* ============================================================================
+   Progress
+   ============================================================================ */
+
+/* A track with a bar grown to the value, easing to each new one. An
+   indeterminate bar covers part of the track and pulses. */
+.cn-progress {
+    background: var(--cn-progress-track, var(--border));
+    border-radius: var(--radius-full);
+    /* A set width gives way to a narrower container. */
+    max-width: 100%;
+}
+.cn-progress-bar {
+    background: var(--cn-progress-bar, var(--primary));
+    border-radius: var(--radius-full);
+    transition: flex-grow var(--duration-slow) var(--ease-nav);
+}
+@keyframes cn-progress-pulse {
+    from { opacity: 0.35; }
+    to { opacity: 1; }
+}
+.cn-progress[data-indeterminate] > .cn-progress-bar {
+    animation: cn-progress-pulse var(--duration-slowest) var(--ease-in-out) infinite alternate;
+}

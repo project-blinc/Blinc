@@ -1,0 +1,106 @@
+/* ============================================================================
+   Input
+   ============================================================================ */
+
+/* The message under a field: an error, or a description. */
+.cn-field-error { color: var(--error); }
+.cn-field-description { color: var(--text-tertiary); }
+
+.cn-input {
+    box-shadow: var(--shadow-sm);
+    background: var(--cn-input-bg, var(--input-bg));
+    border-color: var(--border);
+    border-radius: var(--radius-default);
+    color: var(--text-primary);
+    /* Idle ring: same width, transparent, gap of 1 px so the focus
+       transition "scales" the gap from 1 → 2 px while the colour fades
+       in. Without a base outline the transition has no starting point
+       and the ring pops in. */
+    outline: 2px solid transparent;
+    outline-offset: 1px;
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state),
+        outline-color var(--duration-fast) var(--ease-state),
+        outline-offset var(--duration-fast) var(--ease-out);
+}
+/* The border and fill per state are the layout input's `.blinc-input`
+   rules, which these sit beside at the same specificity. */
+.cn-input:focus:not(:disabled) {
+    /* HID focus affordance: the border brightens AND a 2px outer ring is
+       drawn 2px out from the input edge. The ring uses the fainter
+       `--focus-ring` (alpha-tinted variant token) so the crisp border edge
+       stays distinguishable from the soft halo. */
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+.cn-input:disabled,
+.cn-textarea:disabled,
+.cn-input-otp-slot:disabled {
+    box-shadow: none;
+}
+.cn-input[data-invalid]:not(:disabled),
+.cn-input[data-invalid]:hover:not(:disabled),
+.cn-input[data-invalid]:focus:not(:disabled) {
+    border-color: var(--border-error);
+}
+.cn-input[data-invalid]:focus:not(:disabled) {
+    outline: 2px solid var(--focus-ring-error);
+}
+.cn-input.cn-input--success:not(:disabled),
+.cn-input.cn-input--success:hover:not(:disabled),
+.cn-input.cn-input--success:focus:not(:disabled) {
+    border-color: var(--success);
+}
+.cn-input.cn-input--success:focus:not(:disabled) {
+    outline: 2px solid var(--focus-ring-success);
+}
+
+.cn-input--sm { font-size: var(--text-xs); }
+.cn-input--md { font-size: var(--text-sm); }
+.cn-input--lg { font-size: var(--text-lg); }
+
+/* Input OTP. The slot is a layout input; the border and fill per state are
+   its `.blinc-input` rules. */
+
+.cn-input-otp-slot {
+    box-shadow: var(--shadow-sm);
+    background: var(--cn-input-bg, var(--input-bg));
+    border-color: var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    outline: 2px solid transparent;
+    outline-offset: 1px;
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state),
+        outline-color var(--duration-fast) var(--ease-state),
+        outline-offset var(--duration-fast) var(--ease-out);
+}
+.cn-input-otp-slot:focus:not(:disabled) {
+    /* HID focus ring — see `.cn-input:focus` for rationale. */
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+.cn-input-otp-slot.cn-input-otp-slot--error:not(:disabled),
+.cn-input-otp-slot.cn-input-otp-slot--error:hover:not(:disabled),
+.cn-input-otp-slot.cn-input-otp-slot--error:focus:not(:disabled) {
+    border-color: var(--border-error);
+}
+.cn-input-otp-slot.cn-input-otp-slot--error:focus:not(:disabled) {
+    outline: 2px solid var(--focus-ring-error);
+}
+/* The combobox's search field sits on the dropdown's surface and shows the
+   focus border while hovered as well as focused. */
+.cn-combobox-search {
+    background: var(--surface);
+    border-color: var(--border);
+}
+.cn-combobox-search:hover:not(:disabled),
+.cn-combobox-search:focus:not(:disabled) {
+    background: var(--surface);
+    border-color: var(--border-focus);
+}
+.cn-input-otp--disabled {
+    opacity: 0.5;
+}

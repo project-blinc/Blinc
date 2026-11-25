@@ -1,0 +1,34 @@
+/* ============================================================================
+   Accordion
+   ============================================================================ */
+
+.cn-accordion {
+    /* Accordion outer is a card-tier container, not a modal —
+       elevation 1 (--surface). */
+    background: var(--cn-accordion-bg, var(--surface));
+    border: 1.5px solid var(--cn-accordion-border, var(--border));
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-md);
+}
+.cn-accordion-separator { background: var(--cn-accordion-border, var(--border)); }
+.cn-accordion-trigger > .cn-chevron { color: var(--text-secondary); }
+.cn-accordion-trigger {
+    padding: var(--space-4) var(--space-3);
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+}
+.cn-accordion-trigger:hover {
+    background: var(--surface-overlay);
+}
+.cn-accordion-content {
+    /* Expanded content recedes to the canvas tone inside the
+       elevated container. */
+    background: var(--cn-accordion-content-bg, var(--background));
+    border-top: 1px solid var(--border);
+    color: var(--text-secondary);
+    overflow: hidden;
+}
+/* Closed, laid out at no height and without its divider; opening and
+   closing are a change of size, which the layout animation eases. */
+.cn-accordion-content[data-state="closed"] { height: 0; border-top-width: 0; }

@@ -1,0 +1,17 @@
+/* ============================================================================
+   Spinner
+   ============================================================================ */
+
+/* A faint track with a half-circle arc going round, a turn a second. */
+.cn-spinner {
+    color: var(--cn-spinner-color, var(--primary));
+}
+.cn-spinner__track { border-color: var(--cn-spinner-track, var(--border)); }
+.cn-spinner__arc {
+    border-color: var(--cn-spinner-color, var(--primary));
+    animation: cn-spinner-turn 1000ms linear infinite;
+}
+@keyframes cn-spinner-turn {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
