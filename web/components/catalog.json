@@ -3965,7 +3965,7 @@
       ],
       "since": null,
       "maturity": "stable",
-      "description": "Write formatted prose with headings, emphasis and a selection toolbar.",
+      "description": "Write formatted prose with headings, lists, checklists, tables, alignment and links, from a fixed or floating toolbar.",
       "doc": "docs/book/src/cn/rich-text-editor.md",
       "doc_section": null,
       "entry": "rich_text_editor_demo",
@@ -4004,7 +4004,7 @@
       ],
       "keyboard": "Click to focus, type and select text. Use arrows, Enter, Backspace and the editor\u2019s formatting shortcuts; see the guide below.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
-      "notes": "Write formatted prose with headings, emphasis and a selection toolbar. This built-in widget is provided by blinc_layout; the polished action controls in the example use blinc_cn.",
+      "notes": "Choose a fixed toolbar above the text or a floating one that points at the selection. Both are built from cn components, and the document reads and writes Markdown.",
       "recipe": "rich-text-editor.css",
       "recording": {
         "target": ".blinc-rich-text",

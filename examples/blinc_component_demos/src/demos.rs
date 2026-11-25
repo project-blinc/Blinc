@@ -57,7 +57,8 @@ impl Default for DemoState {
             video: Default::default(),
             document: blinc_cn::components::rich_text_editor::rich_text_state(
                 blinc_cn::components::rich_text_editor::RichDocument::from_markdown(
-                    "## Project notes\n\nBuild interfaces that feel natural.",
+                    "## Project notes\n\nBuild interfaces that feel natural.\n\n\
+                     - [x] Sketch the layout\n- [ ] Pick the colours",
                     blinc_core::Color::TRANSPARENT,
                 ),
             ),
