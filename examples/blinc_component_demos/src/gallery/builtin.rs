@@ -35,8 +35,11 @@ pub fn rich_text_editor_demo(values: &DemoState, viewport: (f32, f32)) -> Div {
         .class("demo-wide")
         .child(blinc_cn::components::rich_text_editor::rich_text_editor(
             &values.document,
-            blinc_cn::components::rich_text_editor::RichTextTheme::default(),
-            (viewport.0 - 80.0).clamp(1.0, 380.0),
+            // The fixed toolbar shows the alignment, list, quote and table controls without a
+            // selection.
+            blinc_cn::components::rich_text_editor::RichTextTheme::default()
+                .toolbar(blinc_cn::components::rich_text_editor::ToolbarPlacement::Fixed),
+            (viewport.0 - 80.0).clamp(1.0, 480.0),
         ))
 }
 

@@ -33,7 +33,7 @@ fn editor_pixels_follow_typing_after_fresh_rebuilds() {
     for (slug, selector) in [
         ("textarea", ".cn-textarea"),
         ("code-editor", ".blinc-code"),
-        ("rich-text-editor", ".blinc-rich-text"),
+        ("rich-text-editor", ".cn-rich-text-editor-document"),
     ] {
         let mut ui = Headless::new(560, 320).unwrap();
         ui.theme(theme_bundle(), ColorScheme::Dark).css(DEMO_CSS);

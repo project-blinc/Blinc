@@ -58,7 +58,9 @@ impl Default for DemoState {
             document: blinc_cn::components::rich_text_editor::rich_text_state(
                 blinc_cn::components::rich_text_editor::RichDocument::from_markdown(
                     "## Project notes\n\nBuild interfaces that feel natural.\n\n\
-                     - [x] Sketch the layout\n- [ ] Pick the colours",
+                     - [x] Sketch the layout\n- [ ] Pick the colours\n\n\
+                     > Keep it simple.\n\n\
+                     | Task | Owner |\n| --- | :---: |\n| Colours | Lin |",
                     blinc_core::Color::TRANSPARENT,
                 ),
             ),

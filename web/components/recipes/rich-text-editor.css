@@ -1,9 +1,9 @@
-.blinc-rich-text {
+.cn-rich-text-editor-document {
   padding: 16px;
   background: var(--surface-elevated);
   border: 1px solid var(--border);
 }
 
-.blinc-rich-text:focus-within {
+.cn-rich-text-editor-document:focus-within {
   border-color: var(--focus-ring);
 }

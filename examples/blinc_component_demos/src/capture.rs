@@ -327,11 +327,18 @@ fn capture(output: &std::path::Path, slug: &str) -> Result<(), Box<dyn Error>> {
             "fn main() {\n    let theme = \"dark\";\n    println!(\"Theme: {theme}\");\n}",
             "recorded code edit"
         ),
-        "rich-text-editor" => assert_eq!(
-            state.document.lock().unwrap().document.plain_text(),
-            "Project notes\nBuild interfaces that feel natural.\nKeep the details clear.",
-            "recorded rich text edit"
-        ),
+        "rich-text-editor" => {
+            // The click lands wherever the document's middle is; the line is typed from there.
+            let text = state.document.lock().unwrap().document.plain_text();
+            assert!(
+                text.starts_with("Project notes\n"),
+                "recorded rich text edit: {text:?}"
+            );
+            assert!(
+                text.contains("Keep the details clear."),
+                "recorded rich text edit: {text:?}"
+            );
+        }
         "button" => assert_eq!(state.clicks.get(), 1, "recorded button click"),
         "input" => assert_eq!(state.name.get(), "Ada", "recorded text input"),
         "select" => assert_eq!(

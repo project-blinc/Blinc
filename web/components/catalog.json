@@ -3996,18 +3996,23 @@
           "name": "theme / width",
           "kind": "Construction",
           "type": "RichTextTheme / f32",
-          "example": "default / container width"
+          "example": "toolbar(Fixed) / container width"
         }
       ],
       "classes": [
-        ".blinc-rich-text"
+        ".cn-rich-text-editor",
+        ".cn-rich-text-editor-document",
+        ".cn-rich-text-editor-fixed-toolbar",
+        ".cn-rich-text-editor-floating-toolbar",
+        ".cn-rich-text-editor-quote-bar",
+        ".cn-rich-text-editor-table"
       ],
-      "keyboard": "Click to focus, type and select text. Use arrows, Enter, Backspace and the editor\u2019s formatting shortcuts; see the guide below.",
+      "keyboard": "Click to focus, type and select text. Use arrows, Enter and Backspace; Tab and Shift+Tab move between table cells and nest list items; Cmd or Ctrl with B, I, U, E and Shift with L, E, R, J, 6, 7, 8 and 9 format and align; see the guide below.",
       "tokens": "--primary, --text-primary, --text-secondary, --surface, --border, --radius-default, --duration-fast, --ease-state",
       "notes": "Choose a fixed toolbar above the text or a floating one that points at the selection. Both are built from cn components, and the document reads and writes Markdown.",
       "recipe": "rich-text-editor.css",
       "recording": {
-        "target": ".blinc-rich-text",
+        "target": ".cn-rich-text-editor-document",
         "kind": "type",
         "text": "Keep the details clear.",
         "frames": 96
