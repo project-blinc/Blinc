@@ -58,6 +58,7 @@ mod hover_follows_content;
 mod keyboard_nav;
 mod layout_widget_rules;
 mod menubar_hover_scroll;
+mod nested_clips;
 mod overlay_css_active;
 mod overlay_owners;
 mod plain_shader_parity;
