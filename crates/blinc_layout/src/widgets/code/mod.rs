@@ -70,6 +70,7 @@ use crate::widgets::text_input::{
 mod bound;
 mod diagnostics;
 mod find;
+mod fold;
 mod hscroll;
 mod ime;
 mod minimap;
@@ -284,6 +285,8 @@ pub struct CodeEditorData {
     /// start_line is the line with `{` and end_line is the matching `}`.
     /// Lines start_line+1..end_line are hidden when folded.
     pub folded_regions: Vec<(usize, usize)>,
+    /// The lines the folds were last placed on
+    fold_basis: Vec<String>,
     /// Diagnostics shown inline; see [`set_code_diagnostics`].
     pub diagnostics: Vec<CodeDiagnostic>,
     /// The code area's sideways scroll. The code area is its own horizontal scroll container
@@ -365,6 +368,7 @@ pub fn code_editor_state(content: impl Into<String>) -> SharedCodeEditorState {
         scroll_physics: Arc::new(Mutex::new(ScrollPhysics::default())),
         viewport_height: 0.0,
         folded_regions: Vec::new(),
+        fold_basis: Vec::new(),
     }))
 }
 
@@ -694,9 +698,9 @@ impl CodeEditorData {
         }
         if self.cursor.column > 0 {
             self.cursor.column -= 1;
-        } else if self.cursor.line > 0 {
-            self.cursor.line -= 1;
-            self.cursor.column = self.lines[self.cursor.line].chars().count();
+        } else if let Some(line) = self.line_above(self.cursor.line) {
+            self.cursor.line = line;
+            self.cursor.column = self.lines[line].chars().count();
         }
     }
 
@@ -712,8 +716,8 @@ impl CodeEditorData {
             let line_len = self.lines[self.cursor.line].chars().count();
             if self.cursor.column < line_len {
                 self.cursor.column += 1;
-            } else if self.cursor.line + 1 < self.lines.len() {
-                self.cursor.line += 1;
+            } else if let Some(line) = self.line_below(self.cursor.line) {
+                self.cursor.line = line;
                 self.cursor.column = 0;
             }
         }
@@ -725,9 +729,9 @@ impl CodeEditorData {
         } else if !select {
             self.selection_start = None;
         }
-        if self.cursor.line > 0 {
-            self.cursor.line -= 1;
-            let line_len = self.lines[self.cursor.line].chars().count();
+        if let Some(line) = self.line_above(self.cursor.line) {
+            self.cursor.line = line;
+            let line_len = self.lines[line].chars().count();
             self.cursor.column = self.cursor.column.min(line_len);
         }
     }
@@ -738,9 +742,9 @@ impl CodeEditorData {
         } else if !select {
             self.selection_start = None;
         }
-        if self.cursor.line + 1 < self.lines.len() {
-            self.cursor.line += 1;
-            let line_len = self.lines[self.cursor.line].chars().count();
+        if let Some(line) = self.line_below(self.cursor.line) {
+            self.cursor.line = line;
+            let line_len = self.lines[line].chars().count();
             self.cursor.column = self.cursor.column.min(line_len);
         }
     }
@@ -771,9 +775,11 @@ impl CodeEditorData {
         } else if !select {
             self.selection_start = None;
         }
-        if self.cursor.column == 0 && self.cursor.line > 0 {
-            self.cursor.line -= 1;
-            self.cursor.column = self.lines[self.cursor.line].chars().count();
+        if self.cursor.column == 0
+            && let Some(line) = self.line_above(self.cursor.line)
+        {
+            self.cursor.line = line;
+            self.cursor.column = self.lines[line].chars().count();
         } else if self.cursor.line < self.lines.len() {
             self.cursor.column =
                 text_edit::word_boundary_left(&self.lines[self.cursor.line], self.cursor.column);
@@ -788,8 +794,10 @@ impl CodeEditorData {
         }
         if self.cursor.line < self.lines.len() {
             let line_len = self.lines[self.cursor.line].chars().count();
-            if self.cursor.column >= line_len && self.cursor.line + 1 < self.lines.len() {
-                self.cursor.line += 1;
+            if self.cursor.column >= line_len
+                && let Some(line) = self.line_below(self.cursor.line)
+            {
+                self.cursor.line = line;
                 self.cursor.column = 0;
             } else {
                 self.cursor.column = text_edit::word_boundary_right(
@@ -859,75 +867,6 @@ impl CodeEditorData {
         }
     }
 
-    /// Detect foldable regions from bracket matching
-    pub fn detect_fold_regions(&self) -> Vec<FoldRegion> {
-        let mut regions = Vec::new();
-        let mut stack: Vec<usize> = Vec::new();
-        for (i, line) in self.lines.iter().enumerate() {
-            if self.is_line_folded(i) {
-                continue;
-            }
-            for ch in line.chars() {
-                if ch == '{' {
-                    stack.push(i);
-                } else if ch == '}'
-                    && let Some(start) = stack.pop()
-                    && start != i
-                {
-                    regions.push(FoldRegion {
-                        start_line: start,
-                        end_line: i,
-                    });
-                }
-            }
-        }
-        regions
-    }
-
-    /// Check if a line is inside a folded region
-    pub fn is_line_folded(&self, line: usize) -> bool {
-        self.folded_regions
-            .iter()
-            .any(|&(start, end)| line > start && line < end)
-    }
-
-    /// Check if a line is the start of a folded region
-    pub fn is_fold_start(&self, line: usize) -> bool {
-        self.folded_regions.iter().any(|&(start, _)| start == line)
-    }
-
-    /// Toggle fold at a line (fold if unfolded, unfold if folded)
-    pub fn toggle_fold(&mut self, line: usize) {
-        // If already folded at this line, unfold
-        if let Some(idx) = self
-            .folded_regions
-            .iter()
-            .position(|&(start, _)| start == line)
-        {
-            self.folded_regions.remove(idx);
-            return;
-        }
-        // Otherwise, find the fold region starting at this line and fold it
-        let regions = self.detect_fold_regions();
-        if let Some(region) = regions.iter().find(|r| r.start_line == line) {
-            self.folded_regions
-                .push((region.start_line, region.end_line));
-            // Move cursor to end of fold start line if it's inside the folded region
-            if self.cursor.line > region.start_line && self.cursor.line <= region.end_line {
-                self.cursor.line = region.start_line;
-                self.cursor.column = self.lines[region.start_line].chars().count();
-            }
-            self.selection_start = None;
-        }
-    }
-
-    /// Get the visible line indices (skipping folded lines)
-    pub fn visible_lines(&self) -> Vec<usize> {
-        (0..self.lines.len())
-            .filter(|&i| !self.is_line_folded(i))
-            .collect()
-    }
-
     /// Smart Home: toggle between first non-whitespace and column 0
     pub fn move_to_line_start_smart(&mut self, select: bool) {
         if select && self.selection_start.is_none() {
@@ -955,7 +894,8 @@ impl CodeEditorData {
         }
         let line_height = self.config.font_size * self.config.line_height;
         let page_lines = (self.viewport_height / line_height).floor() as usize;
-        self.cursor.line = self.cursor.line.saturating_sub(page_lines.max(1));
+        let row = self.row_of(self.cursor.line);
+        self.cursor.line = self.line_at_row(row.saturating_sub(page_lines.max(1)));
         let line_len = self.lines[self.cursor.line].chars().count();
         self.cursor.column = self.cursor.column.min(line_len);
     }
@@ -969,8 +909,8 @@ impl CodeEditorData {
         }
         let line_height = self.config.font_size * self.config.line_height;
         let page_lines = (self.viewport_height / line_height).floor() as usize;
-        let max_line = self.lines.len().saturating_sub(1);
-        self.cursor.line = (self.cursor.line + page_lines.max(1)).min(max_line);
+        let row = self.row_of(self.cursor.line);
+        self.cursor.line = self.line_at_row(row + page_lines.max(1));
         let line_len = self.lines[self.cursor.line].chars().count();
         self.cursor.column = self.cursor.column.min(line_len);
     }
@@ -1036,16 +976,16 @@ impl CodeEditorData {
 
     /// Position cursor from click coordinates
     pub fn cursor_from_click(&mut self, x: f32, y: f32) {
-        let line_height = self.config.font_size * self.config.line_height;
-        let visible_row = (y / line_height).floor() as usize;
-        // Map visible row to actual line index (accounts for folded lines)
-        let visible = self.visible_lines();
-        let line_idx = visible
-            .get(visible_row)
-            .copied()
-            .unwrap_or(visible.last().copied().unwrap_or(0));
+        self.cursor = self.position_at(x, y);
+        self.selection_start = None;
+    }
 
-        let line = &self.lines[line_idx];
+    /// The position in the text nearest `(x, y)`, measured from the first row's top left.
+    fn position_at(&mut self, x: f32, y: f32) -> TextPosition {
+        let line_height = self.config.font_size * self.config.line_height;
+        let line_idx = self.line_at_row((y / line_height).floor() as usize);
+
+        let line = self.lines[line_idx].clone();
         let char_count = line.chars().count();
         let mut best_col = char_count;
         for col in 0..=char_count {
@@ -1067,20 +1007,21 @@ impl CodeEditorData {
             }
         }
 
-        self.cursor = TextPosition::new(line_idx, best_col);
-        self.selection_start = None;
+        TextPosition::new(line_idx, best_col)
     }
 
     /// Total content height in pixels (includes padding)
     pub fn content_height(&self) -> f32 {
         let line_height = self.config.font_size * self.config.line_height;
         let pad = self.config.padding;
-        self.lines.len() as f32 * line_height + pad * 2.0
+        self.visible_lines().len() as f32 * line_height + pad * 2.0
     }
 
     /// Ensure cursor is within the visible scroll viewport.
     /// Only scrolls when cursor would be outside the visible area.
     pub fn ensure_cursor_visible(&mut self) {
+        self.settle_folds();
+        self.reveal_cursor();
         self.keep_caret_in_view_x();
         let line_height = self.config.font_size * self.config.line_height;
         let pad = self.config.padding;
@@ -1089,7 +1030,7 @@ impl CodeEditorData {
         }
 
         // Cursor Y in scroll content coordinates (includes top padding)
-        let cursor_y = self.cursor.line as f32 * line_height + pad;
+        let cursor_y = self.row_of(self.cursor.line) as f32 * line_height + pad;
         let cursor_bottom = cursor_y + line_height;
 
         let mut physics = self.scroll_physics.lock().unwrap();
@@ -1551,12 +1492,7 @@ impl CodeEditor {
                     // Check if click is in the gutter → toggle fold only, skip cursor logic
                     if d.config.code_folding && click_x < gutter_w {
                         let line_height = d.config.font_size * d.config.line_height;
-                        let visible_row = (adjusted_y / line_height).floor() as usize;
-                        let visible = d.visible_lines();
-                        let line_idx = visible
-                            .get(visible_row)
-                            .copied()
-                            .unwrap_or(visible.last().copied().unwrap_or(0));
+                        let line_idx = d.line_at_row((adjusted_y / line_height).floor() as usize);
                         d.toggle_fold(line_idx);
                         d.invalidate_all_highlights();
                         // Don't touch cursor, selection, or drag state
@@ -1687,7 +1623,7 @@ impl CodeEditor {
                     return;
                 }
 
-                let gutter_offset = if d.config.line_numbers {
+                let gutter_offset = if d.config.line_numbers || d.config.code_folding {
                     d.config.gutter_width
                 } else {
                     0.0
@@ -1698,31 +1634,7 @@ impl CodeEditor {
                 let adjusted_y = (ctx.local_y - d.config.padding + scroll_offset).max(0.0);
 
                 // Move cursor to drag position (selection_start stays at mouse-down position)
-                let line_height = d.config.font_size * d.config.line_height;
-                let line_idx = ((adjusted_y / line_height).floor() as usize)
-                    .min(d.lines.len().saturating_sub(1));
-                let line = d.lines[line_idx].clone();
-                let char_count = line.chars().count();
-                let mut best_col = char_count;
-                for col in 0..=char_count {
-                    let text_before: String = line.chars().take(col).collect();
-                    let w = d.measure_mono(&text_before);
-                    if w >= adjusted_x {
-                        if col > 0 {
-                            let prev: String = line.chars().take(col - 1).collect();
-                            let prev_w = d.measure_mono(&prev);
-                            best_col = if (adjusted_x - prev_w).abs() < (adjusted_x - w).abs() {
-                                col - 1
-                            } else {
-                                col
-                            };
-                        } else {
-                            best_col = 0;
-                        }
-                        break;
-                    }
-                }
-                let new_cursor = TextPosition::new(line_idx, best_col);
+                let new_cursor = d.position_at(adjusted_x, adjusted_y);
 
                 if crate::widgets::text_input::is_touch_input() {
                     // Touch drag = move cursor without starting a
@@ -2660,6 +2572,8 @@ fn build_editor_content(
     shared_state: Option<&SharedCodeEditorState>,
     instance_key: &str,
 ) -> Div {
+    data.settle_folds();
+    data.reveal_cursor();
     let styled = data.get_styled_content();
     let (content_w, h_scroll) = (data.content_width(), Arc::clone(&data.h_scroll));
     // Diagnostics measure text, which needs the editor mutably, before its config is borrowed.
@@ -2689,7 +2603,7 @@ fn build_editor_content(
 
     // Current line highlight (subtle background behind active line)
     if is_focused && data.selection_start.is_none() {
-        let line_top = data.cursor.line as f32 * line_height_px + pad;
+        let line_top = data.row_of(data.cursor.line) as f32 * line_height_px + pad;
         let line = div()
             .class("blinc-code-active-line")
             .absolute()
@@ -2708,9 +2622,9 @@ fn build_editor_content(
         let (start, end) = order_positions(sel_start, data.cursor);
         if start != end {
             let sel_color = config.selection_color;
-            for line_idx in start.line..=end.line {
-                if line_idx >= data.lines.len() {
-                    break;
+            for (row, &line_idx) in visible_lines.iter().enumerate() {
+                if line_idx < start.line || line_idx > end.line {
+                    continue;
                 }
                 let line_text = &data.lines[line_idx];
                 let line_char_count = line_text.chars().count();
@@ -2744,7 +2658,7 @@ fn build_editor_content(
                 };
 
                 if width > 0.0 {
-                    let sel_top = line_idx as f32 * line_height_px + pad;
+                    let sel_top = row as f32 * line_height_px + pad;
                     let sel = div()
                         .class("blinc-code-selection")
                         .absolute()
@@ -2915,8 +2829,9 @@ fn build_editor_content(
             pad
         };
 
+        let cursor_row = visible_lines.binary_search(&cursor_line).unwrap_or(0);
         let cursor_top =
-            (cursor_line as f32 * line_height_px) + (line_height_px - cursor_height) / 2.0 + pad;
+            (cursor_row as f32 * line_height_px) + (line_height_px - cursor_height) / 2.0 + pad;
 
         let cursor_state_clone = Arc::clone(&data.cursor_state);
         let cursor_color = config.cursor_color.unwrap_or_else(caret_ink);
