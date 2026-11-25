@@ -1,5 +1,5 @@
-//! The code editor's minimap: each visible line as a bar, and the part of the text in view as a
-//! slider over them. One canvas draws both when it is painted, from the editor's lines and its
+//! The code editor's minimap: each visible line as a bar, and, when the text is taller than the
+//! view, the part in view as a slider over them. One canvas draws both when it is painted, from the editor's lines and its
 //! scroll physics as they are then, so the slider follows a scroll and the bars follow an edit
 //! without the minimap being built again.
 //!
@@ -64,7 +64,12 @@ pub(super) fn geometry(
     } else {
         1.0
     };
-    let slider_h = (lines_h * ratio).max(MIN_SLIDER_H);
+    // A text that fits the view has nothing to scroll, and no slider.
+    let slider_h = if content <= viewport {
+        0.0
+    } else {
+        (lines_h * ratio).max(MIN_SLIDER_H)
+    };
     let scrollable = content - viewport;
     let fraction = if scrollable > 0.0 {
         (offset / scrollable).clamp(0.0, 1.0)
@@ -199,12 +204,14 @@ fn minimap_canvas(state: &SharedCodeEditorState) -> crate::canvas::Canvas {
                 Brush::Solid(bar.color),
             );
         }
-        let slider = crate::ua_styles::stylesheet_color(SLIDER_COLOR, ColorToken::TextPrimary);
-        ctx.fill_rect(
-            Rect::new(bounds.x, bounds.y + g.slider_top, bounds.width, g.slider_h),
-            CornerRadius::uniform(1.0),
-            Brush::Solid(slider),
-        );
+        if g.slider_h > 0.0 {
+            let slider = crate::ua_styles::stylesheet_color(SLIDER_COLOR, ColorToken::TextPrimary);
+            ctx.fill_rect(
+                Rect::new(bounds.x, bounds.y + g.slider_top, bounds.width, g.slider_h),
+                CornerRadius::uniform(1.0),
+                Brush::Solid(slider),
+            );
+        }
     })
 }
 

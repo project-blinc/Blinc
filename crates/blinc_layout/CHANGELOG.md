@@ -88,6 +88,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- The code minimap shows its box over the part in view only when the text is taller than the view.
 - Selection highlights in the code editor, text inputs and text areas have square corners.
 - A node mounted after the first frame with a reactive attribute or class took no `align-items`, `justify-content`, `align-self`, `flex-direction`, `flex-wrap` or `overflow` rules, and state and reactive class rules could not set them. They apply now.
 - The code editor's replace calls `on_change`; before, an application that mirrored the text never saw a replacement. In regex mode the replacement expands `$1`, `${name}`, `$&` and `$$`, whole word applies to the pattern, and a pattern that does not compile reports why in `CodeEditorData::search_error` and the find bar. Cmd+F starts from a one-line selection, Cmd+G, R and H update the bar, and replace moves to the next match instead of the first. `replace_current` returns whether it changed the text, `replace_all` how many it replaced, and `apply_search_query` is public.

@@ -36,10 +36,10 @@ fn the_slider_covers_the_share_of_the_text_in_view() {
 }
 
 #[test]
-fn text_shorter_than_the_editor_leaves_the_slider_still() {
+fn text_that_fits_the_editor_has_no_slider() {
     let g = geometry(5, 300.0, 300.0, content(5), 50.0);
     assert_eq!(g.slider_top, 4.0);
-    assert_eq!(g.slider_h, g.lines_h.max(8.0));
+    assert_eq!(g.slider_h, 0.0);
 }
 
 #[test]
