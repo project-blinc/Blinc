@@ -7,6 +7,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - The rich text editor is a cn component, `blinc_cn::components::rich_text_editor`, moved from `blinc_layout` with its tests. Its CSS rules are part of `CN_STYLES`.
 
 - The rich text editor's toolbar is built from cn components: a cn select for the block's kind, icon buttons with tooltips, the cn colour picker, and a link button that opens a popover with Text and Link fields. `RichTextTheme::toolbar` takes a `ToolbarPlacement`: `Floating`, the default, shows it over the selection once the press that made it is released, as a notch pointing at the selection that fades in, with a close button; `Fixed` shows it above the text; in an editor narrower than its controls, either toolbar's other controls scroll, easing, between two buttons beside the select, and fade at an edge with more beyond it; `Hidden` shows none. `PickerState` is removed.
+- `RichDocument::to_markdown` writes a document as Markdown that `from_markdown` reads back as it was. `from_markdown` reads `<u>`, `<ins>`, `<b>`, `<strong>`, `<i>`, `<em>`, `<s>`, `<del>`, `<code>`, `<br>` and a `<span>`'s hex colour.
 - `RichTextStateExt::on_change` calls back with the document after an edit made in the rich text editor changes it, and not for cursor moves, selection or focus.
 - The rich text editor wraps its text to the width it is laid out at, so it follows its parent; the width given to `rich_text_editor` is used until the first layout. `RichTextTheme::padding` sets the space around the text, and the fixed toolbar spans the full width.
 
@@ -31,6 +32,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - Typography has a dedicated guide covering all helpers, reactive content, inline composition and CSS class hooks; the gallery embeds that guide.
 
 ### Fixed
+- `RichDocument::from_markdown` makes a hard break a line of its own, keeps a quote's paragraphs apart, keeps an item's text after a nested list, and reads a code block as code, line by line.
 - A colour picker's swatch draws its checkerboard only under a translucent colour.
 - In the rich text editor, a mark turned on with a collapsed cursor applies to the text typed next, and a caret at the boundary of two runs takes the marks of the run before it.
 - A tooltip is centred on its trigger whatever its width. It was centred as if it were 100 px wide, and kept inside the window as if it were 280 px wide, which moved it off its trigger.
