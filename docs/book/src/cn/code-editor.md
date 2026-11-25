@@ -65,8 +65,12 @@ rules after the widget layer:
 .cn-code-editor .blinc-code-find-match { background: color-mix(in srgb, var(--primary) 25%, transparent); }
 ```
 
+The editor itself takes its colours from the theme, as the layout editor does. The
+[theming section](../widgets/code-editor.md#theming) lists its classes and the `--blinc-syntax-*`
+variables. The cn stylesheet adds a border to it.
+
 The classes are `cn-code-editor`, `cn-code-editor-find` (the bar), `cn-code-editor-find-row`,
 `-find-query`, `-find-tools`, `-find-replace`, `-find-replace-tools`, `-find-chevron`,
 `-find-option`, `-find-count`, `-find-count--none` and `-find-error`, and `-find-previous`, `-find-next`,
 `-find-close`, `-find-replace-one`, `-find-replace-all` and `-find-replace-toggle` on the buttons.
-The editor itself takes the `.blinc-code` rules.
+

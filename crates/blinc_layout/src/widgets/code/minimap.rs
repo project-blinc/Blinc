@@ -5,8 +5,9 @@
 //!
 //! Colours come from the stylesheet: `--blinc-code-minimap-line` for a line without syntax
 //! colour and `--blinc-code-minimap-slider` for the slider. A line with syntax colour takes the
-//! colour of its first span.
+//! colour of its first span: the highlighter's, else its token's `--blinc-syntax-*`.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use blinc_core::{Brush, Color, CornerRadius, DrawContext, Rect};
@@ -15,6 +16,7 @@ use blinc_theme::ColorToken;
 use super::{CodeEditorData, SharedCodeEditorState};
 use crate::canvas::{CanvasBounds, canvas};
 use crate::div::{Div, div};
+use crate::syntax::TokenType;
 
 /// Space above the first bar and below the last.
 const PAD_Y: f32 = 4.0;
@@ -148,6 +150,8 @@ pub(super) fn bars(lines: &[(f32, Color)], line_h: f32) -> Vec<Bar> {
 /// stylesheet colours.
 fn line_shares(data: &CodeEditorData, ink: Color) -> Vec<(f32, Color)> {
     let inherit = data.highlighter.is_none() && data.config.text_color.is_none();
+    // The stylesheet is asked once for each kind of token.
+    let mut tokens: HashMap<&TokenType, Option<Color>> = HashMap::new();
     data.visible_lines()
         .into_iter()
         .filter_map(|line| data.lines.get(line).map(|text| (line, text)))
@@ -162,7 +166,18 @@ fn line_shares(data: &CodeEditorData, ink: Color) -> Vec<(f32, Color)> {
                     .get(line)
                     .and_then(|cached| cached.as_ref())
                     .and_then(|styled| styled.spans.first())
-                    .map_or(ink, |span| span.color.with_alpha(0.8))
+                    .and_then(|span| {
+                        if span.color.a > 0.0 {
+                            return Some(span.color);
+                        }
+                        let token = span.token_type.as_ref()?;
+                        *tokens.entry(token).or_insert_with(|| {
+                            crate::ua_styles::token_ink(token).map(|css| {
+                                crate::ua_styles::stylesheet_color(css, ColorToken::TextPrimary)
+                            })
+                        })
+                    })
+                    .map_or(ink, |color| color.with_alpha(0.8))
             };
             (width, color)
         })

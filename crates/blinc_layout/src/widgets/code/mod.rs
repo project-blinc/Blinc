@@ -103,8 +103,8 @@ pub struct CodeConfig {
     pub gutter_width: f32,
     /// Padding inside the code block
     pub padding: f32,
-    /// Corner radius
-    pub corner_radius: f32,
+    /// Corner radius over the `.blinc-code` rule's, when set
+    pub corner_radius: Option<f32>,
     /// Background over the `.blinc-code` rule's, when set
     pub bg_color: Option<Color>,
     /// Text colour without syntax highlighting, over the `.blinc-code`
@@ -153,7 +153,7 @@ impl Default for CodeConfig {
             line_numbers: false,
             gutter_width: 48.0,
             padding: 16.0,
-            corner_radius: 8.0,
+            corner_radius: None,
             bg_color: None,
             text_color: None,
             line_number_color: None,
@@ -177,6 +177,14 @@ impl CodeConfig {
     /// a placeholder: [`build_styled_line`] leaves such text uncoloured.
     fn plain_ink(&self) -> Color {
         self.text_color.unwrap_or(Color::TRANSPARENT)
+    }
+
+    /// Take the colours `highlighter` names. What it leaves unnamed stays as configured, or
+    /// with the stylesheet.
+    fn take_colors(&mut self, highlighter: &dyn SyntaxHighlighter) {
+        self.bg_color = highlighter.background_color().or(self.bg_color);
+        self.text_color = highlighter.default_color().or(self.text_color);
+        self.line_number_color = highlighter.line_number_color().or(self.line_number_color);
     }
 }
 
@@ -1180,13 +1188,8 @@ impl Code {
     }
 
     pub fn syntax(mut self, config: SyntaxConfig) -> Self {
-        let bg_color = config.highlighter().background_color();
-        let text_color = config.highlighter().default_color();
-        let line_number_color = config.highlighter().line_number_color();
+        self.config.take_colors(config.highlighter());
         self.highlighter = Some(config.into_arc());
-        self.config.bg_color = Some(bg_color);
-        self.config.text_color = Some(text_color);
-        self.config.line_number_color = Some(line_number_color);
         self.rebuild_inner();
         self
     }
@@ -1228,11 +1231,10 @@ impl Code {
     }
 
     fn create_visual_structure(&self) -> Div {
-        let mut container = div()
-            .class("blinc-code")
-            .flex_row()
-            .rounded(self.config.corner_radius)
-            .overflow_clip();
+        let mut container = div().class("blinc-code").flex_row().overflow_clip();
+        if let Some(radius) = self.config.corner_radius {
+            container = container.rounded(radius);
+        }
         if let Some(bg) = self.config.bg_color {
             container = container.bg(bg);
         }
@@ -1269,12 +1271,8 @@ impl Code {
             .padding_y_px(self.config.padding);
 
         for styled_line in &styled.lines {
-            code_area = code_area.child(build_styled_line(
-                styled_line,
-                &self.config,
-                line_height_px,
-                self.highlighter.is_none(),
-            ));
+            code_area =
+                code_area.child(build_styled_line(styled_line, &self.config, line_height_px));
         }
 
         container.child(scroll_sideways(code_area))
@@ -1294,7 +1292,7 @@ impl Code {
         self
     }
     pub fn rounded(mut self, radius: f32) -> Self {
-        self.config.corner_radius = radius;
+        self.config.corner_radius = Some(radius);
         self
     }
     pub fn border(mut self, width: f32, color: Color) -> Self {
@@ -2020,7 +2018,9 @@ impl CodeEditor {
                     if let Some(bg) = data.config.bg_color {
                         container.set_bg(bg);
                     }
-                    container.set_rounded(data.config.corner_radius);
+                    if let Some(radius) = data.config.corner_radius {
+                        container.set_rounded(radius);
+                    }
 
                     container.set_child(content);
                 },
@@ -2050,16 +2050,10 @@ impl CodeEditor {
     }
 
     pub fn syntax(self, syntax_config: SyntaxConfig) -> Self {
-        let bg = syntax_config.highlighter().background_color();
-        let text_col = syntax_config.highlighter().default_color();
-        let ln = syntax_config.highlighter().line_number_color();
-        let hl = syntax_config.into_arc();
         {
             let mut d = self.state.lock().unwrap();
-            d.highlighter = Some(hl);
-            d.config.bg_color = Some(bg);
-            d.config.text_color = Some(text_col);
-            d.config.line_number_color = Some(ln);
+            d.config.take_colors(syntax_config.highlighter());
+            d.highlighter = Some(syntax_config.into_arc());
         }
         self
     }
@@ -2187,7 +2181,7 @@ impl CodeEditor {
         self
     }
     pub fn rounded(self, radius: f32) -> Self {
-        self.state.lock().unwrap().config.corner_radius = radius;
+        self.state.lock().unwrap().config.corner_radius = Some(radius);
         self
     }
     pub fn m(mut self, value: f32) -> Self {
@@ -2381,10 +2375,8 @@ fn build_styled_line(
     styled_line: &crate::styled_text::StyledLine,
     config: &CodeConfig,
     line_height_px: f32,
-    plain: bool,
 ) -> Div {
     let mut line_div = div().h(line_height_px).flex_row().items_center();
-    let inherit = plain && config.text_color.is_none();
 
     if styled_line.spans.is_empty() {
         line_div = line_div.child(text(" ").size(config.font_size));
@@ -2392,8 +2384,17 @@ fn build_styled_line(
         for span in &styled_line.spans {
             let span_text = &styled_line.text[span.start..span.end];
             let mut txt = text(span_text).size(config.font_size).no_wrap();
-            if !inherit {
+            if let Some(token) = &span.token_type {
+                txt = txt.class(token.css_class());
+            }
+            // A transparent span is the stylesheet's to colour, by its token's class or from
+            // the block, unless a text colour is configured for what is no token.
+            if span.color.a > 0.0 {
                 txt = txt.color(span.color);
+            } else if span.token_type.is_none()
+                && let Some(color) = config.text_color
+            {
+                txt = txt.color(color);
             }
             if span.bold {
                 txt = txt.bold();
@@ -2780,12 +2781,7 @@ fn build_editor_content(
         .padding_y_px(pad);
     for &line_idx in &visible_lines {
         let line_div = if line_idx < styled.lines.len() {
-            let mut ld = build_styled_line(
-                &styled.lines[line_idx],
-                config,
-                line_height_px,
-                data.highlighter.is_none(),
-            );
+            let mut ld = build_styled_line(&styled.lines[line_idx], config, line_height_px);
             // Show fold indicator on fold start lines
             if config.code_folding && data.is_fold_start(line_idx) {
                 let hint = code_face(
@@ -3031,7 +3027,7 @@ mod tests {
 
         assert!(c.config.line_numbers);
         assert_eq!(c.config.font_size, 14.0);
-        assert_eq!(c.config.corner_radius, 12.0);
+        assert_eq!(c.config.corner_radius, Some(12.0));
     }
 
     #[test]

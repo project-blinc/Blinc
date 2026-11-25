@@ -1,7 +1,8 @@
 //! Syntax highlighting for code elements
 //!
 //! This module provides a trait-based syntax highlighting system that uses regex
-//! patterns to match tokens and apply colors.
+//! patterns to match tokens. The code widgets give each token the class
+//! `blinc-code-token-<kind>`, and the stylesheet colours it from the theme.
 //!
 //! # Example
 //!
@@ -19,11 +20,12 @@
 //!     }
 //! }
 //!
-//! // Use with code element
+//! // Rules made with `TokenRule::themed` take the stylesheet's colours.
 //! code("let x = 42;")
-//!     .config(SyntaxConfig::new(MyHighlighter { rules: vec![...] }))
+//!     .syntax(SyntaxConfig::new(MyHighlighter { rules: vec![...] }))
 //! ```
 
+use std::borrow::Cow;
 use std::sync::{Arc, OnceLock};
 
 use blinc_core::Color;
@@ -62,6 +64,36 @@ impl TokenType {
     /// Create a custom token type
     pub fn custom(name: impl Into<String>) -> Self {
         TokenType::Custom(name.into())
+    }
+
+    /// The class a code widget gives a token of this type: `blinc-code-token-` and the type's
+    /// name. A custom name is lower-cased, with a dash for what is not a letter or a digit.
+    pub fn css_class(&self) -> Cow<'static, str> {
+        Cow::Borrowed(match self {
+            TokenType::Keyword => "blinc-code-token-keyword",
+            TokenType::String => "blinc-code-token-string",
+            TokenType::Comment => "blinc-code-token-comment",
+            TokenType::Number => "blinc-code-token-number",
+            TokenType::Type => "blinc-code-token-type",
+            TokenType::Function => "blinc-code-token-function",
+            TokenType::Variable => "blinc-code-token-variable",
+            TokenType::Macro => "blinc-code-token-macro",
+            TokenType::Operator => "blinc-code-token-operator",
+            TokenType::Lifetime => "blinc-code-token-lifetime",
+            TokenType::Custom(name) => {
+                let name: String = name
+                    .chars()
+                    .map(|c| {
+                        if c.is_ascii_alphanumeric() {
+                            c.to_ascii_lowercase()
+                        } else {
+                            '-'
+                        }
+                    })
+                    .collect();
+                return Cow::Owned(format!("blinc-code-token-{name}"));
+            }
+        })
     }
 }
 
@@ -104,7 +136,7 @@ impl TokenHit {
 pub struct TokenRule {
     /// Compiled regex pattern to match
     pattern: Regex,
-    /// Color to apply to matched tokens
+    /// Color to apply to matched tokens, over the stylesheet's. Transparent leaves them to it.
     pub color: Color,
     /// Whether text should be bold
     pub bold: bool,
@@ -124,6 +156,14 @@ impl TokenRule {
             bold: false,
             token_type: TokenType::Custom("unknown".to_string()),
         }
+    }
+
+    /// A rule for tokens of `token_type` that the stylesheet colours, by their class.
+    ///
+    /// # Panics
+    /// Panics if the regex pattern is invalid
+    pub fn themed(pattern: &str, token_type: TokenType) -> Self {
+        Self::new(pattern, Color::TRANSPARENT).token_type(token_type)
     }
 
     /// Try to create a token rule, returning None if pattern is invalid
@@ -173,24 +213,25 @@ pub trait SyntaxHighlighter: Send + Sync {
     /// Get the list of token rules in priority order (first match wins)
     fn token_rules(&self) -> &[TokenRule];
 
-    /// Default text color for non-matched text
-    fn default_color(&self) -> Color {
-        Color::rgba(0.9, 0.9, 0.9, 1.0)
+    /// Colour of text no rule matches, over the stylesheet's, when the highlighter has one
+    fn default_color(&self) -> Option<Color> {
+        None
     }
 
-    /// Background color for the code block
-    fn background_color(&self) -> Color {
-        Color::rgba(0.12, 0.12, 0.14, 1.0)
+    /// Background of the code block, over the stylesheet's, when the highlighter has one
+    fn background_color(&self) -> Option<Color> {
+        None
     }
 
-    /// Line number color (dimmer than text)
-    fn line_number_color(&self) -> Color {
-        Color::rgba(0.45, 0.45, 0.5, 1.0)
+    /// Line number colour, over the stylesheet's, when the highlighter has one
+    fn line_number_color(&self) -> Option<Color> {
+        None
     }
 
     /// Apply highlighting to text, returning styled text
     fn highlight(&self, text: &str) -> StyledText {
-        let default_color = self.default_color();
+        // A transparent span is one the stylesheet colours.
+        let default_color = self.default_color().unwrap_or(Color::TRANSPARENT);
         let rules = self.token_rules();
 
         // Handle empty string specially - .lines() returns empty iterator for ""
@@ -304,35 +345,35 @@ fn highlight_line(line: &str, rules: &[TokenRule], default_color: Color) -> Styl
 /// the same way across most C-family / scripting languages —
 /// strings (double + single quoted), numeric literals, and
 /// line comments in the three common shells (`//`, `#`, `--`). No
-/// keyword set: anything not matched falls through to `text_color`.
+/// keyword set: anything not matched is plain text.
 /// Designed for the "unknown language but I still want some
 /// visual structure" case used by the inline script editor's
 /// fallback path.
 pub struct PlainHighlighter {
     rules: Arc<[TokenRule]>,
-    text_color: Color,
-    bg_color: Color,
+    text_color: Option<Color>,
+    bg_color: Option<Color>,
 }
 
 impl PlainHighlighter {
     pub fn new() -> Self {
         Self {
             rules: plain_rules(),
-            text_color: Color::rgba(0.86, 0.88, 0.90, 1.0),
-            bg_color: Color::rgba(0.12, 0.12, 0.14, 1.0),
+            text_color: None,
+            bg_color: None,
         }
     }
 
     /// Override the default text colour — applied to spans that no
     /// rule matched.
     pub fn text_color(mut self, color: Color) -> Self {
-        self.text_color = color;
+        self.text_color = Some(color);
         self
     }
 
     /// Override the editor background colour.
     pub fn background(mut self, color: Color) -> Self {
-        self.bg_color = color;
+        self.bg_color = Some(color);
         self
     }
 }
@@ -341,28 +382,20 @@ fn plain_rules() -> Arc<[TokenRule]> {
     static CACHE: OnceLock<Arc<[TokenRule]>> = OnceLock::new();
     CACHE
         .get_or_init(|| {
-            // Same palette as the language-specific highlighters so
-            // a fallback file doesn't visually clash with an opened
-            // `.rs` / `.lua` / `.json` next door.
-            let string_color = Color::rgba(0.81, 0.54, 0.44, 1.0); // Orange/brown
-            let comment_color = Color::rgba(0.42, 0.54, 0.35, 1.0); // Green
-            let number_color = Color::rgba(0.71, 0.82, 0.57, 1.0); // Light green
-
+            use TokenType::{Comment, Number, String};
             let rules: Vec<TokenRule> = vec![
                 // Line comments — order matters: catch before
                 // numbers / strings so a `// foo bar` segment
                 // doesn't get split by an inner match.
-                TokenRule::new(r"//.*$", comment_color).token_type(TokenType::Comment),
-                TokenRule::new(r"--.*$", comment_color).token_type(TokenType::Comment),
-                TokenRule::new(r"#.*$", comment_color).token_type(TokenType::Comment),
+                TokenRule::themed(r"//.*$", Comment),
+                TokenRule::themed(r"--.*$", Comment),
+                TokenRule::themed(r"#.*$", Comment),
                 // Strings — double + single quoted with `\` escape.
-                TokenRule::new(r#""(?:[^"\\]|\\.)*""#, string_color).token_type(TokenType::String),
-                TokenRule::new(r#"'(?:[^'\\]|\\.)*'"#, string_color).token_type(TokenType::String),
+                TokenRule::themed(r#""(?:[^"\\]|\\.)*""#, String),
+                TokenRule::themed(r#"'(?:[^'\\]|\\.)*'"#, String),
                 // Numbers — integer / float / scientific / hex.
-                TokenRule::new(r"\b\d+(\.\d+)?([eE][+-]?\d+)?\b", number_color)
-                    .token_type(TokenType::Number),
-                TokenRule::new(r"\b0[xX][0-9a-fA-F]+\b", number_color)
-                    .token_type(TokenType::Number),
+                TokenRule::themed(r"\b\d+(\.\d+)?([eE][+-]?\d+)?\b", Number),
+                TokenRule::themed(r"\b0[xX][0-9a-fA-F]+\b", Number),
             ];
             Arc::from(rules)
         })
@@ -380,11 +413,11 @@ impl SyntaxHighlighter for PlainHighlighter {
         &self.rules
     }
 
-    fn default_color(&self) -> Color {
+    fn default_color(&self) -> Option<Color> {
         self.text_color
     }
 
-    fn background_color(&self) -> Color {
+    fn background_color(&self) -> Option<Color> {
         self.bg_color
     }
 }
@@ -395,19 +428,16 @@ impl SyntaxHighlighter for PlainHighlighter {
 /// `RustHighlighter::new()` — each fresh instance bumps a refcount
 /// instead of re-compiling the ~12 regex patterns. For a typical
 /// app with several `code()` blocks this is the difference between
-/// paying the regex DFA tables once or N times. `bg_color` stays
-/// per-instance so callers can still override it.
+/// paying the regex DFA tables once or N times.
 pub struct RustHighlighter {
     rules: Arc<[TokenRule]>,
-    bg_color: Color,
 }
 
 impl RustHighlighter {
-    /// Create a new Rust highlighter with default colors
+    /// Create a new Rust highlighter
     pub fn new() -> Self {
         Self {
             rules: rust_rules(),
-            bg_color: Color::rgba(0.12, 0.12, 0.14, 1.0),
         }
     }
 }
@@ -421,41 +451,33 @@ fn rust_rules() -> Arc<[TokenRule]> {
     static CACHE: OnceLock<Arc<[TokenRule]>> = OnceLock::new();
     CACHE
         .get_or_init(|| {
-            // Color palette (VS Code Dark+ inspired)
-            let keyword_color = Color::rgba(0.77, 0.56, 0.82, 1.0); // Purple
-            let string_color = Color::rgba(0.81, 0.54, 0.44, 1.0); // Orange/brown
-            let comment_color = Color::rgba(0.42, 0.54, 0.35, 1.0); // Green
-            let number_color = Color::rgba(0.71, 0.82, 0.57, 1.0); // Light green
-            let function_color = Color::rgba(0.86, 0.82, 0.65, 1.0); // Yellow
-            let type_color = Color::rgba(0.31, 0.76, 0.77, 1.0); // Cyan
-            let macro_color = Color::rgba(0.31, 0.76, 0.77, 1.0); // Cyan
-            let lifetime_color = Color::rgba(0.77, 0.56, 0.82, 1.0); // Purple
-
+            use TokenType::{Comment, Function, Keyword, Lifetime, Macro, Number, String, Type};
             let rules: Vec<TokenRule> = vec![
                 // Comments (must be early to capture before other rules)
-                TokenRule::new(r"//.*$", comment_color).token_type(TokenType::Comment),
+                TokenRule::themed(r"//.*$", Comment),
                 // Strings (double-quoted)
-                TokenRule::new(r#""[^"]*""#, string_color).token_type(TokenType::String),
+                TokenRule::themed(r#""[^"]*""#, String),
                 // Characters (single quoted, simplified)
-                TokenRule::new(r"'[^']{1,2}'", string_color).token_type(TokenType::String),
+                TokenRule::themed(r"'[^']{1,2}'", String),
                 // Lifetimes
-                TokenRule::new(r"'[a-zA-Z_][a-zA-Z0-9_]*", lifetime_color).token_type(TokenType::Lifetime),
+                TokenRule::themed(r"'[a-zA-Z_][a-zA-Z0-9_]*", Lifetime),
                 // Macros
-                TokenRule::new(r"\b[a-z_][a-zA-Z0-9_]*!", macro_color).token_type(TokenType::Macro),
+                TokenRule::themed(r"\b[a-z_][a-zA-Z0-9_]*!", Macro),
                 // Keywords
-                TokenRule::new(
+                TokenRule::themed(
                     r"\b(fn|let|mut|const|static|pub|use|mod|struct|enum|trait|impl|for|while|loop|if|else|match|return|break|continue|async|await|move|ref|self|Self|super|crate|where|type|dyn|unsafe|extern)\b",
-                    keyword_color,
-                ).bold().token_type(TokenType::Keyword),
+                    Keyword,
+                )
+                .bold(),
                 // Types (PascalCase)
-                TokenRule::new(r"\b[A-Z][a-zA-Z0-9_]*\b", type_color).token_type(TokenType::Type),
+                TokenRule::themed(r"\b[A-Z][a-zA-Z0-9_]*\b", Type),
                 // Numbers
-                TokenRule::new(r"\b\d+(\.\d+)?([eE][+-]?\d+)?[fiu]?(8|16|32|64|128|size)?\b", number_color).token_type(TokenType::Number),
-                TokenRule::new(r"\b0x[0-9a-fA-F_]+\b", number_color).token_type(TokenType::Number),
-                TokenRule::new(r"\b0b[01_]+\b", number_color).token_type(TokenType::Number),
-                TokenRule::new(r"\b0o[0-7_]+\b", number_color).token_type(TokenType::Number),
+                TokenRule::themed(r"\b\d+(\.\d+)?([eE][+-]?\d+)?[fiu]?(8|16|32|64|128|size)?\b", Number),
+                TokenRule::themed(r"\b0x[0-9a-fA-F_]+\b", Number),
+                TokenRule::themed(r"\b0b[01_]+\b", Number),
+                TokenRule::themed(r"\b0o[0-7_]+\b", Number),
                 // Function calls
-                TokenRule::new(r"\b([a-z_][a-zA-Z0-9_]*)\s*\(", function_color).token_type(TokenType::Function),
+                TokenRule::themed(r"\b([a-z_][a-zA-Z0-9_]*)\s*\(", Function),
             ];
             Arc::from(rules)
         })
@@ -471,10 +493,6 @@ impl Default for RustHighlighter {
 impl SyntaxHighlighter for RustHighlighter {
     fn token_rules(&self) -> &[TokenRule] {
         &self.rules
-    }
-
-    fn background_color(&self) -> Color {
-        self.bg_color
     }
 }
 
@@ -499,20 +517,15 @@ fn json_rules() -> Arc<[TokenRule]> {
     static CACHE: OnceLock<Arc<[TokenRule]>> = OnceLock::new();
     CACHE
         .get_or_init(|| {
-            let string_color = Color::rgba(0.81, 0.54, 0.44, 1.0); // Orange/brown
-            let number_color = Color::rgba(0.71, 0.82, 0.57, 1.0); // Light green
-            let keyword_color = Color::rgba(0.77, 0.56, 0.82, 1.0); // Purple
-            let key_color = Color::rgba(0.61, 0.78, 0.92, 1.0); // Light blue
-
             let rules: Vec<TokenRule> = vec![
                 // Keys (strings followed by colon)
-                TokenRule::new(r#""[^"]*"\s*:"#, key_color),
+                TokenRule::themed(r#""[^"]*"\s*:"#, TokenType::custom("property")),
                 // Strings
-                TokenRule::new(r#""(?:[^"\\]|\\.)*""#, string_color),
+                TokenRule::themed(r#""(?:[^"\\]|\\.)*""#, TokenType::String),
                 // Numbers
-                TokenRule::new(r"-?\b\d+(\.\d+)?([eE][+-]?\d+)?\b", number_color),
+                TokenRule::themed(r"-?\b\d+(\.\d+)?([eE][+-]?\d+)?\b", TokenType::Number),
                 // Keywords
-                TokenRule::new(r"\b(true|false|null)\b", keyword_color),
+                TokenRule::themed(r"\b(true|false|null)\b", TokenType::Keyword),
             ];
             Arc::from(rules)
         })
@@ -542,15 +555,11 @@ impl SyntaxHighlighter for JsonHighlighter {
 /// `nil` / `true` / `false`.
 pub struct LuaHighlighter {
     rules: Arc<[TokenRule]>,
-    bg_color: Color,
 }
 
 impl LuaHighlighter {
     pub fn new() -> Self {
-        Self {
-            rules: lua_rules(),
-            bg_color: Color::rgba(0.12, 0.12, 0.14, 1.0),
-        }
+        Self { rules: lua_rules() }
     }
 }
 
@@ -558,42 +567,29 @@ fn lua_rules() -> Arc<[TokenRule]> {
     static CACHE: OnceLock<Arc<[TokenRule]>> = OnceLock::new();
     CACHE
         .get_or_init(|| {
-            let keyword_color = Color::rgba(0.77, 0.56, 0.82, 1.0); // Purple
-            let string_color = Color::rgba(0.81, 0.54, 0.44, 1.0); // Orange/brown
-            let comment_color = Color::rgba(0.42, 0.54, 0.35, 1.0); // Green
-            let number_color = Color::rgba(0.71, 0.82, 0.57, 1.0); // Light green
-            let function_color = Color::rgba(0.86, 0.82, 0.65, 1.0); // Yellow
-            let literal_color = Color::rgba(0.31, 0.76, 0.77, 1.0); // Cyan
-
+            use TokenType::{Comment, Function, Keyword, Number, String};
             let rules: Vec<TokenRule> = vec![
                 // Comments — `--` to end-of-line. Lua's block comment
                 // form `--[[ ... ]]` spans lines and isn't easily
                 // captured with a per-line regex pass; skipped here.
-                TokenRule::new(r"--.*$", comment_color).token_type(TokenType::Comment),
+                TokenRule::themed(r"--.*$", Comment),
                 // Strings — single + double quoted with `\` escapes.
-                TokenRule::new(r#""(?:[^"\\]|\\.)*""#, string_color)
-                    .token_type(TokenType::String),
-                TokenRule::new(r#"'(?:[^'\\]|\\.)*'"#, string_color)
-                    .token_type(TokenType::String),
+                TokenRule::themed(r#""(?:[^"\\]|\\.)*""#, String),
+                TokenRule::themed(r#"'(?:[^'\\]|\\.)*'"#, String),
                 // Literals first so they don't get caught by the
                 // generic keyword regex below.
-                TokenRule::new(r"\b(nil|true|false)\b", literal_color)
-                    .token_type(TokenType::Keyword),
+                TokenRule::themed(r"\b(nil|true|false)\b", Keyword),
                 // Control + structure keywords.
-                TokenRule::new(
+                TokenRule::themed(
                     r"\b(and|break|do|else|elseif|end|for|function|goto|if|in|local|not|or|repeat|return|then|until|while)\b",
-                    keyword_color,
+                    Keyword,
                 )
-                .bold()
-                .token_type(TokenType::Keyword),
+                .bold(),
                 // Numbers — integer, float, scientific, hex.
-                TokenRule::new(r"\b\d+(\.\d+)?([eE][+-]?\d+)?\b", number_color)
-                    .token_type(TokenType::Number),
-                TokenRule::new(r"\b0[xX][0-9a-fA-F]+\b", number_color)
-                    .token_type(TokenType::Number),
+                TokenRule::themed(r"\b\d+(\.\d+)?([eE][+-]?\d+)?\b", Number),
+                TokenRule::themed(r"\b0[xX][0-9a-fA-F]+\b", Number),
                 // Function calls — identifier followed by `(`.
-                TokenRule::new(r"\b([a-zA-Z_][a-zA-Z_0-9]*)\s*\(", function_color)
-                    .token_type(TokenType::Function),
+                TokenRule::themed(r"\b([a-zA-Z_][a-zA-Z_0-9]*)\s*\(", Function),
             ];
             Arc::from(rules)
         })
@@ -609,10 +605,6 @@ impl Default for LuaHighlighter {
 impl SyntaxHighlighter for LuaHighlighter {
     fn token_rules(&self) -> &[TokenRule] {
         &self.rules
-    }
-
-    fn background_color(&self) -> Color {
-        self.bg_color
     }
 }
 

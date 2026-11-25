@@ -3,10 +3,12 @@
 /* ============================================================================
    Code Editor
 
-   The layout editor takes its own `.blinc-code` rules; these style the find
-   and replace bar floating over it and the marks of its matches.
+   The layout editor takes its own `.blinc-code` rules; these edge it, and style
+   the find and replace bar floating over it and the marks of its matches.
    ============================================================================ */
 
+/* The editor's edge. Its colours are the layout widget's `.blinc-code*` rules. */
+.cn-code-editor .blinc-code { border: 1px solid var(--border); }
 .cn-code-editor-find {
     background: var(--surface-elevated);
     color: var(--text-primary);

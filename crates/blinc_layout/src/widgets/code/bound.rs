@@ -16,13 +16,13 @@ use crate::syntax::SyntaxHighlighter;
 /// One line as the region holds it: its number and its styled text.
 type Line = (usize, StyledLine);
 
-/// The key a line keeps while its number, text and colours stay the same.
+/// The key a line keeps while its number, text, tokens and colours stay the same.
 fn line_key((index, line): &Line) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     index.hash(&mut h);
     line.text.hash(&mut h);
     for span in &line.spans {
-        (span.start, span.end, span.bold).hash(&mut h);
+        (span.start, span.end, span.bold, &span.token_type).hash(&mut h);
         [span.color.r, span.color.g, span.color.b, span.color.a]
             .map(f32::to_bits)
             .hash(&mut h);
@@ -39,7 +39,6 @@ pub(super) fn structure(
 ) -> Div {
     let line_height_px = config.font_size * config.line_height;
     let ink = config.plain_ink();
-    let plain = highlighter.is_none();
     let lines = computed(move |g| {
         let text = source.read(g).unwrap_or_default();
         let styled = match &highlighter {
@@ -85,7 +84,7 @@ pub(super) fn structure(
             .padding_x_px(config.padding)
             .padding_y_px(config.padding)
             .for_each(lines, line_key, move |(_, line): Line| {
-                build_styled_line(&line, &line_config, line_height_px, plain)
+                build_styled_line(&line, &line_config, line_height_px)
             }),
     ))
 }

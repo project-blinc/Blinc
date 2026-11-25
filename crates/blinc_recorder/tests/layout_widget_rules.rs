@@ -125,7 +125,10 @@ fn ink(ui: &mut Headless, node: LayoutNodeId, dark: bool) -> ([u8; 3], [u8; 3]) 
 }
 
 fn token(t: ColorToken) -> [u8; 3] {
-    let c = ThemeState::get().color(t);
+    rgb8(ThemeState::get().color(t))
+}
+
+fn rgb8(c: Color) -> [u8; 3] {
     [
         (c.r * 255.0) as u8,
         (c.g * 255.0) as u8,
@@ -292,55 +295,217 @@ fn plain_code_takes_the_code_rules_in_both_schemes() {
     }
 }
 
-/// A selection in the editor is the `.blinc-code-selection` rule's fill; a
-/// syntax theme keeps its own background.
+/// A selection in the editor is the `.blinc-code-selection` rule's fill, and a highlighted
+/// editor takes the theme's fill and syntax colours in both schemes.
 #[test]
 fn the_editor_takes_selection_and_syntax_colours() {
-    use blinc_layout::syntax::{RustHighlighter, SyntaxConfig, SyntaxHighlighter};
+    use blinc_layout::syntax::{RustHighlighter, SyntaxConfig};
     use blinc_layout::widgets::code::{code_editor, code_editor_state};
     use blinc_layout::widgets::text_area::TextPosition;
+
+    for (scheme, dark, golden) in [
+        (ColorScheme::Dark, true, "layout_code_rules"),
+        (ColorScheme::Light, false, "layout_code_rules_light"),
+    ] {
+        let Some(mut ui) = session(scheme) else {
+            return;
+        };
+        let theme = ThemeState::get();
+        let plain = code_editor_state("hello world");
+        {
+            let mut d = plain.lock().unwrap();
+            d.selection_start = Some(TextPosition::new(0, 0));
+            d.cursor = TextPosition::new(0, 5);
+        }
+        let rust = code_editor_state("fn main() { count(\"word\", 42); } // note");
+        let (p, r) = (plain.clone(), rust.clone());
+        ui.mount(move |_| {
+            div()
+                .w(W as f32)
+                .h(H as f32)
+                .flex_col()
+                .child(code_editor(&p).w(400.0).h(80.0))
+                .child(
+                    code_editor(&r)
+                        .syntax(SyntaxConfig::new(RustHighlighter::new()))
+                        .line_numbers(true)
+                        .font_size(18.0)
+                        .w(400.0)
+                        .h(80.0),
+                )
+        });
+        ui.leave().settle();
+
+        let selection = one(&ui, "blinc-code-selection");
+        assert!(close(
+            background(&ui, selection),
+            theme.color(ColorToken::Selection)
+        ));
+        let editors = all(&ui, "blinc-code");
+        assert_eq!(editors.len(), 2);
+        for editor in editors {
+            assert!(close(
+                background(&ui, editor),
+                theme.color(ColorToken::Surface)
+            ));
+        }
+        let keyword = Color::lerp(
+            &theme.color(ColorToken::Error),
+            &theme.color(ColorToken::Primary),
+            0.55,
+        );
+        let node = one(&ui, "blinc-code-token-keyword");
+        let (got, bg) = ink(&mut ui, node, dark);
+        let want = rgb8(keyword);
+        assert!(
+            drawn_in(got, want, bg),
+            "{scheme:?} keyword drawn {got:?} over {bg:?}, want {want:?}"
+        );
+        ui.assert_snapshot(golden);
+    }
+}
+
+/// An application recolours tokens by variable or by class rule, and a token its highlighter
+/// colours keeps that colour.
+#[test]
+fn token_colours_come_from_the_application_or_the_highlighter() {
+    use blinc_layout::syntax::{SyntaxConfig, SyntaxHighlighter, TokenRule, TokenType};
+
+    struct Mine(Vec<TokenRule>);
+    impl SyntaxHighlighter for Mine {
+        fn token_rules(&self) -> &[TokenRule] {
+            &self.0
+        }
+    }
 
     let Some(mut ui) = session(ColorScheme::Dark) else {
         return;
     };
-    let theme = ThemeState::get();
-    let plain = code_editor_state("hello world");
-    {
-        let mut d = plain.lock().unwrap();
-        d.selection_start = Some(TextPosition::new(0, 0));
-        d.cursor = TextPosition::new(0, 5);
-    }
-    let rust = code_editor_state("fn main() {}");
-    let (p, r) = (plain.clone(), rust.clone());
-    ui.mount(move |_| {
-        div()
-            .w(W as f32)
-            .h(H as f32)
-            .flex_col()
-            .child(code_editor(&p).w(300.0).h(80.0))
-            .child(
-                code_editor(&r)
-                    .syntax(SyntaxConfig::new(RustHighlighter::new()))
-                    .w(300.0)
-                    .h(80.0),
-            )
+    ui.css(
+        ":root { --blinc-syntax-keyword: #00ff00; } \
+         .blinc-code-token-number { color: #ff00ff; }",
+    );
+    ui.mount(|_| {
+        let rules = vec![
+            TokenRule::themed(r"\bfn\b", TokenType::Keyword),
+            TokenRule::themed(r"'a\b", TokenType::Lifetime),
+            TokenRule::themed(r"\d+", TokenType::Number),
+            TokenRule::new(r"\bmine\b", Color::rgb(1.0, 0.5, 0.0))
+                .token_type(TokenType::custom("Mine Own")),
+        ];
+        div().w(W as f32).h(H as f32).child(
+            blinc_layout::widgets::code("fn 'a 42 mine")
+                .syntax(SyntaxConfig::new(Mine(rules)))
+                .font_size(22.0)
+                .w_full(),
+        )
     });
     ui.leave().settle();
+    for (class, want) in [
+        ("blinc-code-token-keyword", [0, 255, 0]),
+        // A lifetime follows the keyword colour until it has its own.
+        ("blinc-code-token-lifetime", [0, 255, 0]),
+        ("blinc-code-token-number", [255, 0, 255]),
+        ("blinc-code-token-mine-own", [255, 127, 0]),
+    ] {
+        let node = one(&ui, class);
+        let (got, bg) = ink(&mut ui, node, true);
+        assert!(
+            drawn_in(got, want, bg),
+            "{class} drawn {got:?} over {bg:?}, want {want:?}"
+        );
+    }
+}
 
-    let selection = one(&ui, "blinc-code-selection");
-    assert!(close(
-        background(&ui, selection),
-        theme.color(ColorToken::Selection)
-    ));
-    let editors = all(&ui, "blinc-code");
-    assert_eq!(editors.len(), 2);
-    assert!(close(
-        background(&ui, editors[0]),
-        theme.color(ColorToken::Surface)
-    ));
-    assert!(close(
-        background(&ui, editors[1]),
-        RustHighlighter::new().background_color()
-    ));
-    ui.assert_snapshot("layout_code_rules");
+/// Every mark an editor draws, in both schemes: the current line, a selection, the brackets,
+/// the indent guides, search matches, diagnostics, a fold and the minimap.
+#[test]
+fn the_editor_draws_its_marks_in_both_schemes() {
+    use blinc_layout::syntax::{RustHighlighter, SyntaxConfig};
+    use blinc_layout::widgets::code::{
+        CodeDiagnostic, DiagnosticSeverity, code_editor, code_editor_state, set_code_diagnostics,
+    };
+    use blinc_layout::widgets::text_area::TextPosition;
+
+    const CODE: &str = "// Counts what it is given.\nfn count(words: &[&str]) -> usize {\n    \
+        let mut seen = 0;\n    for word in words {\n        seen += word.len();\n    }\n    \
+        let wrong = seen +;\n    seen\n}\n\nfn main() {\n    count(&[\"tree\", \"leaf\"]);\n}";
+
+    for (scheme, golden) in [
+        (ColorScheme::Dark, "layout_code_marks"),
+        (ColorScheme::Light, "layout_code_marks_light"),
+    ] {
+        let Some(mut ui) = session(scheme) else {
+            return;
+        };
+        let editing = code_editor_state(CODE);
+        let selecting = code_editor_state("let first = 1;\nlet second = 2;\n");
+        let (e, s) = (editing.clone(), selecting.clone());
+        ui.mount(move |_| {
+            div()
+                .w(W as f32)
+                .h(H as f32)
+                .flex_col()
+                .gap(2.0)
+                .child(
+                    code_editor(&e)
+                        .syntax(SyntaxConfig::new(RustHighlighter::new()))
+                        .line_numbers(true)
+                        .code_folding(true)
+                        .indent_guides(true)
+                        .minimap(true)
+                        .w(400.0)
+                        .h(300.0),
+                )
+                .child(
+                    code_editor(&s)
+                        .syntax(SyntaxConfig::new(RustHighlighter::new()))
+                        .line_numbers(true)
+                        .w(400.0)
+                        .h(80.0),
+                )
+        });
+        ui.settle();
+        {
+            let mut d = selecting.lock().unwrap();
+            d.selection_start = Some(TextPosition::new(0, 4));
+            d.cursor = TextPosition::new(1, 10);
+        }
+        blinc_layout::widgets::code::refresh_code_editor(&selecting);
+        set_code_diagnostics(
+            &editing,
+            vec![CodeDiagnostic::new(
+                6,
+                21,
+                22,
+                DiagnosticSeverity::Error,
+                "expected a value",
+            )],
+        );
+        // A press in the editor focuses it; the cursor goes beside a brace.
+        ui.move_to(200.0, 20.0).mouse_down().mouse_up();
+        ui.settle();
+        {
+            let mut d = editing.lock().unwrap();
+            d.toggle_fold(3);
+            d.apply_search_query("seen".to_string());
+            d.find_open = true;
+            d.cursor = TextPosition::new(1, "fn count(words: &[&str]) -> usize {".len());
+        }
+        blinc_layout::widgets::code::refresh_code_editor(&editing);
+        ui.settle();
+        for class in [
+            "blinc-code-active-line",
+            "blinc-code-selection",
+            "blinc-code-bracket",
+            "blinc-code-guide",
+            "blinc-code-find-match",
+            "blinc-code-line-error",
+            "blinc-code-fold-hint",
+            "blinc-code-minimap",
+        ] {
+            assert!(!all(&ui, class).is_empty(), "{scheme:?}: no .{class}");
+        }
+        ui.assert_snapshot(golden);
+    }
 }

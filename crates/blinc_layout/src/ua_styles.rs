@@ -4,6 +4,52 @@
 //! them whatever their specificity, and a fluent value on an element wins over
 //! them. Colours come from theme variables, so they follow the theme.
 
+use crate::syntax::TokenType;
+
+/// The colour of each kind of syntax token: its `--blinc-syntax-*` variable, else one made from
+/// the theme's colours. The rules for the token classes and the minimap read these.
+macro_rules! syntax_ink {
+    (keyword) => {
+        "var(--blinc-syntax-keyword, color-mix(in srgb, var(--primary) 55%, var(--error)))"
+    };
+    (string) => {
+        "var(--blinc-syntax-string, color-mix(in srgb, var(--success) 75%, var(--text-primary)))"
+    };
+    (comment) => {
+        "var(--blinc-syntax-comment, color-mix(in srgb, var(--text-secondary) 50%, var(--text-tertiary)))"
+    };
+    (number) => {
+        "var(--blinc-syntax-number, color-mix(in srgb, var(--warning) 75%, var(--text-primary)))"
+    };
+    (type) => {
+        concat!(
+            "var(--blinc-syntax-type, color-mix(in srgb, ",
+            "color-mix(in srgb, var(--info) 50%, var(--success)) 80%, var(--text-primary)))"
+        )
+    };
+    (function) => {
+        "var(--blinc-syntax-function, color-mix(in srgb, var(--primary) 80%, var(--text-primary)))"
+    };
+    (variable) => {
+        "var(--blinc-syntax-variable, var(--text-primary))"
+    };
+    (operator) => {
+        "var(--blinc-syntax-operator, var(--text-secondary))"
+    };
+    (lifetime) => {
+        concat!("var(--blinc-syntax-lifetime, ", syntax_ink!(keyword), ")")
+    };
+    (macro) => {
+        concat!("var(--blinc-syntax-macro, ", syntax_ink!(type), ")")
+    };
+    (property) => {
+        concat!("var(--blinc-syntax-property, ", syntax_ink!(function), ")")
+    };
+    (constant) => {
+        concat!("var(--blinc-syntax-constant, ", syntax_ink!(number), ")")
+    };
+}
+
 /// Default rules for the layout widgets.
 pub const UA_STYLES: &str = concat!(
     "@layer components {\n",
@@ -207,16 +253,59 @@ pub const UA_STYLES: &str = concat!(
 .blinc-tr-alt { background: var(--accent-subtle); }
 .blinc-table-separator { background: var(--border); }
 
-/* Code blocks and the code editor. Syntax themes colour the text, fill and
-   line numbers inline; these are the plain look. The caret is drawn in
+/* Code blocks and the code editor. A highlighter or builder that names a colour
+   sets it on the element, over these rules. The caret is drawn in
    `--blinc-code-caret`, the accent when unset, and code is set in
    `--blinc-code-font-family`, the generic monospace face when unset. */
-.blinc-code { background: var(--surface); color: var(--text-primary); }
+.blinc-code {
+    background: var(--surface);
+    color: var(--text-primary);
+    border-radius: var(--radius-md);
+}
+"#,
+    // Syntax tokens.
+    ".blinc-code-token-keyword { color: ",
+    syntax_ink!(keyword),
+    "; }\n",
+    ".blinc-code-token-string { color: ",
+    syntax_ink!(string),
+    "; }\n",
+    ".blinc-code-token-comment { color: ",
+    syntax_ink!(comment),
+    "; }\n",
+    ".blinc-code-token-number { color: ",
+    syntax_ink!(number),
+    "; }\n",
+    ".blinc-code-token-type { color: ",
+    syntax_ink!(type),
+    "; }\n",
+    ".blinc-code-token-function { color: ",
+    syntax_ink!(function),
+    "; }\n",
+    ".blinc-code-token-variable { color: ",
+    syntax_ink!(variable),
+    "; }\n",
+    ".blinc-code-token-macro { color: ",
+    syntax_ink!(macro),
+    "; }\n",
+    ".blinc-code-token-operator { color: ",
+    syntax_ink!(operator),
+    "; }\n",
+    ".blinc-code-token-lifetime { color: ",
+    syntax_ink!(lifetime),
+    "; }\n",
+    ".blinc-code-token-property { color: ",
+    syntax_ink!(property),
+    "; }\n",
+    ".blinc-code-token-constant { color: ",
+    syntax_ink!(constant),
+    "; }\n",
+    r#"
 .blinc-code-line-number, .blinc-code-fold, .blinc-code-fold-hint { color: var(--text-tertiary); }
 .blinc-code-active-line { background: color-mix(in srgb, var(--primary) 5%, transparent); }
 .blinc-code-selection { background: var(--selection); }
 .blinc-code-placeholder { color: var(--text-tertiary); }
-.blinc-code-guide { background: color-mix(in srgb, var(--border) 55%, transparent); }
+.blinc-code-guide { background: var(--border); }
 .blinc-code-bracket {
     background: color-mix(in srgb, var(--primary) 15%, transparent);
     border: 1px solid color-mix(in srgb, var(--primary) 65%, transparent);
@@ -318,6 +407,28 @@ pub(crate) fn stylesheet_variable(name: &str) -> Option<String> {
         .and_then(|sheet| sheet.get_variable(name).map(|v| v.trim().to_string()))
 }
 
+/// The colour expression for a token of `token`'s type, for drawing code. None for a custom
+/// type without a rule.
+pub(crate) fn token_ink(token: &TokenType) -> Option<&'static str> {
+    Some(match token {
+        TokenType::Keyword => syntax_ink!(keyword),
+        TokenType::String => syntax_ink!(string),
+        TokenType::Comment => syntax_ink!(comment),
+        TokenType::Number => syntax_ink!(number),
+        TokenType::Type => syntax_ink!(type),
+        TokenType::Function => syntax_ink!(function),
+        TokenType::Variable => syntax_ink!(variable),
+        TokenType::Macro => syntax_ink!(macro),
+        TokenType::Operator => syntax_ink!(operator),
+        TokenType::Lifetime => syntax_ink!(lifetime),
+        TokenType::Custom(name) => match name.as_str() {
+            "property" => syntax_ink!(property),
+            "constant" => syntax_ink!(constant),
+            _ => return None,
+        },
+    })
+}
+
 /// Queue [`UA_STYLES`] for the runner to register, once per process. The
 /// runners call this at start-up, ahead of the theme's own CSS.
 pub fn install() {
@@ -329,6 +440,36 @@ pub fn install() {
 mod tests {
     use super::*;
     use blinc_theme::ColorToken;
+
+    #[test]
+    fn every_syntax_token_has_a_rule_and_a_colour_from_the_theme() {
+        let theme = ":root { --primary: #0000ff; --success: #00ff00; --warning: #ffaa00; \
+                     --error: #ff0000; --info: #00aaff; --text-primary: #000000; \
+                     --text-secondary: #333333; --text-tertiary: #666666; }";
+        let sheet = crate::css_parser::Stylesheet::parse(theme).unwrap();
+        let tokens = [
+            TokenType::Keyword,
+            TokenType::String,
+            TokenType::Comment,
+            TokenType::Number,
+            TokenType::Type,
+            TokenType::Function,
+            TokenType::Variable,
+            TokenType::Macro,
+            TokenType::Operator,
+            TokenType::Lifetime,
+            TokenType::custom("property"),
+            TokenType::custom("constant"),
+        ];
+        for token in &tokens {
+            let ink = token_ink(token).unwrap();
+            assert!(sheet.resolve_color(ink).is_some(), "{token:?}: {ink}");
+            let rule = format!(".{} {{ color: {ink}; }}", token.css_class());
+            assert!(UA_STYLES.contains(&rule), "no rule for {token:?}");
+        }
+        assert!(token_ink(&TokenType::custom("other")).is_none());
+        assert!(crate::css_parser::Stylesheet::parse(UA_STYLES).is_ok());
+    }
 
     #[test]
     fn drawing_colours_follow_a_variable_the_stylesheet_sets() {
