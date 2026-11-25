@@ -105,7 +105,10 @@ cards autoplay their recordings, with pause and reduced-motion support.
 
 Page entry starts the selected worker in the background. The host transfers a
 fresh OffscreenCanvas once, forwards ordered input and owns focus, IME/clipboard,
-resize and DPR services. The worker owns Rust state, layout and GPU rendering.
+resize and DPR services. While the demo is editing, the host cancels Cmd or Ctrl
+with a letter, and F3, so the browser's find and other shortcuts stay out of the
+way; the worker answers too late to cancel a key itself. The worker owns Rust
+state, layout and GPU rendering.
 Ready follows the completed first GPU frame. It never changes the selected tab.
 Preview, Code and hidden documents pause frame scheduling after warmup; Live
 resumes it. Reset and retry dispose the old worker and create a fresh canvas. CSS Apply

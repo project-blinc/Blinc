@@ -191,7 +191,10 @@ export class LiveDemo {
       if ((e.ctrlKey || e.metaKey) && ['c', 'x', 'v'].includes(e.key.toLowerCase())) return;
       // Keep key-generated text with its shortcut so the worker can cancel both.
       const text = code && e.cancelable !== false && Array.from(e.key).length === 1 && !e.metaKey && (!e.ctrlKey || e.altKey) ? e.key : undefined;
-      if (text) e.preventDefault();
+      // The worker answers too late to cancel a key. While the demo is editing, its shortcuts are
+      // kept from the browser here: Cmd or Ctrl with a letter, and F3, which finds the next match.
+      const shortcut = this.editable && (((e.ctrlKey || e.metaKey) && code >= 65 && code <= 90) || e.key === 'F3');
+      if (text || shortcut) e.preventDefault();
       this.input({ kind: 'key-down', code, ...(text ? { text } : {}) }, e);
     });
     listen(this.editor, 'keyup', e => this.input({ kind: 'key-up', code: e.keyCode || e.which || 0 }, e));

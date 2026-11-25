@@ -211,3 +211,26 @@ test('printable key text travels with its shortcut, while composition and paste 
   assert.deepEqual(input().slice(-2), [{ kind: 'key-down', code: 0 }, { kind: 'text', text: 'a' }]);
   demo.stop();
 });
+
+test('while a demo is editing, its shortcuts are kept from the browser', async () => {
+  const { demo, worker, notify } = await host();
+  demo.setVisible(true); notify('ready');
+  let prevented = 0;
+  const press = event => demo.editor.emit('keydown', { preventDefault() { prevented++; }, ...event });
+  const find = { key: 'f', keyCode: 70, ctrlKey: true };
+  press(find);
+  assert.equal(prevented, 0, 'the page keeps its shortcuts while nothing is being edited');
+  notify('state', { editable: true });
+  press(find);
+  press({ key: 'f', keyCode: 70, metaKey: true });
+  press({ key: 'F3', keyCode: 114 });
+  assert.equal(prevented, 3);
+  press({ key: 'v', keyCode: 86, metaKey: true });
+  assert.equal(prevented, 3, 'the paste event serves the clipboard shortcut');
+  notify('state', { editable: false });
+  press(find);
+  assert.equal(prevented, 3);
+  const finds = worker.messages.filter(m => m.type === 'input' && m.payload.event.code === 70);
+  assert.equal(finds.length, 4, 'the demo hears the key either way');
+  demo.stop();
+});
