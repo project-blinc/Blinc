@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1795625164,"nonce":"FCGgLHX68rbyZ4toF2RqtCo5ogI=","added":["bug","area:css","area:layout"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1795625170,"nonce":"1FrVXoqDd5ykh1xo5TfdN2VRxw4=","message":"Fixed in the commit that cites this issue, with the headless test css_late_mount_layout, which fails without it.","files":null}]}
