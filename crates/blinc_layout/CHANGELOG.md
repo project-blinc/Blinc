@@ -86,6 +86,9 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- The code editor's replace calls `on_change`; before, an application that mirrored the text never saw a replacement. In regex mode the replacement expands `$1`, `${name}`, `$&` and `$$`, whole word applies to the pattern, and a pattern that does not compile reports why in `CodeEditorData::search_error` and the find bar. Cmd+F starts from a one-line selection, Cmd+G, R and H update the bar, and replace moves to the next match instead of the first. `replace_current` returns whether it changed the text, `replace_all` how many it replaced, and `apply_search_query` is public.
+
+### Fixed
 - A CSS rule that needs two classes or attributes following signals, on one element or on an element and its ancestor, stops applying when either goes. It stayed until the one that came last went.
 - The momentum after a trackpad scroll stays with the scroll container the fingers scrolled. Before, moving the pointer off an inner scroll, such as a code editor, while it glided handed the rest of the glide to the container under the pointer.
 - Dragging a scroll container's scrollbar thumb repaints on every move. The window does not repaint for a drag event by itself, and the thumb's drag handler moved the offset without asking for a frame, so the thumb and content moved only when something else drew.

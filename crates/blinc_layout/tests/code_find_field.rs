@@ -332,3 +332,98 @@ fn the_stylesheet_designs_the_bar() {
     );
     let _ = fill(&bar, "blinc-find-count--none");
 }
+
+/// The first node carrying `class`.
+fn node_with(bar: &RenderTree, class: &str) -> Option<blinc_layout::LayoutNodeId> {
+    let registry = bar.element_registry();
+    let mut stack = vec![bar.root().unwrap()];
+    while let Some(n) = stack.pop() {
+        if registry.has_class(n, class) {
+            return Some(n);
+        }
+        stack.extend(bar.layout_tree.children(n));
+    }
+    None
+}
+
+/// A press and release on the middle of `node`, as the runner sends them.
+fn click(bar: &mut RenderTree, node: blinc_layout::LayoutNodeId) {
+    let b = bar.get_absolute_bounds(node).unwrap();
+    let (x, y) = (b.x + b.width / 2.0, b.y + b.height / 2.0);
+    blinc_layout::widgets::blur_all_text_inputs();
+    let mut router = EventRouter::new();
+    let mut events = router.on_mouse_move(bar, x, y);
+    events.extend(router.on_mouse_down(bar, x, y, MouseButton::Left));
+    events.extend(router.on_mouse_up(bar, x, y, MouseButton::Left));
+    for (node, event) in events {
+        bar.dispatch_event(node, event, x, y);
+    }
+}
+
+#[test]
+fn replacing_from_the_bar_tells_on_change() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    init();
+    let state = code_editor_state("let child = 1;\nlet other = child + 2;");
+    let _close = CloseBar(Arc::clone(&state));
+    let heard = Arc::new(Mutex::new(Vec::<String>::new()));
+    {
+        let heard = Arc::clone(&heard);
+        let mut d = state.lock().unwrap();
+        d.on_change = Some(Arc::new(move |text: &str| {
+            heard.lock().unwrap().push(text.to_string())
+        }));
+        d.apply_search_query("child".to_string());
+        d.replace_text = "kid".to_string();
+    }
+    let (editor, mut bar) = open_bar(&state);
+
+    // Cmd+H shows the replace row, and the bar follows the shortcut.
+    let mut shortcut = EventContext::new(
+        blinc_core::events::event_types::KEY_DOWN,
+        bar.root().unwrap(),
+    );
+    shortcut.key_code = 72;
+    shortcut.meta = true;
+    ElementBuilder::event_handlers(&editor)
+        .unwrap()
+        .dispatch(&shortcut);
+    assert!(state.lock().unwrap().replace_active);
+    frame(&mut bar);
+    let mut bar = if node_with(&bar, "blinc-find-replace").is_some() {
+        bar
+    } else {
+        bar_tree()
+    };
+    let replace = node_with(&bar, "blinc-find-replace").expect("the replace row did not show");
+    click(&mut bar, replace);
+    assert_eq!(
+        heard.lock().unwrap().as_slice(),
+        ["let kid = 1;\nlet other = child + 2;"],
+        "one replacement is one change"
+    );
+    let all = node_with(&bar, "blinc-find-replace-all").unwrap();
+    click(&mut bar, all);
+    let heard = heard.lock().unwrap();
+    assert_eq!(heard.len(), 2, "{heard:?}");
+    assert_eq!(heard[1], "let kid = 1;\nlet other = kid + 2;");
+}
+
+#[test]
+fn find_starts_from_a_selection_on_one_line() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    init();
+    let state = code_editor_state("let child = 1;\nlet other = child + 2;");
+    let _close = CloseBar(Arc::clone(&state));
+    {
+        use blinc_layout::widgets::text_area::TextPosition;
+        let mut d = state.lock().unwrap();
+        d.selection_start = Some(TextPosition::new(0, 4));
+        d.cursor = TextPosition::new(0, 9);
+    }
+    let (_editor, _bar) = open_bar(&state);
+    let d = state.lock().unwrap();
+    assert_eq!(d.search_query, "child");
+    assert_eq!(d.search_input_state.lock().unwrap().value, "child");
+    assert_eq!(d.search_matches.len(), 2);
+}

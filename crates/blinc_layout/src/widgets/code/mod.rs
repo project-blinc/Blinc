@@ -69,6 +69,7 @@ use crate::widgets::text_input::{
 
 mod bound;
 mod diagnostics;
+mod find;
 mod hscroll;
 mod ime;
 mod minimap;
@@ -253,6 +254,8 @@ pub struct CodeEditorData {
         Option<crate::stateful::SharedState<crate::stateful::TextFieldState>>,
     /// All match positions: (line, start_col, end_col)
     pub search_matches: Vec<(usize, usize, usize)>,
+    /// Why the query matches nothing, when it is a regex that does not compile.
+    pub search_error: Option<String>,
     /// Index of the currently focused match
     pub search_match_idx: usize,
     /// Scroll physics for vertical scrolling
@@ -337,6 +340,7 @@ pub fn code_editor_state(content: impl Into<String>) -> SharedCodeEditorState {
         diagnostics: Vec::new(),
         h_scroll: Arc::new(Mutex::new(ScrollPhysics::default())),
         search_matches: Vec::new(),
+        search_error: None,
         search_match_idx: 0,
         scroll_physics: Arc::new(Mutex::new(ScrollPhysics::default())),
         viewport_height: 0.0,
@@ -975,196 +979,6 @@ impl CodeEditorData {
             sel.column = sel.column.saturating_sub(4);
         }
         self.sync_highlight_cache();
-    }
-
-    /// Execute search: find all matches of query in content.
-    /// Supports plain text and regex (if query starts with /).
-    pub fn execute_search(&mut self) {
-        self.search_matches.clear();
-        self.search_match_idx = 0;
-
-        if self.search_query.is_empty() {
-            return;
-        }
-
-        if self.search_regex {
-            let case_flag = if self.search_case_sensitive {
-                ""
-            } else {
-                "(?i)"
-            };
-            let pattern = format!("{}{}", case_flag, self.search_query);
-            if let Ok(re) = regex::Regex::new(&pattern) {
-                for (line_idx, line) in self.lines.iter().enumerate() {
-                    for m in re.find_iter(line) {
-                        let start_col = line[..m.start()].chars().count();
-                        let end_col = line[..m.end()].chars().count();
-                        self.search_matches.push((line_idx, start_col, end_col));
-                    }
-                }
-            }
-        } else {
-            #[allow(clippy::type_complexity)]
-            let (query_cmp, make_line_cmp): (String, Box<dyn Fn(&str) -> String>) =
-                if self.search_case_sensitive {
-                    (self.search_query.clone(), Box::new(|s: &str| s.to_string()))
-                } else {
-                    (
-                        self.search_query.to_lowercase(),
-                        Box::new(|s: &str| s.to_lowercase()),
-                    )
-                };
-
-            for (line_idx, line) in self.lines.iter().enumerate() {
-                let line_cmp = make_line_cmp(line);
-                let mut search_from = 0;
-                while let Some(byte_pos) = line_cmp[search_from..].find(&query_cmp) {
-                    let abs_byte = search_from + byte_pos;
-                    let start_col = line[..abs_byte].chars().count();
-                    let end_col = start_col + self.search_query.chars().count();
-
-                    // Whole word check
-                    let is_match = if self.search_whole_word {
-                        let before_ok = start_col == 0
-                            || !line
-                                .chars()
-                                .nth(start_col - 1)
-                                .map(|c| c.is_alphanumeric() || c == '_')
-                                .unwrap_or(false);
-                        let after_ok = end_col >= line.chars().count()
-                            || !line
-                                .chars()
-                                .nth(end_col)
-                                .map(|c| c.is_alphanumeric() || c == '_')
-                                .unwrap_or(false);
-                        before_ok && after_ok
-                    } else {
-                        true
-                    };
-
-                    if is_match {
-                        self.search_matches.push((line_idx, start_col, end_col));
-                    }
-                    search_from = abs_byte + query_cmp.len();
-                }
-            }
-        }
-    }
-
-    /// Jump to next search match
-    pub fn search_next(&mut self) {
-        if self.search_matches.is_empty() {
-            return;
-        }
-        self.search_match_idx = (self.search_match_idx + 1) % self.search_matches.len();
-        let (line, col, _) = self.search_matches[self.search_match_idx];
-        self.cursor = TextPosition::new(line, col);
-        self.selection_start = None;
-        self.ensure_cursor_visible();
-    }
-
-    /// Search for `query` and move to the first match at or after the cursor.
-    pub(crate) fn apply_search_query(&mut self, query: String) {
-        self.search_query = query;
-        self.execute_search();
-        if self.search_matches.is_empty() {
-            return;
-        }
-        self.search_match_idx = self
-            .search_matches
-            .iter()
-            .position(|&(l, c, _)| {
-                l > self.cursor.line || (l == self.cursor.line && c >= self.cursor.column)
-            })
-            .unwrap_or(0);
-        let (line, col, _) = self.search_matches[self.search_match_idx];
-        self.cursor = TextPosition::new(line, col);
-        self.selection_start = None;
-        self.ensure_cursor_visible();
-    }
-
-    /// Jump to previous search match
-    pub fn search_prev(&mut self) {
-        if self.search_matches.is_empty() {
-            return;
-        }
-        if self.search_match_idx == 0 {
-            self.search_match_idx = self.search_matches.len() - 1;
-        } else {
-            self.search_match_idx -= 1;
-        }
-        let (line, col, _) = self.search_matches[self.search_match_idx];
-        self.cursor = TextPosition::new(line, col);
-        self.selection_start = None;
-        self.ensure_cursor_visible();
-    }
-
-    /// Insert a character into the search query
-    pub fn search_insert(&mut self, ch: char) {
-        self.search_query.push(ch);
-        self.execute_search();
-        // Jump to nearest match from cursor
-        if !self.search_matches.is_empty() {
-            self.search_match_idx = self
-                .search_matches
-                .iter()
-                .position(|&(l, c, _)| {
-                    l > self.cursor.line || (l == self.cursor.line && c >= self.cursor.column)
-                })
-                .unwrap_or(0);
-            let (line, col, _) = self.search_matches[self.search_match_idx];
-            self.cursor = TextPosition::new(line, col);
-            self.ensure_cursor_visible();
-        }
-    }
-
-    /// Delete last character from search query
-    pub fn search_backspace(&mut self) {
-        self.search_query.pop();
-        self.execute_search();
-    }
-
-    /// Replace the current search match with replacement text
-    pub fn replace_current(&mut self) {
-        if self.search_matches.is_empty() {
-            return;
-        }
-        let (line, col_start, col_end) = self.search_matches[self.search_match_idx];
-        self.push_undo();
-
-        let line_text = &mut self.lines[line];
-        let start_byte = char_to_byte_pos(line_text, col_start);
-        let end_byte = char_to_byte_pos(line_text, col_end);
-        line_text.replace_range(start_byte..end_byte, &self.replace_text);
-
-        self.invalidate_all_highlights();
-        self.execute_search();
-        if !self.search_matches.is_empty() {
-            self.search_match_idx = self.search_match_idx.min(self.search_matches.len() - 1);
-            let (l, c, _) = self.search_matches[self.search_match_idx];
-            self.cursor = TextPosition::new(l, c);
-            self.ensure_cursor_visible();
-        }
-    }
-
-    /// Replace all search matches with replacement text
-    pub fn replace_all(&mut self) {
-        if self.search_matches.is_empty() {
-            return;
-        }
-        self.push_undo();
-
-        // Replace from last to first to preserve earlier positions
-        for &(line, col_start, col_end) in self.search_matches.iter().rev() {
-            let line_text = &mut self.lines[line];
-            let start_byte = char_to_byte_pos(line_text, col_start);
-            let end_byte = char_to_byte_pos(line_text, col_end);
-            line_text.replace_range(start_byte..end_byte, &self.replace_text);
-        }
-
-        self.invalidate_all_highlights();
-        self.search_matches.clear();
-        self.search_match_idx = 0;
     }
 
     /// Position cursor from click coordinates
@@ -1972,6 +1786,8 @@ impl CodeEditor {
                     let mut cursor_changed = true;
                     let mut text_changed = false;
                     let mut needs_visual_refresh = false;
+                    // The find bar shows what a shortcut changed: its count, toggles and replace row.
+                    let mut search_changed = false;
 
                     // Platform modifier: Cmd on macOS, Ctrl elsewhere
                     let mod_key = ctx.command_modifier();
@@ -2094,6 +1910,18 @@ impl CodeEditor {
                                             close_search_overlay(&mut d);
                                         } else {
                                             d.search_active = true;
+                                            // A one-line selection is what to look for.
+                                            if let Some(picked) = d
+                                                .selected_text()
+                                                .filter(|t| !t.is_empty() && !t.contains('\n'))
+                                            {
+                                                if let Ok(mut field) = d.search_input_state.lock() {
+                                                    field.cursor = picked.chars().count();
+                                                    field.selection_start = Some(0);
+                                                    field.value = picked.clone();
+                                                }
+                                                d.apply_search_query(picked);
+                                            }
                                         }
                                         needs_visual_refresh = true;
                                         cursor_changed = false;
@@ -2106,6 +1934,7 @@ impl CodeEditor {
                                             } else {
                                                 d.search_next();
                                             }
+                                            search_changed = true;
                                         }
                                     }
                                     // H = Toggle replace bar
@@ -2115,6 +1944,7 @@ impl CodeEditor {
                                         }
                                         d.replace_active = !d.replace_active;
                                         needs_visual_refresh = true;
+                                        search_changed = true;
                                         cursor_changed = false;
                                     }
                                     // R = Toggle regex mode (when search active)
@@ -2123,6 +1953,7 @@ impl CodeEditor {
                                             d.search_regex = !d.search_regex;
                                             d.execute_search();
                                             needs_visual_refresh = true;
+                                            search_changed = true;
                                             cursor_changed = false;
                                         }
                                     }
@@ -2155,10 +1986,13 @@ impl CodeEditor {
                     let should_open_search = d.search_active && d.search_overlay_handle.is_none();
                     let needs_editor_refresh =
                         cursor_changed || text_changed || needs_visual_refresh;
-                    (needs_editor_refresh, should_open_search)
+                    (needs_editor_refresh, should_open_search, search_changed)
                 };
                 if let Some((cb, value)) = changed {
                     cb(&value);
+                }
+                if needs_refresh.2 {
+                    fire_search_signal(&data_for_key);
                 }
                 if needs_refresh.1 {
                     // Open search overlay — don't refresh editor for this

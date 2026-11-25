@@ -83,8 +83,10 @@ code_editor(&state)
 - VS Code-style search bar overlay (opt in with `.search_enabled(true)`)
 - Case sensitive, whole word, regex toggles
 - The search runs as you type, with a match count
+- Cmd+F starts from a selection on one line
 - Enter steps to the next match, Shift+Enter to the previous
-- Find and replace with replace all (Cmd+H opens the replace row)
+- Find and replace with replace all (Cmd+H opens the replace row). A replacement calls `on_change`, and replace all is one undo step
+- In regex mode the replacement expands `$1`, `${name}`, `$&` (the whole match) and `$$` (a dollar sign), whole word applies to the pattern, and a pattern that does not compile shows why in place of the count
 
 The bar is built from classed elements, and its look is the default
 stylesheet's `.blinc-find` rules. Override any of them in your application's

@@ -1,6 +1,7 @@
 //! The editor's find and replace bar: an overlay of classed elements whose
 //! look is the `.blinc-find` rules of the layout stylesheet.
 
+use super::find::notify_changed;
 use super::*;
 
 /// Close the search overlay and reset search state
@@ -218,7 +219,9 @@ pub(super) fn build_search_bar(
             let Ok(d) = state.lock() else {
                 return String::new();
             };
-            if d.search_matches.is_empty() {
+            if let Some(why) = &d.search_error {
+                why.clone()
+            } else if d.search_matches.is_empty() {
                 "No results".to_string()
             } else {
                 format!("{} of {}", d.search_match_idx + 1, d.search_matches.len())
@@ -389,13 +392,15 @@ pub(super) fn build_search_bar(
     let replace_row = {
         let state = Arc::clone(shared_state);
         move || {
-            let act = |f: fn(&mut CodeEditorData)| {
+            // A replacement changes the text, so the editor's `on_change` hears it.
+            let edit = |f: fn(&mut CodeEditorData) -> bool| {
                 let state = Arc::clone(&state);
                 move || {
-                    if let Ok(mut d) = state.lock() {
-                        f(&mut d);
-                    }
+                    let changed = state.lock().map(|mut d| f(&mut d)).unwrap_or(false);
                     notify_search(&state);
+                    if changed {
+                        notify_changed(&state);
+                    }
                 }
             };
             let state_for_replace = Arc::clone(&state);
@@ -413,13 +418,13 @@ pub(super) fn build_search_bar(
             let replace_btn = find_button(
                 "blinc-find-replace",
                 button,
-                act(|d| d.replace_current()),
+                edit(|d| d.replace_current()),
                 icon(ICON_REPLACE),
             );
             let replace_all_btn = find_button(
                 "blinc-find-replace-all",
                 button,
-                act(|d| d.replace_all()),
+                edit(|d| d.replace_all() > 0),
                 icon(ICON_REPLACE_ALL),
             );
             // The spacer keeps the field under the find field.
