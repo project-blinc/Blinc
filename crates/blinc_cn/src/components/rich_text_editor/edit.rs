@@ -107,10 +107,25 @@ pub fn delete_backward(doc: &mut RichDocument, pos: DocPosition) -> DocPosition 
         // Soft-break boundary — join previous line in the same block.
         return join_lines(doc, pos.block, pos.line - 1);
     }
+    // At the start of a list item or a quote: out a level, then out of it.
+    let block = &mut doc.blocks[pos.block];
+    if block.kind.is_list_item() || block.kind == BlockKind::Quote {
+        step_out(block);
+        return pos;
+    }
     if pos.block > 0 {
         return merge_with_previous_block(doc, pos.block);
     }
     pos
+}
+
+/// Take a block out one level of nesting, or make it a paragraph at the first.
+fn step_out(block: &mut Block) {
+    if block.indent > 0 {
+        block.indent -= 1;
+    } else {
+        block.kind = BlockKind::Paragraph;
+    }
 }
 
 /// Delete the character at `pos` (forward delete). If `pos` is past the
@@ -218,10 +233,9 @@ pub fn split_block(doc: &mut RichDocument, pos: DocPosition) -> DocPosition {
     }
     let block = doc.blocks[pos.block].clone();
 
-    // Empty list item → exit the list (convert to paragraph).
-    if matches!(block.kind, BlockKind::BulletItem | BlockKind::NumberedItem) && block.is_empty() {
-        doc.blocks[pos.block].kind = BlockKind::Paragraph;
-        doc.blocks[pos.block].indent = 0;
+    // An empty list item steps out a level, and out of the list from the first.
+    if block.kind.is_list_item() && block.is_empty() {
+        step_out(&mut doc.blocks[pos.block]);
         return DocPosition::new(pos.block, 0, 0);
     }
 
@@ -249,6 +263,7 @@ pub fn split_block(doc: &mut RichDocument, pos: DocPosition) -> DocPosition {
     doc.blocks[pos.block].lines = new_lines;
     let next_kind = match block.kind {
         BlockKind::Heading(_) => BlockKind::Paragraph, // headings don't continue
+        BlockKind::TaskItem { .. } => BlockKind::TaskItem { checked: false },
         other => other,
     };
     let next_block = Block {
@@ -752,5 +767,53 @@ mod tests {
             .map(|s| (s.start, s.end, s.bold))
             .collect();
         assert_eq!(spans, vec![(0, 2, true), (2, 3, false)]);
+    }
+
+    fn item(kind: BlockKind, indent: u8, text: &str) -> Block {
+        Block {
+            kind,
+            indent,
+            ..Block::paragraph(text, Color::WHITE)
+        }
+    }
+
+    #[test]
+    fn enter_on_an_empty_item_steps_out_a_level_at_a_time() {
+        let task = BlockKind::TaskItem { checked: true };
+        let mut d = doc(vec![item(task.clone(), 1, "")]);
+        split_block(&mut d, DocPosition::ZERO);
+        assert_eq!((&d.blocks[0].kind, d.blocks[0].indent), (&task, 0));
+        split_block(&mut d, DocPosition::ZERO);
+        assert_eq!(d.blocks[0].kind, BlockKind::Paragraph);
+        assert_eq!(d.blocks.len(), 1);
+    }
+
+    #[test]
+    fn enter_in_a_done_task_starts_one_that_is_not() {
+        let mut d = doc(vec![item(BlockKind::TaskItem { checked: true }, 0, "ab")]);
+        split_block(&mut d, DocPosition::new(0, 0, 1));
+        assert_eq!(d.blocks[0].kind, BlockKind::TaskItem { checked: true });
+        assert_eq!(d.blocks[1].kind, BlockKind::TaskItem { checked: false });
+    }
+
+    #[test]
+    fn backspace_at_the_start_of_an_item_steps_out_then_merges() {
+        for kind in [
+            BlockKind::BulletItem,
+            BlockKind::NumberedItem,
+            BlockKind::TaskItem { checked: false },
+        ] {
+            let mut d = doc(vec![
+                Block::paragraph("a", Color::WHITE),
+                item(kind.clone(), 1, "b"),
+            ]);
+            let start = DocPosition::new(1, 0, 0);
+            assert_eq!(delete_backward(&mut d, start), start);
+            assert_eq!((&d.blocks[1].kind, d.blocks[1].indent), (&kind, 0));
+            assert_eq!(delete_backward(&mut d, start), start);
+            assert_eq!(d.blocks[1].kind, BlockKind::Paragraph);
+            assert_eq!(delete_backward(&mut d, start), DocPosition::new(0, 0, 1));
+            assert_eq!(d.blocks[0].plain_text(), "ab");
+        }
     }
 }

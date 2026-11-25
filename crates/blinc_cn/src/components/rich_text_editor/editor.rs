@@ -129,11 +129,6 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
             // placement so we don't collapse the selection underneath.
             // Events dispatch deepest-first, so the button's handler
             // already ran and set this flag before we got here.
-            //
-            // We can't use a coordinate-based hit test here because
-            // bubbling events carry the *button's* local coordinates,
-            // not the editor's (Blinc's event router caches
-            // `last_hit_local_*` once and forwards them up the chain).
             if data.suppress_next_outer_click {
                 data.suppress_next_outer_click = false;
                 return;
@@ -464,38 +459,44 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                     }
                     // Cmd+Alt+0 — paragraph
                     48 if ctx.alt => {
-                        changed |= apply_block_kind(&mut data, BlockKind::Paragraph);
+                        changed |= data.toggle_kind(BlockKind::Paragraph);
                     }
                     // Cmd+Alt+1..6 — headings
                     49 if ctx.alt => {
-                        changed |= apply_block_kind(&mut data, BlockKind::Heading(1));
+                        changed |= data.toggle_kind(BlockKind::Heading(1));
                     }
                     50 if ctx.alt => {
-                        changed |= apply_block_kind(&mut data, BlockKind::Heading(2));
+                        changed |= data.toggle_kind(BlockKind::Heading(2));
                     }
                     51 if ctx.alt => {
-                        changed |= apply_block_kind(&mut data, BlockKind::Heading(3));
+                        changed |= data.toggle_kind(BlockKind::Heading(3));
                     }
                     52 if ctx.alt => {
-                        changed |= apply_block_kind(&mut data, BlockKind::Heading(4));
+                        changed |= data.toggle_kind(BlockKind::Heading(4));
                     }
                     53 if ctx.alt => {
-                        changed |= apply_block_kind(&mut data, BlockKind::Heading(5));
+                        changed |= data.toggle_kind(BlockKind::Heading(5));
                     }
                     54 if ctx.alt => {
-                        changed |= apply_block_kind(&mut data, BlockKind::Heading(6));
+                        changed |= data.toggle_kind(BlockKind::Heading(6));
                     }
                     // Cmd+Shift+7 — toggle numbered list
                     55 if ctx.shift => {
-                        changed |= apply_block_kind(&mut data, BlockKind::NumberedItem);
+                        changed |= data.toggle_kind(BlockKind::NumberedItem);
                     }
                     // Cmd+Shift+8 — toggle bullet list
                     56 if ctx.shift => {
-                        changed |= apply_block_kind(&mut data, BlockKind::BulletItem);
+                        changed |= data.toggle_kind(BlockKind::BulletItem);
                     }
+                    // Cmd+Shift+6 — toggle checklist
+                    54 if ctx.shift => {
+                        changed |= data.toggle_kind(BlockKind::TaskItem { checked: false });
+                    }
+                    // Cmd+Enter — tick the task under the cursor
+                    13 => changed |= super::tasks::toggle_at_cursor(&mut data),
                     // Cmd+Shift+9 — toggle quote
                     57 if ctx.shift => {
-                        changed |= apply_block_kind(&mut data, BlockKind::Quote);
+                        changed |= data.toggle_kind(BlockKind::Quote);
                     }
                     _ => {}
                 }
@@ -628,13 +629,6 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
             }
         })
         .child(content)
-}
-
-/// Toggle the blocks of the selection or the cursor to `kind`: where all have it, they become
-/// paragraphs.
-fn apply_block_kind(data: &mut super::state::RichTextData, kind: BlockKind) -> bool {
-    let range = data.block_range();
-    data.change(|doc| toggle_block_kind(doc, range, kind))
 }
 
 /// Toggle an inline `mark`.

@@ -2316,6 +2316,9 @@ pub const CN_STYLES: &str = concat!(
     /* Lifts the bar over the text that scrolls under it. */
     box-shadow: var(--shadow-sm);
 }
+/* The list menu is lit like the icon buttons beside it. */
+.blinc-rte-list .cn-dropdown-trigger { border-width: 0; background: transparent; box-shadow: none; border-radius: var(--radius-default); }
+.blinc-rte-list .cn-dropdown-trigger:hover { background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
 .blinc-rte-separator { background: var(--border); }
 /* A mark that is on under the cursor. */
 .blinc-rte-button--active { background: var(--surface-overlay); }

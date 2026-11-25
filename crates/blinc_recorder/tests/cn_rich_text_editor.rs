@@ -833,15 +833,15 @@ fn aligned_text_is_drawn_and_clicked_where_it_is_placed() {
     let state = rich_text_state(doc);
     let e = state.clone();
     ui.mount(move |_| {
-        div()
-            .w(WIDE as f32)
-            .h(H as f32)
-            .p(5.0)
-            .child(div().w(400.0).child(rich_text_editor(
+        div().w(WIDE as f32).h(H as f32).p(5.0).child(
+            div().w(440.0).child(rich_text_editor(
                 &e,
-                RichTextTheme::default().toolbar(ToolbarPlacement::Hidden),
+                RichTextTheme::default()
+                    .toolbar(ToolbarPlacement::Hidden)
+                    .padding(20.0),
                 400.0,
-            )))
+            )),
+        )
     });
     ui.leave().settle();
     let origin = ui
@@ -910,6 +910,23 @@ fn aligned_text_is_drawn_and_clicked_where_it_is_placed() {
         (x - end.0).abs() < 3.0,
         "the caret is at {x}, the text at {end:?}"
     );
+    // A click between two letters in the middle of another line.
+    let (_, y, h) = of(1).next().unwrap();
+    state
+        .lock()
+        .unwrap()
+        .set_cursor(blinc_cn::components::rich_text_editor::DocPosition::new(
+            1, 0, 12,
+        ));
+    let (x, ..) = state.lock().unwrap().cursor_geometry().unwrap();
+    // Not the second press of a double click.
+    state.lock().unwrap().last_click_time = None;
+    ui.move_to(origin.x + x, origin.y + y + h / 2.0);
+    ui.mouse_down();
+    ui.mouse_up();
+    ui.settle();
+    let cursor = state.lock().unwrap().cursor;
+    assert_eq!((cursor.block, cursor.col), (1, 12));
     ui.leave();
     ui.assert_snapshot("cn_rich_text_alignment");
 }
@@ -940,4 +957,107 @@ fn an_alignment_button_aligns_the_selected_blocks() {
     }
     assert!(state.lock().unwrap().undo());
     assert_eq!(align(&state), BlockAlign::Justify);
+}
+
+/// A checklist's boxes tick on a press and follow undo, without rebuilding their block, so the
+/// box's own transition runs.
+#[test]
+fn checklist_boxes_tick_in_place_and_follow_undo() {
+    use blinc_cn::components::rich_text_editor::{
+        BlockKind, DocPosition, RichDocument, RichTextTheme, ToolbarPlacement, rich_text_editor,
+        rich_text_state,
+    };
+    let Some(mut ui) = session(ColorScheme::Light) else {
+        return;
+    };
+    let state = rich_text_state(RichDocument::from_markdown(
+        "- [ ] first\n- [x] second\n  - [ ] nested\n- bullet\n  - inner\n\n1. one\n   - x\n2. two",
+        Color::TRANSPARENT,
+    ));
+    state.lock().unwrap().set_cursor(DocPosition::new(3, 0, 2));
+    let e = state.clone();
+    ui.mount(move |_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .p(5.0)
+            .child(div().w(380.0).child(rich_text_editor(
+                &e,
+                RichTextTheme::default().toolbar(ToolbarPlacement::Hidden),
+                380.0,
+            )))
+    });
+    ui.leave().settle();
+    let boxes = all(&ui, "blinc-rte-task");
+    assert_eq!(boxes.len(), 3);
+    let checked = |block: usize| match state.lock().unwrap().document.blocks[block].kind {
+        BlockKind::TaskItem { checked } => checked,
+        ref kind => panic!("{kind:?}"),
+    };
+    let shown = |ui: &Headless| {
+        let registry = ui.tree().element_registry().clone();
+        all(ui, "blinc-rte-task")
+            .into_iter()
+            .map(|n| {
+                let mut stack = vec![n];
+                while let Some(n) = stack.pop() {
+                    if registry.attribute(n, "checked").is_some() {
+                        return true;
+                    }
+                    stack.extend(ui.tree().layout_tree.children(n));
+                }
+                false
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(shown(&ui), [false, true, false]);
+    let before = all(&ui, "blinc-rte-task");
+    press(&mut ui, boxes[0]);
+    assert!(checked(0));
+    assert_eq!(shown(&ui), [true, true, false]);
+    assert_eq!(
+        all(&ui, "blinc-rte-task"),
+        before,
+        "a tick rebuilt its block"
+    );
+    assert_eq!(
+        state.lock().unwrap().cursor,
+        DocPosition::new(3, 0, 2),
+        "the press moved the caret"
+    );
+
+    // Undo, through the editor's shortcut path, unticks the box shown.
+    ui.move_to(200.0, 200.0);
+    let text = one(&ui, "blinc-rich-text");
+    press(&mut ui, text);
+    assert!(state.lock().unwrap().undo());
+    blinc_cn::components::rich_text_editor::RichTextStateExt::on_change(&state, |_| {});
+    ui.key(39);
+    ui.settle();
+    assert!(!checked(0));
+    assert_eq!(shown(&ui), [false, true, false]);
+    ui.leave();
+    ui.assert_snapshot("cn_rich_text_lists");
+}
+
+#[test]
+fn the_list_menu_makes_lists_of_the_selected_blocks() {
+    use blinc_cn::components::rich_text_editor::{BlockKind, ToolbarPlacement};
+    let Some((mut ui, state)) = selected_editor(ToolbarPlacement::Fixed) else {
+        return;
+    };
+    for (item, kind) in [
+        (0, BlockKind::BulletItem),
+        (1, BlockKind::NumberedItem),
+        (2, BlockKind::TaskItem { checked: false }),
+        // The kind it already has makes it a paragraph again.
+        (2, BlockKind::Paragraph),
+    ] {
+        let trigger = one(&ui, "cn-dropdown-trigger");
+        press(&mut ui, trigger);
+        let items = all(&ui, "cn-dropdown-item");
+        assert_eq!(items.len(), 3, "the list menu did not open");
+        press(&mut ui, items[item]);
+        assert_eq!(state.lock().unwrap().document.blocks[0].kind, kind);
+    }
 }

@@ -16,7 +16,8 @@
 
 use super::document::{Block, BlockAlign, BlockKind, RichDocument};
 use super::line::{LineBox, LineFont};
-use blinc_core::Color;
+use crate::components::checkbox::{CheckboxSize, checkbox};
+use blinc_core::{Color, reactive::signal};
 use blinc_layout::div::{Div, FontWeight, div};
 use blinc_layout::rich_text::{RichText, rich_text_styled};
 use blinc_layout::styled_text::StyledText;
@@ -138,21 +139,61 @@ pub fn render_document(doc: &RichDocument, theme: &RichTextTheme, content_width:
         .flex_col()
         .gap_px(theme.block_gap);
     for (i, block) in doc.blocks.iter().enumerate() {
-        root = root.child(render_block(doc, i, block, theme, content_width));
+        root = root.child(render_block(
+            block,
+            Marker::of(doc, i),
+            theme,
+            content_width,
+        ));
     }
     root
 }
 
-/// Build the element tree for a single block.
+/// What marks a list item.
+pub(super) enum Marker {
+    Text(String),
+    /// A checklist item's box.
+    Box(Div),
+}
+
+impl Marker {
+    /// The marker of the block at `index`, a task's box being one that cannot be pressed.
+    fn of(doc: &RichDocument, index: usize) -> Option<Self> {
+        let block = &doc.blocks[index];
+        match block.kind {
+            BlockKind::TaskItem { checked } => Some(Self::Box(
+                div().child(
+                    checkbox(signal(checked))
+                        .size(CheckboxSize::Small)
+                        .disabled(true)
+                        .build_component(),
+                ),
+            )),
+            _ => Self::text(doc, index).map(Self::Text),
+        }
+    }
+
+    /// The text that marks the block at `index`, if it is a list item marked by text.
+    pub(super) fn text(doc: &RichDocument, index: usize) -> Option<String> {
+        let block = &doc.blocks[index];
+        match block.kind {
+            BlockKind::BulletItem => Some(["•", "◦", "▪"][block.indent as usize % 3].to_string()),
+            BlockKind::NumberedItem => {
+                Some(format!("{}.", doc.numbered_ordinal(index).unwrap_or(1)))
+            }
+            _ => None,
+        }
+    }
+}
+
+/// Build the element tree for a single block, with the `marker` of a list item.
 ///
-/// `index` is the block's position in `doc` — used for computing numbered
-/// list ordinals. `content_width` is the available pixel width *outside*
+/// `content_width` is the available pixel width *outside*
 /// any indent: each block subtracts its own indent before passing the
 /// remainder down to its inline content.
 pub(super) fn render_block(
-    doc: &RichDocument,
-    index: usize,
     block: &Block,
+    marker: Option<Marker>,
     theme: &RichTextTheme,
     content_width: f32,
 ) -> Div {
@@ -182,18 +223,8 @@ pub(super) fn render_block(
             ),
             indent_px,
         ),
-        BlockKind::BulletItem => {
-            list_item_div(block, theme, "•".to_string(), indent_px, inner_width)
-        }
-        BlockKind::NumberedItem => {
-            let ordinal = doc.numbered_ordinal(index).unwrap_or(1);
-            list_item_div(
-                block,
-                theme,
-                format!("{}.", ordinal),
-                indent_px,
-                inner_width,
-            )
+        BlockKind::BulletItem | BlockKind::NumberedItem | BlockKind::TaskItem { .. } => {
+            list_item_div(block, theme, marker, indent_px, inner_width)
         }
         BlockKind::Quote => quote_div(block, theme, indent_px, inner_width),
         BlockKind::Divider => {
@@ -417,13 +448,28 @@ fn slice_styled_line(
 fn list_item_div(
     block: &Block,
     theme: &RichTextTheme,
-    marker: String,
+    marker: Option<Marker>,
     indent_px: f32,
     inner_width: f32,
 ) -> Div {
     // Transparent: the marker takes the `.blinc-rich-text-marker` colour.
     let ink = theme.muted.unwrap_or(Color::TRANSPARENT);
-    let marker_text = rich_text_styled(StyledText::plain(&marker, ink)).size(theme.font_size);
+    let column = div()
+        .class("blinc-rich-text-marker")
+        .flex_shrink_0()
+        .w(theme.bullet_column_width);
+    let column = match marker {
+        Some(Marker::Text(text)) => {
+            column.child(rich_text_styled(StyledText::plain(&text, ink)).size(theme.font_size))
+        }
+        // In the middle of the first line.
+        Some(Marker::Box(task)) => column
+            .h(theme.font_size * theme.line_height)
+            .flex_row()
+            .items_center()
+            .child(task),
+        None => column,
+    };
     // The marker column eats `bullet_column_width + 8` (gap) of the inner width.
     let line_width = (inner_width - theme.bullet_column_width - 8.0).max(0.0);
 
@@ -431,12 +477,7 @@ fn list_item_div(
         .w_full()
         .flex_row()
         .gap_px(8.0)
-        .child(
-            div()
-                .class("blinc-rich-text-marker")
-                .w(theme.bullet_column_width)
-                .child(marker_text),
-        )
+        .child(column)
         .child(paragraph_div(
             block,
             theme,

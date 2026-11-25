@@ -11,8 +11,10 @@ use blinc_layout::div::{Div, div};
 use blinc_layout::widgets::cursor::SharedCursorState;
 
 use super::cursor::Selection;
-use super::render::{RichTextTheme, compute_line_geometry, render_block};
+use super::document::BlockKind;
+use super::render::{Marker, RichTextTheme, compute_line_geometry, render_block};
 use super::state::{RichTextData, RichTextState};
+use super::tasks::task_box;
 use super::toolbar::{
     ToolbarPlacement, fixed_height, fixed_overflows, fixed_toolbar, selection_toolbar, signature,
 };
@@ -68,7 +70,13 @@ fn anchor() -> Div {
 
 fn digest(data: &RichTextData, index: usize) -> u64 {
     let mut hasher = std::hash::DefaultHasher::new();
-    format!("{:?}", data.document.blocks[index]).hash(&mut hasher);
+    let block = &data.document.blocks[index];
+    // A tick is the box's own to show: see `tasks`.
+    match block.kind {
+        BlockKind::TaskItem { .. } => "task".hash(&mut hasher),
+        ref kind => format!("{kind:?}").hash(&mut hasher),
+    }
+    format!("{:?}{}{:?}", block.lines, block.indent, block.align).hash(&mut hasher);
     // A numbered item's number depends on the blocks before it.
     data.document.numbered_ordinal(index).hash(&mut hasher);
     // A block wraps to the editor's width.
@@ -103,15 +111,23 @@ pub(super) fn content(state: &RichTextState, version: &Signal<u32>, theme: &Rich
         })
     };
     let render = {
-        let (state, theme) = (Arc::clone(state), theme.clone());
+        let (state, version, theme) = (Arc::clone(state), *version, theme.clone());
         move |key: BlockKey| {
             let data = state.lock().unwrap();
-            match data.document.blocks.get(key.index) {
-                Some(block) => {
-                    render_block(&data.document, key.index, block, &theme, data.wrap_width)
+            let Some(block) = data.document.blocks.get(key.index).cloned() else {
+                return div();
+            };
+            let text = Marker::text(&data.document, key.index);
+            let width = data.wrap_width;
+            // A box registers itself with the state.
+            drop(data);
+            let marker = match block.kind {
+                BlockKind::TaskItem { checked } => {
+                    Some(Marker::Box(task_box(&state, version, key.index, checked)))
                 }
-                None => div(),
-            }
+                _ => text.map(Marker::Text),
+            };
+            render_block(&block, marker, &theme, width)
         }
     };
     let document = div()
@@ -304,6 +320,8 @@ fn cursor_overlay_canvas(
     .top(0.0)
     .w_full()
     .h_full()
+    // Presses go to the text and the checklist boxes under it.
+    .pointer_events_none()
 }
 
 /// The rectangles the selection covers: one per visual line, as wide as the

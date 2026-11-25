@@ -36,6 +36,7 @@ mod line;
 pub mod markdown;
 pub mod render;
 pub mod state;
+mod tasks;
 pub mod toolbar;
 pub mod wrap;
 

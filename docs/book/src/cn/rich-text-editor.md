@@ -48,6 +48,10 @@ The floating toolbar is a notch, so it takes its fill, border and shadow from th
 
 The floating toolbar's heading select shows short names, P and H1 to H6; the fixed toolbar's shows them in full. Where controls scroll, an edge with more beyond it fades.
 
+## Lists
+
+Blocks can be items of a bulleted list, a numbered list or a checklist. The toolbar's list menu toggles them, and so do Cmd+Shift+8, 7 and 6, or Ctrl on other platforms. Tab nests an item and Shift+Tab takes it out. Enter starts a new item. On an empty item it steps out a level, and out of the list from the first; Backspace at the start of an item does the same. Press a checklist's box to tick it, or use Cmd+Enter for the item under the cursor.
+
 ## Alignment
 
 Each block has an `align`: `BlockAlign::Start`, `Center`, `End` or `Justify`. The toolbar's alignment buttons set it for the blocks of the selection, or the cursor's. So do Cmd+Shift+L, E, R and J, or Ctrl on other platforms. A new paragraph takes the alignment of the one it was split from. In your own code, `block_ops::set_block_align` sets it on a document.

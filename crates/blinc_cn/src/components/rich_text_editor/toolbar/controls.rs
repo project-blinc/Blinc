@@ -10,6 +10,7 @@ use blinc_layout::div::{Div, div};
 use super::actions;
 use crate::components::button::{ButtonSize, ButtonVariant, button};
 use crate::components::color_picker::color_picker;
+use crate::components::dropdown_menu::DropdownMenuBuilder;
 use crate::components::rich_text_editor::cursor::ActiveFormat;
 use crate::components::rich_text_editor::document::{BlockAlign, BlockKind};
 use crate::components::rich_text_editor::format::Mark;
@@ -116,6 +117,48 @@ pub(super) fn aligns(target: &Target, current: BlockAlign) -> Vec<Div> {
             })
         })
         .collect()
+}
+
+/// The list menu's width.
+pub(super) const LIST: f32 = 48.0;
+
+/// The kinds of list: the icon, the name and the block kind of each.
+const LISTS: [(&str, &str, BlockKind); 3] = [
+    (icons::LIST, "Bulleted list", BlockKind::BulletItem),
+    (
+        icons::LIST_ORDERED,
+        "Numbered list",
+        BlockKind::NumberedItem,
+    ),
+    (
+        icons::LIST_TODO,
+        "Checklist",
+        BlockKind::TaskItem { checked: false },
+    ),
+];
+
+/// The list menu: a cn dropdown whose icon is the list the block under the cursor is in.
+pub(super) fn lists(target: &Target, current: &BlockKind) -> Div {
+    let svg = |icon| blinc_icons::to_svg(icon, 16.0);
+    let shown = LISTS
+        .iter()
+        .find(|(_, _, kind)| kind.is_same_kind(current))
+        .map_or(icons::LIST, |(icon, ..)| *icon);
+    let mut menu = DropdownMenuBuilder::new("List").icon(svg(shown));
+    for (icon, label, kind) in LISTS {
+        let (target, kind) = (target.clone(), kind.clone());
+        menu = menu.item_with_icon(label, svg(icon), move || {
+            let kind = kind.clone();
+            target.act(|d| {
+                d.toggle_kind(kind);
+            });
+        });
+    }
+    div()
+        .class("blinc-rte-list")
+        .flex_shrink_0()
+        .w(LIST)
+        .child(menu)
 }
 
 /// The cn colour picker, shown as a swatch of the colour under the cursor; picking colours the

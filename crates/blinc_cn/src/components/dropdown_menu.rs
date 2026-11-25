@@ -102,6 +102,8 @@ type TriggerBuilderFn = Arc<dyn Fn(bool) -> Div + Send + Sync>;
 pub struct DropdownMenuBuilder {
     /// Trigger label (simple mode)
     trigger_label: Option<String>,
+    /// An icon the trigger shows in place of its label
+    trigger_icon: Option<String>,
     /// Custom trigger builder (advanced mode)
     trigger_builder: Option<TriggerBuilderFn>,
     /// Menu items
@@ -142,6 +144,7 @@ impl DropdownMenuBuilder {
     pub fn new(label: impl Into<String>) -> Self {
         Self {
             trigger_label: Some(label.into()),
+            trigger_icon: None,
             trigger_builder: None,
             items: Vec::new(),
             min_width: 180.0,
@@ -165,6 +168,7 @@ impl DropdownMenuBuilder {
     {
         Self {
             trigger_label: None,
+            trigger_icon: None,
             trigger_builder: Some(Arc::new(trigger)),
             items: Vec::new(),
             min_width: 180.0,
@@ -176,6 +180,13 @@ impl DropdownMenuBuilder {
             user_id: None,
             built: OnceCell::new(),
         }
+    }
+
+    /// Show an icon (SVG string) on the trigger in place of its label, which then names the
+    /// trigger for assistive technology.
+    pub fn icon(mut self, icon_svg: impl Into<String>) -> Self {
+        self.trigger_icon = Some(icon_svg.into());
+        self
     }
 
     /// Add a menu item
@@ -307,6 +318,7 @@ impl DropdownMenuBuilder {
         let align = self.align;
         let offset = self.offset;
         let trigger_label = self.trigger_label.clone();
+        let trigger_icon = self.trigger_icon.clone();
         let trigger_builder = self.trigger_builder.clone();
 
         // Get the key string for use in closures (InstanceKey is not Sync)
@@ -324,28 +336,34 @@ impl DropdownMenuBuilder {
             let closed = builder.clone();
             div().show_or(open_state, move || builder(true), move || closed(false))
         } else if let Some(label) = trigger_label {
-            div()
+            let trigger = div()
                 .class("cn-dropdown-trigger")
                 .attr_when("data-state", "open", open_state)
-                .gap(8.0)
                 .flex_row()
                 .items_center()
                 .justify_between()
-                .px(4.0)
-                .py(2.0)
-                .border_width(1.0)
-                .child(
+                .border_width(1.0);
+            let trigger = match &trigger_icon {
+                Some(icon) => trigger
+                    .class("cn-dropdown-trigger--icon")
+                    .attr("aria-label", &label)
+                    .gap_px(4.0)
+                    .px(1.5)
+                    .py(1.5)
+                    .child(svg(icon).size(16.0, 16.0)),
+                None => trigger.gap(8.0).px(4.0).py(2.0).child(
                     text(&label)
                         .size(theme.typography().text_sm)
                         .no_wrap()
                         .no_cursor()
                         .pointer_events_none(),
-                )
-                .child(
-                    div()
-                        .class("cn-chevron")
-                        .child(svg(CHEVRON_DOWN_SVG).size(16.0, 16.0)),
-                )
+                ),
+            };
+            trigger.child(
+                div()
+                    .class("cn-chevron")
+                    .child(svg(CHEVRON_DOWN_SVG).size(16.0, 16.0)),
+            )
         } else {
             div()
         };

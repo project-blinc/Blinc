@@ -63,7 +63,8 @@ pub fn set_block_kind(doc: &mut RichDocument, range: Selection, kind: BlockKind)
         let Some(block) = doc.blocks.get_mut(idx) else {
             break;
         };
-        if block.kind != kind {
+        // A task keeps its tick.
+        if !block.kind.is_same_kind(&kind) {
             block.kind = kind.clone();
             // Headings have no indent; clear it so they don't visually
             // hang from a previous list level.
@@ -91,7 +92,7 @@ pub fn toggle_block_kind(doc: &mut RichDocument, range: Selection, kind: BlockKi
     for idx in first..=last {
         if let Some(block) = doc.blocks.get(idx) {
             any = true;
-            if !block_kind_eq(&block.kind, &kind) {
+            if !block.kind.is_same_kind(&kind) {
                 all_already = false;
             }
         }
@@ -313,22 +314,7 @@ pub fn insert_divider_after(doc: &mut RichDocument, block_idx: usize) -> usize {
 // =============================================================================
 
 fn block_supports_indent(kind: &BlockKind) -> bool {
-    matches!(
-        kind,
-        BlockKind::Paragraph | BlockKind::BulletItem | BlockKind::NumberedItem
-    )
-}
-
-fn block_kind_eq(a: &BlockKind, b: &BlockKind) -> bool {
-    match (a, b) {
-        (BlockKind::Paragraph, BlockKind::Paragraph) => true,
-        (BlockKind::Heading(x), BlockKind::Heading(y)) => x == y,
-        (BlockKind::BulletItem, BlockKind::BulletItem) => true,
-        (BlockKind::NumberedItem, BlockKind::NumberedItem) => true,
-        (BlockKind::Quote, BlockKind::Quote) => true,
-        (BlockKind::Divider, BlockKind::Divider) => true,
-        _ => false,
-    }
+    *kind == BlockKind::Paragraph || kind.is_list_item()
 }
 
 #[cfg(test)]

@@ -8,7 +8,7 @@ use blinc_layout::styled_text::{StyledLine, TextSpan};
 use crate::components::rich_text_editor::document::{Block, BlockAlign, BlockKind, RichDocument};
 
 impl RichDocument {
-    /// Parse `markdown` (CommonMark and strikethrough, with the inline HTML the module lists) into
+    /// Parse `markdown` (CommonMark, strikethrough and checklists, with the inline HTML the module lists) into
     /// a `RichDocument`. Text that names no colour takes `default_color`.
     ///
     /// # Example
@@ -23,7 +23,8 @@ impl RichDocument {
     /// ```
     pub fn from_markdown(markdown: &str, default_color: Color) -> Self {
         let mut importer = Importer::new(default_color);
-        for event in Parser::new_ext(markdown, Options::ENABLE_STRIKETHROUGH) {
+        let options = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
+        for event in Parser::new_ext(markdown, options) {
             importer.event(event);
         }
         importer.flush();
@@ -223,7 +224,12 @@ impl Importer {
             }
             Event::InlineHtml(html) => self.inline_html(&html),
             Event::Html(html) => self.html_block(html.trim()),
-            Event::FootnoteReference(_) | Event::TaskListMarker(_) => {}
+            Event::TaskListMarker(checked) => {
+                if let Some(pending) = &mut self.pending {
+                    pending.kind = BlockKind::TaskItem { checked };
+                }
+            }
+            Event::FootnoteReference(_) => {}
         }
     }
 
@@ -348,6 +354,10 @@ impl Importer {
                 self.marks.remove(at);
             }
         } else if !tag.self_closing {
+            // A task says its alignment after its box, where a tag is inline.
+            if let (Some(align), Some(pending)) = (tag.align(), &mut self.pending) {
+                pending.align = align;
+            }
             let mark = match tag.name.as_str() {
                 "b" | "strong" => Inline::Bold,
                 "i" | "em" => Inline::Italic,
@@ -373,12 +383,7 @@ impl Importer {
                 self.flush();
             }
             ("div", false) => {
-                let align = match tag.attribute("align").as_deref() {
-                    Some("center") => BlockAlign::Center,
-                    Some("right") => BlockAlign::End,
-                    Some("justify") => BlockAlign::Justify,
-                    _ => BlockAlign::Start,
-                };
+                let align = tag.align().unwrap_or_default();
                 self.aligns.push(align);
                 // An item's own `<div>` comes after the item opened.
                 if let Some(pending) = self.pending.as_mut().filter(|p| p.is_empty()) {
@@ -439,6 +444,18 @@ impl HtmlTag {
         let rest = self.attributes.split_once(&format!("{name}="))?.1;
         let quote = rest.chars().next().filter(|c| matches!(c, '"' | '\''))?;
         rest[1..].split_once(quote).map(|(v, _)| v.to_string())
+    }
+
+    /// The alignment an opening tag names.
+    fn align(&self) -> Option<BlockAlign> {
+        let named = self.attribute("align").or(self.style("text-align"))?;
+        match named.as_str() {
+            "left" => Some(BlockAlign::Start),
+            "center" => Some(BlockAlign::Center),
+            "right" => Some(BlockAlign::End),
+            "justify" => Some(BlockAlign::Justify),
+            _ => None,
+        }
     }
 
     /// The value of a property in the `style` attribute.

@@ -158,6 +158,8 @@ pub struct Canvas {
     flow_loop: FlowLoop,
     /// Corner radius of the flow shader's rounded rectangle.
     flow_radius: f32,
+    /// Whether presses and hovers go to what is under the canvas.
+    pointer_events_none: bool,
 }
 
 impl Canvas {
@@ -166,6 +168,7 @@ impl Canvas {
         Self {
             style: Style::default(),
             render_fn: None,
+            pointer_events_none: false,
             opacity: 1.0,
             layer: RenderLayer::default(),
             redraw_while: None,
@@ -181,6 +184,7 @@ impl Canvas {
         F: Fn(&mut dyn DrawContext, CanvasBounds) + 'static,
     {
         Self {
+            pointer_events_none: false,
             style: Style::default(),
             render_fn: Some(Rc::new(render_fn)),
             opacity: 1.0,
@@ -284,6 +288,12 @@ impl Canvas {
         self
     }
 
+    /// Let presses and hovers through to what is under the canvas, as an overlay that only draws.
+    pub fn pointer_events_none(mut self) -> Self {
+        self.pointer_events_none = true;
+        self
+    }
+
     /// Set opacity (0.0 = transparent, 1.0 = opaque)
     pub fn opacity(mut self, opacity: f32) -> Self {
         self.opacity = opacity.clamp(0.0, 1.0);
@@ -366,6 +376,7 @@ impl ElementBuilder for Canvas {
         RenderProps {
             opacity: self.opacity,
             layer: self.layer,
+            pointer_events_none: self.pointer_events_none,
             ..Default::default()
         }
     }

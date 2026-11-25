@@ -162,6 +162,8 @@ pub struct RichTextData {
     pub(super) pressing: bool,
     /// The fixed toolbar's scroll position, kept while the toolbar is rebuilt.
     pub(super) bar_scroll: blinc_layout::selector::ScrollRef,
+    /// The signal of each checklist box shown, by its block.
+    pub(super) tasks: std::collections::HashMap<usize, blinc_core::Signal<bool>>,
     /// Called after an edit changes the document; set by [`RichTextStateExt::on_change`].
     on_change: Option<ChangeCallback>,
     /// The document `on_change` last saw.
@@ -245,6 +247,7 @@ impl RichTextData {
                 blinc_layout::widgets::text_input::TextInputData::with_placeholder("Paste a link"),
             )),
             link_open: false,
+            tasks: Default::default(),
             on_change: None,
             reported: None,
             swatch: None,
@@ -469,6 +472,13 @@ impl RichTextData {
         true
     }
 
+    /// Toggle the blocks of the selection or the cursor to `kind`: where all have it, they become
+    /// paragraphs.
+    pub(super) fn toggle_kind(&mut self, kind: super::document::BlockKind) -> bool {
+        let range = self.block_range();
+        self.change(|doc| super::block_ops::toggle_block_kind(doc, range, kind))
+    }
+
     /// Align the blocks of the selection or the cursor.
     pub(super) fn set_align(&mut self, align: super::document::BlockAlign) -> bool {
         let range = self.block_range();
@@ -682,11 +692,13 @@ impl RichTextStateExt for RichTextState {
     }
 }
 
-/// Report the document to `on_change` if it differs from the one last reported.
+/// Follow a change: show its ticks in the checklist boxes, and report the document to `on_change`
+/// if it differs from the one last reported.
 ///
 /// Called by the edit handlers with the state unlocked and outside any reactive computation, as
 /// the callback may lock the state and set signals.
 pub(in crate::components::rich_text_editor) fn report_change(state: &RichTextState) {
+    super::tasks::sync(state);
     let changed = state.lock().ok().and_then(|mut data| {
         let f = data.on_change.clone()?;
         if data.reported.as_ref() == Some(&data.document) {

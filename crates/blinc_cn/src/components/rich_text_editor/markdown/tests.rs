@@ -376,6 +376,7 @@ fn lines_and_empty_blocks_round_trip() {
         BlockKind::Quote,
         BlockKind::BulletItem,
         BlockKind::NumberedItem,
+        BlockKind::TaskItem { checked: true },
     ] {
         for lines in [
             vec![l("a"), l("b")],
@@ -556,4 +557,34 @@ fn alignment_round_trips_for_every_kind_of_block() {
         "<div align=\"center\">\n\na\n\nb\n\n</div>\n"
     );
     assert_eq!(Divider, Block::divider().kind);
+}
+
+#[test]
+fn checklists_round_trip() {
+    use BlockKind::{BulletItem, NumberedItem, TaskItem};
+    let item = |kind, indent, t: &str| block(kind, indent, vec![line(&[(t, P)])]);
+    let (done, open) = (TaskItem { checked: true }, TaskItem { checked: false });
+    let doc = RichDocument::from_blocks(vec![
+        item(done.clone(), 0, "a"),
+        item(open.clone(), 1, "b"),
+        item(BulletItem, 0, "[ ] not a task"),
+        item(open.clone(), 0, ""),
+        item(NumberedItem, 0, "one"),
+        item(done.clone(), 1, "c"),
+        item(NumberedItem, 0, "two"),
+        Block {
+            align: BlockAlign::End,
+            ..item(done, 0, "aligned")
+        },
+        item(open, 0, "last"),
+    ]);
+    let markdown = round_trips(&doc);
+    assert!(markdown.starts_with("- [x] a\n  - [ ] b\n"), "{markdown}");
+}
+
+#[test]
+fn numbering_goes_on_past_nested_items() {
+    let doc = RichDocument::from_markdown("1. a\n   - b\n     1. c\n2. d\n3. e", Color::WHITE);
+    let ordinals: Vec<_> = (0..5).map(|i| doc.numbered_ordinal(i)).collect();
+    assert_eq!(ordinals, [Some(1), None, Some(1), Some(2), Some(3)]);
 }

@@ -7,6 +7,7 @@
 //! | `> quote`                   | `BlockKind::Quote` |
 //! | `- item`, `* item`          | `BlockKind::BulletItem` (`indent` follows nesting) |
 //! | `1. item`                   | `BlockKind::NumberedItem` |
+//! | `- [ ] item`, `- [x] item`  | `BlockKind::TaskItem` |
 //! | `---`, `***`                | `BlockKind::Divider` |
 //! | `**bold**`, `<strong>`      | `TextSpan.bold` |
 //! | `*italic*`, `<em>`          | `TextSpan.italic` |
@@ -18,6 +19,7 @@
 //! | `\\` at a line's end, `<br>`  | a soft break: a new line in the block |
 //! | `<br>` alone                | an empty paragraph |
 //! | `<div align="center">` … `</div>` | `Block.align`, with a blank line inside each tag |
+//! | `<span style="text-align:…">` | a task's `Block.align` |
 //!
 //! Footnotes and other HTML are not mapped. Use `blinc_layout::markdown::markdown` for full
 //! CommonMark and GFM rendering.

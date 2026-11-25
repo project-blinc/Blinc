@@ -9,6 +9,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ### Added
 - `ScrollRef::scroll_by_with_behavior` and `set_scroll_offset_with_behavior` with `ScrollBehavior::Smooth` spring to the new offset instead of jumping to it.
+- `Canvas::pointer_events_none` lets presses and hovers through to what is under the canvas.
 - `ScrollRef::watch_x` is the horizontal offset as a signal that outlasts the build that asks for it.
 - `Div::on_layout_change` calls back with the element's laid-out bounds after a layout that changes its size, for content that wraps to the width it is given.
 - `Notch::peak_top_at` and `Notch::peak_bottom_at` place a peak's apex off the edge's centre, such as a popover's pointer toward its anchor. `CenterPeak` has an `offset` field.

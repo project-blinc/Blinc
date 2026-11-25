@@ -184,8 +184,8 @@ fn row_width(buttons: usize, dividers: usize) -> f32 {
     buttons as f32 * BUTTON + dividers as f32 * DIVIDER + (buttons + dividers - 1) as f32 * GAP
 }
 
-/// The controls after the block kind's menu, and their width: the marks, the alignments, colour
-/// and link, and in the floating toolbar, the close button.
+/// The controls after the block kind's menu, and their width: the marks, the alignments, the
+/// lists, colour and link, and in the floating toolbar, the close button.
 fn rest(target: &Target, look: &Look, close: bool) -> (Div, f32) {
     let mut row = div().flex_row().items_center().gap_px(GAP);
     for button in controls::marks(target, &look.format) {
@@ -196,6 +196,7 @@ fn rest(target: &Target, look: &Look, close: bool) -> (Div, f32) {
         row = row.child(button);
     }
     row = row
+        .child(controls::lists(target, &look.kind))
         .child(controls::divider())
         .child(controls::color(target, look.swatch))
         .child(link::link_button(target, look.format.link.is_some()));
@@ -210,7 +211,7 @@ fn rest(target: &Target, look: &Look, close: bool) -> (Div, f32) {
 /// The width of [`rest`].
 fn rest_width(close: bool) -> f32 {
     let buttons = MARKS.len() + ALIGNS.len() + 2 + close as usize;
-    row_width(buttons, 2 + close as usize)
+    row_width(buttons, 2 + close as usize) + controls::LIST + GAP
 }
 
 /// What a toolbar shows of the editor's state.

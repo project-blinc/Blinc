@@ -55,9 +55,25 @@ impl RichDocument {
                 let (indent, content) = items.enter(block.indent, marker.len());
                 let margin = " ".repeat(content);
                 let body = write_block(block, default_color, Breaks::Lines(&margin));
-                let body = match open_div(block.align) {
-                    Some(open) => format!("{open}\n\n{margin}{body}\n\n{margin}</div>"),
-                    None => body,
+                let body = match (&block.kind, open_div(block.align)) {
+                    (BlockKind::TaskItem { checked }, _) => {
+                        let tick = if *checked { "[x]" } else { "[ ]" };
+                        // A box with nothing after it is text.
+                        let body = if body.is_empty() {
+                            "<span></span>"
+                        } else {
+                            &body
+                        };
+                        // A block's tag may not follow a box.
+                        match text_align(block.align) {
+                            Some(align) => format!(
+                                "{tick} <span style=\"display:block;text-align:{align}\">{body}</span>"
+                            ),
+                            None => format!("{tick} {body}"),
+                        }
+                    }
+                    (_, Some(open)) => format!("{open}\n\n{margin}{body}\n\n{margin}</div>"),
+                    (_, None) => body,
                 };
                 format!("{}{marker}{body}", " ".repeat(indent))
             } else {
@@ -83,17 +99,21 @@ const EMPTY_PARAGRAPH: &str = "<br>";
 
 /// The tag that aligns what follows it, up to its close.
 fn open_div(align: BlockAlign) -> Option<String> {
-    let value = match align {
-        BlockAlign::Start => return None,
-        BlockAlign::Center => "center",
-        BlockAlign::End => "right",
-        BlockAlign::Justify => "justify",
-    };
-    Some(format!("<div align=\"{value}\">"))
+    text_align(align).map(|value| format!("<div align=\"{value}\">"))
+}
+
+/// An alignment as CSS and HTML name it, but for the default.
+fn text_align(align: BlockAlign) -> Option<&'static str> {
+    match align {
+        BlockAlign::Start => None,
+        BlockAlign::Center => Some("center"),
+        BlockAlign::End => Some("right"),
+        BlockAlign::Justify => Some("justify"),
+    }
 }
 
 fn is_item(block: &Block) -> bool {
-    matches!(block.kind, BlockKind::BulletItem | BlockKind::NumberedItem)
+    block.kind.is_list_item()
 }
 
 /// Where the content of each open list level starts, which its nested items are indented to.
@@ -144,7 +164,7 @@ fn write_block_as(
         BlockKind::Paragraph if block.is_empty() && block.lines.len() == 1 => {
             EMPTY_PARAGRAPH.into()
         }
-        BlockKind::Paragraph | BlockKind::BulletItem | BlockKind::NumberedItem => text(breaks),
+        _ => text(breaks),
     }
 }
 

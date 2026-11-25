@@ -33,10 +33,30 @@ pub enum BlockKind {
     /// Numbered-list item. Ordinal is computed at render time from the
     /// position within a contiguous run at the same `indent`.
     NumberedItem,
+    /// Item of a checklist, done or not.
+    TaskItem { checked: bool },
     /// Block quote.
     Quote,
     /// Horizontal divider (no inline content).
     Divider,
+}
+
+impl BlockKind {
+    /// Whether this is an item of a list, whichever kind of list.
+    pub fn is_list_item(&self) -> bool {
+        matches!(
+            self,
+            Self::BulletItem | Self::NumberedItem | Self::TaskItem { .. }
+        )
+    }
+
+    /// Whether this is `other`'s kind, a done task being of the kind of one that is not.
+    pub fn is_same_kind(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::TaskItem { .. }, Self::TaskItem { .. }) => true,
+            _ => self == other,
+        }
+    }
 }
 
 /// How a block's lines are placed across its width.
@@ -288,9 +308,9 @@ impl RichDocument {
     /// Compute the ordinal (1-based) for a NumberedItem at `block_index`.
     ///
     /// Returns `None` if the block at `block_index` is not a `NumberedItem`.
-    /// The ordinal is the count of contiguous `NumberedItem`s at the same
-    /// `indent` level ending at this block, walking backward and stopping
-    /// at the first block that isn't a numbered item at the same indent.
+    /// The ordinal is the count of `NumberedItem`s at the same `indent` ending at this block,
+    /// walking backward over deeper list items, which are nested in the ones counted, and
+    /// stopping at any other block.
     pub fn numbered_ordinal(&self, block_index: usize) -> Option<u32> {
         let block = self.blocks.get(block_index)?;
         if block.kind != BlockKind::NumberedItem {
@@ -304,9 +324,7 @@ impl RichDocument {
             let prev = &self.blocks[i];
             if prev.kind == BlockKind::NumberedItem && prev.indent == indent {
                 ordinal += 1;
-            } else if prev.kind == BlockKind::NumberedItem && prev.indent > indent {
-                // Skip nested deeper items — they belong to a sub-list and
-                // don't break the parent run.
+            } else if prev.kind.is_list_item() && prev.indent > indent {
                 continue;
             } else {
                 break;

@@ -7,6 +7,8 @@ All notable changes to `blinc_cn` will be documented in this file.
 - The rich text editor is a cn component, `blinc_cn::components::rich_text_editor`, moved from `blinc_layout` with its tests. Its CSS rules are part of `CN_STYLES`.
 
 - The rich text editor's toolbar is built from cn components: a cn select for the block's kind, icon buttons with tooltips, the cn colour picker, and a link button that opens a popover with Text and Link fields. `RichTextTheme::toolbar` takes a `ToolbarPlacement`: `Floating`, the default, shows it over the selection once the press that made it is released, as a notch pointing at the selection that fades in, with a close button; `Fixed` shows it above the text; in an editor narrower than its controls, either toolbar's other controls scroll, easing, between two buttons beside the select, and fade at an edge with more beyond it; `Hidden` shows none. `PickerState` is removed.
+- Rich text checklists: `BlockKind::TaskItem`, with a cn checkbox that ticks in place, Cmd or Ctrl+Enter, and `- [ ]` in Markdown. The toolbar has a list menu. Enter on an empty list item and Backspace at an item's start step out one level.
+- `DropdownMenuBuilder::icon` shows an icon on the trigger in place of its label.
 - Rich text blocks have an alignment, `Block::align`, with toolbar buttons, Cmd or Ctrl+Shift+L, E, R and J, and `block_ops::set_block_align`.
 - `cn::button` components take attributes, `Button::attr`, such as an `aria-label` for an icon-only button. The rich text toolbar's buttons have one.
 - `RichDocument::to_markdown` writes a document as Markdown that `from_markdown` reads back as it was. `from_markdown` reads `<u>`, `<ins>`, `<b>`, `<strong>`, `<i>`, `<em>`, `<s>`, `<del>`, `<code>`, `<br>` and a `<span>`'s hex colour.
@@ -34,6 +36,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - Typography has a dedicated guide covering all helpers, reactive content, inline composition and CSS class hooks; the gallery embeds that guide.
 
 ### Fixed
+- A rich text numbered list goes on counting past items nested in it.
 - In the rich text editor, the cursor, the selection and the line wrapping measure bold and italic text in its own face. They drifted along a line with any.
 - `RichDocument::from_markdown` makes a hard break a line of its own, keeps a quote's paragraphs apart, keeps an item's text after a nested list, and reads a code block as code, line by line.
 - A colour picker's swatch draws its checkerboard only under a translucent colour.

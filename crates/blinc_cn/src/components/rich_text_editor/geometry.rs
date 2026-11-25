@@ -64,7 +64,7 @@ pub fn compute_line_geometry(
                     &mut y,
                 );
             }
-            BlockKind::BulletItem | BlockKind::NumberedItem => {
+            BlockKind::BulletItem | BlockKind::NumberedItem | BlockKind::TaskItem { .. } => {
                 let marker_total = theme.bullet_column_width + 8.0;
                 let line_x = indent_px + marker_total;
                 let line_w = (inner_width - marker_total).max(0.0);
