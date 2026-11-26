@@ -281,7 +281,8 @@ fn capture(output: &std::path::Path, slug: &str) -> Result<(), Box<dyn Error>> {
                 .value
                 .set((52.0 + (index - 16) as f32 * 2.6).min(100.0));
         }
-        if slug == "video-player" {
+        // Playback follows the wall clock, so a frame of a media demo takes the time it shows.
+        if matches!(slug, "audio-player" | "video-player") {
             std::thread::sleep(std::time::Duration::from_millis(60));
         }
         ui.advance(60);
