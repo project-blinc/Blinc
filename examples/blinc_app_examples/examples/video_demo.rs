@@ -80,6 +80,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                 .h(ctx.height - 32.0)
                 .bg(Color::BLACK)
                 .rounded(8.0)
+                .show_dimensions()
                 .into_div(),
         )
 }

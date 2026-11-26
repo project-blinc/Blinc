@@ -9,7 +9,7 @@ use blinc_core::reactive::global_graph;
 use blinc_layout::div::div;
 use blinc_layout::renderer::{ElementType, RenderTree};
 use blinc_layout::widgets::media::video_player;
-use blinc_media::VideoPlayer;
+use blinc_media::{Frame, VideoPlayer};
 
 fn init() {
     static I: std::sync::Once = std::sync::Once::new();
@@ -79,4 +79,27 @@ fn playback_patches_the_controls_in_place() {
     assert_eq!(playing.len(), icons.len());
     assert_ne!(playing[0], icons[0], "the play icon did not turn to pause");
     assert_ne!(playing[1], icons[1], "the volume icon did not show muted");
+}
+
+#[test]
+fn the_frame_size_is_shown_once_there_is_a_frame() {
+    init();
+    let player = Rc::new(VideoPlayer::new());
+    let host = div().w(640.0).h(400.0).child(
+        video_player(Rc::clone(&player))
+            .show_dimensions()
+            .into_div(),
+    );
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(640.0, 400.0);
+    let size = |tree: &RenderTree| shown(tree).0.into_iter().find(|t| t.contains('×'));
+    assert_eq!(size(&tree), None);
+
+    player.push_frame(Frame::from_rgba(vec![0; 320 * 180 * 4], 320, 180));
+    frame(&mut tree);
+    assert_eq!(size(&tree).as_deref(), Some("320 × 180"));
+
+    player.stop();
+    frame(&mut tree);
+    assert_eq!(size(&tree), None);
 }

@@ -383,7 +383,7 @@ pub const UA_STYLES: &str = concat!(
    `--blinc-media-level`, `--blinc-media-level-rest`, `--blinc-waveform-played`
    and `--blinc-waveform-unplayed`, theme colours when unset. */
 .blinc-media-play-btn { background: var(--surface-elevated); color: var(--text-primary); }
-.blinc-media-time, .blinc-media-volume { color: var(--text-tertiary); }
+.blinc-media-time, .blinc-media-volume, .blinc-video-dimensions { color: var(--text-tertiary); }
 .blinc-media-mute-btn { color: var(--text-secondary); }
 .blinc-media-seek-rail { background: var(--surface-elevated); }
 .blinc-media-seek-fill { background: var(--primary); }

@@ -122,7 +122,10 @@ impl AudioPlayerWidget {
         }
         #[cfg(target_arch = "wasm32")]
         {
-            container = container.child(VideoControlsBuilder::new(self.player.browser_backend()));
+            container = container.child(VideoControlsBuilder::new(
+                self.player.browser_backend(),
+                false,
+            ));
         }
 
         container
@@ -150,6 +153,7 @@ pub fn video_player(player: Rc<blinc_media::VideoPlayer>) -> VideoPlayerWidget {
 }
 
 impl VideoPlayerWidget {
+    /// Show the video's size in pixels under the controls, once a frame is decoded.
     pub fn show_dimensions(mut self) -> Self {
         self.show_dimensions = true;
         self
@@ -238,7 +242,7 @@ impl VideoPlayerWidget {
         container = container.child(surface);
 
         // Controls, bound to the player's signals
-        let controls = VideoControlsBuilder::new((*player).clone());
+        let controls = VideoControlsBuilder::new((*player).clone(), self.show_dimensions);
         container = container.child(controls);
 
         container
@@ -249,22 +253,30 @@ impl VideoPlayerWidget {
 /// context.
 struct VideoControlsBuilder {
     player: blinc_media::VideoPlayer,
+    show_dimensions: bool,
     key: InstanceKey,
     built: std::cell::OnceCell<Div>,
 }
 
 impl VideoControlsBuilder {
-    fn new(player: blinc_media::VideoPlayer) -> Self {
+    fn new(player: blinc_media::VideoPlayer, show_dimensions: bool) -> Self {
         Self {
             player,
+            show_dimensions,
             key: InstanceKey::new("video-controls"),
             built: std::cell::OnceCell::new(),
         }
     }
 
     fn get_or_build(&self) -> &Div {
-        self.built
-            .get_or_init(|| controls(&self.player, self.key.get()))
+        self.built.get_or_init(|| {
+            let bar = controls(&self.player, self.key.get());
+            if self.show_dimensions {
+                div().flex_col().child(bar).child(dimensions(&self.player))
+            } else {
+                bar
+            }
+        })
     }
 }
 
@@ -491,6 +503,23 @@ fn controls(player: &blinc_media::VideoPlayer, key: &str) -> Div {
                         .child(vol_canvas),
                 ),
         )
+}
+
+/// The size of the current frame, empty while there is none.
+fn dimensions(player: &blinc_media::VideoPlayer) -> Div {
+    use crate::binding::IntoReactive;
+    use blinc_core::reactive::{ReactiveGraph, computed};
+
+    let size = player.dimensions_signal.signal();
+    let label = computed(move |g: &ReactiveGraph| match g.get(size) {
+        Some((width, height)) if width > 0 => format!("{width} × {height}"),
+        _ => String::new(),
+    });
+    div().class("blinc-video-dimensions").px(1.5).pb(1.0).child(
+        crate::text::Text::bound(label.into_reactive())
+            .size(11.0)
+            .monospace(),
+    )
 }
 
 impl ElementBuilder for VideoControlsBuilder {

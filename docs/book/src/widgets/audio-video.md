@@ -95,10 +95,14 @@ use blinc::layout::widgets::media::video_player;
 let player = Rc::new(VideoPlayer::new());
 
 video_player(Rc::clone(&player))
+    .show_dimensions()
     .w_full()
     .h(400.0)
     .into_div()
 ```
+
+`.show_dimensions()` shows the size of the video in pixels below the controls, after the player has
+a frame. To read the same size in your code, use `player.dimensions_signal`.
 
 ## Waveform
 
@@ -171,6 +175,7 @@ result, they follow the theme, and a stylesheet can restyle them:
 | `.blinc-media-controls` | Controls row | |
 | `.blinc-media-play-btn` | Play/pause | `--surface-elevated` fill, `--text-primary` icon |
 | `.blinc-media-time` | Time display | `--text-tertiary` |
+| `.blinc-video-dimensions` | Video size, with `.show_dimensions()` | `--text-tertiary` |
 | `.blinc-media-live-badge` | LIVE indicator | `--error` fill, white text |
 | `.blinc-media-seek`, `.blinc-media-seek-track` | Seek bar | see below |
 | `.blinc-media-seek-rail` | Seek bar track | `--surface-elevated` |

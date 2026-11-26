@@ -116,6 +116,8 @@ pub struct VideoPlayer {
     pub position_signal: blinc_core::State<u64>,
     pub duration_signal: blinc_core::State<u64>,
     pub volume_signal: blinc_core::State<f32>,
+    /// The pixel size of the current frame, `(0, 0)` while there is none.
+    pub dimensions_signal: blinc_core::State<(u32, u32)>,
     /// End of the streaming buffer in ms. Drives the "ghost" fill
     /// behind the seek bar (the part of the timeline that's already
     /// been downloaded and is safe to scrub into). On native this
@@ -150,6 +152,8 @@ impl VideoPlayer {
         let duration_signal = blinc_core::use_state_keyed(&format!("vp:{id}:duration"), || 0u64);
         let volume_signal = blinc_core::use_state_keyed(&format!("vp:{id}:volume"), || 1.0f32);
         let buffered_signal = blinc_core::use_state_keyed(&format!("vp:{id}:buffered"), || 0u64);
+        let dimensions_signal =
+            blinc_core::use_state_keyed(&format!("vp:{id}:dimensions"), || (0u32, 0u32));
 
         let state = std::sync::Arc::new(std::sync::Mutex::new(VideoPlayerInner {
             playback_state: VideoState::Idle,
@@ -172,6 +176,8 @@ impl VideoPlayer {
         let playing_for_tick = playing_signal.clone();
         #[cfg(target_arch = "wasm32")]
         let buf_for_tick = buffered_signal.clone();
+        #[cfg(target_arch = "wasm32")]
+        let dimensions_for_tick = dimensions_signal.clone();
         #[cfg(target_arch = "wasm32")]
         let last_buffered: std::sync::Arc<std::sync::atomic::AtomicU64> =
             std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -201,9 +207,12 @@ impl VideoPlayer {
                     drop(inner);
                     if needs_frame {
                         if let Some(frame) = crate::web_video::capture_frame(_tick_id) {
+                            let size = (frame.width, frame.height);
                             let mut inner = state_for_tick.lock().unwrap();
                             inner.current_frame = Some(std::sync::Arc::new(frame));
                             inner.frame_generation += 1;
+                            drop(inner);
+                            set_size(&dimensions_for_tick, size);
                             redraw_handle.request_redraw();
                         }
                     }
@@ -248,6 +257,7 @@ impl VideoPlayer {
             duration_signal,
             volume_signal,
             buffered_signal,
+            dimensions_signal,
         }
     }
 
@@ -256,7 +266,12 @@ impl VideoPlayer {
         let pos = inner.position_ms;
         let dur = inner.duration_ms;
         let vol = inner.volume;
+        let size = inner
+            .current_frame
+            .as_ref()
+            .map_or((0, 0), |frame| (frame.width, frame.height));
         drop(inner);
+        set_size(&self.dimensions_signal, size);
         self.position_signal.set(pos);
         self.duration_signal.set(dur);
         self.volume_signal.set(vol);
@@ -638,6 +653,7 @@ impl VideoPlayer {
         let state = self.state.clone();
         let playing_sig = self.playing_signal.clone();
         let position_sig = self.position_signal.clone();
+        let dimensions_sig = self.dimensions_signal.clone();
 
         std::thread::spawn(move || {
             let mut decoder = VideoDecoder::new();
@@ -813,10 +829,13 @@ impl VideoPlayer {
                     decoded_count += 1;
                     // Skip display for samples before the seek target (decoder warmup)
                     if sample_idx >= target_sample {
+                        let size = (frame.width, frame.height);
                         let mut inner = state.lock().unwrap();
                         inner.current_frame = Some(std::sync::Arc::new(frame));
                         inner.frame_generation += 1;
                         inner.position_ms = (sample_idx as u64 * duration_ms) / sample_count as u64;
+                        drop(inner);
+                        set_size(&dimensions_sig, size);
                     }
                 }
 
@@ -848,6 +867,8 @@ impl VideoPlayer {
                         )));
                         inner.frame_generation += 1;
                         inner.position_ms = duration_ms;
+                        drop(inner);
+                        set_size(&dimensions_sig, (w as u32, h as u32));
                     }
                 }
             }
@@ -858,6 +879,13 @@ impl VideoPlayer {
             playing_sig.set(false);
             position_sig.set(duration_ms);
         });
+    }
+}
+
+/// Writes a frame size, only when it differs from the one already there.
+fn set_size(signal: &blinc_core::State<(u32, u32)>, size: (u32, u32)) {
+    if signal.get() != size {
+        signal.set(size);
     }
 }
 
