@@ -52,6 +52,11 @@ impl AudioSource {
     }
 }
 
+/// How close to its end a track is opened again for a seek. A sink that runs out before it takes
+/// a seek order never answers it.
+#[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+const END_MARGIN: std::time::Duration = std::time::Duration::from_millis(100);
+
 /// Cross-platform audio player
 pub struct AudioPlayer {
     #[cfg(target_arch = "wasm32")]
@@ -463,12 +468,19 @@ impl AudioPlayerInner {
         }
     }
 
-    /// Moves the sink to `position_ms`, and returns the position it moved to. A track that has
-    /// played to its end is opened again, paused.
+    /// Moves the sink to `position_ms`, and returns the position it moved to. A track at its end
+    /// is opened again first: paused if it had finished, playing or paused as it was otherwise.
     fn seek_sink(&mut self, position_ms: u64) -> Result<u64, rodio::source::SeekError> {
-        if self.sink.as_ref().is_some_and(|sink| sink.empty())
+        let end = std::time::Duration::from_millis(self.duration_ms);
+        let reopen_paused = self.sink.as_ref().and_then(|sink| {
+            let finished = sink.empty();
+            let at_the_end = !end.is_zero() && sink.get_pos() + END_MARGIN >= end;
+            (finished || at_the_end).then(|| finished || sink.is_paused())
+        });
+        if let Some(paused) = reopen_paused
             && let Some(source) = self.source.clone()
-            && self.load(&source, true)
+            && self.load(&source, paused)
+            && paused
         {
             self.state = PlaybackState::Paused;
         }

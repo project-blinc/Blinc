@@ -132,3 +132,23 @@ fn a_seek_after_the_end_holds_the_track_there() {
     let at = heard_at(&mut output);
     assert!((200..400).contains(&at), "heard {at} ms");
 }
+
+#[test]
+fn a_seek_close_to_the_end_keeps_playing() {
+    let (player, mut output) = detached();
+    player.play(AudioSource::bytes(ramp(1003)));
+    let played = || {
+        let inner = player.inner.borrow();
+        inner.sink.as_ref().expect("a sink").get_pos()
+    };
+    // A few samples short of the end, where the sink would not answer a seek order.
+    while played() < Duration::from_millis(1000) {
+        output.next();
+    }
+
+    while_draining(&mut output, || player.seek(200));
+
+    assert_eq!(player.state(), PlaybackState::Playing);
+    let at = heard_at(&mut output);
+    assert!((200..900).contains(&at), "heard {at} ms");
+}
