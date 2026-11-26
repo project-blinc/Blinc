@@ -46,23 +46,6 @@ use crate::widgets::link::open_url;
 
 mod parser;
 
-/// Whether link spans cover the entire content, so a node-level
-/// pointer cursor tells the truth.
-fn link_covers_all(spans: &[TextSpan], content_len: usize) -> bool {
-    if content_len == 0 {
-        return false;
-    }
-    let mut covered_to = 0usize;
-    // Spans arrive in order; a gap means some text is not a link.
-    for span in spans.iter().filter(|s| s.link_url.is_some()) {
-        if span.start > covered_to {
-            return false;
-        }
-        covered_to = covered_to.max(span.end);
-    }
-    covered_to >= content_len
-}
-
 /// A rich text element with inline formatting support
 pub struct RichText {
     /// Plain text content (tags stripped)
@@ -129,13 +112,6 @@ impl RichText {
         let markup = markup.into();
         let (content, spans) = parser::parse(&markup);
 
-        // Check if there are any links
-        // The node itself claims no cursor: `render_props` publishes a
-        // pointer per link x-range instead, so only the link text shows
-        // one. A node-level pointer made every word in a paragraph look
-        // clickable.
-        let has_links = false;
-
         let mut rich = Self {
             content,
             spans,
@@ -156,13 +132,15 @@ impl RichText {
             ascender: 14.0 * 0.8,
             half_leading: 0.0,
             baseline: None,
-            cursor: has_links.then_some(crate::element::CursorStyle::Pointer),
+            // `render_props` publishes a pointer per link range, so the
+            // node claims none and only the link text shows one.
+            cursor: None,
             word_spacing: 0.0,
             event_handlers: EventHandlers::new(),
             hit_spans: None,
         };
         rich.update_size_estimate();
-        rich.setup_link_handlers();
+        rich.refresh_links();
         rich
     }
 
@@ -196,13 +174,6 @@ impl RichText {
             offset += line.text.len();
         }
 
-        // Check if there are any links
-        // The node itself claims no cursor: `render_props` publishes a
-        // pointer per link x-range instead, so only the link text shows
-        // one. A node-level pointer made every word in a paragraph look
-        // clickable.
-        let has_links = false;
-
         let mut rich = Self {
             content,
             spans,
@@ -223,13 +194,15 @@ impl RichText {
             ascender: 14.0 * 0.8,
             half_leading: 0.0,
             baseline: None,
-            cursor: has_links.then_some(crate::element::CursorStyle::Pointer),
+            // `render_props` publishes a pointer per link range, so the
+            // node claims none and only the link text shows one.
+            cursor: None,
             word_spacing: 0.0,
             event_handlers: EventHandlers::new(),
             hit_spans: None,
         };
         rich.update_size_estimate();
-        rich.setup_link_handlers();
+        rich.refresh_links();
         rich
     }
 
@@ -274,6 +247,7 @@ impl RichText {
             span.link_url = Some(url.clone());
             span.underline = true;
         });
+        self.refresh_links();
         self
     }
 
@@ -309,6 +283,7 @@ impl RichText {
     pub fn size(mut self, size: f32) -> Self {
         self.font_size = size;
         self.update_size_estimate();
+        self.refresh_links();
         self
     }
 
@@ -360,6 +335,7 @@ impl RichText {
         self.v_align = TextVerticalAlign::Baseline;
         self.line_height = 1.0;
         self.update_size_estimate();
+        self.refresh_links();
         self
     }
 
@@ -374,6 +350,7 @@ impl RichText {
     /// Set font weight
     pub fn weight(mut self, weight: FontWeight) -> Self {
         self.weight = weight;
+        self.refresh_links();
         self
     }
 
@@ -385,6 +362,7 @@ impl RichText {
     /// Set italic style
     pub fn italic(mut self) -> Self {
         self.italic = true;
+        self.refresh_links();
         self
     }
 
@@ -392,6 +370,7 @@ impl RichText {
     pub fn font_family(mut self, family: FontFamily) -> Self {
         self.font_family = family;
         self.update_size_estimate();
+        self.refresh_links();
         self
     }
 
@@ -409,6 +388,7 @@ impl RichText {
     pub fn line_height(mut self, multiplier: f32) -> Self {
         self.line_height = multiplier;
         self.update_size_estimate();
+        self.refresh_links();
         self
     }
 
@@ -595,12 +575,15 @@ impl RichText {
         }))
     }
 
-    /// Set up click handlers for links
-    fn setup_link_handlers(&mut self) {
-        let Some(hit_spans) = self.collect_hit_spans() else {
+    /// Rebuilds the pointer targets and the click handler from the current
+    /// spans and font. Call it after a change to either.
+    fn refresh_links(&mut self) {
+        // The link handler is the only one this element registers.
+        self.event_handlers = EventHandlers::new();
+        self.hit_spans = self.collect_hit_spans();
+        let Some(hit_spans) = self.hit_spans.clone() else {
             return;
         };
-        self.hit_spans = Some(Arc::clone(&hit_spans));
 
         // Resolved through the same `hit` the cursor uses, at the width
         // the event carries, so the pointer and the click cannot
@@ -833,6 +816,37 @@ mod tests {
         for rect in &narrow {
             assert!(rect.x1 <= 200.0, "{rect:?} escapes a 200px container");
         }
+    }
+
+    fn click_handlers(rt: &RichText) -> usize {
+        rt.event_handlers
+            .get(event_types::POINTER_UP)
+            .map_or(0, |handlers| handlers.len())
+    }
+
+    #[test]
+    fn a_link_added_by_range_is_clickable() {
+        let rt = rich_text("Read the manual").link_range(9..15, "https://example.com");
+        let hit = rt.render_props().text_hit_spans.expect("a pointer target");
+        assert_eq!(hit.spans.len(), 1);
+        assert_eq!(&hit.content[hit.spans[0].start..hit.spans[0].end], "manual");
+        assert_eq!(hit.spans[0].url.as_deref(), Some("https://example.com"));
+        assert_eq!(click_handlers(&rt), 1);
+    }
+
+    #[test]
+    fn link_targets_follow_the_font_and_keep_one_handler() {
+        let rt = rich_text(r#"<a href="https://example.com">one</a> two"#)
+            .link_range(4..7, "https://example.org")
+            .size(30.0)
+            .line_height(2.0)
+            .italic();
+        let hit = rt.render_props().text_hit_spans.expect("pointer targets");
+        assert_eq!(hit.spans.len(), 2);
+        assert_eq!(hit.font_size, 30.0);
+        assert_eq!(hit.line_height, 2.0);
+        assert!(hit.options.italic);
+        assert_eq!(click_handlers(&rt), 1);
     }
 
     #[test]

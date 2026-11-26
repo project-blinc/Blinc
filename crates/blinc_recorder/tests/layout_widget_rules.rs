@@ -249,6 +249,56 @@ fn a_hovered_link_turns_the_hover_colour() {
     assert!(drawn_in(got, want, bg), "hovered link {got:?} over {bg:?}");
 }
 
+/// Whether some row of a node's box is drawn across nearly its whole width,
+/// which glyphs alone do not do.
+fn underlined(ui: &mut Headless, node: LayoutNodeId) -> bool {
+    let b = ui.tree().get_absolute_bounds(node).unwrap();
+    let frame = ui.snapshot().unwrap();
+    let bg = frame.get_pixel(b.x as u32, b.y as u32).unwrap();
+    let drawn = |x: u32, y: u32| {
+        let p = frame.get_pixel(x, y).unwrap();
+        (0..3).map(|i| p[i].abs_diff(bg[i]) as u32).sum::<u32>() > 40
+    };
+    let (left, right) = (b.x as u32 + 1, (b.x + b.width) as u32 - 1);
+    (b.y as u32..(b.y + b.height) as u32).any(|y| {
+        let across = (left..right).filter(|&x| drawn(x, y)).count();
+        across as u32 > (right - left) * 9 / 10
+    })
+}
+
+#[test]
+fn a_link_set_to_underline_on_hover_does_so_under_the_pointer() {
+    let Some(mut ui) = session(ColorScheme::Dark) else {
+        return;
+    };
+    ui.mount(|_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(12.0))
+            .flex_col()
+            .child(
+                link("Documentation", "https://example.com")
+                    .underline_on_hover()
+                    .font_size(24.0),
+            )
+    });
+    ui.leave().settle();
+    let label = one(&ui, "blinc-link-hover-underline");
+    assert!(!underlined(&mut ui, label), "underlined at rest");
+
+    let b = ui.tree().get_absolute_bounds(label).unwrap();
+    ui.move_to(b.x + b.width / 2.0, b.y + b.height / 2.0)
+        .settle();
+    assert!(underlined(&mut ui, label), "no underline under the pointer");
+
+    ui.leave().settle();
+    assert!(
+        !underlined(&mut ui, label),
+        "still underlined after leaving"
+    );
+}
+
 fn mount_code(ui: &mut Headless) {
     ui.mount(|_| {
         div()

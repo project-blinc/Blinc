@@ -239,6 +239,7 @@ pub const UA_STYLES: &str = concat!(
 /* Text and tables. */
 .blinc-link { color: var(--text-link); }
 .blinc-link:hover { color: var(--primary-hover); }
+.blinc-link:hover .blinc-link-hover-underline { text-decoration: underline; }
 .blinc-blockquote {
     background: var(--surface-overlay);
     border-left: 4px solid var(--border);

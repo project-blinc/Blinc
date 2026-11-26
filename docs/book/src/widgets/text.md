@@ -149,14 +149,13 @@ These range methods are available:
 
 ### Interactive Links
 
-Links that come from `<a href>` in the markup, or from a `StyledText`, are interactive:
+Links that come from `<a href>` in the markup, from `.link_range()`, or from a `StyledText`, are
+interactive:
 
 - On macOS, Linux and Windows, a click on a link opens the URL in the default browser of the system.
   On other platforms, Blinc writes a warning to the log.
 - Over a link, the cursor changes to a pointer.
 - Rich text underlines links automatically to make them visible.
-
-A link added with `.link_range()` is underlined, but a click on it does not open the URL.
 
 ```rust
 rich_text(r#"
@@ -179,15 +178,17 @@ link("Click here", "https://example.com")
 link("Styled link", "https://example.com")
     .font_size(18.0)
 
-// No underline
-link("Plain link", "https://example.com")
+// An underline only while the pointer is over the link
+link("Quiet link", "https://example.com")
     .underline_on_hover()
+
+// Your own action in place of the browser
+link("Log the URL", "https://example.com")
+    .font_size(14.0)
+    .on_click(|url, _| println!("{url}"))
 ```
 
-`.underline_on_hover()` removes the underline, and it does not add one on hover.
-
-Each of `.font_size()`, `.text_color()`, `.underline()`, `.no_underline()`, `.underline_on_hover()`
-and `.on_click()` starts again from the default link. Only the last one in a chain applies.
+The modifiers of a link combine. If two of them set the underline, the last one applies.
 
 ### Default colours
 
