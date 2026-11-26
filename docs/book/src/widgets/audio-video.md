@@ -199,7 +199,7 @@ come from these stylesheet variables:
 | `--blinc-media-track` | the track of the seek bar | `--surface-elevated` |
 | `--blinc-media-buffered` | what is buffered ahead | `--border` |
 | `--blinc-media-progress` | what already played | `--primary` |
-| `--blinc-media-level`, `--blinc-media-level-rest` | the volume columns up to the level, and the columns above it | `--surface-elevated`, `--text-secondary` |
+| `--blinc-media-level`, `--blinc-media-level-rest` | the volume columns up to the level, and the columns above it | `--text-secondary`, `--surface-elevated` |
 | `--blinc-waveform-played`, `--blinc-waveform-unplayed` | the bars of the waveform | `--primary`, `--border-secondary` |
 
 ```css

@@ -88,12 +88,12 @@ fn text(tree: &RenderTree, class: &str) -> Option<Color> {
         .map(|[r, g, b, a]| Color::rgba(r, g, b, a))
 }
 
-/// The width and colour of each bar the seek bar draws at `width`.
-fn seek_bars(tree: &RenderTree, width: f32) -> Vec<(f32, Color)> {
+/// The width and colour of each bar the canvas under `class` draws at `width`.
+fn bars(tree: &RenderTree, class: &str, width: f32) -> Vec<(f32, Color)> {
     let registry = tree.element_registry();
     let mut stack = vec![(tree.root().unwrap(), false)];
     while let Some((node, inside)) = stack.pop() {
-        let inside = inside || registry.has_class(node, "blinc-media-seek");
+        let inside = inside || registry.has_class(node, class);
         if let Some(ElementType::Canvas(canvas)) =
             tree.get_render_node(node).map(|n| &n.element_type)
             && inside
@@ -126,7 +126,7 @@ fn seek_bars(tree: &RenderTree, width: f32) -> Vec<(f32, Color)> {
                 .map(|child| (child, inside)),
         );
     }
-    panic!("no seek bar");
+    panic!("no canvas under .{class}");
 }
 
 #[test]
@@ -138,16 +138,27 @@ fn controls_take_their_colours_from_rules() {
         theme.color(ColorToken::SurfaceElevated)
     ));
     // The seek bar is drawn: the track across it, and the half that has played.
-    let bars = seek_bars(&tree, 200.0);
+    let seek = bars(&tree, "blinc-media-seek", 200.0);
     for (width, token) in [
         (200.0, ColorToken::SurfaceElevated),
         (100.0, ColorToken::Primary),
     ] {
         assert!(
-            bars.iter()
+            seek.iter()
                 .any(|(w, c)| (w - width).abs() < 0.5 && near(Some(*c), theme.color(token))),
-            "no {token:?} bar {width} wide in {bars:?}"
+            "no {token:?} bar {width} wide in {seek:?}"
         );
+    }
+    // Half the volume: the columns up to it stand out, and the rest are dim.
+    let columns = bars(&tree, "blinc-media-vol-slider", 50.0);
+    assert_eq!(columns.len(), 20);
+    for (index, (_, color)) in columns.iter().enumerate() {
+        let token = if index < 10 {
+            ColorToken::TextSecondary
+        } else {
+            ColorToken::SurfaceElevated
+        };
+        assert!(near(Some(*color), theme.color(token)), "column {index}");
     }
     assert!(near(
         text(&tree, "blinc-media-time"),

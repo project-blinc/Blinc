@@ -150,6 +150,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - `.show_dimensions()` on a video player shows the size of the frame under the controls.
 - `virtual_list(..).gap_px(..)` puts the gap between the rows, and the scroll range counts it.
 - The controls of the desktop audio player follow playback: the play button, the time, the seek bar and the volume. `MediaControls::new` reads its player as it paints, for any `Player`.
+- The volume bar of the media controls draws the columns up to the volume bright and the rest dim. The two default colours were the wrong way round, and a muted bar lit one column.
 
 ### Added
 - `Image::retry(ImageRetry)` and `Image::no_retry()`: how an image whose load fails is tried again. `ImageRetry::backoff(first, max)` doubles the wait from `first` up to `max`, `.attempts(n)` limits the tries, `ImageRetry::NEVER` turns it off; the default waits half a second, doubling to half a minute, with no limit. `ImageRenderInfo` and `ImageData` carry it.

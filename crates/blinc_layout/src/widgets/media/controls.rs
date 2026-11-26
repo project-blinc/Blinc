@@ -55,12 +55,12 @@ const PROGRESS: Ink = (
     ColorToken::Primary,
 );
 const LEVEL: Ink = (
-    "var(--blinc-media-level, var(--surface-elevated))",
-    ColorToken::SurfaceElevated,
+    "var(--blinc-media-level, var(--text-secondary))",
+    ColorToken::TextSecondary,
 );
 const LEVEL_REST: Ink = (
-    "var(--blinc-media-level-rest, var(--text-secondary))",
-    ColorToken::TextSecondary,
+    "var(--blinc-media-level-rest, var(--surface-elevated))",
+    ColorToken::SurfaceElevated,
 );
 
 /// Resolved each paint, so a theme or stylesheet change shows.
@@ -377,7 +377,8 @@ fn volume<P: Player + 'static>(
         for i in 0..cols {
             let frac = (i as f32 + 0.5) / cols as f32;
             let col_h = bounds.height * frac;
-            let color = if frac <= volume + 0.025 { level } else { rest };
+            // A column is lit when its middle is within the volume.
+            let color = if frac <= volume { level } else { rest };
             ctx.fill_rect(
                 blinc_core::Rect::new(i as f32 * col_w, bounds.height - col_h, col_w - 1.0, col_h),
                 0.0.into(),
