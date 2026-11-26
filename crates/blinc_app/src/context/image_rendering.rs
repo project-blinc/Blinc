@@ -476,6 +476,18 @@ impl RenderContext {
                             );
                         }
                     }
+                    // Type 4: Brush fill
+                    4 => {
+                        let mut ctx = GpuPaintContext::new(viewport_width, viewport_height);
+                        ctx.push_opacity(image.opacity);
+                        super::captured_image::fill_placeholder_brush(
+                            &mut ctx,
+                            image,
+                            scale_factor,
+                        );
+                        let batch = ctx.take_batch();
+                        self.renderer.render_overlay(target, &batch);
+                    }
                     // Type 3: Skeleton shimmer (animated gradient sweep)
                     3 => {
                         let t =

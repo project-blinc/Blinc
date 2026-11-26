@@ -113,6 +113,7 @@ Lazy loading is for content-heavy apps with many images, such as galleries, feed
 #### Builder API
 
 ```rust
+use blinc::core::{Brush, Gradient, Point};
 use blinc::layout::prelude::*;
 use std::time::Duration;
 
@@ -126,6 +127,18 @@ img("large-photo.jpg")
 img("photo.jpg")
     .lazy()
     .placeholder_color(Color::rgba(0.2, 0.2, 0.2, 1.0))
+    .w(300.0)
+    .h(200.0)
+
+// Gradient placeholder, with coordinates in the pixels of the image box
+img("photo.jpg")
+    .lazy()
+    .placeholder_brush(Brush::Gradient(Gradient::linear(
+        Point::new(0.0, 0.0),
+        Point::new(300.0, 0.0),
+        Color::rgb(0.15, 0.15, 0.2),
+        Color::rgb(0.3, 0.3, 0.4),
+    )))
     .w(300.0)
     .h(200.0)
 
@@ -166,7 +179,7 @@ img("photo.jpg")
 |-------------|-------------|
 | `None` | No placeholder. The area stays empty until the bitmap arrives |
 | `Color(color)` | Solid color background. The default is a translucent gray |
-| `Brush(brush)` | Not drawn. Use a color, an image or the skeleton |
+| `Brush(brush)` | A gradient fills the image box. An image brush shows its image. A glass or blur brush shows its tint color only |
 | `Image(url)` | Another image (a low-res thumbnail or a blur hash). Preloaded on tree build |
 | `Skeleton` | Shimmer band animation that needs no asset |
 

@@ -348,6 +348,7 @@ impl RenderTree {
                         placeholder_type: info.placeholder_type,
                         placeholder_color: info.placeholder_color,
                         placeholder_image: info.placeholder_image,
+                        placeholder_brush: info.placeholder_brush.clone(),
                         fade_duration_ms: info.fade_duration_ms,
                         retry: info.retry,
                     })
@@ -665,6 +666,7 @@ impl RenderTree {
                         placeholder_type: info.placeholder_type,
                         placeholder_color: info.placeholder_color,
                         placeholder_image: info.placeholder_image,
+                        placeholder_brush: info.placeholder_brush.clone(),
                         fade_duration_ms: info.fade_duration_ms,
                         retry: info.retry,
                     })

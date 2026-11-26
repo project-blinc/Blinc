@@ -83,6 +83,9 @@ impl RenderContext {
                 Rect::new(x, y, w, h),
                 style,
             );
+        } else if !loaded && image.placeholder_type == 4 {
+            paint.push_opacity(image.content_opacity);
+            fill_placeholder_brush(&mut paint, image, dpi);
         } else if !loaded && matches!(image.placeholder_type, 1 | 3) {
             paint.push_opacity(image.content_opacity);
             let [r, g, b, a] = image.placeholder_color;
@@ -118,4 +121,21 @@ impl RenderContext {
         paint.end_row_clips(row_clips);
         paint.take_batch()
     }
+}
+
+/// Fills an image's box with its placeholder brush. Gradient coordinates are in
+/// the box's logical pixels, as for a background.
+pub(super) fn fill_placeholder_brush(paint: &mut GpuPaintContext, image: &ImageElement, dpi: f32) {
+    let Some(brush) = image.placeholder_brush.as_deref() else {
+        return;
+    };
+    paint.push_transform(Transform::translate(image.x, image.y));
+    paint.push_transform(Transform::scale(dpi, dpi));
+    paint.fill_rect(
+        Rect::new(0.0, 0.0, image.width / dpi, image.height / dpi),
+        CornerRadius::uniform(image.border_radius / dpi),
+        brush.clone(),
+    );
+    paint.pop_transform();
+    paint.pop_transform();
 }

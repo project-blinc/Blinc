@@ -506,6 +506,8 @@ struct ImageElement {
     placeholder_color: [f32; 4],
     /// Placeholder image source (only used when placeholder_type == 2)
     placeholder_image: Option<String>,
+    /// Placeholder fill (only used when placeholder_type == 4)
+    placeholder_brush: Option<std::sync::Arc<blinc_core::Brush>>,
     /// Fade-in duration in milliseconds (0 = no fade)
     fade_duration_ms: u32,
     /// How a failed load is tried again

@@ -224,12 +224,14 @@ pub struct ImageData {
     pub filter: [f32; 8],
     /// Loading strategy: 0 = Eager (default), 1 = Lazy
     pub loading_strategy: u8,
-    /// Placeholder type: 0 = None, 1 = Color, 2 = Image, 3 = Skeleton
+    /// Placeholder type: 0 = None, 1 = Color, 2 = Image, 3 = Skeleton, 4 = Brush
     pub placeholder_type: u8,
     /// Placeholder color [r, g, b, a]
     pub placeholder_color: [f32; 4],
     /// Placeholder image source (only used when placeholder_type == 2)
     pub placeholder_image: Option<String>,
+    /// Placeholder fill (only used when placeholder_type == 4)
+    pub placeholder_brush: Option<std::sync::Arc<blinc_core::Brush>>,
     /// Fade-in duration in milliseconds (0 = no fade)
     pub fade_duration_ms: u32,
     /// How a failed load is tried again

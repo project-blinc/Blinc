@@ -739,7 +739,9 @@ impl Image {
         self
     }
 
-    /// Set a brush as placeholder (supports gradients, glass effects, etc.)
+    /// Set a brush as placeholder. A gradient fills the image's box, with its
+    /// coordinates in the box's pixels. A glass or blur brush draws its tint
+    /// colour only.
     ///
     /// # Example
     /// ```ignore
@@ -884,38 +886,41 @@ impl ElementBuilder for Image {
     }
 
     fn image_render_info(&self) -> Option<ImageRenderInfo> {
-        let (placeholder_type, placeholder_color, placeholder_image) = match &self.placeholder {
-            Placeholder::None => (0, [0.0, 0.0, 0.0, 0.0], None),
-            Placeholder::Color(c) => (1, [c.r, c.g, c.b, c.a], None),
-            Placeholder::Brush(brush) => {
-                // Extract representative color from brush for rendering
-                // TODO: Full brush rendering support in image pipeline
-                let color = match brush {
-                    Brush::Solid(c) => [c.r, c.g, c.b, c.a],
-                    Brush::Gradient(g) => {
-                        // Use first gradient stop color
-                        if let Some(stop) = g.stops().first() {
-                            let c = &stop.color;
-                            [c.r, c.g, c.b, c.a]
-                        } else {
-                            [0.2, 0.2, 0.2, 1.0]
-                        }
-                    }
-                    Brush::Glass(_) => [0.1, 0.1, 0.1, 0.5], // Semi-transparent for glass
-                    Brush::Image(_) => [0.0, 0.0, 0.0, 0.0],
-                    Brush::Blur(blur) => {
-                        // Use tint color if present, otherwise transparent
-                        if let Some(tint) = &blur.tint {
-                            [tint.r, tint.g, tint.b, tint.a * blur.opacity]
-                        } else {
-                            [0.0, 0.0, 0.0, 0.0]
-                        }
-                    }
-                };
-                (4, color, None) // Type 4 = Brush (treated as color for now)
+        let mut placeholder_color = [0.0; 4];
+        let mut placeholder_image = None;
+        let mut placeholder_brush = None;
+        let solid = |c: &Color| [c.r, c.g, c.b, c.a];
+        let placeholder_type = match &self.placeholder {
+            Placeholder::None => 0,
+            Placeholder::Color(c) | Placeholder::Brush(Brush::Solid(c)) => {
+                placeholder_color = solid(c);
+                1
             }
-            Placeholder::Image(src) => (2, [0.0, 0.0, 0.0, 0.0], Some(src.clone())),
-            Placeholder::Skeleton => (3, [0.0, 0.0, 0.0, 0.0], None),
+            Placeholder::Image(src) => {
+                placeholder_image = Some(src.clone());
+                2
+            }
+            Placeholder::Brush(Brush::Image(image)) => {
+                placeholder_image = Some(image.source.clone());
+                2
+            }
+            Placeholder::Skeleton => 3,
+            Placeholder::Brush(brush @ Brush::Gradient(_)) => {
+                placeholder_brush = Some(std::sync::Arc::new(brush.clone()));
+                4
+            }
+            // The image pipeline has no backdrop to blur: the tint stands in.
+            Placeholder::Brush(Brush::Glass(glass)) => {
+                placeholder_color = solid(&glass.tint);
+                1
+            }
+            Placeholder::Brush(Brush::Blur(blur)) => {
+                if let Some(tint) = &blur.tint {
+                    placeholder_color = solid(tint);
+                    placeholder_color[3] *= blur.opacity;
+                }
+                1
+            }
         };
 
         Some(ImageRenderInfo {
@@ -934,6 +939,7 @@ impl ElementBuilder for Image {
             placeholder_type,
             placeholder_color,
             placeholder_image,
+            placeholder_brush,
             fade_duration_ms: self.fade_duration.as_millis() as u32,
             retry: self.retry,
         })
@@ -1083,6 +1089,36 @@ mod tests {
 
         let info = i.image_render_info().unwrap();
         assert_eq!(info.placeholder_type, 3); // Skeleton
+    }
+
+    #[test]
+    fn a_brush_placeholder_is_carried_as_what_can_draw_it() {
+        let info = |brush: Brush| {
+            img("large.jpg")
+                .placeholder_brush(brush)
+                .image_render_info()
+                .unwrap()
+        };
+
+        let solid = info(Brush::Solid(Color::RED));
+        assert_eq!(solid.placeholder_type, 1);
+        assert_eq!(solid.placeholder_color, [1.0, 0.0, 0.0, 1.0]);
+
+        let gradient = info(Brush::Gradient(blinc_core::Gradient::linear(
+            blinc_core::Point::new(0.0, 0.0),
+            blinc_core::Point::new(10.0, 0.0),
+            Color::RED,
+            Color::BLUE,
+        )));
+        assert_eq!(gradient.placeholder_type, 4);
+        assert!(matches!(
+            gradient.placeholder_brush.as_deref(),
+            Some(Brush::Gradient(_))
+        ));
+
+        let image = info(Brush::Image(blinc_core::ImageBrush::new("thumb.jpg")));
+        assert_eq!(image.placeholder_type, 2);
+        assert_eq!(image.placeholder_image.as_deref(), Some("thumb.jpg"));
     }
 
     #[test]

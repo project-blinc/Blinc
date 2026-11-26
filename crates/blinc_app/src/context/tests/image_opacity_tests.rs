@@ -561,3 +561,87 @@ fn retry_scene(retry: bool) -> (bool, std::path::PathBuf) {
     }
     (green(&page), path)
 }
+
+#[test]
+#[ignore] // Requires GPU
+fn image_brush_placeholder_fills_the_box_with_its_gradient() {
+    let gradient = blinc_core::Brush::Gradient(blinc_core::Gradient::linear(
+        blinc_core::Point::new(0.0, 0.0),
+        blinc_core::Point::new(100.0, 0.0),
+        Color::RED,
+        Color::GREEN,
+    ));
+    // Plain, and under a translucent group, which prepares the image apart.
+    for group_opacity in [1.0, 0.5] {
+        for mode in 0..4 {
+            let mut context = super::main_text_clip_tests::context(true, 1);
+            let mut tree = RenderTree::from_element(
+                &div().w(160.0).h(120.0).bg(Color::BLUE).child(
+                    div()
+                        .id("host")
+                        .absolute()
+                        .left(20.0)
+                        .top(20.0)
+                        .w(100.0)
+                        .h(60.0)
+                        .child(
+                            blinc_layout::image("missing-brush-placeholder.png")
+                                .size(100.0, 60.0)
+                                .placeholder_brush(gradient.clone()),
+                        ),
+                ),
+            );
+            let host = tree.query_by_id("host").unwrap();
+            tree.update_render_props(host, |p| p.opacity = group_opacity);
+            tree.compute_layout(160.0, 120.0);
+            let drawn = frame(&mut context, &tree, &state(), mode);
+
+            let (left, right) = (drawn.get_pixel(24, 50).0, drawn.get_pixel(115, 50).0);
+            let outside = drawn.get_pixel(130, 50).0;
+            assert!(
+                left[0] > left[1] + 40 && right[1] > right[0] + 40,
+                "mode {mode} group {group_opacity}: left {left:?}, right {right:?}"
+            );
+            assert_eq!(outside, [0, 0, 255, 255], "mode {mode}: drew outside");
+        }
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn image_placeholder_stays_inside_a_clipping_ancestor() {
+    let brush = blinc_core::Brush::Gradient(blinc_core::Gradient::linear(
+        blinc_core::Point::new(0.0, 0.0),
+        blinc_core::Point::new(100.0, 0.0),
+        Color::CYAN,
+        Color::CYAN,
+    ));
+    for placeholder in [
+        blinc_layout::image::Placeholder::Color(Color::CYAN),
+        blinc_layout::image::Placeholder::Brush(brush),
+    ] {
+        for mode in 0..4 {
+            let mut context = super::main_text_clip_tests::context(true, 1);
+            let mut tree = RenderTree::from_element(
+                &div().w(160.0).h(120.0).bg(Color::BLUE).child(
+                    div()
+                        .absolute()
+                        .left(20.0)
+                        .top(20.0)
+                        .w(40.0)
+                        .h(40.0)
+                        .overflow_clip()
+                        .child(
+                            blinc_layout::image("missing-clip-placeholder.png")
+                                .size(100.0, 60.0)
+                                .placeholder(placeholder.clone()),
+                        ),
+                ),
+            );
+            tree.compute_layout(160.0, 120.0);
+            let drawn = frame(&mut context, &tree, &state(), mode);
+            pixel(&drawn, (30, 30), [0, 255, 255, 255]);
+            pixel(&drawn, (90, 30), [0, 0, 255, 255]);
+        }
+    }
+}

@@ -5133,12 +5133,14 @@ pub struct ImageRenderInfo {
     pub filter: [f32; 8],
     /// Loading strategy: 0 = Eager (default), 1 = Lazy
     pub loading_strategy: u8,
-    /// Placeholder type: 0 = None, 1 = Color, 2 = Image, 3 = Skeleton
+    /// Placeholder type: 0 = None, 1 = Color, 2 = Image, 3 = Skeleton, 4 = Brush
     pub placeholder_type: u8,
     /// Placeholder color (only used when placeholder_type == 1)
     pub placeholder_color: [f32; 4],
     /// Placeholder image source (only used when placeholder_type == 2)
     pub placeholder_image: Option<String>,
+    /// Placeholder fill (only used when placeholder_type == 4)
+    pub placeholder_brush: Option<std::sync::Arc<blinc_core::Brush>>,
     /// Fade-in duration in milliseconds
     pub fade_duration_ms: u32,
     /// How a failed load is tried again
@@ -5159,6 +5161,7 @@ impl Default for ImageRenderInfo {
             placeholder_type: 1,                              // Color (default)
             placeholder_color: [0.15, 0.15, 0.15, 0.5],       // Default gray
             placeholder_image: None,
+            placeholder_brush: None,
             fade_duration_ms: 200,
             retry: crate::image::ImageRetry::default(),
         }

@@ -616,6 +616,7 @@ impl RenderContext {
                         placeholder_type: final_placeholder_type,
                         placeholder_color: final_placeholder_color,
                         placeholder_image: final_placeholder_image,
+                        placeholder_brush: image_data.placeholder_brush.clone(),
                         fade_duration_ms: final_fade_duration,
                         retry: image_data.retry,
                         z_index: *z_layer,
@@ -710,6 +711,7 @@ impl RenderContext {
                             placeholder_type: 0, // None
                             placeholder_color: [0.0; 4],
                             placeholder_image: None,
+                            placeholder_brush: None,
                             fade_duration_ms: 0,
                             retry: blinc_layout::ImageRetry::default(),
                             z_index: *z_layer,

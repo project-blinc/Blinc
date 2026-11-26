@@ -29,6 +29,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Platform-neutral accessibility snapshots use stable node IDs, expose control names, values and states, and route assistive actions to widget handlers. Text inputs provide reactive accessible names and masked value snapshots.
 
 ### Changed
+- Breaking: `ImageRenderInfo` and the renderer's `ImageData` have a `placeholder_brush` field, and `placeholder_type` 4 means a brush.
 - Code blocks and the code editor take their colours from the theme with a syntax highlighter too. A highlighter names each token, the token gets the class `blinc-code-token-<kind>`, and the default stylesheet colours it from the theme through the `--blinc-syntax-*` variables. `TokenRule::themed` makes such a rule and `TokenType::css_class` names the class. A rule made with a colour keeps it.
 - Breaking: `SyntaxHighlighter::default_color`, `background_color` and `line_number_color` return `Option<Color>`, `None` unless implemented. `CodeConfig::corner_radius` is an `Option<f32>`, and the corners follow `--radius-md` unless set. Indent guides are drawn in `--border`.
 - `LayoutTree` keeps its own nodes and runs taffy's algorithms over them through taffy's tree traits, instead of wrapping a `TaffyTree` and mapping ids both ways. Each node logs what its parent asked of it during layout. After an edit, the changed node is asked again, and layout stops at the first node whose answers are all the same; only that subtree is laid out and rounded again. A calendar month turn lays out the month carousel instead of the page. `BLINC_LAYOUT_BOUNDARIES=0` lays out from the root after every edit. `BLINC_LAYOUT_CHECK=1` compares every layout with one from scratch and panics on a difference. `LayoutTree::check_from_scratch` runs that comparison once. `taffy_child_count` now equals `child_count`.
@@ -144,6 +145,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Returning from a pressed scale to the identity transform does not restart hover colour transitions.
 - Repeated hover evaluation preserves settled transition targets instead of restarting them. Complex state selectors respect component layers and application specificity.
 - Overlay focus returns to stable trigger identities on dismissal, and nested scopes constrain Tab to the topmost active popup. Pointer focus persists without a keyboard ring. Menu roles support roving focus, submenu keys and keyboard context-menu activation.
+- `.placeholder_brush()` draws its brush while the image loads. A gradient fills the image's box, an image brush shows its image, and a glass or blur brush shows its tint colour.
 
 ### Added
 - `Image::retry(ImageRetry)` and `Image::no_retry()`: how an image whose load fails is tried again. `ImageRetry::backoff(first, max)` doubles the wait from `first` up to `max`, `.attempts(n)` limits the tries, `ImageRetry::NEVER` turns it off; the default waits half a second, doubling to half a minute, with no limit. `ImageRenderInfo` and `ImageData` carry it.
