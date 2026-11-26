@@ -122,7 +122,8 @@ waveform(buckets)
 
 ## Shared Controls
 
-`MediaControls` is generic over `Player`:
+The audio widget and the video widget show the same controls. `MediaControls` shows them for any
+`Player`:
 
 ```rust
 use blinc::layout::widgets::media::MediaControls;
@@ -130,13 +131,16 @@ use blinc::layout::widgets::media::MediaControls;
 MediaControls::new(player_rc).class("my-controls").into_div()
 ```
 
-The controls read the player each time they are painted. If your code changes a paused player, the
+`MediaControls` reads the player each time it is painted. If your code changes a paused player, the
 controls show the change in the next frame that the window draws. `AudioPlayer` requests that frame
 itself.
 
-Layout: `[ ▶ ] [ 1:23 / 3:45 ] [ ══seek══ ] [ 80% ]`
+Layout: `[ ▶ ] [ 1:23 / 3:45 ] [ ══seek══ ] [ mute ] [ volume ]`
 
-Live streams: `[ ▶ ] [ LIVE ] [ ════════════ ]`
+A live stream has no time and no seek bar: `[ ▶ ] [ LIVE ]            [ mute ] [ volume ]`
+
+A click on the seek bar seeks, a click on the volume level sets the volume, and the mute button
+switches between silence and full volume.
 
 ## Camera & Recording
 
@@ -182,13 +186,12 @@ result, they follow the theme, and a stylesheet can restyle them:
 | `.blinc-media-time` | Time display | `--text-tertiary` |
 | `.blinc-video-dimensions` | Video size, with `.show_dimensions()` | `--text-tertiary` |
 | `.blinc-media-live-badge` | LIVE indicator | `--error` fill, white text |
-| `.blinc-media-seek`, `.blinc-media-seek-track` | Seek bar | see below |
-| `.blinc-media-seek-rail` | Seek bar track | `--surface-elevated` |
-| `.blinc-media-seek-fill` | Seek progress | `--primary` |
+| `.blinc-media-seek` | Seek bar | see below |
+| `.blinc-media-vol-slider` | Volume level | see below |
 | `.blinc-media-volume` | Volume | `--text-tertiary` |
 | `.blinc-media-mute-btn` | Mute | `--text-secondary` |
 
-Blinc draws the video seek bar, the volume level, and the waveform. Their colors
+Blinc draws the seek bar, the volume level, and the waveform. Their colors
 come from these stylesheet variables:
 
 | Variable | Draws | Default |

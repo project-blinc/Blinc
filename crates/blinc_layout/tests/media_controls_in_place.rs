@@ -8,10 +8,10 @@ use std::rc::Rc;
 
 use blinc_core::events::event_types;
 use blinc_core::reactive::global_graph;
-use blinc_layout::LayoutNodeId;
 use blinc_layout::div::div;
 use blinc_layout::renderer::{ElementType, RenderTree};
 use blinc_layout::widgets::media::{MediaControls, video_player};
+use blinc_layout::{CanvasBounds, CanvasData, LayoutNodeId};
 use blinc_media::{Frame, Player, VideoPlayer};
 
 fn init() {
@@ -112,6 +112,7 @@ fn the_frame_size_is_shown_once_there_is_a_frame() {
 struct Track {
     playing: Cell<bool>,
     position: Cell<u64>,
+    volume: Cell<f32>,
 }
 
 impl Player for Track {
@@ -132,9 +133,11 @@ impl Player for Track {
         60_000
     }
     fn volume(&self) -> f32 {
-        1.0
+        self.volume.get()
     }
-    fn set_volume(&self, _: f32) {}
+    fn set_volume(&self, volume: f32) {
+        self.volume.set(volume);
+    }
     fn is_playing(&self) -> bool {
         self.playing.get()
     }
@@ -157,28 +160,42 @@ fn find(tree: &RenderTree, class: &str) -> LayoutNodeId {
         .unwrap_or_else(|| panic!("no .{class}"))
 }
 
-/// Runs the canvas that reads the player, as a frame does, and returns whether it asks for
-/// another.
+/// Runs the canvases, as a frame does, and returns whether one asks for another frame.
 fn paint(tree: &mut RenderTree) -> bool {
-    let canvas = nodes(tree)
-        .into_iter()
-        .find_map(|node| match &tree.get_render_node(node)?.element_type {
-            ElementType::Canvas(canvas) => Some(canvas.clone()),
-            _ => None,
-        })
-        .expect("the controls have a canvas");
-    let mut ctx = blinc_core::RecordingContext::new(blinc_core::Size::new(400.0, 60.0));
-    (canvas.render_fn.as_ref().expect("a paint"))(
-        &mut ctx,
-        blinc_layout::CanvasBounds {
-            x: 0.0,
-            y: 0.0,
-            width: 1.0,
-            height: 1.0,
-        },
-    );
+    let mut wants_frames = false;
+    for (canvas, bounds) in canvases(tree) {
+        let mut ctx = blinc_core::RecordingContext::new(blinc_core::Size::new(400.0, 60.0));
+        (canvas.render_fn.as_ref().expect("a paint"))(&mut ctx, bounds);
+        wants_frames |= canvas.wants_frames();
+    }
     frame(tree);
-    canvas.wants_frames()
+    wants_frames
+}
+
+/// The canvases in tree order, each with its laid out size.
+fn canvases(tree: &RenderTree) -> Vec<(CanvasData, CanvasBounds)> {
+    let mut found = Vec::new();
+    let mut stack = vec![tree.root().unwrap()];
+    while let Some(node) = stack.pop() {
+        if let Some(ElementType::Canvas(canvas)) =
+            tree.get_render_node(node).map(|r| &r.element_type)
+        {
+            let b = tree.get_absolute_bounds(node).unwrap();
+            found.push((
+                canvas.clone(),
+                CanvasBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: b.width,
+                    height: b.height,
+                },
+            ));
+        }
+        let mut children = tree.layout_tree.children(node);
+        children.reverse();
+        stack.extend(children);
+    }
+    found
 }
 
 fn click(tree: &mut RenderTree, class: &str, across: f32) {
@@ -200,16 +217,30 @@ fn click(tree: &mut RenderTree, class: &str, across: f32) {
     frame(tree);
 }
 
-/// The share of the seek bar that is filled.
-fn filled(tree: &RenderTree) -> f32 {
-    let width = |class| tree.get_absolute_bounds(find(tree, class)).unwrap().width;
-    width("blinc-media-seek-fill") / width("blinc-media-seek-rail")
+/// The share of the seek bar that is drawn as played: the narrowest of the bars it draws over
+/// its track, or none when it draws the track and what is buffered only.
+fn played(tree: &RenderTree) -> f32 {
+    // The follower, the seek bar and the volume level.
+    let (seek, bounds) = canvases(tree).swap_remove(1);
+    let mut ctx = blinc_core::RecordingContext::new(blinc_core::Size::new(400.0, 60.0));
+    (seek.render_fn.as_ref().expect("a paint"))(&mut ctx, bounds);
+    let widths: Vec<f32> = ctx
+        .commands()
+        .iter()
+        .filter_map(|command| match command {
+            blinc_core::DrawCommand::FillRect { rect, .. } => Some(rect.width()),
+            _ => None,
+        })
+        .collect();
+    // The track, what is buffered (here the whole track), and then what has played.
+    widths.get(2).map_or(0.0, |played| played / widths[0])
 }
 
 #[test]
 fn controls_follow_a_player_that_publishes_nothing() {
     init();
     let player = Rc::new(Track::default());
+    player.volume.set(1.0);
     // A column, as the audio player is, so the controls take its width.
     let host = div()
         .w(400.0)
@@ -219,9 +250,9 @@ fn controls_follow_a_player_that_publishes_nothing() {
     let mut tree = RenderTree::from_element(&host);
     tree.compute_layout(400.0, 60.0);
     assert!(!paint(&mut tree), "a still player asks for no frame");
-    assert_eq!(shown(&tree).0, ["0:00 / 1:00", "100%"]);
-    assert!(filled(&tree) < 0.01);
-    let play_icon = shown(&tree).1;
+    assert_eq!(shown(&tree).0, ["0:00 / 1:00"]);
+    assert_eq!(played(&tree), 0.0);
+    let still = shown(&tree).1;
 
     // The player moves on its own.
     player.playing.set(true);
@@ -229,23 +260,29 @@ fn controls_follow_a_player_that_publishes_nothing() {
     assert!(paint(&mut tree), "a playing player asks for frames");
     assert_eq!(shown(&tree).0[0], "0:30 / 1:00");
     assert!(
-        (filled(&tree) - 0.5).abs() < 0.01,
-        "filled {}",
-        filled(&tree)
+        (played(&tree) - 0.5).abs() < 0.01,
+        "played {}",
+        played(&tree)
     );
-    assert_ne!(shown(&tree).1, play_icon, "the button offers to pause");
+    assert_ne!(shown(&tree).1[0], still[0], "the button offers to pause");
 
     // What the controls do shows with no paint in between.
     click(&mut tree, "blinc-media-play-btn", 0.5);
     assert!(!player.playing.get());
-    assert_eq!(shown(&tree).1, play_icon, "the button offers to play");
-    click(&mut tree, "blinc-media-seek-track", 0.25);
+    assert_eq!(shown(&tree).1[0], still[0], "the button offers to play");
+    click(&mut tree, "blinc-media-mute-btn", 0.5);
+    assert_eq!(player.volume.get(), 0.0);
+    assert_ne!(shown(&tree).1[1], still[1], "the volume icon shows muted");
+    click(&mut tree, "blinc-media-vol-slider", 0.8);
+    assert!((player.volume.get() - 0.8).abs() < 0.01);
+    assert_eq!(shown(&tree).1[1], still[1]);
+    click(&mut tree, "blinc-media-seek", 0.25);
     assert_eq!(player.position.get(), 15_000);
     assert_eq!(shown(&tree).0[0], "0:15 / 1:00");
     assert!(
-        (filled(&tree) - 0.25).abs() < 0.01,
-        "filled {}",
-        filled(&tree)
+        (played(&tree) - 0.25).abs() < 0.01,
+        "played {}",
+        played(&tree)
     );
 
     // A player that stops by itself is read once more before the frames stop.
