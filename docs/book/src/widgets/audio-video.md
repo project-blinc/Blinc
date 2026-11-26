@@ -61,8 +61,8 @@ fn show_status(p: &dyn Player) {
 | `volume()` / `set_volume(f32)` | Volume (0.0–1.0) |
 | `is_playing()` / `is_live()` | State queries |
 
-On desktop, audio `seek` changes only the position that `position_ms()` reports. The sound does not
-move to the new position.
+On desktop, a seek past the end of an audio track goes to the end. After a track finishes, a seek
+leaves the audio player paused at the new position, and `resume()` plays from there.
 
 ## Audio Widget
 

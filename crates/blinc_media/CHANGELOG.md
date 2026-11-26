@@ -4,6 +4,9 @@ All notable changes to `blinc_media` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- `AudioPlayer::seek` moves the sound on desktop. A position past the end goes to the end, and a seek after the track has finished holds it paused at the new position.
+
 ### Added
 - Browser media can use a host bridge when rendering in an OffscreenCanvas worker. Browser audio uses the same URL streaming engine; playback state, duration, buffering and decoded video frames follow the browser transport.
 

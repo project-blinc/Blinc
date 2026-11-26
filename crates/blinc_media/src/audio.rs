@@ -74,11 +74,15 @@ struct AudioPlayerInner {
     #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
     sink: Option<rodio::Player>,
     /// MixerDeviceSink (renamed from OutputStream in 0.19). Owns the
-    /// audio device handle; dropped when the player goes away. The
-    /// `mixer()` accessor returns the `&Mixer` we connect new
-    /// `Player`s to.
+    /// audio device handle; dropped when the player goes away.
     #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
     _stream: Option<rodio::MixerDeviceSink>,
+    /// The mixer of that device, which each new sink connects to.
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+    mixer: Option<rodio::mixer::Mixer>,
+    /// What the sink was made from, opened again by a seek after its end.
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+    source: Option<AudioSource>,
 }
 
 impl AudioPlayer {
@@ -103,6 +107,7 @@ impl AudioPlayer {
             #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
             {
                 let stream = rodio::DeviceSinkBuilder::open_default_sink().ok();
+                let mixer = stream.as_ref().map(|stream| stream.mixer().clone());
 
                 Self {
                     inner: Rc::new(RefCell::new(AudioPlayerInner {
@@ -114,6 +119,8 @@ impl AudioPlayer {
                         duration_ms: 0,
                         sink: None,
                         _stream: stream,
+                        mixer,
+                        source: None,
                     })),
                 }
             }
@@ -164,31 +171,7 @@ impl AudioPlayer {
             #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
             {
                 inner.duration_ms = 0;
-                match &source {
-                    AudioSource::File(path) => {
-                        if let Ok(file) = std::fs::File::open(path) {
-                            let reader = std::io::BufReader::new(file);
-                            if let Ok(decoder) = rodio::Decoder::new(reader) {
-                                inner.set_source(decoder);
-                            }
-                        }
-                    }
-                    AudioSource::Bytes(data) => {
-                        let cursor = std::io::Cursor::new(data.as_ref().clone());
-                        if let Ok(decoder) = rodio::Decoder::new(cursor) {
-                            inner.set_source(decoder);
-                        }
-                    }
-                    AudioSource::Asset(path) => {
-                        // Try loading via platform asset loader
-                        if let Ok(data) = blinc_platform::assets::load_asset(path) {
-                            let cursor = std::io::Cursor::new(data);
-                            if let Ok(decoder) = rodio::Decoder::new(cursor) {
-                                inner.set_source(decoder);
-                            }
-                        }
-                    }
-                }
+                inner.source = inner.load(&source, false).then(|| source.clone());
             }
 
             #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
@@ -273,6 +256,7 @@ impl AudioPlayer {
             #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
             {
                 inner.sink = None;
+                inner.source = None;
             }
             #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
             {
@@ -303,21 +287,25 @@ impl AudioPlayer {
 
     /// Seek to a position in milliseconds
     ///
-    /// Note: seeking restarts playback from the new position on desktop.
-    /// On mobile, the platform player handles seeking natively.
-    pub fn seek(&self, _position_ms: u64) {
+    /// On desktop, a position past the end is the end. A seek after the track
+    /// has finished leaves it paused at the new position. If the source cannot
+    /// seek, playback stays where it is.
+    pub fn seek(&self, position_ms: u64) {
         #[cfg(target_arch = "wasm32")]
         {
-            self.browser.seek(_position_ms);
+            self.browser.seek(position_ms);
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
             let mut inner = self.inner.borrow_mut();
-            inner.position_offset_ms = _position_ms;
-            inner.play_start = if inner.state == PlaybackState::Playing {
-                Some(std::time::Instant::now())
-            } else {
-                None
+
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+            let position_ms = match inner.seek_sink(position_ms) {
+                Ok(position_ms) => position_ms,
+                Err(error) => {
+                    tracing::warn!("audio seek failed: {error}");
+                    return;
+                }
             };
 
             #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
@@ -326,10 +314,17 @@ impl AudioPlayer {
                     "audio",
                     "seek",
                     vec![blinc_core::native_bridge::NativeValue::Int64(
-                        _position_ms as i64,
+                        position_ms as i64,
                     )],
                 );
             }
+
+            inner.position_offset_ms = position_ms;
+            inner.play_start = if inner.state == PlaybackState::Playing {
+                Some(std::time::Instant::now())
+            } else {
+                None
+            };
         }
     }
 
@@ -424,17 +419,67 @@ impl Default for AudioPlayer {
 
 #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
 impl AudioPlayerInner {
-    fn set_source<S: rodio::Source + Send + 'static>(&mut self, source: S) {
+    /// Decodes `source` into a new sink, and returns whether it decoded.
+    fn load(&mut self, source: &AudioSource, paused: bool) -> bool {
+        match source {
+            AudioSource::File(path) => std::fs::File::open(path)
+                .ok()
+                .and_then(|file| rodio::Decoder::try_from(file).ok())
+                .map(|decoder| self.set_source(decoder, paused))
+                .is_some(),
+            AudioSource::Bytes(data) => self.load_bytes(data.as_ref().clone(), paused),
+            // Through the platform asset loader.
+            AudioSource::Asset(path) => blinc_platform::assets::load_asset(path)
+                .is_ok_and(|data| self.load_bytes(data, paused)),
+        }
+    }
+
+    fn load_bytes(&mut self, data: Vec<u8>, paused: bool) -> bool {
+        // A decoder seeks only in input that it knows is seekable and how long it is.
+        let length = data.len() as u64;
+        rodio::Decoder::builder()
+            .with_data(std::io::Cursor::new(data))
+            .with_byte_len(length)
+            .with_seekable(true)
+            .build()
+            .map(|decoder| self.set_source(decoder, paused))
+            .is_ok()
+    }
+
+    fn set_source<S: rodio::Source + Send + 'static>(&mut self, source: S, paused: bool) {
         self.duration_ms = source
             .total_duration()
             .map(|duration| duration.as_millis() as u64)
             .unwrap_or(0);
-        if let Some(stream) = &self._stream {
-            let sink = rodio::Player::connect_new(stream.mixer());
-            sink.append(source);
+        if let Some(mixer) = &self.mixer {
+            let sink = rodio::Player::connect_new(mixer);
+            // Set before the source is appended, so none of it plays otherwise.
+            if paused {
+                sink.pause();
+            }
             sink.set_volume(self.volume);
+            sink.append(source);
             self.sink = Some(sink);
         }
+    }
+
+    /// Moves the sink to `position_ms`, and returns the position it moved to. A track that has
+    /// played to its end is opened again, paused.
+    fn seek_sink(&mut self, position_ms: u64) -> Result<u64, rodio::source::SeekError> {
+        if self.sink.as_ref().is_some_and(|sink| sink.empty())
+            && let Some(source) = self.source.clone()
+            && self.load(&source, true)
+        {
+            self.state = PlaybackState::Paused;
+        }
+        let position_ms = match self.duration_ms {
+            0 => position_ms,
+            duration => position_ms.min(duration),
+        };
+        if let Some(sink) = &self.sink {
+            sink.try_seek(std::time::Duration::from_millis(position_ms))?;
+        }
+        Ok(position_ms)
     }
 }
 
