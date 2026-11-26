@@ -1,33 +1,37 @@
-//! Measured row heights with logarithmic prefix sums and offset lookup.
+//! Measured row heights with logarithmic prefix sums and offset lookup. A row's slot in the
+//! sums is its height and the gap after it.
 #[derive(Clone)]
 pub(super) struct Heights {
     estimate: f32,
+    gap: f32,
     values: Vec<f32>,
     sums: Vec<f32>,
 }
 impl Heights {
-    pub fn new(count: usize, estimate: f32) -> Self {
+    pub fn new(count: usize, estimate: f32, gap: f32) -> Self {
         let mut this = Self {
             estimate,
+            gap,
             values: vec![estimate; count],
             sums: vec![0.0; count + 1],
         };
         for i in 0..count {
-            this.add(i, estimate);
+            this.add(i, estimate + gap);
         }
         this
     }
-    pub fn reconfigure(&mut self, count: usize, estimate: f32) -> bool {
-        if self.values.len() == count && self.estimate == estimate {
+    pub fn reconfigure(&mut self, count: usize, estimate: f32, gap: f32) -> bool {
+        if self.values.len() == count && self.estimate == estimate && self.gap == gap {
             return false;
         }
         if self.estimate != estimate {
-            *self = Self::new(count, estimate);
+            *self = Self::new(count, estimate, gap);
         } else {
+            self.gap = gap;
             self.values.resize(count, estimate);
             self.sums = vec![0.0; count + 1];
             for i in 0..count {
-                self.add(i, self.values[i]);
+                self.add(i, self.values[i] + gap);
             }
         }
         true
@@ -52,6 +56,7 @@ impl Heights {
         self.add(index, delta);
         true
     }
+    /// Where row `count` starts: the slots of the rows before it.
     pub fn prefix(&self, count: usize) -> f32 {
         let mut i = count.min(self.values.len());
         let mut sum = 0.0;
@@ -98,7 +103,7 @@ mod tests {
     use super::*;
     #[test]
     fn measured_rows_update_prefixes_and_scroll_windows() {
-        let mut heights = Heights::new(10_000, 40.0);
+        let mut heights = Heights::new(10_000, 40.0, 0.0);
         assert_eq!(heights.index_at(1000.0), 25);
         assert!(heights.measure(0, 80.0));
         assert_eq!(heights.prefix(2), 120.0);
@@ -109,8 +114,21 @@ mod tests {
         assert_eq!(bottom, 0.0);
         assert_eq!(top, heights.prefix(start));
         assert_eq!(
-            Heights::new(0, 40.0).window(200.0, 100.0, 24),
+            Heights::new(0, 40.0, 0.0).window(200.0, 100.0, 24),
             (0, 0, 0.0, 0.0)
         );
+    }
+    #[test]
+    fn a_gap_is_part_of_each_row_slot() {
+        let mut heights = Heights::new(100, 30.0, 10.0);
+        assert_eq!(heights.prefix(5), 200.0);
+        assert_eq!(heights.index_at(199.0), 4);
+        assert!(heights.measure(0, 50.0));
+        assert_eq!(heights.prefix(5), 220.0);
+
+        // A new gap keeps what was measured.
+        assert!(heights.reconfigure(100, 30.0, 0.0));
+        assert_eq!(heights.prefix(5), 170.0);
+        assert!(!heights.reconfigure(100, 30.0, 0.0));
     }
 }

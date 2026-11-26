@@ -55,6 +55,7 @@ virtual_list(count, builder)
     .rounded(8.0)                   // Corner radius
     .estimated_item_height(48.0)    // Height of a row not yet measured (default: 40px)
     .window_size(80)                // Rows to build, with those around the view (default: 50)
+    .gap_px(8.0)                    // Space between rows (default: 0)
     .into_div()
 ```
 
@@ -62,9 +63,10 @@ virtual_list(count, builder)
 |--------|---------|-------------|
 | `estimated_item_height` | 40.0 | Height that the list uses for a row that it did not measure yet |
 | `window_size` | 50 | Number of rows that the list builds, with the rows around the view |
+| `gap_px` | 0.0 | Space between rows, in pixels |
 
-The list always builds all the visible rows. Their number can be more than `window_size`. To put space between
-rows, give each row padding or a margin.
+The list always builds all the visible rows. Their number can be more than `window_size`. To put space
+between rows, use `.gap_px()`. The list does not measure the margin of a row.
 
 ## How It Works
 

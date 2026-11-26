@@ -53,6 +53,8 @@ pub struct VirtualList {
     /// Number of items to render in the visible window
     /// (more items = smoother scroll, more elements)
     window_size: usize,
+    /// Space between rows, in pixels
+    row_gap: f32,
     /// CSS class applied to each item wrapper
     item_class: Option<String>,
     /// CSS class applied to the scroll content container
@@ -79,6 +81,7 @@ where
         inner: div().overflow_clip(),
         estimated_item_height: 40.0,
         window_size: 50,
+        row_gap: 0.0,
         item_class: None,
         content_class: None,
     }
@@ -145,8 +148,9 @@ impl VirtualList {
         self.inner = self.inner.p(v);
         self
     }
+    /// Set the space between rows, in pixels (default: 0).
     pub fn gap_px(mut self, v: f32) -> Self {
-        self.inner = self.inner.gap_px(v);
+        self.row_gap = if v.is_finite() { v.max(0.0) } else { 0.0 };
         self
     }
     pub fn id(mut self, id: &str) -> Self {
@@ -184,6 +188,7 @@ impl VirtualList {
         let key = self.key.derive("window");
         let count = self.item_count;
         let estimate = self.estimated_item_height;
+        let gap = self.row_gap;
         let create = || {
             let reference = self.scroll_ref.unwrap_or_default();
             let offset = reference.watch_y(0.0);
@@ -192,7 +197,7 @@ impl VirtualList {
                 offset,
                 signal(initial_height),
                 signal(0u64),
-                Arc::new(Mutex::new(Heights::new(count, estimate))),
+                Arc::new(Mutex::new(Heights::new(count, estimate, gap))),
             )
         };
         let (reference, offset, viewport, revision, heights) =
@@ -203,7 +208,7 @@ impl VirtualList {
             } else {
                 create()
             };
-        if heights.lock().unwrap().reconfigure(count, estimate) {
+        if heights.lock().unwrap().reconfigure(count, estimate, gap) {
             revision.set(revision.get().wrapping_add(1));
         }
         // Resizing or changing the dataset updates the window without resetting scroll.
@@ -229,7 +234,7 @@ impl VirtualList {
         });
         let builder = self.item_builder;
         let item_class = self.item_class;
-        let rows = div().flex_col().w_full().h_fit().for_each(
+        let rows = div().flex_col().w_full().h_fit().gap_px(gap).for_each(
             indices,
             |i| *i,
             move |i| {
