@@ -1,9 +1,9 @@
 # Data Display Components
 
-Tooltips, popovers, charts, tables and trees present information around the
-application's content. Install `cn_bundle()` as described in
-[Getting Started](overview.md). Examples use these imports and the application
-builder's `ctx`:
+Tooltips, popovers, charts, tables and trees show information around the content
+of the application. Install `cn_bundle()` as described in
+[Getting Started](overview.md). The examples use these imports and the `ctx` of
+the application builder:
 
 ```rust
 use blinc::cn::prelude::*;
@@ -13,7 +13,7 @@ use blinc::layout::prelude::{FontWeight, Text, div, text};
 
 ## Tooltip
 
-Pass a trigger builder and supply its text:
+Pass a trigger builder, and give the tooltip its text:
 
 ```rust
 tooltip(|| div().child(button("Hover me")))
@@ -21,9 +21,9 @@ tooltip(|| div().child(button("Hover me")))
     .side(TooltipSide::Top)
 ```
 
-`TooltipSide` has `Top` (the default), `Bottom`, `Left` and `Right`.
-`.align(..)`, `.offset(..)`, `.open_delay_ms(..)` and `.close_delay_ms(..)`
-control placement and timing. The text accepts a Signal or Computed:
+`TooltipSide` has `Top` (the default), `Bottom`, `Left` and `Right`. To control
+placement and timing, use `.align(..)`, `.offset(..)`, `.open_delay_ms(..)` and
+`.close_delay_ms(..)`. The text can be a Signal or Computed:
 
 ```rust
 let hint = ctx.use_signal("Ready to upload".to_string());
@@ -31,12 +31,13 @@ let hint = ctx.use_signal("Ready to upload".to_string());
 tooltip(|| div().child(button("Upload"))).text(hint)
 ```
 
-The popup uses `.cn-tooltip` and a side class such as `.cn-tooltip--top`.
-Its look comes from CSS. There is no configurable arrow part.
+The popup uses `.cn-tooltip` and a side class such as `.cn-tooltip--top`. CSS
+sets its appearance. There is no arrow part that you can configure.
 
 ## Hover Card
 
-A hover card takes trigger and content builders returning `Div`:
+A hover card takes a trigger builder and a content builder. Each builder returns
+a `Div`:
 
 ```rust
 hover_card(|| div().child(text("@jane")))
@@ -51,13 +52,13 @@ hover_card(|| div().child(text("@jane")))
     .align(HoverCardAlign::Start)
 ```
 
-Its popup is `.cn-hover-card-content`. `.open_delay_ms(..)` and
-`.close_delay_ms(..)` tune the interaction delays.
+The popup is `.cn-hover-card-content`. To adjust the interaction delays, use
+`.open_delay_ms(..)` and `.close_delay_ms(..)`.
 
 ## Popover
 
-A popover opens on click. Its trigger builder receives the current open
-value; the component manages toggling and dismissal:
+A popover opens on click, and the component toggles and dismisses it. Its
+trigger builder receives the current open value:
 
 ```rust
 let notifications = ctx.use_signal(true);
@@ -73,18 +74,21 @@ popover(|_open| div().child(button("Preferences")))
     .offset(8.0)
 ```
 
-The content builder returns a `Div`. Runtime values inside it bind to
-Signals; there is no public `.open(signal)` or `.on_open_change(...)` builder.
-`.class(..)` targets the trigger wrapper. The separately mounted panel is
-`.cn-popover-content`, so use that class to restyle the panel rather than a
-descendant selector rooted at the trigger.
+The content builder returns a `Div`. To use runtime values in the content, bind
+them to Signals. There is no public `.open(signal)` or `.on_open_change(...)`
+builder.
+
+`.class(..)` targets the trigger wrapper. The panel mounts separately, and its
+class is `.cn-popover-content`. To restyle the panel, use that class, not a
+descendant selector that starts at the trigger.
 
 ## Chart
 
-Line, area and bar charts draw on a canvas, with the value axis, category
-labels, legend and tooltip as ordinary elements. Moving the pointer across a
-chart marks the category under it (a line through its points, a band behind
-its bars) and shows each series' value there.
+Line, area and bar charts draw on a canvas. The value axis, category labels,
+legend and tooltip are ordinary elements. When the pointer moves across a chart,
+the chart marks the category under the pointer. The mark is a line through the
+points of that category, or a band behind its bars. The chart also shows the
+value of each series there.
 
 ```rust
 use blinc::cn::prelude::*;
@@ -97,11 +101,12 @@ cn::line_chart()
     .dots()
 ```
 
-`cn::area_chart()` fills down to the axis; `.stacked()` piles the series, each
-filling down to the one below. `cn::bar_chart()` sets the series side by side
-in each category, or piles them when `.stacked()`; `.horizontal()` lays the
-bars along the width with the categories down the side. Bars are rounded at
-the end away from the axis.
+`cn::area_chart()` fills down to the axis. With `.stacked()`, it stacks the
+series, and each series fills down to the one below.
+
+`cn::bar_chart()` puts the series side by side in each category. With
+`.stacked()`, it stacks them. `.horizontal()` lays the bars along the width, with
+the categories down the side. Bars are rounded at the end away from the axis.
 
 ```rust
 cn::bar_chart()
@@ -110,18 +115,22 @@ cn::bar_chart()
     .labels(vec!["Jan".into(), "Feb".into(), "Mar".into()])
 ```
 
-`.curve(ChartCurve::Linear)` or `Step` replace
-the smooth curve, `.height(..)` and `.width(..)` size it (it fills its parent's
-width unless set), `.min(..)` and `.max(..)` fix the value axis, and
-`.no_grid()`, `.no_axes()`, `.no_tooltip()` and `.legend(false)` leave parts
-out.
+These methods change the chart:
+
+- `.curve(ChartCurve::Linear)` or `Step` replaces the smooth curve.
+- `.height(..)` and `.width(..)` set the size. If you do not set a width, the
+  chart fills the width of its parent.
+- `.min(..)` and `.max(..)` fix the value axis.
+- `.no_grid()`, `.no_axes()`, `.no_tooltip()` and `.legend(false)` leave parts
+  out.
 
 ### Pie and donut
 
-`cn::pie_chart()` sizes slices by their share of the total, clockwise from the
-top; they sweep in, and ease to new values. `.donut(0.6)` cuts a hole of that
-share of the radius, and `.total("Visitors")` writes the total in it with the
-caption under. Hovering pulls a slice out and shows its value and share.
+`cn::pie_chart()` sizes each slice by its share of the total. The slices go
+clockwise from the top. They sweep in, and they ease to new values.
+`.donut(0.6)` cuts a hole with that share of the radius. `.total("Visitors")`
+writes the total in the hole, with the caption under it. When the pointer hovers
+over a slice, the slice pulls out and shows its value and share.
 
 ```rust
 cn::pie_chart()
@@ -132,15 +141,16 @@ cn::pie_chart()
     .total("Visitors")
 ```
 
-`.data(..)` takes a list, Signal or Computed of `PieSlice`; `.size(..)` sets the
-diameter (220 unless set). The total is `.cn-chart-pie-total` and its caption
-`.cn-chart-pie-caption`.
+`.data(..)` takes a list, Signal or Computed of `PieSlice`. `.size(..)` sets the
+diameter, which is 220 by default. The total is `.cn-chart-pie-total`, and its
+caption is `.cn-chart-pie-caption`.
 
 ### Live data
 
 `.data(..)` takes all the series as a list, Signal or Computed of
-`ChartSeries`, and `.labels(..)` likewise. The chart follows them in place,
-easing from the values it shows to the new ones:
+`ChartSeries`. `.labels(..)` also takes a list, Signal or Computed. The chart
+follows changes to them in place. It eases from the values on screen to the new
+values:
 
 ```rust
 let visitors = ctx.use_signal(vec![
@@ -153,24 +163,28 @@ cn::area_chart().data(visitors).stacked()
 
 ### Styling
 
-Series take `--chart-1` to `--chart-5` in turn, from the theme (one palette per
-scheme); `ChartSeries::color(..)` takes any CSS colour for one. The grid, the
-pointer's cursor and the rings round dots are `--cn-chart-grid`,
-`--cn-chart-cursor` and `--cn-chart-surface`. Setting those variables restyles
-every chart:
+Series take the theme colors `--chart-1` to `--chart-5` in turn. The theme has
+one palette per scheme. To give one series a different color, use
+`ChartSeries::color(..)`, which takes any CSS color. The variables
+`--cn-chart-grid`, `--cn-chart-cursor` and `--cn-chart-surface` control the grid,
+the pointer cursor and the rings around dots. To restyle every chart, set these
+variables:
 
 ```css
 :root { --chart-1: #16a34a; --cn-chart-grid: transparent; }
 ```
 
-The parts are `.cn-chart`, `.cn-chart-plot`, `.cn-chart-axis` (a crowded
-label carries `data-hidden`), `.cn-chart-legend` with `.cn-chart-legend-item`
-and `.cn-chart-swatch`, and `.cn-chart-tooltip` with its `-title`, `-row`,
-`-name` and `-value`.
+The parts are:
+
+- `.cn-chart`
+- `.cn-chart-plot`
+- `.cn-chart-axis`. A crowded label carries `data-hidden`.
+- `.cn-chart-legend`, with `.cn-chart-legend-item` and `.cn-chart-swatch`
+- `.cn-chart-tooltip`, with its `-title`, `-row`, `-name` and `-value`
 
 ### Sparklines, thresholds, histograms and comparisons
 
-These are drawn on the same plot:
+These charts use the same plot as line, area and bar charts:
 
 ```rust
 let frame_times = vec![12.0, 18.0, 15.0, 22.0];
@@ -196,15 +210,15 @@ cn::comparison_bar_chart()
     .threshold(10.0)
 ```
 
-Any chart takes `.band(..)` for a shaded value range (good, warning and bad in
-turn unless given a colour) and `.marker(ChartMarker::new(v))` for a dashed
-line at a value. A band's label is `.cn-chart-band-label`; a comparison's notes
-are `.cn-chart-note` with `data-tone="bad"` past the threshold or `"good"` for a
-decrease.
+Any chart takes `.band(..)` for a shaded value range and
+`.marker(ChartMarker::new(v))` for a dashed line at a value. A band with no color
+of its own takes the good, warning or bad color, in turn. The label of a band is
+`.cn-chart-band-label`. The notes of a comparison are `.cn-chart-note`. Past the
+threshold, a note has `data-tone="bad"`. For a decrease, the tone is `"good"`.
 
 ## Table
 
-Rows of cells under a header, with an optional footer and caption:
+A table has rows of cells under a header, with an optional footer and caption:
 
 ```rust
 let chosen = ctx.use_signal(false);
@@ -229,13 +243,13 @@ table()
 
 ### Styling
 
-The look is the `.cn-table*` rules. `.cn-table` sets the text colour every
-cell inherits, the border and the radius; `.cn-table-header` and
-`.cn-table-footer` sit on `--surface-overlay`; `.cn-table-head` and
-`.cn-table-caption` text is muted. Body rows highlight on hover, and a
-selected row carries `data-state="selected"`. The variables
-`--cn-table-border`, `--cn-table-radius`, `--cn-table-row-hover` and
-`--cn-table-row-selected` adjust them:
+The `.cn-table*` rules set the appearance. `.cn-table` sets the border, the
+radius and the text color that every cell inherits. `.cn-table-header` and
+`.cn-table-footer` use `--surface-overlay` as their background. The text of
+`.cn-table-head` and `.cn-table-caption` is muted. Body rows highlight on hover,
+and a selected row carries `data-state="selected"`. To adjust the appearance, use
+the variables `--cn-table-border`, `--cn-table-radius`, `--cn-table-row-hover`
+and `--cn-table-row-selected`:
 
 ```css
 .cn-table-row[data-state="selected"] { background: color-mix(in srgb, var(--primary) 20%, transparent); }
@@ -243,8 +257,8 @@ selected row carries `data-state="selected"`. The variables
 
 ## Tree
 
-`tree_view()` adds roots with `.node(key, label, configure)` and nested nodes
-with `.child(key, label, configure)`:
+`tree_view()` adds roots with `.node(key, label, configure)`. To add nested
+nodes, use `.child(key, label, configure)`:
 
 ```rust
 let chosen = ctx.use_signal("main".to_string());
@@ -264,24 +278,29 @@ div().flex_col().gap(2.0)
     .child(Text::bound(chosen.into_reactive()))
 ```
 
-A group's rows are built when it first opens and kept after, so a large tree
-costs only what has been opened. `.selected(..)` sets an initial key. `.on_select(..)` reports subsequent
-selection; it does not bind the tree's selection to an external signal.
+When a group first opens, the tree builds its rows and then keeps them. As a
+result, a large tree costs only what was opened. `.selected(..)` sets an initial
+key. `.on_select(..)` reports later selections. It does not bind the selection of
+the tree to an external signal.
 
-Clicking a row selects it and opens or closes it. Once the tree has been
-clicked, Up and Down walk the shown rows, Right opens a row or enters its
-children, Left closes it or goes to its parent, Home and End jump to the ends,
-and Enter or Space selects.
+A click on a row selects the row and opens or closes it. After you click the
+tree, these keys work:
 
-A node's `.diff(TreeNodeDiff::Added)` (or `Removed`, `Modified`) colours its
-row. `.guides(false)` hides the guide lines; `.indent(px)` sets the indent
-(14px by default).
+- Up and Down move through the visible rows.
+- Right opens a row or enters its children.
+- Left closes a row or goes to its parent.
+- Home and End jump to the ends.
+- Enter or Space selects.
+
+`.diff(TreeNodeDiff::Added)` on a node colors its row. You can also pass
+`Removed` or `Modified`. `.guides(false)` hides the guide lines. `.indent(px)`
+sets the indent, which is 14px by default.
 
 ### Styling
 
-Each `.cn-tree-item` holds a `.cn-tree-row` and, with children, a
-`.cn-tree-group`. A row carries `data-selected`, `data-diff` and, while the
-keys are on it, `data-focus-visible`. An item and its group carry
+Each `.cn-tree-item` holds a `.cn-tree-row`. An item with children also holds a
+`.cn-tree-group`. A row carries `data-selected` and `data-diff`. While the keys
+are on a row, it also carries `data-focus-visible`. An item and its group carry
 `data-state="open"` or `"closed"`. The other parts are `.cn-tree-chevron`,
 `.cn-tree-icon`, `.cn-tree-label` and `.cn-tree-guide`:
 
@@ -293,7 +312,7 @@ keys are on it, `data-focus-visible`. An item and its group carry
 
 ## Kbd
 
-Keyboard shortcuts can combine several keycaps:
+A keyboard shortcut can combine several keycaps:
 
 ```rust
 div().flex_row().items_center().gap(2.0)
@@ -303,8 +322,8 @@ div().flex_row().items_center().gap(2.0)
         .child(kbd("K")))
 ```
 
-The fill, border, radius, shadow and text colour come from `.cn-kbd`.
-`--cn-kbd-bg` and `--cn-kbd-border` recolour it.
+`.cn-kbd` sets the fill, border, radius, shadow and text color. To recolor a
+keycap, use `--cn-kbd-bg` and `--cn-kbd-border`.
 
 ## Examples
 

@@ -1,6 +1,6 @@
 # Images & SVG
 
-Blinc supports raster images and SVG graphics with flexible sizing and styling options.
+Blinc supports raster images and SVG graphics. You can set their size and style.
 
 ## Images
 
@@ -24,7 +24,7 @@ image("https://example.com/image.jpg")
 
 ### Object Fit
 
-Control how the image fills its container:
+Set how the image fills its container:
 
 ```rust
 image(src)
@@ -47,7 +47,7 @@ image(src)
 
 ### Object Position
 
-Control alignment within the container:
+Set the alignment of the image in its container:
 
 ```rust
 image(src)
@@ -90,15 +90,15 @@ image(src)
 
 ### Lazy Loading
 
-For content-heavy apps with many images (galleries, feeds, chat) lazy loading defers decode until the image is actually visible in the viewport. While the real bitmap is loading, Blinc renders a placeholder in its place; once the texture lands in cache, the image fades in over a configurable duration.
+Lazy loading is for content-heavy apps with many images, such as galleries, feeds, and chat. It delays decode until the image is visible in the viewport (the area on screen). While the real bitmap loads, Blinc renders a placeholder in its place. After the texture is in the cache, the image fades in. You can set the duration of the fade.
 
 #### How it works
 
-1. On each frame, the renderer tests every lazy image's quad against the current viewport AABB. Off-screen images are skipped — no decode, no GPU upload.
-2. When an image first intersects the viewport, the loader is triggered and a placeholder is drawn at the image's final layout rect.
-3. As soon as the decoded texture appears in the GPU cache, Blinc records `image_load_times[source] = Instant::now()` and starts the fade-in. `elapsed_ms / fade_duration_ms` is the alpha multiplier — once it reaches `1.0` the image is fully opaque and the fade-in flag is cleared.
-4. Placeholder images (type 2) are eagerly preloaded so they're available the moment the lazy element appears — there's no flash of empty space waiting on the thumbnail itself.
-5. While any image is fading in, the runtime keeps requesting redraws so the animation runs smoothly even when nothing else on screen is changing.
+1. On each frame, the renderer tests the quad of every lazy image against the current viewport AABB (axis-aligned bounding box). It skips off-screen images, with no decode and no GPU upload.
+2. When an image intersects the viewport for the first time, Blinc starts the loader. It draws a placeholder at the final layout rect of the image.
+3. As soon as the decoded texture is in the GPU cache, Blinc records `image_load_times[source] = Instant::now()`. Then it starts the fade-in. The alpha multiplier is `elapsed_ms / fade_duration_ms`. When the multiplier reaches `1.0`, the image is fully opaque and Blinc clears the fade-in flag.
+4. Blinc preloads placeholder images (type 2) eagerly. They are available as soon as the lazy element appears. You see no flash of empty space while you wait for the thumbnail itself.
+5. While any image fades in, the runtime continues to request redraws. The animation thus runs smoothly, even on a screen where nothing else changes.
 
 #### Builder API
 
@@ -159,25 +159,22 @@ img("photo.jpg")
 
 | Strategy | Description |
 |----------|-------------|
-| `Eager` (default) | Load and decode immediately when the element is created |
-| `Lazy` | Defer load until the image's layout rect intersects the viewport |
+| `Eager` (default) | Load and decode the image immediately at element creation |
+| `Lazy` | Delay the load until the layout rect of the image intersects the viewport |
 
 #### Placeholder types
 
 | Placeholder | Description |
 |-------------|-------------|
-| `None` | No placeholder — empty until the bitmap arrives |
+| `None` | No placeholder. The area stays empty until the bitmap arrives |
 | `Color(color)` | Solid color background |
-| `Brush(brush)` | Any brush — gradients, glass effects, etc. |
-| `Image(url)` | Another image (low-res thumbnail, blur hash). Preloaded on tree build |
-| `Skeleton` | Shimmer band animation, no asset required |
+| `Brush(brush)` | Any brush, such as a gradient or a glass effect |
+| `Image(url)` | Another image (a low-res thumbnail or a blur hash). Preloaded on tree build |
+| `Skeleton` | Shimmer band animation that needs no asset |
 
 #### Failed loads
 
-An image that fails to load (a missing file, a request that errors) shows its placeholder and is
-tried again: after half a second, then after twice the last wait each time, never waiting longer
-than half a minute. `.retry(..)` sets that per image, and `.no_retry()` turns it off. A change to
-the file behind an image, seen by hot reload, tries it again at once.
+If an image fails to load, it shows its placeholder, and Blinc tries to load it again. Examples of a failure are a missing file and a request that returns an error. The first retry comes after half a second. Each later wait is twice the last wait, but never longer than half a minute. `.retry(..)` sets this behavior for each image, and `.no_retry()` turns it off. If hot reload sees a change to the file behind an image, Blinc tries that image again at once.
 
 ```rust
 use blinc::layout::prelude::*;
@@ -191,11 +188,11 @@ img("https://example.com/photo.jpg")
 img("optional-badge.png").no_retry()
 ```
 
-A retry that comes due while the window is idle runs on the next frame it draws.
+If a retry is due while the window is idle, it runs on the next frame that the window draws.
 
 #### CSS overrides
 
-Lazy-loading behavior can be overridden from a stylesheet without touching the builder. This is useful for theming galleries or applying defaults to all images that match a class.
+A stylesheet can override lazy-loading behavior, with no change to the builder. Use this to theme galleries, or to apply defaults to all images that match a class.
 
 ```css
 .gallery-item {
@@ -221,19 +218,19 @@ Lazy-loading behavior can be overridden from a stylesheet without touching the b
 |----------|--------|--------|
 | `loading` | `eager` \| `lazy` | Switches the loading strategy |
 | `image-placeholder-type` | `none` \| `color` \| `skeleton` | Selects which placeholder to draw |
-| `image-placeholder-color` | `<color>` | Solid color placeholder; implies `type: color` |
-| `image-placeholder-image` | `<url>` | Thumbnail placeholder; implies `type: image` |
-| `fade-duration` | `<time>` (`200ms`, `0.3s`) | Fade-in length once the bitmap is ready |
+| `image-placeholder-color` | `<color>` | Solid color placeholder. Implies `type: color` |
+| `image-placeholder-image` | `<url>` | Thumbnail placeholder. Implies `type: image` |
+| `fade-duration` | `<time>` (`200ms`, `0.3s`) | Length of the fade-in after the bitmap is ready |
 
 CSS values override builder values. Use the builder for one-off images and CSS for repeated patterns.
 
-> **Note:** Lazy loading currently applies to raster images only. SVGs are vectorized and rasterized on demand, so deferring their decode rarely pays for itself; if you need a deferred SVG, wrap it in a `Stateful` and reveal it when needed.
+> Note: Lazy loading currently applies to raster images only. Blinc vectorizes and rasterizes SVGs on demand, so a delay of their decode is rarely worth the cost. If you need a deferred SVG, wrap it in a `Stateful`, and reveal it on demand.
 
 ---
 
 ## Emoji Images
 
-Render emoji as images at arbitrary sizes using the system emoji font. Emoji images are **automatically lazy-loaded** for memory efficiency.
+You can render emoji as images at any size with the system emoji font. To save memory, Blinc lazy-loads emoji images automatically.
 
 ```rust
 use blinc::layout::image::{emoji, emoji_sized};
@@ -271,7 +268,7 @@ svg("icons/menu.svg")
 
 ### SVG with Tint
 
-Apply a color tint to monochrome SVGs:
+Apply a color tint to monochrome (single-color) SVGs:
 
 ```rust
 svg("icons/settings.svg")
@@ -442,18 +439,18 @@ fn image_with_placeholder(url: Option<&str>) -> impl ElementBuilder {
 
 ## Best Practices
 
-1. **Set explicit dimensions** - Images need width and height for layout.
+1. Set explicit dimensions. Images need a width and a height for layout.
 
-2. **Use `cover` for photos** - Fills container nicely without distortion.
+2. Use `cover` for photos. It fills the container well, without distortion.
 
-3. **Use `contain` for diagrams** - Ensures nothing is cropped.
+3. Use `contain` for diagrams. It makes sure that nothing is cropped.
 
-4. **Tint icons** - Use `.tint()` to match your color scheme.
+4. Tint icons. Use `.tint()` to match your color scheme.
 
-5. **Use SVG for icons** - Scales perfectly at any size.
+5. Use SVG for icons. SVG scales perfectly to any size.
 
-6. **Optimize images** - Use appropriate formats and compression for web.
+6. Optimize images. Use suitable formats and compression for the web.
 
-7. **Use lazy loading for galleries** - In scroll containers with many images, use `.lazy()` to reduce memory usage and improve initial load time.
+7. Use lazy loading for galleries. In scroll containers with many images, use `.lazy()`. It reduces memory usage and improves the initial load time.
 
-8. **Use emoji images for large emoji** - For emoji larger than ~24px, use `emoji_sized()` instead of text for crisp rendering.
+8. Use emoji images for large emoji. For crisp rendering of emoji larger than ~24px, use `emoji_sized()` instead of text.

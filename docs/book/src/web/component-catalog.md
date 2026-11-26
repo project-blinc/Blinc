@@ -136,6 +136,6 @@ motion, content primitives, images, SVG, notched surfaces and media. Overlapping
 controls use the polished component-library version. Coverage mappings in
 `web/components/catalog.json` are checked against both public module inventories.
 
-Audio and Video use native recordings with ashui’s original media samples. Their
+Audio and Video use native recordings of original media samples. Their
 Live playback uses the existing browser decoder through a host bridge, while Blinc renders the controls and video in its worker canvas. Waveform also renders live. Capture viewport dimensions come from each fixture’s
 metadata instead of a single fixed size.

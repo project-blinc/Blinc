@@ -87,7 +87,7 @@ with `cn-code-editor` in front.
 | --- | --- |
 | `cn-code-editor` | The editor with its bar |
 | `cn-code-editor-find` | The bar |
-| `-find-row`, `-find-query`, `-find-tools` | The find row, its field and its buttons |
+| `cn-code-editor-find-row`, `-find-query`, `-find-tools` | The find row, its field and its buttons |
 | `-find-replace`, `-find-replace-tools` | The replace row and its buttons |
 | `-find-chevron`, `-find-replace-toggle` | The arrow that shows the replace row, and its button |
 | `-find-option` | A search option |

@@ -21,7 +21,7 @@ card()
 
 ### card()
 
-The container that wraps all card content.
+`card()` is the container that wraps all card content.
 
 ```rust
 card()
@@ -31,7 +31,7 @@ card()
 
 ### card_header()
 
-Contains the title and description.
+The header contains the title and the description.
 
 ```rust
 card_header()
@@ -39,13 +39,14 @@ card_header()
     .description("Description")
 ```
 
-The title is `.cn-card-title` and the description `.cn-card-description`;
-their colours are those rules. Either takes a string or a signal; a signal
-replaces the text in place when it changes.
+The title has the class `.cn-card-title`, and the description has the class
+`.cn-card-description`. The rules for these classes set their colors. The title
+and the description each take a string or a signal. When a signal changes, it
+replaces the text in place.
 
 ### card_title()
 
-The main heading of the card.
+This is the main heading of the card.
 
 ```rust
 card_title("Account Settings")
@@ -53,7 +54,7 @@ card_title("Account Settings")
 
 ### card_description()
 
-Secondary text below the title.
+This is the secondary text below the title.
 
 ```rust
 card_description("Manage your account preferences")
@@ -61,7 +62,7 @@ card_description("Manage your account preferences")
 
 ### card_content()
 
-The main content area.
+This is the main content area.
 
 ```rust
 card_content()
@@ -70,7 +71,7 @@ card_content()
 
 ### card_footer()
 
-Actions and secondary information at the bottom.
+The footer holds actions and secondary information at the bottom.
 
 ```rust
 card_footer()
@@ -118,8 +119,8 @@ card()
 
 ### Card with Form
 
-`.w_full().max_w(350.0)` makes a card 350 px wide where there is room and
-narrower in a smaller container; `.w(350.0)` keeps it at 350 px.
+With `.w_full().max_w(350.0)`, a card is 350 px wide where there is room. In a
+smaller container, it is narrower. `.w(350.0)` keeps the card at 350 px.
 
 ```rust
 card()
@@ -194,14 +195,14 @@ card()
 
 ## Styling
 
-Cards automatically use theme tokens:
+Cards use theme tokens automatically:
 
 - Background: `theme.colors.card`
 - Border: `theme.colors.border`
 - Radius: `theme.radius.lg`
 - Shadow: `theme.shadows.sm`
 
-Override with custom styles:
+To override them, set your own styles:
 
 ```rust
 card()

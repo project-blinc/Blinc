@@ -1,8 +1,8 @@
 # Icons
 
-Enable the `cn` and `icons` features on your `blinc` dependency for these examples.
+For these examples, enable the `cn` and `icons` features on your `blinc` dependency.
 
-`cn::icon` renders Lucide paths from `blinc_icons` and inherits its surrounding text colour.
+`cn::icon` renders Lucide paths from `blinc_icons`. The icon inherits the color of the text around it.
 
 ```rust
 use blinc::cn as cn;
@@ -14,9 +14,9 @@ let icons = div().class("toolbar-icons")
     .child(cn::icon(icons::SETTINGS).size(cn::IconSize::Large));
 ```
 
-Size is a construction option; use `size_px` for a custom dimension. Use a button with a label or tooltip when the icon performs an action. Decorative icons are not independent keyboard stops.
+Size is a construction option. For a custom dimension, use `size_px`. If the icon performs an action, use a button with a label or a tooltip. Decorative icons are not independent keyboard stops.
 
-Style `.cn-icon` or an application class on its parent. Keep colours in CSS so icons follow theme and scheme changes:
+Style `.cn-icon`, or an application class on its parent. Keep the colors in CSS. Then the icons follow changes of theme and color scheme:
 
 ```css
 .toolbar-icons { color: var(--primary); gap: var(--space-4); }

@@ -1,8 +1,8 @@
 # Navigation Components
 
-Tabs, menus, breadcrumbs and sidebars organize application navigation.
-Install `cn_bundle()` as described in [Getting Started](overview.md).
-Examples use these imports and the application builder's `ctx`:
+Tabs, menus, breadcrumbs and sidebars organize the navigation of an application.
+Install `cn_bundle()` as described in [Getting Started](overview.md). The
+examples use these imports and the `ctx` of the application builder:
 
 ```rust
 use blinc::cn::prelude::*;
@@ -28,14 +28,14 @@ tabs(tab)
 ```
 
 The pill, `.cn-tabs-indicator`, slides to the selected trigger and takes its
-width. Its fill, radius and shadow are CSS rules.
+width. CSS rules set its fill, radius and shadow.
 
-The new panel enters and the old one leaves by `.cn-tabs-panel` rules for
-`data-transition`: `slide` (the default), `fade`, `slide-left`, `slide-right`,
-`slide-up` or `slide-down`. `TabsTransition::None` switches immediately.
-Panels carry `data-motion="enter"` or `"exit"`; the old panel remains until
-its exit finishes. With `slide`, `data-direction="next"` or `"prev"`
-selects the direction according to tab order.
+The `.cn-tabs-panel` rules make the new panel enter and the old panel leave. They
+follow the `data-transition` value: `slide` (the default), `fade`, `slide-left`,
+`slide-right`, `slide-up` or `slide-down`. `TabsTransition::None` switches
+immediately. Panels carry `data-motion="enter"` or `"exit"`. The old panel
+remains until its exit finishes. With `slide`, `data-direction="next"` or
+`"prev"` selects the direction according to the tab order.
 
 ```css
 .cn-tabs-panel[data-transition="fade"][data-motion="enter"] {
@@ -43,12 +43,12 @@ selects the direction according to tab order.
 }
 ```
 
-`reorderable` lets the triggers be dragged along the strip. A dragged trigger
-follows the pointer and carries `.cn-tabs-trigger--dragging`; the tabs it
-passes slide aside by the `transform` transition on
-`.cn-tabs-list--reorderable > .cn-tabs-trigger`, and the drop calls back with
-the values in their new order. A press that does not move
-still selects its tab. Keep the order and build the tabs in it:
+With `reorderable`, the user can drag the triggers along the strip. A dragged
+trigger follows the pointer and carries `.cn-tabs-trigger--dragging`. The tabs
+that it passes slide aside by the `transform` transition on
+`.cn-tabs-list--reorderable > .cn-tabs-trigger`. On drop, the callback receives
+the values in their new order. A press that does not move still selects its tab.
+Keep the order, and build the tabs in that order:
 
 ```rust
 let order = ctx.use_signal(vec!["a".to_string(), "b".to_string()]);
@@ -58,9 +58,10 @@ for value in order.get() {
 }
 ```
 
-`closable` gives each trigger a close button (`.cn-tabs-close`) at its end,
-shown on the active trigger and while another is hovered. Pressing it calls back with the tab's
-value without selecting the tab; the app removes the tab:
+`closable` gives each trigger a close button (`.cn-tabs-close`) at its end. The
+active trigger shows its button. While the pointer is over another trigger, that
+trigger shows its button too. A press on the button calls back with the value of
+the tab and does not select the tab. The app removes the tab:
 
 ```rust
 let open = ctx.use_signal(vec!["a".to_string(), "b".to_string()]);
@@ -84,24 +85,31 @@ dropdown_menu("Options")
     .item("Delete", move || action.set("delete".to_string()))
 ```
 
-Shortcut labels display hints; application code supplies any global shortcut
-bindings. `dropdown_menu_custom(|open| div()...)` supplies a custom trigger.
-`.min_width(..)`, `.position(..)`, `.align(..)` and `.offset(..)` place the menu.
+A shortcut label shows a hint, and the application code supplies any global
+shortcut bindings. For a custom trigger, use
+`dropdown_menu_custom(|open| div()...)`. To place the menu, use
+`.min_width(..)`, `.position(..)`, `.align(..)` and `.offset(..)`.
 
-While the menu is open, Up and Down wrap through enabled rows, Home and End
-jump to the first and last, and Enter or Space activates the focused row.
-Right opens a submenu; Left returns to its parent row. Escape closes the
-current menu and restores focus. Tab closes the menu and continues past its
-trigger; Shift+Tab moves back. Disabled rows and separators are skipped.
-Down or Up on a closed trigger opens at its first or last enabled row.
-A pointer opens with focus on the panel, ready for the first arrow key.
+While the menu is open, these keys work:
 
-`.cn-dropdown-trigger` styles the visual trigger. Its surrounding
-`[aria-haspopup="menu"]` element holds keyboard focus, including for custom
-triggers; restyle `[aria-haspopup="menu"]:focus-visible` for its outline.
-The panel and its rows share the
-`.cn-menu`, `.cn-menu-item`, `.cn-menu-item-label`, `.cn-menu-shortcut` and
-`.cn-menu-separator` rules with other menus:
+- Up and Down move through the enabled rows and wrap at the ends.
+- Home and End jump to the first row and the last row.
+- Enter or Space activates the focused row.
+- Right opens a submenu.
+- Left returns to the parent row of a submenu.
+- Escape closes the current menu and restores focus.
+- Tab closes the menu and continues past its trigger.
+- Shift+Tab moves back.
+
+The keys skip disabled rows and separators. On a closed trigger, Down opens the
+menu at its first enabled row. Up opens it at its last enabled row. If a pointer
+opens the menu, the panel has focus and is ready for the first arrow key.
+
+`.cn-dropdown-trigger` styles the visual trigger. The `[aria-haspopup="menu"]`
+element around it holds keyboard focus, also for custom triggers. To change its
+outline, restyle `[aria-haspopup="menu"]:focus-visible`. The panel and its rows
+share these rules with other menus: `.cn-menu`, `.cn-menu-item`,
+`.cn-menu-item-label`, `.cn-menu-shortcut` and `.cn-menu-separator`.
 
 ```css
 .cn-dropdown-trigger:hover { background: #1e1e2a; }
@@ -110,7 +118,7 @@ The panel and its rows share the
 
 ## Context Menu
 
-Open a context menu at the pointer's window coordinates:
+Open a context menu at the window coordinates of the pointer:
 
 ```rust
 let action = ctx.use_signal(String::new());
@@ -128,12 +136,12 @@ div().w(240.0).h(160.0)
     })
 ```
 
-`on_context_menu` makes the target a Tab stop. Shift+F10 or the Context Menu
-key opens at the focused target; right-click opens at the pointer. The menu shares
-the dropdown's arrow, activation and dismissal keys. The returned overlay
-handle can close the menu programmatically.
+`on_context_menu` makes the target a Tab stop. If the target has focus, Shift+F10
+or the Context Menu key opens the menu at that target. A right-click opens it at
+the pointer. The menu uses the same arrow, activation and dismissal keys as the
+dropdown. With the returned overlay handle, your code can close the menu.
 
-Add SVG icons with `item_with_icon`; the menu aligns each icon with its label:
+To add SVG icons, use `item_with_icon`. The menu aligns each icon with its label:
 
 ```rust
 context_menu().at(x, y)
@@ -163,18 +171,18 @@ menubar()
     })
 ```
 
-A menubar is one Tab stop. Left/Right, Home/End move between its triggers;
-Down/Up opens the selected menu. Left/Right in an open root menu switches
-to the adjacent menu. Submenus use Right to enter and Left to return.
+A menubar is one Tab stop. Left/Right and Home/End move between its triggers.
+Down/Up opens the selected menu. In an open root menu, Left/Right switches to the
+adjacent menu. In submenus, Right enters and Left returns.
 
-Restyle the shared `.cn-menu-item:focus-visible` highlight and
-`.cn-menubar-trigger:focus-visible` outline. Menus also expose
+Restyle the shared `.cn-menu-item:focus-visible` highlight and the
+`.cn-menubar-trigger:focus-visible` outline. Menus also have the classes
 `.cn-context-menu`, `.cn-context-menu-item`, `.cn-dropdown-menu`,
 `.cn-dropdown-item`, `.cn-menubar-content` and `.cn-menubar-item`.
 
 ## Breadcrumb
 
-Each step except the last invokes an application callback:
+Each step except the last calls an application callback:
 
 ```rust
 let page = ctx.use_signal("settings".to_string());
@@ -187,11 +195,10 @@ breadcrumb()
     .current("Settings")
 ```
 
-`.slash_separator()`, `.text_separator(..)` and
-`.separator(BreadcrumbSeparator::Svg(..))` replace the chevron.
-`.small()` and `.large()` set the size. The last `.cn-breadcrumb-item` carries
-`aria-current="page"`; links carry `data-link`. Separators are
-`.cn-breadcrumb-separator`.
+To replace the chevron, use `.slash_separator()`, `.text_separator(..)` or
+`.separator(BreadcrumbSeparator::Svg(..))`. `.small()` and `.large()` set the
+size. The last `.cn-breadcrumb-item` carries `aria-current="page"`, and links
+carry `data-link`. Separators are `.cn-breadcrumb-separator`.
 
 ```css
 .cn-breadcrumb-item[data-link]:hover { color: var(--primary); }
@@ -199,8 +206,8 @@ breadcrumb()
 
 ## Pagination
 
-Bind the current page to a `Signal<usize>`, `Signal<i32>` or float signal,
-which is rounded to a page:
+Bind the current page to a `Signal<usize>`, a `Signal<i32>` or a float signal.
+The component rounds a float value to a page:
 
 ```rust
 let page = ctx.use_signal(1usize);
@@ -213,14 +220,14 @@ pagination(10, page)
     })
 ```
 
-Buttons are `.cn-pagination-btn`; the current page carries
-`aria-current="page"`, and unavailable arrows carry `disabled`.
-Gaps are `.cn-pagination-ellipsis`.
+Buttons are `.cn-pagination-btn`. The current page carries
+`aria-current="page"`, and unavailable arrows carry `disabled`. Gaps are
+`.cn-pagination-ellipsis`.
 
 ## Sidebar
 
-The collapse state is a `Signal<bool>`. Click handlers can also update a
-page signal, which the content binds independently:
+The collapse state is a `Signal<bool>`. Click handlers can also update a page
+signal, which the content binds independently:
 
 ```rust
 use blinc::core::reactive::computed;
@@ -244,28 +251,29 @@ sidebar(collapsed)
     .content(move |_| div().p(6.0).child(Text::bound(shown.clone().into_reactive())))
 ```
 
-The built-in toggle and external writes to `collapsed` control the same rail.
-Clicking an item marks it active. `.show_toggle(false)` hides the toggle.
-An item that opens and closes something rather than navigating is a
-`toggle_item`: it is active while its bool, signal or computed holds, and
-pressing it leaves the selection alone.
+The built-in toggle and outside writes to `collapsed` control the same rail. A
+click on an item marks it active. `.show_toggle(false)` hides the toggle. For an
+item that opens and closes something and does not go to a page, use
+`toggle_item`. While its bool, signal or computed is true, the item is active. A
+press on it does not change the selection.
 
 ```rust
 sidebar(collapsed).toggle_item("Inspector", icon, inspector_open, move || {
     inspector_open.update(|open| !open)
 })
 ```
-The content builder runs once; its argument is the selection at construction,
-so use bindings or `show`/`for_each` regions for subsequent page changes.
+
+The content builder runs once. Its argument is the selection at construction time.
+For later page changes, use bindings or `show`/`for_each` regions.
 
 ### Styling
 
-The rail is `.cn-sidebar` with `data-state="expanded"` or `"collapsed"`.
-Its width uses `--cn-sidebar-width` (200px) and
-`--cn-sidebar-collapsed-width` (41px), eased over the normal theme duration.
-The adjacent page is `.cn-sidebar-inset`. Items use `.cn-sidebar-item` and
-`data-active`; their parts are `.cn-sidebar-icon` and `.cn-sidebar-label`.
-Section titles are `.cn-sidebar-group-label`.
+The rail is `.cn-sidebar` with `data-state="expanded"` or `"collapsed"`. Its
+width uses `--cn-sidebar-width` (200px) and `--cn-sidebar-collapsed-width`
+(41px). The width eases over the normal theme duration. The adjacent page is
+`.cn-sidebar-inset`. Items use `.cn-sidebar-item` and `data-active`. Their parts
+are `.cn-sidebar-icon` and `.cn-sidebar-label`. Section titles are
+`.cn-sidebar-group-label`.
 
 ```css
 .wide-nav.cn-sidebar { width: 280px; }
@@ -280,7 +288,7 @@ sidebar(collapsed).class("wide-nav")
 
 ## Navigation Menu
 
-Use `.trigger(..)` for a popup panel and `.item(..)` for a direct action:
+For a popup panel, use `.trigger(..)`. For a direct action, use `.item(..)`:
 
 ```rust
 let page = ctx.use_signal("home".to_string());

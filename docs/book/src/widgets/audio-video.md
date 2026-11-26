@@ -1,8 +1,8 @@
 # Audio & Video
 
-Enable the `media` feature on your `blinc` dependency for the playback and capture APIs in this chapter.
+To use the playback and capture APIs in this chapter, enable the `media` feature on your `blinc` dependency.
 
-The `blinc_media` crate provides cross-platform audio/video with royalty-free codecs.
+The `blinc_media` crate provides cross-platform audio and video with royalty-free codecs.
 Media widgets in `blinc_layout` (behind the `media` feature) provide player UIs.
 
 ## Audio Playback
@@ -20,7 +20,7 @@ player.resume();
 println!("Position: {}ms", player.position_ms());
 ```
 
-Desktop: Vorbis, WAV, FLAC via rodio. Mobile: platform codecs via native bridge.
+Desktop plays Vorbis, WAV, and FLAC through rodio. Mobile uses platform codecs through a native bridge.
 
 ## Video Playback
 
@@ -39,7 +39,7 @@ player.play();
 player.seek(10_000);
 ```
 
-Desktop: OpenH264 (royalty-free). Mobile: platform decoders via native bridge.
+Desktop uses OpenH264 (royalty-free). Mobile uses platform decoders through a native bridge.
 
 ## Player Trait
 
@@ -56,7 +56,7 @@ fn show_status(p: &dyn Player) {
 | Method | Description |
 |--------|-------------|
 | `play()` / `pause()` / `stop()` | Playback controls |
-| `seek(ms)` | Seek to position |
+| `seek(ms)` | Seek to a position |
 | `position_ms()` / `duration_ms()` | Time tracking |
 | `volume()` / `set_volume(f32)` | Volume (0.0–1.0) |
 | `is_playing()` / `is_live()` | State queries |
@@ -79,9 +79,9 @@ audio_player(Rc::clone(&player))
     .into_div()
 ```
 
-The waveform follows the player's position and duration: its played region
-advances during playback, holds when paused, and follows seeks. The waveform
-asks for animation frames only while its player is playing.
+The waveform follows the position and duration of the player. Its played region
+advances during playback, holds during a pause, and follows seeks. The waveform
+requests animation frames only while its player plays.
 
 ## Video Widget
 
@@ -100,7 +100,7 @@ video_player(Rc::clone(&player))
 
 ## Waveform
 
-Standalone amplitude visualization:
+A standalone view of amplitude:
 
 ```rust
 use blinc::layout::widgets::media::waveform;
@@ -158,8 +158,8 @@ let resampled = mono.resample(48000);
 
 ## CSS Classes
 
-The controls take their colours from the default stylesheet's rules, so they
-follow the theme and a stylesheet restyles them:
+The controls take their colors from the rules of the default stylesheet. As a
+result, they follow the theme, and a stylesheet can restyle them:
 
 | Class | Element | Default |
 |-------|---------|---------|
@@ -176,49 +176,49 @@ follow the theme and a stylesheet restyles them:
 | `.blinc-media-volume` | Volume | `--text-tertiary` |
 | `.blinc-media-mute-btn` | Mute | `--text-secondary` |
 
-The video seek bar, the volume level and the waveform are drawn, in colours
-the stylesheet's variables give:
+Blinc draws the video seek bar, the volume level, and the waveform. Their colors
+come from these stylesheet variables:
 
 | Variable | Draws | Default |
 |----------|-------|---------|
-| `--blinc-media-track` | the seek bar's track | `--surface-elevated` |
+| `--blinc-media-track` | the track of the seek bar | `--surface-elevated` |
 | `--blinc-media-buffered` | what is buffered ahead | `--border` |
-| `--blinc-media-progress` | what has played | `--primary` |
-| `--blinc-media-level`, `--blinc-media-level-rest` | the volume columns at and above the level | `--surface-elevated`, `--text-secondary` |
-| `--blinc-waveform-played`, `--blinc-waveform-unplayed` | the waveform's bars | `--primary`, `--border-secondary` |
+| `--blinc-media-progress` | what already played | `--primary` |
+| `--blinc-media-level`, `--blinc-media-level-rest` | the volume columns up to the level, and the columns above it | `--surface-elevated`, `--text-secondary` |
+| `--blinc-waveform-played`, `--blinc-waveform-unplayed` | the bars of the waveform | `--primary`, `--border-secondary` |
 
 ```css
 :root { --blinc-media-progress: #22c55e; }
 .blinc-media-play-btn { background: var(--primary); color: var(--text-inverse); }
 ```
 
-`waveform(..).played_color(..)` and `.unplayed_color(..)` set the waveform's
-colours over the variables.
+`waveform(..).played_color(..)` and `.unplayed_color(..)` set the colors of the
+waveform. These colors override the variables.
 
 ## Licensing
 
-Desktop uses royalty-free codecs only — no ffmpeg, no patent fees:
+Desktop uses only royalty-free codecs. It uses no ffmpeg and has no patent fees:
 
 | Codec | License |
 |-------|---------|
 | Vorbis, WAV, FLAC | BSD / Public domain |
 | OpenH264 | BSD, Cisco covers patents |
 
-Mobile uses OS-provided codecs (licensing handled by the OS).
+Mobile uses the codecs that the OS provides. The OS handles their licensing.
 
 ## Gallery samples
 
-The component gallery has separate Audio Player, Video Player and Waveform pages.
-Their native recordings use ashui’s original Night Drive soundtrack and outdoor
-handpan session. The waveform uses amplitude peaks from the same Night Drive
-excerpt. Source assets and conversion details live in
+The component gallery has separate pages for Audio Player, Video Player, and
+Waveform. Their native recordings use the original Night Drive soundtrack and an
+outdoor handpan session. The waveform uses amplitude peaks from the same Night
+Drive excerpt. For the source assets and conversion details, see
 `examples/blinc_component_demos/assets/README.md`.
 
-Native recordings start with audio paused and muted. Browser playback starts
-only after Play; the video sample is silent. Native playback needs the
-`blinc_layout` `media` feature.
+Native recordings start with the audio paused and muted. Browser playback starts
+only after you press Play. The video sample is silent. Native playback needs the
+`media` feature of `blinc_layout`.
 
-The gallery connects browser media decoding to the dedicated worker. Controls,
-time, volume, seek and decoded video frames use the real Blinc players. Hiding a
-Live demo pauses playback; disposing it releases its media elements and frame
-transport.
+The gallery connects media decoding in the browser to the dedicated worker.
+Controls, time, volume, seek, and decoded video frames use the real Blinc
+players. A hidden Live demo pauses playback. A disposed demo releases its media
+elements and frame transport.

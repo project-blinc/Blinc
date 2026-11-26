@@ -1,6 +1,6 @@
 # Virtualized List
 
-The `virtual_list` widget efficiently renders large datasets by only creating elements for a window of visible items. Items can have **variable heights** — flexbox layout determines their size.
+The `virtual_list` widget renders large datasets efficiently. It creates elements only for a window of visible items. Items can have variable heights, and the flexbox layout sets their size.
 
 ## Basic Usage
 
@@ -26,7 +26,7 @@ virtual_list(items.len(), move |index| {
 
 ## Variable Height Items
 
-Items don't need a fixed height. Flexbox handles sizing:
+Items do not need a fixed height. Flexbox sets their size:
 
 ```rust
 virtual_list(messages.len(), move |i| {
@@ -61,13 +61,13 @@ virtual_list(count, builder)
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `estimated_item_height` | 40.0 | Average item height estimate for scroll spacer calculation |
-| `window_size` | 50 | Number of items rendered at once |
+| `estimated_item_height` | 40.0 | Estimate of the average item height, for the calculation of the scroll spacer |
+| `window_size` | 50 | Number of items that the list renders at once |
 
 ## How It Works
 
-1. The builder creates elements for the first `window_size` items
-2. Flexbox layout determines each item's actual height
-3. A spacer div below the rendered items estimates the remaining scroll height
-4. The scroll container provides momentum physics scrolling
-5. Items use their natural flex-determined height — no fixed constraints
+1. The builder creates elements for the first `window_size` items.
+2. The flexbox layout sets the actual height of each item.
+3. A spacer div below the rendered items estimates the remaining scroll height.
+4. The scroll container provides scrolling with momentum physics.
+5. Items use the natural height that flexbox gives them, with no fixed constraints.

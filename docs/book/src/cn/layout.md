@@ -1,9 +1,9 @@
 # Layout Components
 
-Avatars, separators, scroll areas and expandable sections provide structure
-around application content. Install `cn_bundle()` as described in
-[Getting Started](overview.md). Examples use these imports and the application
-builder's `ctx`:
+Avatars, separators, scroll areas and expandable sections give structure around
+the content of an application. Install `cn_bundle()` as described in
+[Getting Started](overview.md). The examples use these imports and the `ctx` of
+the application builder:
 
 ```rust
 use blinc::cn::prelude::*;
@@ -33,9 +33,9 @@ div().flex_row().gap(2.0)
 avatar().fallback("JD").online()
 ```
 
-The root is `.cn-avatar`; its fill and initials use `--cn-avatar-bg` and
-`--cn-avatar-fg`. An empty avatar shows `.cn-avatar-placeholder`. The status
-dot is `.cn-avatar-status` with `data-status`.
+The root is `.cn-avatar`. Its fill and initials use `--cn-avatar-bg` and
+`--cn-avatar-fg`. An empty avatar shows `.cn-avatar-placeholder`. The status dot
+is `.cn-avatar-status` with `data-status`.
 
 ### Avatar Group
 
@@ -49,13 +49,13 @@ avatar_group()
     .child(avatar().fallback("TW"))
 ```
 
-This shows three avatars and a `+2` chip. The group is `.cn-avatar-group`;
-the overflow chip is `.cn-avatar-group__more`. Their rings and fills are CSS.
+This shows three avatars and a `+2` chip. The group is `.cn-avatar-group`, and
+the overflow chip is `.cn-avatar-group__more`. CSS sets their rings and fills.
 
 ## Separator
 
-The default separator is horizontal. Set an explicit height on a vertical
-separator:
+The default separator is horizontal. On a vertical separator, set an explicit
+height:
 
 ```rust
 div().flex_row().items_center().gap(2.0)
@@ -64,7 +64,7 @@ div().flex_row().items_center().gap(2.0)
     .child(text("Settings"))
 ```
 
-A labelled horizontal divider uses flexible containers around the lines:
+A horizontal divider with a label uses flexible containers around the lines:
 
 ```rust
 div().flex_row().items_center().gap(2.0)
@@ -89,7 +89,9 @@ aspect_ratio(16.0 / 9.0)
 Convenience builders include `aspect_ratio_16_9()`, `aspect_ratio_4_3()`,
 `aspect_ratio_square()`, `aspect_ratio_9_16()` and `aspect_ratio_21_9()`.
 
-CSS `aspect-ratio` changes the container's native layout constraint. Set one dimension and let the other follow it; setting both width and height explicitly fixes both dimensions.
+CSS `aspect-ratio` changes the native layout constraint of the container. Set one
+dimension, and let the other dimension follow it. If you set both width and height
+explicitly, both dimensions are fixed.
 
 ```css
 .cn-aspect-ratio {
@@ -98,7 +100,9 @@ CSS `aspect-ratio` changes the container's native layout constraint. Set one dim
 }
 ```
 
-The gallery compares all eight presets, including 3:2, 2:3 and 3:4. Values may be a positive number, a positive fraction such as `16 / 9`, or `auto` to clear the constraint.
+The gallery compares all eight presets. They include 3:2, 2:3 and 3:4. A value
+can be a positive number, a positive fraction such as `16 / 9`, or `auto`. The
+value `auto` clears the constraint.
 
 ## Scroll Area
 
@@ -109,7 +113,7 @@ scroll_area().h(240.0).child(
 )
 ```
 
-Use `.horizontal()` or `.both_directions()` to change the scroll direction:
+To change the scroll direction, use `.horizontal()` or `.both_directions()`:
 
 ```rust
 scroll_area().horizontal().w(320.0).h(120.0).child(
@@ -121,14 +125,14 @@ scroll_area().horizontal().w(320.0).h(120.0).child(
 )
 ```
 
-`.scrollbar(ScrollbarVisibility::Always)` keeps the bars visible;
-`Auto` is the default: the bars show while the content scrolls and fade
-out 1.5 s after the last scroll. Scrollbar thumb and track colours currently use
-`.thumb_color(..)` and `.track_color(..)` rather than CSS `scrollbar-color`.
+`.scrollbar(ScrollbarVisibility::Always)` keeps the bars visible. `Auto` is the
+default. While the content scrolls, `Auto` shows the bars. They fade out 1.5 s
+after the last scroll. At present, you set the scrollbar thumb and track colors
+with `.thumb_color(..)` and `.track_color(..)`, not with CSS `scrollbar-color`.
 
 ## Collapsible
 
-Pass a `Signal<bool>` to both the trigger and content:
+Pass a `Signal<bool>` to both the trigger and the content:
 
 ```rust
 let open = ctx.use_signal(false);
@@ -140,8 +144,8 @@ div().flex_col()
     }))
 ```
 
-Writing `open.set(true)` from an event or application callback opens the same
-section. `collapsible_section` combines the trigger and body:
+If an event or application callback calls `open.set(true)`, the same section
+opens. `collapsible_section` combines the trigger and body:
 
 ```rust
 let open = ctx.use_signal(false);
@@ -151,17 +155,19 @@ collapsible_section("Details", open, || {
 })
 ```
 
-The body is built the first time the section opens and kept after: closing
-folds it without tearing it down, so it keeps its state and eases shut, and a
-section that is never opened costs nothing. There are no separate
-`collapsible_trigger()` or `collapsible_content()` functions. The parts are `.cn-collapsible-trigger`, `.cn-collapsible-content`
-and `.cn-chevron`; their `data-state` is `open` or `closed`. CSS sets the
-closed height and chevron transform, with theme-timed expansion.
+When the section first opens, it builds the body and then keeps it. A close folds
+the body but does not destroy it. As a result, the body keeps its state and eases
+shut. If a section never opens, it costs nothing.
+
+There are no separate `collapsible_trigger()` or `collapsible_content()`
+functions. The parts are `.cn-collapsible-trigger`, `.cn-collapsible-content`
+and `.cn-chevron`. Their `data-state` is `open` or `closed`. CSS sets the closed
+height and the chevron transform. The theme sets the timing of the expansion.
 
 ## Accordion
 
-Add each section with a key, label and body builder. One section opens at a
-time by default:
+Add each section with a key, a label and a body builder. By default, one section
+opens at a time:
 
 ```rust
 accordion()
@@ -174,9 +180,10 @@ accordion()
     })
 ```
 
-As with a collapsible, a section's body is built when it first opens and kept.
+When a section first opens, it builds its body and keeps it, as a collapsible
+does.
 
-`.multi_open()` allows several sections to stay open:
+To let several sections stay open, use `.multi_open()`:
 
 ```rust
 accordion().multi_open()
@@ -184,7 +191,7 @@ accordion().multi_open()
     .item("billing", "Billing", || div().child(text("Billing details")))
 ```
 
-For application-controlled sections, use `.item_with_state(...)`:
+For sections that the application controls, use `.item_with_state(...)`:
 
 ```rust
 let open = ctx.use_signal(true);
@@ -194,10 +201,13 @@ accordion().item_with_state("help", "Help", open, || {
 })
 ```
 
-Each section's trigger and body use `.cn-accordion-trigger` and
-`.cn-accordion-content`, with `data-state="open"` or `"closed"`.
-Content wrappers and spacing belong to the application. Accordion renders the
-body returned by the closure directly; add your own padded container when needed:
+The trigger and body of each section use `.cn-accordion-trigger` and
+`.cn-accordion-content`, with `data-state="open"` or `"closed"`. To set colors,
+override those rules. Do not select colors in the body builder.
+
+Content wrappers and spacing belong to the application. The accordion directly
+renders the body that the closure returns. If you need padding, add your own
+padded container:
 
 ```rust
 accordion().item("help", "Help", || {
@@ -209,13 +219,12 @@ accordion().item("help", "Help", || {
 .help-copy { padding: 12px; }
 ```
 
-Keep padding on that caller-owned container so `.cn-accordion-content` can fold
-to zero height.
-Override those rules instead of selecting colours in the body builder.
+To let `.cn-accordion-content` fold to zero height, keep the padding on that
+container, which your code owns.
 
 ## Resizable
 
-Panel sizes and limits are pixels. A `flex_grow()` panel takes the remaining
+Panel sizes and limits are in pixels. A `flex_grow()` panel takes the remaining
 space, and the group inserts its handles between panels:
 
 ```rust
@@ -237,10 +246,11 @@ resizable_group().vertical()
     .panel(resizable_panel().flex_grow().child(text("Bottom panel")))
 ```
 
-A panel's `visible` takes a bool, a signal or a computed. While it is false the
-panel and the handle beside it leave layout and the flexible panels take the
-space, in place with no rebuild. Shown again, the panel has the size it had,
-which is how a collapsible bottom panel or sidebar is built:
+The `visible` method of a panel takes a bool, a signal or a computed. While the
+value is false, the panel and the handle beside it leave the layout. The flexible
+panels take the space in place, with no rebuild. If you show the panel again, it
+has the size that it had. This is how you build a collapsible bottom panel or
+sidebar:
 
 ```rust
 let panel_open = signal(true);
@@ -250,9 +260,10 @@ resizable_group().vertical()
         .child(text("Output area")))
 ```
 
-A fixed panel's `collapsed(when, size)` folds it to `size` pixels instead, below
-its minimum and without its handle, and opens it again at the size it had. A
-sidebar that folds to its icon rail is one panel holding both:
+On a fixed panel, `collapsed(when, size)` folds the panel to `size` pixels
+instead. The folded panel is below its minimum size and has no handle. When the
+panel opens again, it has the size that it had. A sidebar that folds to its icon
+rail is one panel that holds both:
 
 ```rust
 let inspector_open = signal(true);
@@ -264,15 +275,15 @@ resizable_group().horizontal()
 ```
 
 The `.cn-resizable-handle` contains `.cn-resizable-line`. Its hover and
-`data-state="dragging"` rules control the line's appearance. `handle_thickness`
-sets the line's width and `handle_hit_padding` how far the grab area reaches
-past it on each side; the gap between two panels is the line plus twice the
-padding. There is no
-standalone `resizable_handle()` builder.
+`data-state="dragging"` rules control the appearance of the line.
+`handle_thickness` sets the width of the line. `handle_hit_padding` sets how far
+the grab area reaches past the line on each side. The gap between two panels is
+the line plus twice the padding. There is no standalone `resizable_handle()`
+builder.
 
 ## Split Pane Example
 
-Nested groups combine horizontal navigation with vertically split content:
+Nested groups combine horizontal navigation with content that splits vertically:
 
 ```rust
 resizable_group().horizontal()
@@ -288,5 +299,5 @@ resizable_group().horizontal()
     ))
 ```
 
-Place the group in a parent with a definite width and height so its flexible
-panels have space to divide.
+Place the group in a parent with a definite width and height. This gives its
+flexible panels space to divide.

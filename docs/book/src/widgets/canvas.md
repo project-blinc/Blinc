@@ -1,6 +1,6 @@
 # Canvas Drawing
 
-The `canvas()` element provides direct GPU drawing access for custom graphics, charts, and procedural content.
+The `canvas()` element gives you direct access to GPU drawing. Use it for custom graphics, charts, and procedural content.
 
 ## Basic Usage
 
@@ -276,12 +276,12 @@ fn color_palette() -> impl ElementBuilder {
 
 ## Best Practices
 
-1. **Set explicit size** - Canvas needs width and height to render.
+1. Set an explicit size. A canvas needs a width and a height to render.
 
-2. **Use bounds parameter** - Draw relative to `bounds.width` and `bounds.height`.
+2. Use the `bounds` parameter. Draw relative to `bounds.width` and `bounds.height`.
 
-3. **Clone Arcs for closures** - Animation values need `Arc::clone()` before the render closure.
+3. Clone each `Arc` that a closure needs. Before the render closure, call `Arc::clone()` on animation values.
 
-4. **Push/pop transforms** - Always pop what you push to avoid state leaks.
+4. Push and pop transforms in pairs. To prevent state leaks, always pop what you push.
 
-5. **Prefer elements when possible** - Use `div()`, `text()` for standard UI; canvas for custom graphics.
+5. If possible, prefer elements. For standard UI, use `div()` and `text()`. For custom graphics, use a canvas.

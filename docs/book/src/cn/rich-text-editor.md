@@ -172,8 +172,8 @@ The editor writes tables as GitHub Flavored Markdown (GFM) tables.
 ## Changes
 
 `on_change` calls your function with the document after an edit in the editor changes it. Typing,
-format changes, paste, undo and redo call it. Cursor moves, selections and focus changes do not. Your
-function can set signals and lock the state:
+format changes, paste, undo and redo call it. Cursor moves, selections and focus changes do not call
+it. Your function can set signals and lock the state:
 
 ```rust
 use blinc::cn::components::rich_text_editor::RichTextStateExt;

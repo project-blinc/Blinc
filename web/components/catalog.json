@@ -4508,7 +4508,7 @@
           "name": "player",
           "kind": "Shared player",
           "type": "Rc<VideoPlayer>",
-          "example": "ashui handpan session"
+          "example": "handpan session"
         },
         {
           "name": "width / height",

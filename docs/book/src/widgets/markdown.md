@@ -1,6 +1,6 @@
 # Markdown Rendering
 
-Blinc includes a built-in markdown renderer that converts CommonMark + GFM markdown to native layout elements.
+Blinc has a built-in markdown renderer. It converts CommonMark + GFM markdown to native layout elements.
 
 ## Basic Usage
 
@@ -113,7 +113,7 @@ markdown(r#"
 
 ### Code Blocks
 
-Fenced code blocks with optional language:
+A fenced code block can name a language, but the name is optional:
 
 ````rust
 markdown(r#"
@@ -125,7 +125,7 @@ fn main() {
 "#)
 ````
 
-Supported languages for syntax highlighting include Rust, Python, JavaScript, TypeScript, and more.
+Syntax highlighting supports Rust, Python, JavaScript, TypeScript, and other languages.
 
 ### Blockquotes
 
@@ -173,7 +173,7 @@ markdown(r#"
 
 ## Configuration
 
-Customize the renderer with `MarkdownConfig`:
+To customize the renderer, use `MarkdownConfig`:
 
 ```rust
 use blinc::layout::markdown::{markdown_with_config, MarkdownConfig};
@@ -224,20 +224,20 @@ let light = MarkdownConfig::light();
 
 ## Live Editor Example
 
-A full markdown editor with live preview is available in the examples:
+The examples include a full markdown editor with a live preview. To run it, use this command:
 
 ```bash
 cargo run -p blinc_app_examples --example markdown_demo --features windowed
 ```
 
-This demonstrates:
-- TextArea for markdown source editing
-- Live preview with `markdown_light()`
-- Stateful reactive updates on text change
+The editor shows these features:
+- A TextArea to edit the markdown source
+- A live preview with `markdown_light()`
+- Stateful reactive updates on each text change
 
 ## HTML Entities
 
-The renderer automatically decodes HTML entities in text:
+The renderer decodes HTML entities in text automatically:
 
 ```rust
 markdown(r#"
@@ -249,13 +249,13 @@ Price: &euro;99.99
 "#)
 ```
 
-Common entities: `&amp;` (`&`), `&lt;` (`<`), `&gt;` (`>`), `&quot;` (`"`), `&nbsp;` (non-breaking space), `&copy;` (`©`), `&trade;` (`™`), and many more.
+Common entities include `&amp;` (`&`), `&lt;` (`<`), `&gt;` (`>`), `&quot;` (`"`), and `&nbsp;` (non-breaking space). They also include `&copy;` (`©`), `&trade;` (`™`), and many more.
 
 ## Best Practices
 
-1. **Use `markdown_light()` for light backgrounds** - The default theme assumes dark backgrounds.
+1. For light backgrounds, use `markdown_light()`. The default theme assumes dark backgrounds.
 
-2. **Wrap in scroll for long content** - Markdown can produce tall content:
+2. For long content, put the markdown in a scroll container. Markdown can produce tall content:
 
    ```rust
    scroll()
@@ -264,7 +264,7 @@ Common entities: `&amp;` (`&`), `&lt;` (`<`), `&gt;` (`>`), `&quot;` (`"`), `&nb
        .child(markdown(long_content))
    ```
 
-3. **Set container width** - Markdown content respects parent width:
+3. Set the width of the container. Markdown content follows the width of its parent:
 
    ```rust
    div()
@@ -272,6 +272,6 @@ Common entities: `&amp;` (`&`), `&lt;` (`<`), `&gt;` (`>`), `&quot;` (`"`), `&nb
        .child(markdown(content))
    ```
 
-4. **Code blocks need height** - For syntax highlighting to render properly, ensure the container has adequate height.
+4. Code blocks need height. For correct rendering of syntax highlighting, make sure that the container is tall enough.
 
-5. **Images need explicit dimensions** - While images will render, they work best when the markdown container has width constraints.
+5. Images need explicit dimensions. Images will render, but for the best result, put a width constraint on the markdown container.

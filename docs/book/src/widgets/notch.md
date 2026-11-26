@@ -1,6 +1,6 @@
 # Notched Surfaces
 
-`notch` creates concave, rounded and stepped corners. Shape is configured by the builder; keep the surface's colours in CSS.
+`notch` creates concave, rounded, and stepped corners. Configure the shape with the builder. Keep the colors of the surface in CSS.
 
 ```rust
 use blinc::layout::prelude::*;
@@ -18,13 +18,13 @@ let panel = notch().w(280.0).h(160.0)
 :root { --shaped-panel-fill: var(--primary); }
 ```
 
-The custom canvas fill reads the application’s root variable when the widget is built. Its children are regular elements with their own classes and bindings. A shaped surface has no keyboard action unless you add interactive content to it.
+The custom canvas fill reads the root variable of the application at widget build time. The children of the widget are regular elements with their own classes and bindings. Unless you add interactive content to a shaped surface, it has no keyboard action.
 
 ## Interactive gallery
 
-The component page adapts `examples/blinc_app_examples/examples/notch_demo.rs`: hover the menu icons to reveal and slide the concave dropdown. The navigation bulge, angle cuts, peak and scooped dock demonstrate different edge treatments in context.
+The component page adapts `examples/blinc_app_examples/examples/notch_demo.rs`. Hover the menu icons to reveal and slide the concave dropdown. The navigation bulge, angle cuts, peak, and scooped dock show different edge treatments in context.
 
-The gallery exposes `--gallery-notch-radius` (8–40px), `--gallery-notch-bar` and `--gallery-notch-active` as CSS variables. Applying CSS refreshes the geometry while preserving the current demo instance:
+The gallery exposes `--gallery-notch-radius` (8–40px), `--gallery-notch-bar`, and `--gallery-notch-active` as CSS variables. When you apply CSS, the geometry refreshes and the current demo instance stays:
 
 ```css
 :root {

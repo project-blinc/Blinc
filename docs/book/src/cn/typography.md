@@ -1,14 +1,16 @@
 # Typography
 
-Typography helpers provide defaults for headings, body copy and short inline
-fragments. They return `Text`, except `chained_text`, which groups fragments in a
-`Div`. Import them through `blinc::cn::cn` or the component prelude. Install
-`cn_bundle()` as described in [Getting Started](overview.md).
+Typography helpers provide defaults for headings, body text, and short inline
+fragments. They return `Text`. The exception is `chained_text`, which groups
+fragments in a `Div`. Import the helpers through `blinc::cn::cn` or the
+component prelude. Install `cn_bundle()` as [Getting Started](overview.md)
+describes.
 
 ## Headings
 
-Use a level that reflects the content hierarchy. The named helpers and
-`heading(level, content)` share these defaults; application CSS can override them.
+Use a level that matches the content hierarchy. The named helpers and
+`heading(level, content)` share these defaults. Application CSS can override
+them.
 
 | Helper | Default size / weight | CSS class |
 |--------|-----------------------|-----------|
@@ -32,18 +34,20 @@ div().flex_col().gap(3.0)
     .child(cn::h6("Earlier updates"))
 ```
 
-`cn::heading(2, content)` chooses the same heading level and `.cn-h2` class as
-`cn::h2(content)`. Its level is a construction option from 1 to 6; its content
-also accepts a Signal or Computed.
+`cn::heading(2, content)` selects the same heading level and `.cn-h2` class as
+`cn::h2(content)`. Its level is a construction option from 1 to 6. Its content
+also accepts a Signal or a Computed.
 
 ## Body and supporting text
 
-- `cn::p(content)`: wrapping body copy; 16px, line-height 1.5. Class: `.cn-p`.
-- `cn::muted(content)`: short secondary information; secondary text colour,
-  no wrapping. Class: `.cn-muted`.
-- `cn::caption(content)`: captions and footnotes; 12px, tertiary text colour,
-  no wrapping. Class: `.cn-caption`.
-- `cn::small(content)`: short fine print; 12px, no wrapping. No automatic class.
+- `cn::p(content)`: body text that wraps, at 16px with line-height 1.5. Class:
+  `.cn-p`.
+- `cn::muted(content)`: short secondary information, in the secondary text
+  color, with no wrapping. Class: `.cn-muted`.
+- `cn::caption(content)`: captions and footnotes, at 12px in the tertiary text
+  color, with no wrapping. Class: `.cn-caption`.
+- `cn::small(content)`: short fine print at 12px, with no wrapping. No automatic
+  class.
 
 ```rust
 use blinc::cn::cn;
@@ -56,8 +60,8 @@ div().flex_col().gap(2.0)
     .child(cn::small("Changes are saved automatically."))
 ```
 
-All of these return `Text` and support its fluent methods. For supporting copy
-that needs multiple lines, enable wrapping with `.wrap(true)`.
+All of these helpers return `Text` and support its fluent methods. If supporting
+text needs more than one line, enable wrapping with `.wrap(true)`.
 
 ## Inline helpers and composition
 
@@ -65,8 +69,8 @@ that needs multiple lines, enable wrapping with `.wrap(true)`.
 - `cn::b(content)`: bold fragment.
 - `cn::strong(content)`: alias for `b`.
 - `cn::inline_code(content)`: monospace fragment, such as a filename or identifier.
-- `cn::chained_text([fragments])`: a `Div` containing a baseline-aligned row of
-  `Text` fragments.
+- `cn::chained_text([fragments])`: a `Div` that holds a row of `Text` fragments,
+  aligned on the baseline.
 
 ```rust
 use blinc::cn::cn;
@@ -79,22 +83,23 @@ cn::chained_text([
 ])
 ```
 
-Include spaces in the fragments where needed. Inline helpers do not wrap by
-default, and `chained_text` lays out separate elements in a row. For a paragraph
-that wraps mixed styles as flowing text, use
-[`rich_text()`](../widgets/text.md#rich-text). For syntax-highlighted code blocks,
-use [`code()`](../widgets/code-editor.md#read-only-code-block).
+Where you need spaces, include them in the fragments. Inline helpers do not wrap
+by default, and `chained_text` lays out separate elements in a row. For a
+paragraph that wraps mixed styles as flowing text, use
+[`rich_text()`](../widgets/text.md#rich-text). For code blocks with syntax
+highlighting, use [`code()`](../widgets/code-editor.md#read-only-code-block).
 
-The plain `blinc::layout::typography::label(content)` helper returns 14px,
-medium-weight inline `Text`; it is also re-exported from
-`blinc::cn::components::typography`. `cn::label(content)` instead creates the
-themed [form Label component](form.md#label), with required and disabled options.
+The plain helper `blinc::layout::typography::label(content)` returns inline
+`Text` at 14px and medium weight. `blinc::cn::components::typography` also
+re-exports it. In contrast, `cn::label(content)` creates the themed
+[form Label component](form.md#label), with required and disabled options.
 
 ## Reactive text
 
-`heading` accepts `impl IntoReactive<String>`. The named `h1`–`h6`, `p`, `muted`,
-`caption` and inline helpers take construction-time strings. For other live
-text, bind a Signal or Computed with `Text::bound` and give it a CSS class:
+`heading` accepts `impl IntoReactive<String>`. The named helpers `h1` to `h6`,
+`p`, `muted`, `caption`, and the inline helpers take strings at construction
+time. For other live text, bind a Signal or Computed with `Text::bound`, and
+give it a CSS class:
 
 ```rust
 use blinc::cn::cn;
@@ -114,17 +119,20 @@ let header = div().class("project-copy")
 pending.set(5);
 ```
 
-Create these bindings once, or use `ctx.use_signal(...)` when retaining them
-across UI builds. Updating either source replaces the bound text in place.
+Create these bindings once. As an alternative, use `ctx.use_signal(...)` to
+retain them across UI builds. An update to either source replaces the bound text
+in place.
 
 ## Restyling
 
-The heading, paragraph, muted and caption classes listed above are styling
-hooks. `span`, `b`, `strong`, `small`, `inline_code` and `chained_text` do not add
-`cn-*` classes; attach your own with `.class(...)`. The equivalent helpers in
-`blinc::layout::typography` have the same text defaults without the CN classes.
+The classes listed above for headings, paragraphs, muted text, and captions are
+hooks for your styles. `span`, `b`, `strong`, `small`, `inline_code`, and
+`chained_text` do not add `cn-*` classes. Attach your own classes with
+`.class(...)`. The equivalent helpers in `blinc::layout::typography` have the
+same text defaults without the CN classes.
 
-Add overrides after the component stylesheet, using the theme's root variables:
+Add your overrides after the component stylesheet, and use the root variables of
+the theme:
 
 ```css
 .cn-h2 {
@@ -149,5 +157,5 @@ Add overrides after the component stylesheet, using the theme's root variables:
 }
 ```
 
-Scope shared classes to an application container when only one section should
-change, for example `.project-copy .cn-h2`.
+If only one section must change, scope the shared classes to an application
+container. For example, use `.project-copy .cn-h2`.

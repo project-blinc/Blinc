@@ -1,6 +1,6 @@
 # Motion Containers
 
-The `motion()` element provides declarative enter/exit animations for content. It's ideal for animated lists, page transitions, and conditional rendering.
+The `motion()` element gives content declarative enter and exit animations. Use it for animated lists, page transitions, and conditional rendering.
 
 ## Basic Usage
 
@@ -71,7 +71,7 @@ motion()
 
 ## Combining Animations
 
-Apply multiple effects:
+You can apply multiple effects:
 
 ```rust
 motion()
@@ -84,7 +84,7 @@ motion()
 
 ## Staggered Lists
 
-Animate list items with delays between each:
+You can animate list items with a delay between each item and the next:
 
 ```rust
 use blinc::layout::motion::{motion, StaggerConfig, AnimationPreset};
@@ -131,7 +131,7 @@ StaggerConfig::new(100, preset).from_center()
 
 ## Binding to AnimatedValue
 
-For continuous animation control, bind motion transforms to AnimatedValue:
+For continuous control of an animation, bind motion transforms to AnimatedValue:
 
 ```rust
 fn pull_to_refresh(ctx: &WindowedContext) -> impl ElementBuilder {
@@ -160,7 +160,7 @@ fn pull_to_refresh(ctx: &WindowedContext) -> impl ElementBuilder {
 
 ## Example: Animated Card List
 
-Use a stateful element with `.deps()` to react to visibility state changes:
+To react to changes in the visibility state, use a stateful element with `.deps()`:
 
 ```rust
 fn animated_card_list(show_cards: State<bool>) -> impl ElementBuilder {
@@ -208,7 +208,7 @@ fn card_list() -> impl ElementBuilder {
 
 ## Example: Page Transition
 
-Use a custom state type for page navigation:
+For page navigation, use a custom state type:
 
 ```rust
 use blinc::layout::stateful::{stateful, StateTransitions};
@@ -283,13 +283,13 @@ fn nav_button(current_page: State<u8>, target: u8, label: &str) -> impl ElementB
 | Lists | Stagger support | Manual delays |
 | Use case | Transitions | Interactive |
 
-**Use motion for:**
+Use motion for:
 - List item animations
 - Page transitions
 - Conditional content
 - Staggered reveals
 
-**Use AnimatedValue for:**
+Use AnimatedValue for:
 - Drag interactions
 - Hover effects
 - Custom physics

@@ -210,7 +210,7 @@ The Rust registry must match the metadata exactly.
 
 Editors, Markdown, Canvas, Virtual List, gestures, motion, lists, blockquotes,
 links, SVG, images, notched surfaces and media appear alongside the component
-library. Native Audio/Video recordings use the ashui samples documented in the
+library. Native Audio/Video recordings use the samples documented in the
 demo assets directory. Audio and Video use real browser media decoding and a bounded frame transport into the worker; the same Blinc controls remain interactive. Waveform also renders live. Calendar and picker captures use a taller viewport when
 needed. Each recording’s manifest states its actual dimensions and capabilities.
 

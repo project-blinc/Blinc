@@ -1,11 +1,11 @@
 # Dialog, Sheet and Drawer
 
 Dialogs ask for a decision. Sheets and drawers place content beside the main
-view. Install `cn_bundle()` as described in [Getting Started](overview.md)
-to load their styles and motion.
+view. To load their styles and motion, install `cn_bundle()` as described in
+[Getting Started](overview.md).
 
-The examples use these imports. `ctx` is the `WindowedContext` supplied to
-the application builder:
+The examples use these imports. `ctx` is the `WindowedContext` that the
+application builder receives:
 
 ```rust
 use blinc::cn::prelude::*;
@@ -14,7 +14,7 @@ use blinc::layout::prelude::{div, text};
 
 ## Open a Dialog
 
-Configure a builder and call `.show()` from an event handler:
+Configure a builder, then call `.show()` from an event handler:
 
 ```rust
 button("Open dialog").on_click(|_| {
@@ -30,17 +30,18 @@ button("Open dialog").on_click(|_| {
 })
 ```
 
-`.show()` returns an `OverlayHandle`. Keep it when the application needs to
-call `handle.close()`. The default footer has Cancel and Confirm buttons,
-which close the dialog. Escape and a backdrop click also dismiss it.
+`.show()` returns an `OverlayHandle`. If the application needs to call
+`handle.close()`, keep the handle. The default footer has Cancel and Confirm
+buttons, which close the dialog. Escape and a click on the backdrop (the layer
+behind the dialog) also dismiss it.
 
-`on_confirm` and `on_cancel` report their respective buttons.
-`on_close` reports dismissal by any route, including Escape and the backdrop.
-These callbacks take no arguments.
+`on_confirm` runs for the Confirm button, and `on_cancel` runs for the Cancel
+button. When the dialog is dismissed by any route, `on_close` runs. These routes
+include Escape and the backdrop. These callbacks take no arguments.
 
 ### Confirmation Dialog
 
-Use `confirm_destructive(true)` for a destructive action:
+For a destructive action, use `confirm_destructive(true)`:
 
 ```rust
 let deleted = ctx.use_signal(false);
@@ -59,7 +60,7 @@ button("Delete draft")
     })
 ```
 
-`alert_dialog()` is an acknowledgement dialog: it hides Cancel. It is not a
+`alert_dialog()` is an acknowledgment dialog, so it hides Cancel. It is not a
 separate set of trigger, content or action components.
 
 ```rust
@@ -75,8 +76,9 @@ button("Show notice").on_click(|_| {
 
 ## Form Dialog
 
-Create editor data once and clone its handle into the deferred body. Input
-changes can update a Signal that the confirmation callback reads:
+Create the editor data one time. Clone its handle into the deferred body (the
+`content` closure, which runs later). Input changes can update a Signal that the
+confirmation callback reads:
 
 ```rust
 use blinc::layout::widgets::text_input::text_input_data;
@@ -107,14 +109,14 @@ button("Edit profile").on_click(move |_| {
 })
 ```
 
-The default footer suits this form. `.footer(|| div()...)` replaces the
-entire footer, including its automatic Cancel and Confirm buttons; custom
-actions must arrange dismissal themselves.
+The default footer is suitable for this form. `.footer(|| div()...)` replaces
+the entire footer, which includes its automatic Cancel and Confirm buttons.
+Custom actions must arrange dismissal themselves.
 
 ## Text That Changes
 
-Titles, descriptions, `confirm_text` and `cancel_text` accept strings,
-Signals or Computeds. Bind them before showing the dialog:
+Titles, descriptions, `confirm_text` and `cancel_text` accept strings, Signals
+or Computeds. Before you show the dialog, bind them:
 
 ```rust
 let remaining = ctx.use_signal("3 files".to_string());
@@ -133,7 +135,7 @@ button("Review files").on_click(move |_| {
 })
 ```
 
-The description changes in place while the dialog remains open.
+While the dialog remains open, the description changes in place.
 
 ## Sheet
 
@@ -154,15 +156,17 @@ button("Open settings").on_click(|_| {
 
 `sheet_left()`, `sheet_right()`, `sheet_top()` and `sheet_bottom()` select the
 edge directly. `SheetSize` is `Small`, `Medium`, `Large` or `Full`.
-`.show_close(false)` hides the close button; `.on_close(|| ...)` observes
-dismissal. The title and description accept reactive values.
+`.show_close(false)` hides the close button. To observe dismissal, use
+`.on_close(|| ...)`. The title and description accept reactive values.
 
-Sheet and Drawer close controls are standard ghost icon buttons. Their existing
-`.cn-sheet-close` and `.cn-drawer-close` classes remain available for styling.
+The close controls of Sheet and Drawer are standard ghost icon buttons. Their
+existing `.cn-sheet-close` and `.cn-drawer-close` classes remain available for
+styling.
 
 ## Drawer
 
-A drawer is a left or right navigation panel, with the left as the default:
+A drawer is a navigation panel on the left or the right. The left side is the
+default:
 
 ```rust
 button("Open navigation").on_click(|_| {
@@ -175,15 +179,16 @@ button("Open navigation").on_click(|_| {
 })
 ```
 
-`DrawerSide` has `Left` and `Right`; `DrawerSize` has `Narrow`, `Medium` and
-`Wide`. Use a bottom sheet for a panel entering from below. `.header(|| ...)`
-replaces the title header. Each `.child(|| ...)` adds a body section.
+`DrawerSide` has `Left` and `Right`. `DrawerSize` has `Narrow`, `Medium` and
+`Wide`. For a panel that enters from below, use a bottom sheet.
+`.header(|| ...)` replaces the title header. Each `.child(|| ...)` adds a body
+section.
 
 ## Initial Focus
 
-Use `.initial_focus("control-id")` to choose the starting control. The target
-must be visible, enabled and inside the dialog. For example, a form can
-start with its second field:
+To choose the control that has the focus first, use
+`.initial_focus("control-id")`. The target must be visible, enabled and inside
+the dialog. For example, a form can start with its second field:
 
 ```rust
 let first = blinc::layout::widgets::text_input::text_input_state();
@@ -205,32 +210,33 @@ dialog()
     .show();
 ```
 
-An input's outer ID resolves to its editable field. A container with several
-focusable controls needs a more specific target ID.
+The outer ID of an input resolves to its editable field. If a container has
+several focusable controls, it needs a more specific target ID.
 
-Without an available named target, the dialog prefers a control marked with
-`autofocus`. The normal fallback selects the first enabled control, or the
-panel when it has no controls. This preference applies once per opening.
+If no named target is available, the dialog prefers a control marked with
+`autofocus`. The normal fallback selects the first enabled control. If the panel
+has no controls, the fallback selects the panel. This preference applies one
+time for each opening.
 
-The stack `OverlayBuilder` and the legacy modal and dialog builders accept
-`.initial_focus(...)` as well. `Div::autofocus()` marks a custom control or a
-container with one focusable control.
+The stack `OverlayBuilder` and the legacy modal and dialog builders also accept
+`.initial_focus(...)`. `Div::autofocus()` marks a custom control or a container
+with one focusable control.
 
-Tab and Shift+Tab stay inside the topmost dialog or nested popup. Closing
-restores focus to the opening control if it still exists and is enabled.
-Pointer focus uses the same target without a keyboard outline; keyboard
+Tab and Shift+Tab stay inside the topmost dialog or nested popup. If the opening
+control still exists and is enabled, the focus returns to it when the dialog
+closes. Pointer focus uses the same target without a keyboard outline. Keyboard
 navigation uses the shared `:focus-visible` rules.
 
 ## Styling and Motion
 
 The panel classes are `.cn-dialog`, `.cn-sheet` and `.cn-drawer`. Dialog text
-uses `.cn-dialog-title` and `.cn-dialog-description`; sheets use
-`.cn-sheet-title` and `.cn-sheet-description`; drawers use `.cn-drawer-title`.
-Add a panel class with `.class("...")` and override it in application CSS.
+uses `.cn-dialog-title` and `.cn-dialog-description`. Sheets use
+`.cn-sheet-title` and `.cn-sheet-description`. Drawers use `.cn-drawer-title`.
+Add a panel class with `.class("...")`, and override it in application CSS.
 
-The overlay wrapper carries `data-motion="enter"` or `"exit"` and remains
-mounted while its exit animation plays. Child transforms stay inside that
-motion, so rotated icons slide with the panel. The backdrop is `.overlay-backdrop`.
+The overlay wrapper carries `data-motion="enter"` or `"exit"`. While its exit
+animation plays, it remains mounted. Child transforms stay inside that motion,
+so rotated icons slide with the panel. The backdrop is `.overlay-backdrop`.
 
 | Overlay | Motion wrapper | Default motion |
 | --- | --- | --- |
@@ -238,7 +244,7 @@ motion, so rotated icons slide with the panel. The backdrop is `.overlay-backdro
 | Sheet | `.cn-sheet-motion-{left,right,top,bottom}` | `cn-slide-from-{side}`, `cn-slide-to-{side}` |
 | Drawer | `.cn-drawer-motion-{left,right}` | `cn-slide-from-{side}`, `cn-slide-to-{side}` |
 
-Timing comes from theme tokens. Change it through rules:
+The timing comes from theme tokens. To change it, use rules:
 
 ```css
 .cn-dialog-motion[data-motion="enter"] {

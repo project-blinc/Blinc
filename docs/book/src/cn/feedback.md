@@ -1,8 +1,9 @@
 # Feedback Components
 
-Alerts, badges, progress indicators and toasts report application status.
-Install `cn_bundle()` as described in [Getting Started](overview.md).
-Examples use these imports and the application builder's `ctx`:
+Alerts, badges, progress indicators and toasts report the status of the
+application. Install `cn_bundle()` as described in
+[Getting Started](overview.md). The examples use these imports and the `ctx` of
+the application builder:
 
 ```rust
 use blinc::cn::prelude::*;
@@ -11,7 +12,7 @@ use blinc::layout::prelude::{div, text};
 
 ## Alert
 
-`alert(message)` displays a single message. `alert_box()` adds a title and
+`alert(message)` shows a single message. `alert_box()` adds a title and a
 description:
 
 ```rust
@@ -38,14 +39,14 @@ div().flex_col().gap(2.0)
         .description("Check your connection and try again."))
 ```
 
-Messages, titles and descriptions can bind to Signals or Computeds. The root
-is `.cn-alert` or `.cn-alert-box`, with a variant class such as
-`.cn-alert--success` or `.cn-alert--error`. Restyle those rules rather than
-picking colours in the component builder.
+Messages, titles and descriptions can bind to Signals or Computeds. The root is
+`.cn-alert` or `.cn-alert-box`, with a variant class such as
+`.cn-alert--success` or `.cn-alert--error`. To change colors, restyle those
+rules. Do not pick colors in the component builder.
 
 ## Badge
 
-A badge has a semantic variant and a visual treatment:
+A badge has a variant for its meaning and a style for its appearance:
 
 ```rust
 div().flex_row().gap(2.0)
@@ -75,7 +76,7 @@ badge("Verified")
 
 ### A Bound Label
 
-Convert a Signal or Computed with `IntoReactive`:
+To convert a Signal or Computed, use `IntoReactive`:
 
 ```rust
 use blinc::core::reactive::computed;
@@ -87,9 +88,9 @@ let shown = computed(move |graph| format!("{} new", graph.get(count).unwrap_or(0
 badge("").reactive_label(shown.into_reactive())
 ```
 
-The root is `.cn-badge`. Its fill, border and text colour come from
-`.cn-badge--{style}-{variant}`, such as `.cn-badge--soft-success`.
-A custom class supports application overrides:
+The root is `.cn-badge`. Its fill, border and text color come from
+`.cn-badge--{style}-{variant}`, such as `.cn-badge--soft-success`. For
+application overrides, you can add a custom class:
 
 ```rust
 badge("Done").variant(BadgeVariant::Success).class("my-badge")
@@ -110,8 +111,8 @@ progress(75.0)
 
 ### Bound to a Signal
 
-An `f32`, `Signal<f32>` or `Computed<f32>` can drive the bar. Bound values
-change in place and ease by the transition on `.cn-progress-bar`:
+An `f32`, `Signal<f32>` or `Computed<f32>` can drive the bar. Bound values change
+in place. The transition on `.cn-progress-bar` eases each change:
 
 ```rust
 let pct = ctx.use_signal(0.0_f32);
@@ -125,16 +126,17 @@ div()
 
 ### Indeterminate
 
-For work of unknown length:
+For work of unknown length, use this bar:
 
 ```rust
 progress_indeterminate().w(300.0)
 ```
 
-The track is `.cn-progress`, with `data-size` and, when applicable,
-`data-indeterminate`. The bar is `.cn-progress-bar`. Their colours read
-`--cn-progress-track` and `--cn-progress-bar`; the transition and
-`cn-progress-pulse` keyframes control motion.
+The track is `.cn-progress`, with `data-size`. If the progress is indeterminate,
+the track also has `data-indeterminate`. The bar is `.cn-progress-bar`. The track
+and the bar take their colors from `--cn-progress-track` and
+`--cn-progress-bar`. The transition and the `cn-progress-pulse` keyframes control
+the motion.
 
 ### With a Label
 
@@ -157,9 +159,9 @@ div().flex_col().gap(1.0)
 spinner().size(SpinnerSize::Medium)
 ```
 
-Sizes are `Small` (16px), `Medium` (24px, the default) and `Large` (32px).
-The track is `.cn-spinner__track`; `.cn-spinner__arc` turns by the
-`cn-spinner-turn` keyframes. Set speed through CSS:
+Sizes are `Small` (16px), `Medium` (24px, the default) and `Large` (32px). The
+track is `.cn-spinner__track`. The `cn-spinner-turn` keyframes turn
+`.cn-spinner__arc`. To set the speed, use CSS:
 
 ```css
 .slow-spinner .cn-spinner__arc { animation-duration: 2000ms; }
@@ -167,7 +169,8 @@ The track is `.cn-spinner__track`; `.cn-spinner__arc` turns by the
 
 ### Beside a Busy Button
 
-A button binds its label and disabled prop. Compose a spinner while it is busy:
+A button binds its label and disabled prop. While the button is busy, add a
+spinner next to it:
 
 ```rust
 use blinc::core::reactive::computed;
@@ -183,13 +186,13 @@ div().flex_row().items_center().gap(2.0)
     .child(button("Finish").on_click(move |_| busy.set(false)))
 ```
 
-In an application, the request completion callback clears `busy`; the Finish
-button makes that completion explicit in this example. There is no button
+In an application, the callback for the completed request clears `busy`. In this
+example, the Finish button makes that completion explicit. There is no button
 `.loading(...)` prop.
 
 ## Skeleton
 
-A skeleton pulses by the `cn-skeleton-pulse` keyframes:
+The `cn-skeleton-pulse` keyframes make a skeleton pulse:
 
 ```rust
 div().flex_col().gap(2.0)
@@ -197,8 +200,8 @@ div().flex_col().gap(2.0)
     .child(skeleton_circle(48.0))
 ```
 
-The root is `.cn-skeleton`; a circle also has `.cn-skeleton--circle`.
-Override the animation through a custom class:
+The root is `.cn-skeleton`. A circle also has `.cn-skeleton--circle`. To override
+the animation, use a custom class:
 
 ```css
 .my-skeleton { animation-duration: 3000ms; }
@@ -217,7 +220,7 @@ card().child(card_content().child(
 
 ## Toast
 
-Show notifications from an event or application callback:
+Show notifications from an event or an application callback:
 
 ```rust
 button("Notify").on_click(|_| {
@@ -228,9 +231,9 @@ button("Notify").on_click(|_| {
 ```
 
 `toast_success`, `toast_warning` and `toast_error` select variants directly.
-`.duration_ms(..)` sets the lifetime; `.persistent()` waits for dismissal.
-`.corner(..)` sets the tray corner. `.show()` returns a handle whose
-`.dismiss()` method removes that toast.
+`.duration_ms(..)` sets the lifetime. With `.persistent()`, the toast waits for
+dismissal. `.corner(..)` sets the tray corner. `.show()` returns a handle, and
+the `.dismiss()` method of the handle removes that toast.
 
 ### With an Action
 
@@ -248,14 +251,14 @@ button("Create event").on_click(move |_| {
 
 ### Styling and Motion
 
-The root is `.cn-toast` with `data-variant`: `default`, `success`, `warning`
-or `destructive`. Parts include `.cn-toast-icon`, `.cn-toast-title`,
-`.cn-toast-description` and `.cn-toast-close`. Set `--cn-toast-bg` and
-`--cn-toast-border` to override their defaults.
+The root is `.cn-toast` with `data-variant`: `default`, `success`, `warning` or
+`destructive`. The parts include `.cn-toast-icon`, `.cn-toast-title`,
+`.cn-toast-description` and `.cn-toast-close`. To override the defaults, set
+`--cn-toast-bg` and `--cn-toast-border`.
 
-The wrapper is `.cn-toast-motion-right` or `.cn-toast-motion-left`, depending
-on its corner. It carries `data-motion="enter"` or `"exit"` and remains
-mounted until the exit completes:
+Depending on the corner of the toast, its wrapper is `.cn-toast-motion-right` or
+`.cn-toast-motion-left`. The wrapper carries `data-motion="enter"` or `"exit"`.
+It remains mounted until the exit completes:
 
 ```css
 .cn-toast-motion-right[data-motion="exit"] {
@@ -267,7 +270,7 @@ mounted until the exit completes:
 
 ### Loading State
 
-Use a conditional region so content follows the Signal after construction:
+To make content follow the Signal after construction, use a conditional region:
 
 ```rust
 let loading = ctx.use_signal(true);
@@ -284,9 +287,9 @@ div().flex_col().gap(3.0)
 
 ### Form Submission Feedback
 
-The application owns request state. Bind the button to it, and mount feedback
-through a computed condition. The completion button stands in for a request
-callback in this interactive example:
+The application owns the request state. Bind the button to that state, and mount
+the feedback through a computed condition. In this interactive example, the
+completion button takes the place of a request callback:
 
 ```rust
 use blinc::core::reactive::computed;
@@ -313,9 +316,9 @@ div().flex_col().gap(3.0)
     })
 ```
 
-Signals update props or regions; neither example branches on a value read
-once at build time. Error feedback can use a separate error Signal and a
-`Destructive` alert, with the same binding pattern.
+Signals update props or regions. Neither example branches on a value that it
+reads once at build time. For error feedback, you can use a separate error Signal
+and a `Destructive` alert, with the same binding pattern.
 
 ### Notification Helpers
 

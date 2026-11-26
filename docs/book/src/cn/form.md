@@ -1,10 +1,11 @@
 # Form Components
 
-Components for building forms: inputs, checkboxes, selects, and more.
+Use these components to build forms. They include inputs, checkboxes, selects
+and more.
 
 ## Input
 
-Text input field, bound to a `SharedTextInputData`:
+The input is a text field that is bound to a `SharedTextInputData`:
 
 ```rust
 use blinc::cn::prelude::*;
@@ -47,29 +48,30 @@ cn::input(&email)
     .error(error)
 ```
 
-The placeholder, description and error each take a string or a signal and
-change in place. While the error is non-empty it shows in place of the
+The placeholder, description and error each take a string or a signal, and they
+change in place. While the error is not empty, it shows instead of the
 description.
 
 ### Styling
 
-The field is one element with the class `cn-input`. Its border and fill while
-hovered, focused, invalid or disabled are rules, eased by a CSS `transition`:
-`:hover`, `:focus`, `[data-invalid]` (set while the error is non-empty, and
-while a value fails validation) and `:disabled`.
-Restyle it with rules of your own:
+The field is one element with the class `cn-input`. While it is hovered,
+focused, invalid or disabled, CSS rules set its border and fill. A CSS
+`transition` makes these changes smooth. The rules use `:hover`, `:focus`,
+`[data-invalid]` and `:disabled`. While the error is not empty, or while a value
+fails validation, the field has `data-invalid`. To restyle the field, write your
+own rules:
 
 ```css
 .my-field:focus { border-color: #16a34a; outline-color: #16a34a; }
 ```
 
 `idle_border_color(..)` and `idle_bg_color(..)` set the idle values as inline
-style, which the component rules do not replace. The `hover_*`, `focused_*`,
-`error_*` and grouped colour setters are removed; use rules.
+style. The component rules do not replace these values. The `hover_*`,
+`focused_*`, `error_*` and grouped color setters are removed. Use rules instead.
 
 ## OTP Input
 
-Segmented one-time-code input:
+The OTP input has separate segments for a one-time code:
 
 ```rust
 use blinc::cn::prelude::*;
@@ -83,10 +85,10 @@ cn::input_otp(code, 6)
 
 ### OTP Options
 
-Tab and Shift+Tab reach each enabled slot and continue to the controls before
-or after the OTP input. Typing still advances automatically, Backspace in an
-empty slot moves back, and pasting distributes the code across the slots.
-Disabled slots are skipped.
+Tab and Shift+Tab reach each enabled slot, then continue to the controls before
+or after the OTP input. When you type, the focus still advances automatically.
+Backspace in an empty slot moves back. When you paste a code, the input spreads
+it across the slots. Disabled slots are skipped.
 
 ```rust
 cn::input_otp(code, 6)
@@ -98,7 +100,8 @@ cn::input_otp(code, 6)
 
 ## Textarea
 
-Multi-line text input, bound to a `SharedTextAreaState`:
+The textarea is a text input with multiple lines. It is bound to a
+`SharedTextAreaState`:
 
 ```rust
 use blinc::layout::widgets::text_area::text_area_state;
@@ -112,16 +115,21 @@ cn::textarea(&description)
     .on_change(|value| println!("description: {value}"))
 ```
 
-`.error("msg")` shows the message and turns the border red; `.disabled(true)`
-dims the field. The message under a field is `.cn-field-error`, or
-`.cn-field-description` for `.description(..)`, coloured by those rules. It is styled like [Input](#input): one element with the class
-`cn-textarea`, whose border and fill per state are `:hover`, `:focus`,
-`[data-invalid]` and `:disabled` rules, eased by a `transition`. Its
-placeholder, description and error follow signals as an input's do.
+`.error("msg")` shows the message and turns the border red. `.disabled(true)`
+dims the field. The message under a field has the class `.cn-field-error`. For
+`.description(..)`, the class is `.cn-field-description`. The rules for these
+classes color the message.
+
+The textarea is styled like [Input](#input). It is one element with the class
+`cn-textarea`. The `:hover`, `:focus`, `[data-invalid]` and `:disabled` rules
+set its border and fill for each state, and a `transition` makes the changes
+smooth. Its placeholder, description and error follow signals, as they do on an
+input.
 
 ## Number Input
 
-A number between a − and a +, bound to a `Signal<f64>`:
+The number input shows a number between a − button and a + button. It is bound
+to a `Signal<f64>`:
 
 ```rust
 let qty = ctx.use_signal(1.0);
@@ -135,9 +143,10 @@ cn::number_input(qty)
     .on_change(|value| println!("qty: {value}"))
 ```
 
-`.size(..)` picks a scale of its own, a step smaller than a text input's, so
-the control sits in a row beside others. The group carries the size as
-`data-size` for rules to key on:
+`.size(..)` selects from a size scale that belongs to the number input. This
+scale is one step smaller than the scale of a text input, so the control fits in
+a row beside other controls. The group stores the size as `data-size`, and your
+rules can select on it:
 
 | Size | `data-size` | Row | Steps | Field (at least) | Text |
 |------|-------------|-----|-------|------------------|------|
@@ -145,18 +154,22 @@ the control sits in a row beside others. The group carries the size as
 | `InputSize::Medium` (default) | `md` | 32px | 32px | 48px | 13px |
 | `InputSize::Large` | `lg` | 40px | 36px | 52px | 14px |
 
-Typing, the arrow keys, the buttons and the mouse wheel all clamp to `min` and `max`. One wheel line is one step and wheel up increases the value; trackpad movement accumulates into steps, and a disabled input ignores the wheel. The
-width follows the bounds, not the value, so typing never resizes it.
+Typing, the arrow keys, the buttons and the mouse wheel all keep the value
+between `min` and `max`. One wheel line is one step, and wheel up increases the
+value. Trackpad movement adds up into steps. A disabled input ignores the wheel.
+The width of the control depends on the bounds, not on the value. Thus, typing
+never changes the width.
 
-The group is one bordered element (`.cn-number-input-group`) with a borderless
-field and two steps (`.cn-number-input-step--dec` and `--inc`). A step tints on
-`:hover` and `:active`, and is `disabled`, so dimmed and inert, where a step
-would change nothing. These are rules with a `transition`; restyle them with
-rules of your own.
+The group is one element with a border (`.cn-number-input-group`). It contains
+a field with no border and two step buttons (`.cn-number-input-step--dec` and
+`--inc`). On `:hover` and `:active`, a step button gets a tint. If a step cannot
+change the value, its button is `disabled`, so it is dimmed and does not
+respond. Rules with a `transition` define these looks. To restyle them, write
+your own rules.
 
 ## Checkbox
 
-A checkbox reads and writes the `Signal<bool>` it is given:
+A checkbox reads and writes the `Signal<bool>` that you give to it:
 
 ```rust
 let accepted = ctx.use_signal(false);
@@ -171,14 +184,15 @@ checkbox(accepted).size(CheckboxSize::Large)
 checkbox(accepted).disabled(locked)   // a bool, Signal or Computed
 ```
 
-The label takes a string, Signal or Computed too.
+The label also takes a string, Signal or Computed.
 
 ### Styling
 
-A checkbox is an element with a `checked` attribute while it is checked and
-`disabled` while it cannot be used. Its fill, border colour, hover, the
-disabled palette and the mark's fade-in are the `.cn-checkbox` rules of
-`CN_STYLES`, with a `transition`. Restyle it with rules of your own:
+While a checkbox is checked, its element has a `checked` attribute. While it
+cannot be used, it has `disabled`. The `.cn-checkbox` rules of `CN_STYLES`,
+with a `transition`, set its fill, border color and hover look. They also set
+the disabled palette and the fade-in of the check mark. To restyle the
+checkbox, write your own rules:
 
 ```css
 @layer components {
@@ -211,10 +225,10 @@ switch(dark).disabled(locked)          // a bool, Signal or Computed
 
 ### Styling
 
-The switch is the track, with a thumb inside it. The track has a `checked`
-attribute while on; the thumb slides by a transform and shrinks slightly while
-pressed. All of it is the `.cn-switch` rules of `CN_STYLES`, per size
-(`.cn-switch--sm`, `--md`, `--lg`):
+The switch element is the track, and a thumb is inside it. While the switch is
+on, the track has a `checked` attribute. The thumb slides by a transform. While
+pressed, the thumb shrinks slightly. The `.cn-switch` rules of `CN_STYLES`
+define all of this for each size (`.cn-switch--sm`, `--md`, `--lg`):
 
 ```css
 @layer components {
@@ -233,7 +247,7 @@ switch(dark).class("my-switch")
 
 ## Radio Group
 
-A group reads and writes a `Signal<String>` holding the selected value:
+A group reads and writes a `Signal<String>` that holds the selected value:
 
 ```rust
 let size = ctx.use_signal("md".to_string());
@@ -255,10 +269,10 @@ radio_group(size).disabled(locked)                  // all of them; a bool, Sign
 
 ### Styling
 
-Each ring has a `checked` attribute while its option is selected and
-`disabled` while it cannot be chosen. The ring's border, the dot's fade-in,
-hover (which also highlights an unselected option) and the disabled fill are
-the `.cn-radio` and `.cn-radio-dot` rules of `CN_STYLES`:
+While its option is selected, each ring has a `checked` attribute. While the
+option cannot be chosen, the ring has `disabled`. Hover also highlights an
+unselected option. The `.cn-radio` and `.cn-radio-dot` rules of `CN_STYLES` set
+the ring border, the fade-in of the dot, hover and the disabled fill:
 
 ```css
 @layer components {
@@ -273,7 +287,8 @@ the `.cn-radio` and `.cn-radio-dot` rules of `CN_STYLES`:
 
 ## Toggle
 
-A button that stays pressed: a formatting toggle in a toolbar, or a filter.
+A toggle is a button that stays pressed. Use it, for example, as a formatting
+toggle in a toolbar or as a filter.
 
 ```rust
 let bold = ctx.use_signal(false);
@@ -298,13 +313,17 @@ toggle(bold).label("B").disabled(locked)   // a bool, Signal or Computed
 
 ### Styling
 
-A toggle is one element carrying `data-state="on"` or `"off"` (and a
-`checked` attribute while on), `data-variant`, `data-size` and `disabled`.
-Its look is the `.blinc-toggle` rules of the layout stylesheet: transparent
-when off, a faint wash of the text colour when on, a
-lighter wash on hover, and a slight shrink while pressed, all eased by a
-`transition`. Sizes and variants are attribute selectors, so your own rules
-can use them the same way:
+A toggle is one element that carries `data-state="on"` or `"off"`,
+`data-variant`, `data-size` and `disabled`. While on, it also has a `checked`
+attribute.
+
+The `.blinc-toggle` rules of the layout stylesheet define its look. When off,
+the toggle is transparent. When on, it has a faint tint of the text color. On
+hover, it has a lighter tint. While pressed, it shrinks slightly. A
+`transition` makes all of these changes smooth.
+
+The rules select sizes and variants with attribute selectors, so your own rules
+can do the same:
 
 ```css
 @layer components {
@@ -322,8 +341,8 @@ toggle(bold).class("my-toggle")
 
 ## Toggle Group
 
-A row of toggles where one value is selected, such as text alignment. The
-group reads and writes a `Signal<String>`:
+A toggle group is a row of toggles in which one value is selected, such as a
+text alignment. The group reads and writes a `Signal<String>`:
 
 ```rust
 let align = ctx.use_signal("left".to_string());
@@ -339,17 +358,19 @@ toggle_group(align)
 toggle_item("add").icon(to_svg(icons::PLUS, 16.0)).label("Add")
 ```
 
-Clicking the selected item leaves it selected; to clear the selection, set the
-signal to `""` yourself. `.size(..)`, `.disabled(..)` for the group (a bool, Signal or Computed) and
-`toggle_item(..).disabled(true)` for one item work as on a toggle.
+If you click the selected item, it stays selected. To clear the selection, set
+the signal to `""` yourself. `.size(..)` and `.disabled(..)` (a bool, Signal or
+Computed) on the group work as on a toggle. `toggle_item(..).disabled(true)`
+does the same for one item.
 
 Each item is a toggle, so the rules above apply to it. The group sets
-`data-variant` and `data-size` for its items, and its rules (`.blinc-toggle-group`)
-give a 4px gap; `.gap(..)` overrides it.
+`data-variant` and `data-size` for its items. The rules of the group
+(`.blinc-toggle-group`) give a 4px gap, and `.gap(..)` overrides this gap.
 
 ## Select
 
-Dropdown selection, bound to a `Signal<String>` holding the selected value:
+With a select, you choose a value from a dropdown list. It is bound to a
+`Signal<String>` that holds the selected value:
 
 ```rust
 let fruit = ctx.use_signal(String::new());
@@ -365,12 +386,13 @@ cn::select(fruit)
     .on_change(|value| println!("selected: {value}"))
 ```
 
-`.disabled(..)` makes the whole select inert; it takes a bool, Signal or Computed.
+`.disabled(..)` makes the whole select inactive. It takes a bool, Signal or
+Computed.
 
-The open list grows to 300px and then scrolls, and it opens with the chosen
-option in the middle. For a long list, `.virtual_rows(row_height)` builds only
-the rows in view, each `row_height` pixels tall, so hundreds of options open
-at once:
+The open list grows to 300px and then scrolls. It opens with the chosen option
+in the middle. For a long list, use `.virtual_rows(row_height)`. It builds only
+the rows in view, and each row is `row_height` pixels tall. Thus, a list with
+hundreds of options opens immediately:
 
 ```rust
 let year = ctx.use_signal("2026".to_string());
@@ -382,13 +404,17 @@ cn::select(year)
 
 ### Styling
 
-The trigger is one element with the class `cn-select-trigger`. It has a
-`disabled` attribute while disabled, `data-placeholder` while nothing is
-chosen and `data-state="open"` while its list is showing, so its look is
-rules, eased by a `transition`: a faint tint on `:hover`, a stronger one on
-`:active`, a darker border while open, and the disabled palette. The shown
-text inherits the trigger's `color`, which the placeholder and disabled rules
-dim. Restyle it with rules of your own:
+The trigger is one element with the class `cn-select-trigger`. While disabled,
+it has a `disabled` attribute. While nothing is chosen, it has
+`data-placeholder`. While its list is open, it has `data-state="open"`.
+
+Thus, rules set its look, and a `transition` makes the changes smooth. The rules
+give a faint tint on `:hover` and a stronger tint on `:active`. While the list
+is open, they give a darker border. A disabled trigger uses the disabled
+palette.
+
+The shown text inherits the `color` of the trigger, and the placeholder and
+disabled rules dim this color. To restyle the trigger, write your own rules:
 
 ```css
 .cn-select-trigger[data-state="open"] { border-color: #16a34a; }
@@ -396,7 +422,8 @@ dim. Restyle it with rules of your own:
 
 ## Calendar
 
-A month of days to pick a date from, bound to a `Signal<Option<CalendarDay>>`:
+The calendar shows the days of a month, and you pick a date from them. It is
+bound to a `Signal<Option<CalendarDay>>`:
 
 ```rust
 let picked = ctx.use_signal(None::<CalendarDay>);
@@ -408,25 +435,35 @@ cn::calendar(picked)
     .on_change(|day| println!("{}-{}-{}", day.year, day.month, day.day))
 ```
 
-`CalendarDay` holds a year, a month from 1 to 12 and a day. `CalendarDay::today()`
-is the local date, and `add_days`, `add_months` and `weekday` do the date
-arithmetic. The month and year selects, or the buttons either side of them,
-turn the month. Dragging or a two-finger swipe across the days moves the
-month with it; let go far enough and it turns (leftward for the next), or it
-springs back. Moving the pointer off the days cancels it. Scrolling up and down still moves the page;
-choosing a day of the month before or after turns to it.
-Tab to the day grid, or click a day: the arrows move by a day or a week, Page Up and
-Page Down by a month, Home and End to the ends of the week, and Enter or Space
-choose.
-For a compact trigger that opens this calendar in a popover, use
+`CalendarDay` holds a year, a month from 1 to 12 and a day.
+`CalendarDay::today()` is the local date. `add_days`, `add_months` and
+`weekday` do the date arithmetic.
+
+To change the month, use the month and year selects, or the buttons on either
+side of them. If you drag or swipe with two fingers across the days, the month
+moves with your movement. If you let go after you move far enough, the month
+changes (a leftward movement shows the next month). Otherwise, the month springs
+back. If the pointer moves off the days, the drag or swipe is canceled.
+
+Vertical scrolling still moves the page. If you choose a day of the previous or
+next month, the calendar changes to that month.
+
+To use the keyboard, Tab to the day grid, or click a day. Then use these keys:
+
+- The arrow keys move by a day or a week.
+- Page Up and Page Down move by a month.
+- Home and End move to the ends of the week.
+- Enter or Space chooses the day that the keys are on.
+
+If you need a compact trigger that opens this calendar in a popover, use
 [Date Picker](pickers.md#date-picker).
 
 ### Events
 
-`.events(..)` marks days with what is on them: meetings, the weather,
-deadlines. It takes a list, or a Signal or Computed of one, and the marks
-follow it in place. Up to three show along the bottom of a day, each a dot or,
-with `.icon(..)`, the event's icon:
+`.events(..)` marks days with their events, such as meetings, the weather or
+deadlines. It takes a list, or a Signal or Computed of a list, and the marks
+follow it in place. A day shows up to three marks along its bottom. Each mark is
+a dot or, with `.icon(..)`, the icon of the event:
 
 ```rust
 let events = ctx.use_signal(vec![
@@ -439,20 +476,27 @@ let events = ctx.use_signal(vec![
 cn::calendar(picked).events(events)
 ```
 
-`events_on(&events, day)` lists what is on a day, for showing beside the
-calendar.
+To show the events of a day beside the calendar, get the list with
+`events_on(&events, day)`.
 
 ### Styling
 
-The parts are `.cn-calendar`, `-header`, `-caption`, `-nav` (with
-`data-step="prev"` or `"next"`), `-body`, `-weekdays`, `-weekday`, `-months`,
-`-page`, `-grid` and `-day`. A day carries `data-outside`, `data-today`,
-`data-selected`, `data-events`, `data-focus-visible` while the keys are on it,
-and `disabled` outside the allowed years. A turning month's grid carries
-`data-enter` while it slides in and `data-leaving` while it slides out, each
-`"next"` or `"prev"`, and slides by the `cn-calendar-*` keyframes. An event's
-mark is `.cn-calendar-event` with its `data-kind`, and `.cn-calendar-event--icon`
-when it is an icon; a dot takes its `background`, an icon its `color`:
+The parts are `.cn-calendar`, `-header`, `-caption` and `-nav` (with
+`data-step="prev"` or `"next"`). The other parts are `-body`, `-weekdays`,
+`-weekday`, `-months`, `-page`, `-grid` and `-day`.
+
+A day carries `data-outside`, `data-today`, `data-selected` and `data-events`.
+While the keys are on it, it also carries `data-focus-visible`. Outside the
+allowed years, it carries `disabled`.
+
+When the month changes, two grids move. While the new grid slides in, it
+carries `data-enter`. While the old grid slides out, it carries `data-leaving`.
+Each value is `"next"` or `"prev"`. The grids slide by the `cn-calendar-*`
+keyframes.
+
+The mark of an event is `.cn-calendar-event` with its `data-kind`. If the mark
+is an icon, it also has `.cn-calendar-event--icon`. To color a dot, set its
+`background`. To color an icon, set its `color`:
 
 ```css
 .cn-calendar-event[data-kind="rain"] { color: #38bdf8; }
@@ -462,7 +506,8 @@ when it is an icon; a dot takes its `background`, an icon its `color`:
 
 ## Combobox
 
-Searchable select, bound to a `Signal<String>` holding the selected value:
+The combobox is a select that you can search. It is bound to a `Signal<String>`
+that holds the selected value:
 
 ```rust
 let framework = ctx.use_signal(String::new());
@@ -478,20 +523,25 @@ cn::combobox(framework)
     .on_change(|value| println!("selected: {value}"))
 ```
 
-Typing in the list's search field filters the options.
+The text that you type in the search field of the list filters the options.
 
 ### Styling
 
-The trigger is one element with the class `cn-combobox-trigger`. It has a
-`disabled` attribute while disabled and `data-state="open"` while its list is
-showing, so its border is rules, eased by a `transition`: darker on `:hover`,
-the focus border while open, and the disabled palette. The search field is a
-text input with the class `cn-combobox-search`. Restyle either with rules of
-your own.
+The trigger is one element with the class `cn-combobox-trigger`. While disabled,
+it has a `disabled` attribute. While its list is open, it has
+`data-state="open"`.
+
+Thus, rules set its border, and a `transition` makes the changes smooth. On
+`:hover`, the border is darker. While the list is open, the trigger uses the
+focus border. A disabled trigger uses the disabled palette.
+
+The search field is a text input with the class `cn-combobox-search`. To restyle
+the trigger or the search field, write your own rules.
 
 ## Slider
 
-A number picked along a track, bound to a `Signal<f32>` or `Signal<f64>`:
+With a slider, you pick a number along a track. It is bound to a `Signal<f32>`
+or `Signal<f64>`:
 
 ```rust
 let volume = ctx.use_signal(50.0);
@@ -505,32 +555,39 @@ cn::slider(volume)
     .on_change(|value| println!("volume: {value}"))
 ```
 
-Click where you want it or drag the thumb; the wheel steps it, and after a
-click the arrow keys, Page Up/Down and Home/End move it too. Without a step,
-an arrow or wheel step moves a hundredth of the range. `.size(SliderSize::Small)`
-sets the size, `.w(px)` the track's length (300px unless set), and
-`.disabled(..)` takes a bool, Signal or Computed and follows it in place.
+To set the value, click the position that you want on the track, or drag the
+thumb. The wheel also steps the value. After a click, the arrow keys, Page
+Up/Down and Home/End move the value too. If you do not set a step, one arrow or
+wheel step moves one hundredth of the range.
+
+`.size(SliderSize::Small)` sets the size. `.w(px)` sets the length of the track.
+If you do not set it, the length is 300px. `.disabled(..)` takes a bool, Signal
+or Computed and follows it in place.
 
 The label and live value form one adjustable element in the
 [accessibility snapshot](../core/accessibility.md). Assistive adjustment uses
-the same step, bounds and change callback; disabled sliders reject it.
+the same step, bounds and change callback. Disabled sliders reject it.
 
 The slider is a `.cn-slider` row of `.cn-slider-fill`, `.cn-slider-thumb` and
-`.cn-slider-rest`, inside a `.cn-slider-field` with a `.cn-slider-header`
-(`.cn-slider-label`, `.cn-slider-value`) when it has a label or shows its value.
-Colours are those rules; `--cn-slider-fill-bg`, `--cn-slider-track-bg` and
-`--cn-slider-thumb-bg` recolour one. The thumb grows under the pointer and more
-while held, and a disabled slider carries `disabled`:
+`.cn-slider-rest`. If the slider has a label or shows its value, this row is
+inside a `.cn-slider-field`. That field has a `.cn-slider-header`
+(`.cn-slider-label`, `.cn-slider-value`).
+
+The rules for these classes set the colors. To recolor one slider, use
+`--cn-slider-fill-bg`, `--cn-slider-track-bg` and `--cn-slider-thumb-bg`. Under
+the pointer, the thumb grows. While held, it grows more. A disabled slider
+carries `disabled`:
 
 ```css
 .cn-slider:disabled > .cn-slider-fill { background: var(--border); }
 ```
 
-For two ends on one control, use a [Number Range Gauge](#number-range-gauge).
+If you need two ends on one control, use a
+[Number Range Gauge](#number-range-gauge).
 
 ## Number Gauge
 
-A number shown as a fill, with the value written over it:
+The number gauge shows a number as a fill, with the value written over it:
 
 ```rust
 let opacity = ctx.use_signal(64.0);
@@ -544,15 +601,16 @@ cn::number_gauge(opacity)
     .on_change(|n| println!("opacity: {n}"))
 ```
 
-Drag it, click where you want it, or scroll over it. After a click the arrow
-keys, Page Up/Down and Home/End move it too. Values snap to the step.
+To change the value, drag the gauge, click the position that you want, or scroll
+over it. After a click, the arrow keys, Page Up/Down and Home/End move it too.
+Values snap to the step.
 
-The gauge is as wide as its longest value needs, so it doesn't change width
-as you drag; `.w(px)` sets a width instead.
+The gauge is as wide as its longest value needs, so a drag does not change its
+width. `.w(px)` sets a width instead.
 
 ### Number Range Gauge
 
-Two ends on one gauge, held in one `Signal<RangeInclusive<f64>>`:
+This gauge has two ends. One `Signal<RangeInclusive<f64>>` holds them:
 
 ```rust
 let band = ctx.use_signal(18.0..=24.0);
@@ -563,18 +621,20 @@ cn::number_range_gauge(band)
     .format(|r| format!("{}–{} °C", r.start(), r.end()))
 ```
 
-Clicking or scrolling moves the nearer end. The ends never cross.
+A click or a scroll moves the nearer end. The ends never cross.
 
 ### Styling
 
-Both are a `.cn-number-gauge` (the range one also `.cn-number-range-gauge`)
-holding `.cn-number-gauge-fill`, `.cn-number-gauge-thumb` and
-`.cn-number-gauge-rest`, with the value in `.cn-number-gauge-value`. The range
-gauge puts each face in a `.cn-number-gauge-layer` with
-`data-endpoint="lower"` or `"upper"`. The gauge has `data-state="dragging"`
-during a drag, `data-focus-visible` once a key has moved it, and `disabled`.
-Colours, the border, the radius per size (`.cn-number-gauge--sm`, `--md`,
-`--lg`) and the cursor are rules of `CN_STYLES`:
+Each gauge is a `.cn-number-gauge`, and the range gauge is also a
+`.cn-number-range-gauge`. Each one holds `.cn-number-gauge-fill`,
+`.cn-number-gauge-thumb` and `.cn-number-gauge-rest`. The value is in
+`.cn-number-gauge-value`. In the range gauge, the fill, thumb and rest of each
+end are in a `.cn-number-gauge-layer` with `data-endpoint="lower"` or `"upper"`.
+
+During a drag, the gauge has `data-state="dragging"`. After a key moves the
+gauge, it has `data-focus-visible`. It can also have `disabled`. The rules of
+`CN_STYLES` set the colors, the border, the radius for each size
+(`.cn-number-gauge--sm`, `--md`, `--lg`) and the cursor:
 
 ```css
 .my-gauge > .cn-number-gauge-fill { background: color-mix(in srgb, #16a34a 25%, var(--input-bg)); }
@@ -587,9 +647,9 @@ cn::number_gauge(opacity).class("my-gauge")
 
 ## Label
 
-Inputs, selects and checkboxes take a `.label(..)` of their own. A standalone
-label's text is a string, a `Signal<String>` or a `Computed<String>`, and
-follows a signal in place:
+Inputs, selects and checkboxes have their own `.label(..)`. The text of a
+standalone label is a string, a `Signal<String>` or a `Computed<String>`. The
+label follows a signal in place:
 
 ```rust
 cn::label("Email").required()      // marks the field required
@@ -636,9 +696,9 @@ div()
 
 ## Validation
 
-An `Email` or `Number` input checks its own value and sets `data-invalid`
-while it fails, which the `.cn-input` rules show as a red border. For a
-message of your own, write it to a signal and show it in a label:
+An `Email` or `Number` input tests its own value. While the value is not valid,
+the input sets `data-invalid`, and the `.cn-input` rules show a red border. To
+show your own message, write it to a signal, and show the signal in a label:
 
 ```rust
 let email = text_input_data();

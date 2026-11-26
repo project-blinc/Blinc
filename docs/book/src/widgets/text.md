@@ -1,13 +1,14 @@
 # Text & Rich Text
 
-Blinc provides two main elements for displaying text: `text()` for plain text and `rich_text()` for inline-formatted text with HTML-like markup.
+Blinc has two main elements that show text. Use `text()` for plain text.
+Use `rich_text()` for text with inline formatting in HTML-like markup.
 
-For headings, paragraphs, captions and inline composition, see the
+For headings, paragraphs, captions, and inline composition, see the
 [Typography helpers](../cn/typography.md) guide.
 
 ## Plain Text
 
-The `text()` element is the simplest way to display text:
+The simplest way to show text is the `text()` element:
 
 ```rust
 use blinc::layout::prelude::*;
@@ -42,11 +43,11 @@ text("Underlined and struck")
 | `.v_align(TextVerticalAlign)` | Vertical alignment (Top, Middle, Bottom) |
 | `.font_family(FontFamily)` | Custom font family |
 | `.line_height(f32)` | Line height multiplier (default: 1.2) |
-| `.wrap(bool)` | Enable/disable text wrapping |
+| `.wrap(bool)` | Turns text wrapping on or off |
 
 ## Rich Text
 
-The `rich_text()` element supports inline formatting using HTML-like tags. This is ideal for text that needs mixed styling within a single block.
+The `rich_text()` element supports inline formatting with HTML-like tags. If a single block of text needs mixed styles, use this element.
 
 ```rust
 use blinc::layout::prelude::*;
@@ -79,7 +80,7 @@ rich_text(r#"Visit <a href="https://example.com">our website</a> for more info."
 
 ### Color Formats
 
-The `<span color="...">` tag supports multiple color formats:
+The `<span color="...">` tag accepts several color formats:
 
 ```rust
 // Hex colors
@@ -95,11 +96,15 @@ rich_text(r#"<span color="steelblue">Steel Blue</span>"#)
 rich_text(r#"<span color="rgb(255, 128, 0)">Orange</span>"#)
 ```
 
-**Supported named colors:** black, white, red, green, blue, yellow, cyan, magenta, gray, silver, maroon, olive, navy, purple, teal, orange, pink, brown, lime, coral, gold, indigo, violet, crimson, salmon, tomato, skyblue, steelblue, transparent
+Supported named colors:
+
+- black, white, red, green, blue, yellow, cyan, magenta, gray, silver
+- maroon, olive, navy, purple, teal, orange, pink, brown, lime, coral
+- gold, indigo, violet, crimson, salmon, tomato, skyblue, steelblue, transparent
 
 ### HTML Entity Decoding
 
-Rich text automatically decodes common HTML entities:
+Rich text decodes common HTML entities automatically:
 
 ```rust
 rich_text("Use &lt;b&gt; for bold")  // Renders: Use <b> for bold
@@ -107,11 +112,17 @@ rich_text("&copy; 2024 &bull; All Rights Reserved &trade;")
 rich_text("&ldquo;Smart quotes&rdquo; &mdash; and &hellip;")
 ```
 
-**Supported entities:** `&lt;`, `&gt;`, `&amp;`, `&quot;`, `&apos;`, `&nbsp;`, `&copy;`, `&reg;`, `&trade;`, `&mdash;`, `&ndash;`, `&hellip;`, `&lsquo;`, `&rsquo;`, `&ldquo;`, `&rdquo;`, `&bull;`, `&middot;`, and numeric entities (`&#65;`, `&#x41;`)
+Supported entities:
+
+- `&lt;`, `&gt;`, `&amp;`, `&quot;`, `&apos;`, `&nbsp;`
+- `&copy;`, `&reg;`, `&trade;`
+- `&mdash;`, `&ndash;`, `&hellip;`
+- `&lsquo;`, `&rsquo;`, `&ldquo;`, `&rdquo;`, `&bull;`, `&middot;`
+- Numeric entities (`&#65;`, `&#x41;`)
 
 ### Range-Based API
 
-For programmatic control, use the range-based API with byte indices:
+To control styles from code, use the range-based API with byte indices:
 
 ```rust
 // Style specific byte ranges
@@ -128,7 +139,7 @@ rich_text("Important Notice: Please read carefully!")
     .underline_range(18..39)     // "Please read carefully" underlined
 ```
 
-Available range methods:
+These range methods are available:
 - `.bold_range(Range<usize>)`
 - `.italic_range(Range<usize>)`
 - `.underline_range(Range<usize>)`
@@ -140,9 +151,9 @@ Available range methods:
 
 Links in rich text are fully interactive:
 
-- **Click to open**: Clicking a link opens the URL in the system's default browser
-- **Pointer cursor**: The cursor changes to a pointer when hovering over links
-- **Auto-underlined**: Links are automatically underlined for visibility
+- A click on a link opens the URL in the default browser of the system.
+- Over a link, the cursor changes to a pointer.
+- Rich text underlines links automatically to make them visible.
 
 ```rust
 rich_text(r#"
@@ -174,8 +185,8 @@ link("Hover to see underline", "https://example.com")
 
 ### Default colours
 
-Links, blockquotes, rules, lists and tables take their colours from the
-default stylesheet's rules, so a stylesheet restyles them:
+Links, blockquotes, rules, lists, and tables take their colors from rules
+in the default stylesheet. Thus, a stylesheet can restyle them:
 
 | Class | Element | Default |
 |-------|---------|---------|
@@ -183,8 +194,8 @@ default stylesheet's rules, so a stylesheet restyles them:
 | `blinc-blockquote` | a `blockquote()` | `--surface-overlay` fill, `--border` left edge |
 | `blinc-hr` | an `hr()` | `--border` |
 | `blinc-list-marker` | a bullet or number | `--text-tertiary` |
-| `blinc-task-box` | a task item's box, `checked` when done | `--text-tertiary` |
-| `blinc-thead`, `blinc-tfoot` | a table's head and foot | `--surface-overlay` |
+| `blinc-task-box` | the box of a task item, `checked` for a done item | `--text-tertiary` |
+| `blinc-thead`, `blinc-tfoot` | the head and foot of a table | `--surface-overlay` |
 | `blinc-th`, `blinc-td` | text from `th_text()`, `td_text()` | `--text-primary`, `--text-secondary` |
 | `blinc-tr-alt` | an odd row from `striped_tr()` | `--accent-subtle` |
 
@@ -193,12 +204,13 @@ default stylesheet's rules, so a stylesheet restyles them:
 .blinc-tr-alt { background: transparent; }
 ```
 
-A colour given to the widget (`text_color`, `hr_color`, `header_bg`, a config
-colour) is set on the element and wins over the rule.
+If you give a color to the widget (`text_color`, `hr_color`, `header_bg`, a
+configuration color), the widget sets it on the element. That color then has
+priority over the rule.
 
 ## From StyledText
 
-For integration with syntax highlighting or markdown rendering, create rich text from a pre-built `StyledText`:
+To integrate with syntax highlighting or markdown rendering, create rich text from a pre-built `StyledText`:
 
 ```rust
 use blinc::layout::styled_text::{StyledText, StyledLine, TextSpan};
@@ -227,7 +239,7 @@ rich_text_styled(styled)
 
 ## Example
 
-Here's a complete example demonstrating various text features:
+This complete example shows various text features:
 
 ```rust
 use blinc::app::prelude::*;
@@ -269,7 +281,7 @@ fn demo_ui() -> impl ElementBuilder {
 }
 ```
 
-Run the rich text demo to see all features in action:
+To see all features at work, run the rich text demo:
 
 ```bash
 cargo run -p blinc_app_examples --example rich_text_demo --features windowed

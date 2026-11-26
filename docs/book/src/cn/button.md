@@ -11,7 +11,8 @@ button("Click me")
     .on_click(|_| println!("Clicked!"))
 ```
 
-The label takes a string or a signal, and is patched in place when it changes.
+The label takes a string or a signal. When the label changes, it is patched in
+place.
 
 ## Variants
 
@@ -71,14 +72,15 @@ button("Disabled").disabled(true)
 button("Save").disabled(&is_saving)
 ```
 
-A disabled button does not click and takes the disabled look.
+A disabled button does not respond to clicks, and it has the disabled look.
 
 ## Styling
 
-A button's look is stylesheet. Its fill, text colour, border and shadow, and
-how they change on hover, press and while disabled, are the `.cn-button`
-rules of `CN_STYLES`, with a `transition`, so a button eases between states.
-Each variant and size has a class to hang your own rules on:
+A stylesheet defines the look of a button. The `.cn-button` rules of
+`CN_STYLES` set its fill, text color, border and shadow. They also set how these
+change on hover, on press and while the button is disabled. The rules include a
+`transition`, so a button changes smoothly between states. Each variant and size
+has a class that your own rules can use:
 
 | Class | Matches |
 |-------|---------|
@@ -102,13 +104,14 @@ Each variant and size has a class to hang your own rules on:
 button("Delete").class("danger")
 ```
 
-`:hover:not(:disabled)` keeps the rule off a disabled button. `:active`
-matches while the pointer is down on the button or anything inside it, as on
-the web. Text and icons inside take the button's `color`, so a rule that
-changes it changes them too.
+The `:hover:not(:disabled)` selector keeps a rule off a disabled button.
+`:active` matches while the pointer is down on the button or on anything inside
+it, as on the web. The text and icons inside the button take its `color`. A rule
+that changes this `color` also changes them.
 
-`.color(..)` on the builder fixes the text colour in every state; a fluent
-value wins over cn's rules, as an inline style does on the web.
+`.color(..)` on the builder fixes the text color in every state. A fluent value
+(a value that you set with a builder method) overrides the cn rules, as an
+inline style does on the web.
 
 ## Button Groups
 
@@ -120,7 +123,7 @@ div()
     .child(button("Cancel").variant(ButtonVariant::Outline))
 ```
 
-`gap` takes 4px units, so `gap(2.0)` is 8px.
+`gap` takes units of 4px, so `gap(2.0)` is 8px.
 
 ## Examples
 
@@ -150,10 +153,10 @@ button("Save")
 |--------|------|---------|-------------|
 | `variant` | `ButtonVariant` | `Primary` | Visual style |
 | `size` | `ButtonSize` | `Medium` | `Small`, `Medium`, `Large`, `Icon` or `Custom(w, h)` |
-| `disabled` | `bool` or signal | `false` | Disable interaction |
+| `disabled` | `bool` or signal | `false` | Disables interaction |
 | `icon` | `&str` | none | An icon from `blinc::icons::icons` |
 | `icon_position` | `IconPosition` | `Start` | `Start` or `End` |
 | `icon_size` | `f32` | label size + 2 | Icon size in px |
-| `color` | `Color` | by variant | Text colour in every state |
-| `on_click` | `Fn(&EventContext)` | none | Called when clicked |
+| `color` | `Color` | by variant | Text color in every state |
+| `on_click` | `Fn(&EventContext)` | none | Called on a click |
 | `class`, `id` | `&str` | none | Selectors for your own rules |
