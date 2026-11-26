@@ -152,3 +152,25 @@ fn a_seek_close_to_the_end_keeps_playing() {
     let at = heard_at(&mut output);
     assert!((200..900).contains(&at), "heard {at} ms");
 }
+
+#[test]
+fn a_finished_track_stays_at_its_end_and_plays_again() {
+    let (player, mut output) = detached();
+    player.play(AudioSource::bytes(ramp(400)));
+    for _ in 0..10_000 {
+        if player.state() == PlaybackState::Stopped {
+            break;
+        }
+        output.next();
+    }
+    assert!(!player.is_playing());
+    std::thread::sleep(Duration::from_millis(450));
+    assert_eq!(player.position_ms(), 400);
+
+    player.resume();
+
+    assert!(player.is_playing());
+    assert!(player.position_ms() < 400);
+    let at = heard_at(&mut output);
+    assert!(at < 200, "heard {at} ms");
+}

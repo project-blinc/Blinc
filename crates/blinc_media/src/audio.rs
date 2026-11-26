@@ -57,6 +57,14 @@ impl AudioSource {
 #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
 const END_MARGIN: std::time::Duration = std::time::Duration::from_millis(100);
 
+/// A window that is drawing nothing shows a change to a player on its next frame.
+#[cfg(not(target_arch = "wasm32"))]
+fn request_redraw() {
+    if let Some(scheduler) = blinc_animation::try_get_scheduler() {
+        scheduler.request_redraw();
+    }
+}
+
 /// Cross-platform audio player
 pub struct AudioPlayer {
     #[cfg(target_arch = "wasm32")]
@@ -199,6 +207,7 @@ impl AudioPlayer {
             inner.state = PlaybackState::Playing;
             inner.position_offset_ms = 0;
             inner.play_start = Some(std::time::Instant::now());
+            request_redraw();
         }
     }
 
@@ -224,10 +233,11 @@ impl AudioPlayer {
                 inner.position_offset_ms += start.elapsed().as_millis() as u64;
             }
             inner.state = PlaybackState::Paused;
+            request_redraw();
         }
     }
 
-    /// Resume playback
+    /// Resume playback. A track that has finished starts again.
     pub fn resume(&self) {
         #[cfg(target_arch = "wasm32")]
         {
@@ -237,8 +247,11 @@ impl AudioPlayer {
         {
             let mut inner = self.inner.borrow_mut();
             #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
-            if let Some(ref sink) = inner.sink {
-                sink.play();
+            {
+                inner.rewind_if_finished();
+                if let Some(ref sink) = inner.sink {
+                    sink.play();
+                }
             }
             #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
             {
@@ -246,6 +259,7 @@ impl AudioPlayer {
             }
             inner.state = PlaybackState::Playing;
             inner.play_start = Some(std::time::Instant::now());
+            request_redraw();
         }
     }
 
@@ -270,6 +284,7 @@ impl AudioPlayer {
             inner.state = PlaybackState::Stopped;
             inner.play_start = None;
             inner.position_offset_ms = 0;
+            request_redraw();
         }
     }
 
@@ -286,7 +301,11 @@ impl AudioPlayer {
                 .play_start
                 .map(|s| s.elapsed().as_millis() as u64)
                 .unwrap_or(0);
-            inner.position_offset_ms + elapsed
+            // The clock runs on after the last sample.
+            match inner.duration_ms {
+                0 => inner.position_offset_ms + elapsed,
+                duration => (inner.position_offset_ms + elapsed).min(duration),
+            }
         }
     }
 
@@ -330,6 +349,7 @@ impl AudioPlayer {
             } else {
                 None
             };
+            request_redraw();
         }
     }
 
@@ -343,6 +363,7 @@ impl AudioPlayer {
         {
             let mut inner = self.inner.borrow_mut();
             inner.volume = volume.clamp(0.0, 1.0);
+            request_redraw();
             #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
             if let Some(ref sink) = inner.sink {
                 sink.set_volume(inner.volume);
@@ -465,6 +486,17 @@ impl AudioPlayerInner {
             sink.set_volume(self.volume);
             sink.append(source);
             self.sink = Some(sink);
+        }
+    }
+
+    /// Opens a track that has played to its end again, from its start.
+    fn rewind_if_finished(&mut self) {
+        if self.sink.as_ref().is_some_and(|sink| sink.empty())
+            && let Some(source) = self.source.clone()
+            && self.load(&source, false)
+        {
+            self.position_offset_ms = 0;
+            self.play_start = None;
         }
     }
 

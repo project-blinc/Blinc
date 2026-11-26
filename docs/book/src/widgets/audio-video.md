@@ -61,8 +61,9 @@ fn show_status(p: &dyn Player) {
 | `volume()` / `set_volume(f32)` | Volume (0.0–1.0) |
 | `is_playing()` / `is_live()` | State queries |
 
-On desktop, a seek past the end of an audio track goes to the end. After a track finishes, a seek
-leaves the audio player paused at the new position, and `resume()` plays from there.
+On desktop, a seek past the end of an audio track goes to the end. After a track finishes,
+`resume()` starts it again from the beginning. A seek after the end leaves the audio player paused at
+the new position, and `resume()` plays from there.
 
 ## Audio Widget
 
@@ -82,9 +83,9 @@ audio_player(Rc::clone(&player))
     .into_div()
 ```
 
-The waveform follows the position and duration of the player. Its played region
-advances during playback, holds during a pause, and follows seeks. The waveform
-requests animation frames only while its player plays.
+The waveform and the controls follow the player. The played region of the waveform, the time and the
+seek bar advance during playback, hold during a pause, and follow seeks. The widget requests
+animation frames only while its player plays.
 
 ## Video Widget
 
@@ -128,6 +129,10 @@ use blinc::layout::widgets::media::MediaControls;
 
 MediaControls::new(player_rc).class("my-controls").into_div()
 ```
+
+The controls read the player each time they are painted. If your code changes a paused player, the
+controls show the change in the next frame that the window draws. `AudioPlayer` requests that frame
+itself.
 
 Layout: `[ ▶ ] [ 1:23 / 3:45 ] [ ══seek══ ] [ 80% ]`
 

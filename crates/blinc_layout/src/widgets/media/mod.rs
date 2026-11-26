@@ -1,7 +1,8 @@
 //! Audio and video player widgets
 //!
-//! Both widgets use `MediaControls` which is generic over
-//! the `Player` trait — shared play/pause, seek, time, volume.
+//! The audio widget uses `MediaControls`, which works with any `Player`:
+//! play/pause, seek, time and volume. The video widget binds its controls to
+//! its player's signals.
 //!
 //! All elements have CSS classes (`.blinc-audio-*`, `.blinc-video-*`,
 //! `.blinc-media-*`) for stylesheet targeting.

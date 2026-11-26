@@ -148,6 +148,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - `.placeholder_brush()` draws its brush while the image loads. A gradient fills the image's box, an image brush shows its image, and a glass or blur brush shows its tint colour.
 - `.show_dimensions()` on a video player shows the size of the frame under the controls.
 - `virtual_list(..).gap_px(..)` puts the gap between the rows, and the scroll range counts it.
+- The controls of the desktop audio player follow playback: the play button, the time, the seek bar and the volume. `MediaControls::new` reads its player as it paints, for any `Player`.
 
 ### Added
 - `Image::retry(ImageRetry)` and `Image::no_retry()`: how an image whose load fails is tried again. `ImageRetry::backoff(first, max)` doubles the wait from `first` up to `max`, `.attempts(n)` limits the tries, `ImageRetry::NEVER` turns it off; the default waits half a second, doubling to half a minute, with no limit. `ImageRenderInfo` and `ImageData` carry it.
