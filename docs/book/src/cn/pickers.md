@@ -44,8 +44,8 @@ edits.
 
 Tab moves to the trigger, and Enter/Space opens it. The calendar keeps its own
 month controls and keyboard navigation. A click outside dismisses the popup.
-`size(InputSize)`, `week_start`, `min_year`, `max_year`, `today`, and `events`
-configure its presentation through the existing calendar API.
+`size(InputSize)` sets the `data-size` of the trigger. `week_start`, `min_year`, `max_year`,
+`today` and `events` go to the calendar.
 
 | Class | Part |
 |---|---|
@@ -129,8 +129,8 @@ nearest value. For the compact editor without a clock button, use
 In each field, type up to two digits, or use Up/Down and the mouse wheel to
 step. Stepping wraps within that field and does not carry into the neighboring
 fields. `minute_step` and `second_step` affect stepping. Typing accepts any
-valid value. Enter restores the two-digit presentation of the field. Invalid or
-partial text does not change the selected time.
+valid value. Enter restores the two-digit presentation of the field. If the text is not a valid value, the selected time does not change. A single digit that is a
+valid value changes the time at once.
 
 ### Time styling
 

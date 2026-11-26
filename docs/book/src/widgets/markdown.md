@@ -25,16 +25,17 @@ div()
 
 ## Themes
 
-The renderer supports light and dark themes:
+Markdown takes its colors from the current theme. `markdown_light` is a compact style with smaller
+text and tighter spacing:
 
 ```rust
 use blinc::layout::markdown::{markdown, markdown_light, markdown_with_config, MarkdownConfig};
 
-// Dark theme (default) - for dark backgrounds
-let dark_content = markdown("# Dark Theme");
+// The default style
+let regular = markdown("# Heading");
 
-// Light theme - for white/light backgrounds
-let light_content = markdown_light("# Light Theme");
+// Compact: smaller text and tighter spacing
+let compact = markdown_light("# Heading");
 
 // Custom configuration
 let custom = markdown_with_config("# Custom", MarkdownConfig {
@@ -125,7 +126,7 @@ fn main() {
 "#)
 ````
 
-Syntax highlighting supports Rust, Python, JavaScript, TypeScript, and other languages.
+A code block shows its code with line numbers. The renderer does not highlight syntax.
 
 ### Blockquotes
 
@@ -192,15 +193,13 @@ let config = MarkdownConfig {
 
     // Colors
     text_color: Color::WHITE,
-    heading_color: Color::WHITE,
     link_color: Color::rgba(0.4, 0.6, 1.0, 1.0),
     code_bg: Color::rgba(0.1, 0.1, 0.12, 1.0),
     code_text: Color::rgba(0.9, 0.6, 0.3, 1.0),
 
     // Spacing
     paragraph_spacing: 16.0,
-    heading_margin_top: 24.0,
-    heading_margin_bottom: 12.0,
+    heading_spacing: 24.0,
 
     // Lists
     list_indent: 24.0,
@@ -215,11 +214,11 @@ let content = markdown_with_config("# Custom Styled", config);
 ### Preset Themes
 
 ```rust
-// Dark theme (default) - white text on dark backgrounds
-let dark = MarkdownConfig::default();
+// The default: theme colors
+let regular = MarkdownConfig::default();
 
-// Light theme - dark text on light backgrounds
-let light = MarkdownConfig::light();
+// Theme colors with smaller text and tighter spacing
+let compact = MarkdownConfig::light();
 ```
 
 ## Live Editor Example
@@ -227,7 +226,7 @@ let light = MarkdownConfig::light();
 The examples include a full markdown editor with a live preview. To run it, use this command:
 
 ```bash
-cargo run -p blinc_app_examples --example markdown_demo --features windowed
+cargo run -p blinc_app_examples --example markdown_demo
 ```
 
 The editor shows these features:
@@ -253,7 +252,7 @@ Common entities include `&amp;` (`&`), `&lt;` (`<`), `&gt;` (`>`), `&quot;` (`"`
 
 ## Best Practices
 
-1. For light backgrounds, use `markdown_light()`. The default theme assumes dark backgrounds.
+1. For a compact layout, use `markdown_light()`. Both styles follow the light or dark theme.
 
 2. For long content, put the markdown in a scroll container. Markdown can produce tall content:
 
@@ -272,6 +271,6 @@ Common entities include `&amp;` (`&`), `&lt;` (`<`), `&gt;` (`>`), `&quot;` (`"`
        .child(markdown(content))
    ```
 
-4. Code blocks need height. For correct rendering of syntax highlighting, make sure that the container is tall enough.
+4. Code blocks need height. Make sure that the container is tall enough for them.
 
 5. Images need explicit dimensions. Images will render, but for the best result, put a width constraint on the markdown container.

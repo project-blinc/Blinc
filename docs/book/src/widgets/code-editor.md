@@ -265,7 +265,7 @@ highlighter gives. The widget sets these colors on the element, and they replace
 Your app, or a toolbar that you build, can change the editor with these functions:
 
 ```rust
-use blinc_layout::widgets::code::{
+use blinc::layout::widgets::code::{
     focus_code_editor, refresh_code_editor, replace_all_code_matches, set_code_value,
 };
 

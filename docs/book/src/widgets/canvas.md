@@ -41,10 +41,12 @@ ctx.fill_rect(
 ### Stroked Rectangles
 
 ```rust
+use blinc::core::Stroke;
+
 ctx.stroke_rect(
     Rect::new(x, y, width, height),
     CornerRadius::uniform(4.0),
-    2.0,  // Stroke width
+    &Stroke::new(2.0),  // Stroke width
     Brush::Solid(Color::WHITE),
 );
 ```
@@ -52,6 +54,8 @@ ctx.stroke_rect(
 ### Circles
 
 ```rust
+use blinc::core::{Point, Stroke};
+
 // Filled circle
 ctx.fill_circle(
     Point::new(cx, cy),  // Center
@@ -63,7 +67,7 @@ ctx.fill_circle(
 ctx.stroke_circle(
     Point::new(cx, cy),
     radius,
-    2.0,  // Stroke width
+    &Stroke::new(2.0),  // Stroke width
     Brush::Solid(Color::WHITE),
 );
 ```
@@ -120,7 +124,7 @@ use blinc::core::Transform;
 ctx.push_transform(Transform::translate(50.0, 50.0));
 
 // Draw in transformed space
-ctx.fill_rect(/* ... */);
+ctx.fill_rect(Rect::new(0.0, 0.0, 40.0, 40.0), CornerRadius::default(), Brush::Solid(Color::BLUE));
 
 // Pop transform
 ctx.pop_transform();
@@ -139,11 +143,13 @@ ctx.pop_transform();
 ## Clipping
 
 ```rust
+use blinc::core::ClipShape;
+
 // Push clip region
-ctx.push_clip(Rect::new(10.0, 10.0, 100.0, 100.0));
+ctx.push_clip(ClipShape::rect(Rect::new(10.0, 10.0, 100.0, 100.0)));
 
 // Only content within clip region is visible
-ctx.fill_rect(/* ... */);
+ctx.fill_rect(Rect::new(0.0, 0.0, 200.0, 200.0), CornerRadius::default(), Brush::Solid(Color::BLUE));
 
 // Pop clip
 ctx.pop_clip();
@@ -153,6 +159,9 @@ ctx.pop_clip();
 
 ```rust
 use std::f32::consts::PI;
+use std::sync::Arc;
+
+use blinc::app::windowed::WindowedContext;
 
 fn spinner(ctx: &WindowedContext) -> impl ElementBuilder {
     let timeline = ctx.use_animated_timeline();
@@ -207,7 +216,7 @@ fn progress_ring(progress: f32) -> impl ElementBuilder {
         ctx.stroke_circle(
             Point::new(cx, cy),
             radius,
-            4.0,
+            &Stroke::new(4.0),
             Brush::Solid(Color::rgba(0.2, 0.2, 0.25, 1.0)),
         );
 
@@ -243,6 +252,15 @@ fn progress_ring(progress: f32) -> impl ElementBuilder {
 ## Example: Color Palette
 
 ```rust
+/// A color from a hue, a saturation and a value, each from 0 to 1.
+fn hsv_to_rgb(h: f32, s: f32, v: f32) -> Color {
+    let channel = |n: f32| {
+        let k = (n + h * 6.0) % 6.0;
+        v - v * s * k.min(4.0 - k).clamp(0.0, 1.0)
+    };
+    Color::rgb(channel(5.0), channel(3.0), channel(1.0))
+}
+
 fn color_palette() -> impl ElementBuilder {
     canvas(|ctx, bounds| {
         let cols = 8;

@@ -40,10 +40,10 @@ text("Underlined and struck")
 | `.underline()` | Underline decoration |
 | `.strikethrough()` | Strikethrough decoration |
 | `.align(TextAlign)` | Horizontal alignment (Left, Center, Right) |
-| `.v_align(TextVerticalAlign)` | Vertical alignment (Top, Middle, Bottom) |
+| `.v_align(TextVerticalAlign)` | Vertical alignment (Top, Center, Baseline) |
 | `.font_family(FontFamily)` | Custom font family |
 | `.line_height(f32)` | Line height multiplier (default: 1.2) |
-| `.wrap(bool)` | Turns text wrapping on or off |
+| `.no_wrap()` | Keeps the text on one line |
 
 ## Rich Text
 
@@ -60,8 +60,8 @@ rich_text("This has <b>bold</b> and <i>italic</i> text.")
 // Nested tags
 rich_text("<b>Bold with <i>nested italic</i></b>")
 
-// Inline colors
-rich_text(r#"Colors: <span color="#FF0000">red</span> and <span color="blue">blue</span>"#)
+// Inline colors. `r##` lets the string hold `"#`.
+rich_text(r##"Colors: <span color="#FF0000">red</span> and <span color="blue">blue</span>"##)
 
 // Links (clickable, opens in browser)
 rich_text(r#"Visit <a href="https://example.com">our website</a> for more info."#)
@@ -84,9 +84,9 @@ The `<span color="...">` tag accepts several color formats:
 
 ```rust
 // Hex colors
-rich_text(r#"<span color="#FF0000">Red</span>"#)
-rich_text(r#"<span color="#F00">Short hex</span>"#)
-rich_text(r#"<span color="#FF000080">With alpha</span>"#)
+rich_text(r##"<span color="#FF0000">Red</span>"##)
+rich_text(r##"<span color="#F00">Short hex</span>"##)
+rich_text(r##"<span color="#FF000080">With alpha</span>"##)
 
 // Named colors (CSS subset)
 rich_text(r#"<span color="crimson">Crimson</span>"#)
@@ -149,11 +149,14 @@ These range methods are available:
 
 ### Interactive Links
 
-Links in rich text are fully interactive:
+Links that come from `<a href>` in the markup, or from a `StyledText`, are interactive:
 
-- A click on a link opens the URL in the default browser of the system.
+- On macOS, Linux and Windows, a click on a link opens the URL in the default browser of the system.
+  On other platforms, Blinc writes a warning to the log.
 - Over a link, the cursor changes to a pointer.
 - Rich text underlines links automatically to make them visible.
+
+A link added with `.link_range()` is underlined, but a click on it does not open the URL.
 
 ```rust
 rich_text(r#"
@@ -172,16 +175,19 @@ For simple clickable text, use the `link()` widget:
 // Default behavior - opens URL in browser
 link("Click here", "https://example.com")
 
-// Custom styling
+// A larger link
 link("Styled link", "https://example.com")
     .font_size(18.0)
-    .text_color(Color::CYAN)
-    .no_underline()
 
-// Underline only on hover
-link("Hover to see underline", "https://example.com")
+// No underline
+link("Plain link", "https://example.com")
     .underline_on_hover()
 ```
+
+`.underline_on_hover()` removes the underline, and it does not add one on hover.
+
+Each of `.font_size()`, `.text_color()`, `.underline()`, `.no_underline()`, `.underline_on_hover()`
+and `.on_click()` starts again from the default link. Only the last one in a chain applies.
 
 ### Default colours
 
@@ -220,13 +226,8 @@ let styled = StyledText {
         StyledLine {
             text: "Hello World".to_string(),
             spans: vec![
-                TextSpan {
-                    start: 0,
-                    end: 5,
-                    bold: true,
-                    color: Color::RED,
-                    ..Default::default()
-                },
+                // Bytes 0 to 5, red and bold
+                TextSpan::new(0, 5, Color::RED, true),
             ],
         },
     ],
@@ -248,8 +249,8 @@ use blinc::core::Color;
 fn demo_ui() -> impl ElementBuilder {
     div()
         .flex_col()
-        .gap(16.0)
-        .p(20.0)
+        .gap(4.0)
+        .p(5.0)
         // Plain text
         .child(
             text("Plain Text Example")
@@ -272,9 +273,9 @@ fn demo_ui() -> impl ElementBuilder {
         // Range-based styling
         .child(
             rich_text("Programmatic styling with ranges")
-                .bold_range(0..13)
-                .color_range(14..21, Color::CYAN)
-                .underline_range(22..32)
+                .bold_range(0..12)
+                .color_range(13..20, Color::CYAN)
+                .underline_range(21..32)
                 .size(16.0)
                 .default_color(Color::WHITE)
         )
@@ -284,5 +285,5 @@ fn demo_ui() -> impl ElementBuilder {
 To see all features at work, run the rich text demo:
 
 ```bash
-cargo run -p blinc_app_examples --example rich_text_demo --features windowed
+cargo run -p blinc_app_examples --example rich_text_demo
 ```

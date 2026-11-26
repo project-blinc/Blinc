@@ -159,10 +159,10 @@ When the section first opens, it builds the body and then keeps it. A close fold
 the body but does not destroy it. As a result, the body keeps its state and eases
 shut. If a section never opens, it costs nothing.
 
-There are no separate `collapsible_trigger()` or `collapsible_content()`
-functions. The parts are `.cn-collapsible-trigger`, `.cn-collapsible-content`
-and `.cn-chevron`. Their `data-state` is `open` or `closed`. CSS sets the closed
-height and the chevron transform. The theme sets the timing of the expansion.
+There are no separate `collapsible_trigger()` or `collapsible_content()` functions. The parts are
+`.cn-collapsible-trigger`, `.cn-collapsible-content` and `.cn-chevron`. The trigger and the content
+have `data-state` `open` or `closed`, and the chevron turns with the state of its trigger. CSS sets
+the closed height and the chevron transform. The theme sets the timing of the expansion.
 
 ## Accordion
 
@@ -253,6 +253,8 @@ has the size that it had. This is how you build a collapsible bottom panel or
 sidebar:
 
 ```rust
+use blinc::prelude::signal;
+
 let panel_open = signal(true);
 resizable_group().vertical()
     .panel(resizable_panel().flex_grow().child(text("Editor area")))
@@ -266,6 +268,8 @@ panel opens again, it has the size that it had. A sidebar that folds to its icon
 rail is one panel that holds both:
 
 ```rust
+use blinc::prelude::{computed, signal};
+
 let inspector_open = signal(true);
 resizable_group().horizontal()
     .panel(resizable_panel().default_size(340.0).min_size(260.0)

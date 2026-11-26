@@ -5,20 +5,19 @@
 ```rust
 use blinc::layout::prelude::*;
 
-let fill = blinc::layout::css_parser::active_stylesheet()
-    .and_then(|sheet| sheet.resolve_color("var(--shaped-panel-fill)"))
-    .unwrap_or(blinc::core::Color::TRANSPARENT);
 let panel = notch().w(280.0).h(160.0)
     .concave_tr(32.0).rounded_bl(24.0)
-    .bg(fill)
+    .class("shaped-panel")
     .child(div().child(text("A different kind of corner")));
 ```
 
 ```css
-:root { --shaped-panel-fill: var(--primary); }
+.shaped-panel { background: var(--primary); }
 ```
 
-The custom canvas fill reads the root variable of the application at widget build time. The children of the widget are regular elements with their own classes and bindings. Unless you add interactive content to a shaped surface, it has no keyboard action.
+You style a notch like any box. A rule for its class or id sets the `background`, `border`,
+`border-radius`, `box-shadow` and `opacity`. The children of the widget are regular elements with their
+own classes and bindings. Unless you add interactive content to a shaped surface, it has no keyboard action.
 
 ## Interactive gallery
 

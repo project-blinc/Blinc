@@ -61,6 +61,9 @@ fn show_status(p: &dyn Player) {
 | `volume()` / `set_volume(f32)` | Volume (0.0–1.0) |
 | `is_playing()` / `is_live()` | State queries |
 
+On desktop, audio `seek` changes only the position that `position_ms()` reports. The sound does not
+move to the new position.
+
 ## Audio Widget
 
 ```rust
@@ -92,7 +95,6 @@ use blinc::layout::widgets::media::video_player;
 let player = Rc::new(VideoPlayer::new());
 
 video_player(Rc::clone(&player))
-    .show_dimensions()
     .w_full()
     .h(400.0)
     .into_div()
@@ -100,7 +102,7 @@ video_player(Rc::clone(&player))
 
 ## Waveform
 
-A standalone view of amplitude:
+A standalone view of amplitude. `buckets` is an `Arc<Vec<f32>>` of amplitudes:
 
 ```rust
 use blinc::layout::widgets::media::waveform;
@@ -215,7 +217,7 @@ Drive excerpt. For the source assets and conversion details, see
 `examples/blinc_component_demos/assets/README.md`.
 
 Native recordings start with the audio paused and muted. Browser playback starts
-only after you press Play. The video sample is silent. Native playback needs the
+only after you press Play. The video sample has sound, which plays after you press Play. Native playback needs the
 `media` feature of `blinc_layout`.
 
 The gallery connects media decoding in the browser to the dedicated worker.

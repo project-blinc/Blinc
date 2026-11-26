@@ -6,11 +6,12 @@ Cards group related content and actions.
 
 ```rust
 use blinc::cn::prelude::*;
+use blinc::layout::prelude::{div, img, text};
 
 card()
     .child(card_header()
-        .child(card_title("Card Title"))
-        .child(card_description("Card description text")))
+        .title("Card Title")
+        .description("Card description text"))
     .child(card_content()
         .child(text("Card content goes here.")))
     .child(card_footer()
@@ -26,7 +27,7 @@ card()
 ```rust
 card()
     .w(400.0)  // Custom width
-    .child(/* card parts */)
+    .child(text("Card content"))
 ```
 
 ### card_header()
@@ -44,29 +45,13 @@ The title has the class `.cn-card-title`, and the description has the class
 and the description each take a string or a signal. When a signal changes, it
 replaces the text in place.
 
-### card_title()
-
-This is the main heading of the card.
-
-```rust
-card_title("Account Settings")
-```
-
-### card_description()
-
-This is the secondary text below the title.
-
-```rust
-card_description("Manage your account preferences")
-```
-
 ### card_content()
 
 This is the main content area.
 
 ```rust
 card_content()
-    .child(/* any content */)
+    .child(text("Any content"))
 ```
 
 ### card_footer()
@@ -84,17 +69,22 @@ card_footer()
 ### Simple Card
 
 ```rust
+use blinc::prelude::signal;
+
+let email = signal(true);
+let push = signal(false);
+
 card()
     .child(card_header()
-        .child(card_title("Notifications"))
-        .child(card_description("Configure notification settings")))
+        .title("Notifications")
+        .description("Configure notification settings"))
     .child(card_content()
         .child(
             div()
                 .flex_col()
-                .gap(12.0)
-                .child(checkbox().checked(true).child(label("Email notifications")))
-                .child(checkbox().child(label("Push notifications")))
+                .gap_px(12.0)
+                .child(checkbox(email).label("Email notifications"))
+                .child(checkbox(push).label("Push notifications"))
         ))
 ```
 
@@ -102,7 +92,6 @@ card()
 
 ```rust
 card()
-    .overflow_clip()
     .child(
         img("cover.jpg")
             .w_full()
@@ -110,8 +99,8 @@ card()
             .cover()
     )
     .child(card_header()
-        .child(card_title("Beautiful Sunset"))
-        .child(card_description("Photo by @photographer")))
+        .title("Beautiful Sunset")
+        .description("Photo by @photographer"))
     .child(card_footer()
         .child(button("View").variant(ButtonVariant::Outline))
         .child(button("Download")))
@@ -123,117 +112,122 @@ With `.w_full().max_w(350.0)`, a card is 350 px wide where there is room. In a
 smaller container, it is narrower. `.w(350.0)` keeps the card at 350 px.
 
 ```rust
+use blinc::layout::widgets::text_input::text_input_state;
+
+let email = text_input_state();
+let password = text_input_state();
+
 card()
     .w_full()
     .max_w(350.0)
     .child(card_header()
-        .child(card_title("Login"))
-        .child(card_description("Enter your credentials")))
+        .title("Login")
+        .description("Enter your credentials"))
     .child(card_content()
         .child(
             div()
                 .flex_col()
-                .gap(16.0)
-                .child(
-                    div()
-                        .flex_col()
-                        .gap(4.0)
-                        .child(label("Email"))
-                        .child(input().placeholder("name@example.com"))
-                )
-                .child(
-                    div()
-                        .flex_col()
-                        .gap(4.0)
-                        .child(label("Password"))
-                        .child(input().input_type("password"))
-                )
+                .gap_px(16.0)
+                .child(input(&email).label("Email").placeholder("name@example.com"))
+                .child(input(&password).label("Password").password())
         ))
     .child(card_footer()
-        .child(button("Sign in").full_width(true)))
+        .child(button("Sign in")))
 ```
 
 ### Card Grid
 
+The cards sit in a row. If the space is too narrow, they wrap onto new rows.
+
 ```rust
+let plan = |name: &'static str, price: &'static str| {
+    card()
+        .w(220.0)
+        .child(card_header().title(name))
+        .child(card_content().child(text(price)))
+        .child(card_footer().child(button("Select")))
+};
+
 div()
-    .grid()
-    .grid_cols(3)
-    .gap(16.0)
-    .child(
-        card()
-            .child(card_header().child(card_title("Plan A")))
-            .child(card_content().child(text("$9/month")))
-            .child(card_footer().child(button("Select")))
-    )
-    .child(
-        card()
-            .child(card_header().child(card_title("Plan B")))
-            .child(card_content().child(text("$19/month")))
-            .child(card_footer().child(button("Select")))
-    )
-    .child(
-        card()
-            .child(card_header().child(card_title("Plan C")))
-            .child(card_content().child(text("$29/month")))
-            .child(card_footer().child(button("Select")))
-    )
+    .flex_row()
+    .flex_wrap()
+    .gap_px(16.0)
+    .child(plan("Plan A", "$9/month"))
+    .child(plan("Plan B", "$19/month"))
+    .child(plan("Plan C", "$29/month"))
 ```
 
 ### Interactive Card
 
+A card has no click handler of its own. To make the whole card clickable, put it in a `div` that has
+one.
+
 ```rust
-card()
-    .on_click(|| navigate_to("/details"))
-    .cursor("pointer")
-    .child(card_header()
-        .child(card_title("Click Me"))
-        .child(card_description("This entire card is clickable")))
-    .child(card_content()
-        .child(text("Card content...")))
+div()
+    .cursor_pointer()
+    .on_click(|_| {
+        // Open the details here.
+    })
+    .child(card()
+        .child(card_header()
+            .title("Click Me")
+            .description("This entire card is clickable"))
+        .child(card_content()
+            .child(text("Card content..."))))
 ```
 
 ## Styling
 
-Cards use theme tokens automatically:
+Cards take their colors from the theme. The `.cn-card` rule sets these:
 
-- Background: `theme.colors.card`
-- Border: `theme.colors.border`
-- Radius: `theme.radius.lg`
-- Shadow: `theme.shadows.sm`
+- Background: `--cn-card-bg`, with `--surface` as the default
+- Border: `--cn-card-border`, with `--border` as the default
+- Radius: `--cn-card-radius`, with `--radius-xl` as the default
 
-To override them, set your own styles:
+A card also has the small theme shadow.
+
+To change the look, write rules for `.cn-card` in your CSS:
+
+```css
+.cn-card {
+    background: var(--surface-elevated);
+    border-color: var(--primary);
+    border-radius: var(--radius-lg);
+}
+```
+
+In Rust, `.bg(color)` sets the background, and `.shadow_md()` or `.shadow_lg()` sets a larger shadow.
 
 ```rust
 card()
     .bg(Color::rgb(0.1, 0.1, 0.1))
-    .border(2.0, Color::BLUE)
-    .rounded(16.0)
-    .shadow(Shadow::lg())
+    .shadow_lg()
 ```
 
 ## API Reference
 
 ### card()
 
-| Prop | Type | Description |
-|------|------|-------------|
-| Standard div props | - | All div styling props |
+| Method | Description |
+|--------|-------------|
+| `child` | Adds content |
+| `w`, `h`, `w_full`, `max_w` | Set the size |
+| `p`, `px`, `py`, `m` | Set padding and margin, in units of 4 px |
+| `bg`, `shadow_md`, `shadow_lg` | Set the background and the shadow |
+| `class`, `id` | Name the card for CSS |
+
+Other `div` methods, for example `rounded` or `on_click`, are not on a card. Use CSS, or put the card
+in a `div`.
 
 ### card_header()
 
-| Prop | Type | Description |
-|------|------|-------------|
-| Standard div props | - | All div styling props |
+| Method | Description |
+|--------|-------------|
+| `title` | The main heading. A string or a signal |
+| `description` | The text below the title. A string or a signal |
 
-### card_title()
+### card_content() and card_footer()
 
-| Prop | Type | Description |
-|------|------|-------------|
-| Text content | `&str` | Title text |
-
-### card_description()
-
-| Prop | Type | Description |
-|------|------|-------------|
-| Text content | `&str` | Description text |
+| Method | Description |
+|--------|-------------|
+| `child` | Adds an element |

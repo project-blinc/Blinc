@@ -1,6 +1,6 @@
 # Virtualized List
 
-The `virtual_list` widget renders large datasets efficiently. It creates elements only for a window of visible items. Items can have variable heights, and the flexbox layout sets their size.
+The `virtual_list` widget renders large datasets efficiently. It creates elements only for a window of items around the visible part. Items can have variable heights, and the flexbox layout sets their size.
 
 ## Basic Usage
 
@@ -53,21 +53,23 @@ virtual_list(count, builder)
     .h(400.0)                       // Viewport height
     .bg(Color::BLACK)               // Background
     .rounded(8.0)                   // Corner radius
-    .gap_px(4.0)                    // Gap between items
-    .estimated_item_height(48.0)    // Hint for scroll spacer (default: 40px)
-    .window_size(80)                // Items to render at once (default: 50)
+    .estimated_item_height(48.0)    // Height of a row not yet measured (default: 40px)
+    .window_size(80)                // Rows to build, with those around the view (default: 50)
     .into_div()
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `estimated_item_height` | 40.0 | Estimate of the average item height, for the calculation of the scroll spacer |
-| `window_size` | 50 | Number of items that the list renders at once |
+| `estimated_item_height` | 40.0 | Height that the list uses for a row that it did not measure yet |
+| `window_size` | 50 | Number of rows that the list builds, with the rows around the view |
+
+The list always builds all the visible rows. Their number can be more than `window_size`. To put space between
+rows, give each row padding or a margin.
 
 ## How It Works
 
-1. The builder creates elements for the first `window_size` items.
-2. The flexbox layout sets the actual height of each item.
-3. A spacer div below the rendered items estimates the remaining scroll height.
-4. The scroll container provides scrolling with momentum physics.
-5. Items use the natural height that flexbox gives them, with no fixed constraints.
+1. The list builds rows only for a window around the visible part.
+2. When you scroll, the window follows.
+3. The flexbox layout sets the height of each row, and the list measures it.
+4. A spacer above the window and a spacer below it stand for the other rows.
+5. The scroll container provides scrolling with momentum physics.

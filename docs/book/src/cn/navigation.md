@@ -87,8 +87,8 @@ dropdown_menu("Options")
 
 A shortcut label shows a hint, and the application code supplies any global
 shortcut bindings. For a custom trigger, use
-`dropdown_menu_custom(|open| div()...)`. To place the menu, use
-`.min_width(..)`, `.position(..)`, `.align(..)` and `.offset(..)`.
+`dropdown_menu_custom(|open| div()...)`. To place the menu, use `.position(..)`, `.align(..)` and `.offset(..)`. `.min_width(..)` sets its
+smallest width.
 
 While the menu is open, these keys work:
 
@@ -258,7 +258,9 @@ item that opens and closes something and does not go to a page, use
 press on it does not change the selection.
 
 ```rust
-sidebar(collapsed).toggle_item("Inspector", icon, inspector_open, move || {
+let inspector_open = ctx.use_signal(false);
+
+sidebar(collapsed).toggle_item("Inspector", to_svg(icons::PANEL_RIGHT, 16.0), inspector_open, move || {
     inspector_open.update(|open| !open)
 })
 ```

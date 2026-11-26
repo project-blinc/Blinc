@@ -22,6 +22,13 @@ image("https://example.com/image.jpg")
     .h(200.0)
 ```
 
+To load an image from a URL, your app needs the `network` feature of `blinc_image`. Add it to your
+`Cargo.toml`:
+
+```toml
+blinc_image = { version = "0.6", features = ["network"] }
+```
+
 ### Object Fit
 
 Set how the image fills its container:
@@ -90,12 +97,15 @@ image(src)
 
 ### Lazy Loading
 
-Lazy loading is for content-heavy apps with many images, such as galleries, feeds, and chat. It delays decode until the image is visible in the viewport (the area on screen). While the real bitmap loads, Blinc renders a placeholder in its place. After the texture is in the cache, the image fades in. You can set the duration of the fade.
+Lazy loading is for content-heavy apps with many images, such as galleries, feeds, and chat. It delays decode until the image is within 100 px of the visible area. While the real bitmap loads, Blinc renders a placeholder in its place. After the texture is in the cache, the image fades in. You can set the duration of the fade.
 
 #### How it works
 
-1. On each frame, the renderer tests the quad of every lazy image against the current viewport AABB (axis-aligned bounding box). It skips off-screen images, with no decode and no GPU upload.
-2. When an image intersects the viewport for the first time, Blinc starts the loader. It draws a placeholder at the final layout rect of the image.
+1. On each frame, the renderer compares every lazy image with the visible area, plus 100 px on each
+   side. Inside a scroll container, the visible area is that of the container. The renderer skips the
+   other images, with no decode and no GPU upload.
+2. When an image comes into that area for the first time, Blinc starts the loader. It draws a
+   placeholder at the final layout rect of the image.
 3. As soon as the decoded texture is in the GPU cache, Blinc records `image_load_times[source] = Instant::now()`. Then it starts the fade-in. The alpha multiplier is `elapsed_ms / fade_duration_ms`. When the multiplier reaches `1.0`, the image is fully opaque and Blinc clears the fade-in flag.
 4. Blinc preloads placeholder images (type 2) eagerly. They are available as soon as the lazy element appears. You see no flash of empty space while you wait for the thumbnail itself.
 5. While any image fades in, the runtime continues to request redraws. The animation thus runs smoothly, even on a screen where nothing else changes.
@@ -106,7 +116,7 @@ Lazy loading is for content-heavy apps with many images, such as galleries, feed
 use blinc::layout::prelude::*;
 use std::time::Duration;
 
-// Basic lazy loading — no placeholder, just defer decode
+// Basic lazy loading, with the default gray placeholder
 img("large-photo.jpg")
     .lazy()
     .w(300.0)
@@ -116,18 +126,6 @@ img("large-photo.jpg")
 img("photo.jpg")
     .lazy()
     .placeholder_color(Color::rgba(0.2, 0.2, 0.2, 1.0))
-    .w(300.0)
-    .h(200.0)
-
-// Gradient (or any Brush) placeholder
-img("photo.jpg")
-    .lazy()
-    .placeholder_brush(Brush::Gradient(Gradient::linear(
-        Point::new(0.0, 0.0),
-        Point::new(1.0, 1.0),
-        Color::rgba(0.4, 0.6, 1.0, 1.0),
-        Color::rgba(0.6, 0.4, 1.0, 1.0),
-    )))
     .w(300.0)
     .h(200.0)
 
@@ -160,15 +158,15 @@ img("photo.jpg")
 | Strategy | Description |
 |----------|-------------|
 | `Eager` (default) | Load and decode the image immediately at element creation |
-| `Lazy` | Delay the load until the layout rect of the image intersects the viewport |
+| `Lazy` | Delay the load until the image is within 100 px of the visible area |
 
 #### Placeholder types
 
 | Placeholder | Description |
 |-------------|-------------|
 | `None` | No placeholder. The area stays empty until the bitmap arrives |
-| `Color(color)` | Solid color background |
-| `Brush(brush)` | Any brush, such as a gradient or a glass effect |
+| `Color(color)` | Solid color background. The default is a translucent gray |
+| `Brush(brush)` | Not drawn. Use a color, an image or the skeleton |
 | `Image(url)` | Another image (a low-res thumbnail or a blur hash). Preloaded on tree build |
 | `Skeleton` | Shimmer band animation that needs no asset |
 
@@ -244,7 +242,7 @@ emoji_sized("🚀", 128.0)
 // In a layout
 div()
     .flex_row()
-    .gap(8.0)
+    .gap(2.0)
     .child(emoji_sized("👍", 32.0))
     .child(emoji_sized("🎉", 32.0))
     .child(emoji_sized("✨", 32.0))
@@ -258,12 +256,17 @@ Emoji images use the system color emoji font (Apple Color Emoji on macOS, Segoe 
 
 ### Basic SVG
 
+`svg()` takes SVG markup, not a file path. To use a file, read it first, for example with
+`include_str!("icons/menu.svg")`.
+
 ```rust
 use blinc::layout::svg::svg;
 
-svg("icons/menu.svg")
-    .w(24.0)
-    .h(24.0)
+const MENU: &str = r#"<svg viewBox="0 0 24 24">
+    <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2"/>
+</svg>"#;
+
+svg(MENU).size(24.0, 24.0)
 ```
 
 ### SVG with Tint
@@ -271,28 +274,23 @@ svg("icons/menu.svg")
 Apply a color tint to monochrome (single-color) SVGs:
 
 ```rust
-svg("icons/settings.svg")
-    .w(24.0)
-    .h(24.0)
+svg(MENU)
+    .square(24.0)
     .tint(Color::WHITE)
 
-svg("icons/error.svg")
-    .w(20.0)
-    .h(20.0)
+svg(MENU)
+    .square(20.0)
     .tint(Color::rgba(0.9, 0.3, 0.3, 1.0))
 ```
 
 ### SVG Sizing
 
 ```rust
-// Fixed size
-svg(src).w(32.0).h(32.0)
+// Width and height
+svg(MENU).size(32.0, 16.0)
 
 // Square shorthand
-svg(src).square(24.0)
-
-// Aspect ratio preserved
-svg(src).w(48.0).h_auto()
+svg(MENU).square(24.0)
 ```
 
 ---
@@ -307,7 +305,7 @@ fn avatar(url: &str, size: f32) -> impl ElementBuilder {
         .w(size)
         .h(size)
         .cover()
-        .rounded_full()  // Circular
+        .circular()
 }
 ```
 
@@ -316,27 +314,22 @@ fn avatar(url: &str, size: f32) -> impl ElementBuilder {
 ```rust
 use blinc::layout::stateful::stateful;
 
-fn icon_button(icon_path: &str) -> impl ElementBuilder {
-    stateful::<ButtonState>()
-        .w(40.0)
-        .h(40.0)
-        .rounded(8.0)
-        .flex_center()
-        .on_state(|ctx| {
-            let bg = match ctx.state() {
-                ButtonState::Idle => Color::TRANSPARENT,
-                ButtonState::Hovered => Color::rgba(0.2, 0.2, 0.25, 1.0),
-                ButtonState::Pressed => Color::rgba(0.15, 0.15, 0.2, 1.0),
-                _ => Color::TRANSPARENT,
-            };
-            div().bg(bg)
-        })
-        .child(
-            svg(icon_path)
-                .w(20.0)
-                .h(20.0)
-                .tint(Color::WHITE)
-        )
+fn icon_button(icon: &'static str) -> impl ElementBuilder {
+    stateful::<ButtonState>().on_state(move |ctx| {
+        let bg = match ctx.state() {
+            ButtonState::Hovered => Color::rgba(0.2, 0.2, 0.25, 1.0),
+            ButtonState::Pressed => Color::rgba(0.15, 0.15, 0.2, 1.0),
+            _ => Color::TRANSPARENT,
+        };
+        div()
+            .w(40.0)
+            .h(40.0)
+            .rounded(8.0)
+            .items_center()
+            .justify_center()
+            .bg(bg)
+            .child(svg(icon).square(20.0).tint(Color::WHITE))
+    })
 }
 ```
 
@@ -357,7 +350,7 @@ fn image_card(image_url: &str, title: &str) -> impl ElementBuilder {
         )
         .child(
             div()
-                .p(16.0)
+                .p(4.0)
                 .child(
                     text(title)
                         .size(18.0)
@@ -375,41 +368,31 @@ fn gallery(images: &[&str]) -> impl ElementBuilder {
     div()
         .flex_row()
         .flex_wrap()
-        .gap(8.0)
-        .child(
-            images.iter().map(|url| {
-                image(*url)
-                    .w(150.0)
-                    .h(150.0)
-                    .cover()
-                    .rounded(8.0)
-            })
-        )
+        .gap(2.0)
+        .children(images.iter().map(|url| {
+            image(*url)
+                .w(150.0)
+                .h(150.0)
+                .cover()
+                .rounded(8.0)
+        }))
 }
 ```
 
 ### Placeholder with Fallback
 
 ```rust
-fn image_with_placeholder(url: Option<&str>) -> impl ElementBuilder {
+fn image_with_placeholder(url: Option<&str>, icon: &str) -> Div {
     match url {
-        Some(src) => image(src)
-            .w(200.0)
-            .h(200.0)
-            .cover()
-            .rounded(8.0),
+        Some(src) => div().child(image(src).w(200.0).h(200.0).cover().rounded(8.0)),
         None => div()
             .w(200.0)
             .h(200.0)
             .rounded(8.0)
             .bg(Color::rgba(0.2, 0.2, 0.25, 1.0))
-            .flex_center()
-            .child(
-                svg("icons/image-placeholder.svg")
-                    .w(48.0)
-                    .h(48.0)
-                    .tint(Color::rgba(0.4, 0.4, 0.5, 1.0))
-            ),
+            .items_center()
+            .justify_center()
+            .child(svg(icon).square(48.0).tint(Color::rgba(0.4, 0.4, 0.5, 1.0))),
     }
 }
 ```
@@ -420,12 +403,12 @@ fn image_with_placeholder(url: Option<&str>) -> impl ElementBuilder {
 
 ### Images
 
-- PNG
-- JPEG
-- WebP
-- GIF (first frame)
-- BMP
-- ICO
+PNG and JPEG work by default. For the other formats, add `blinc_image` with the matching feature to
+your `Cargo.toml`:
+
+- WebP: `webp`
+- GIF (first frame): `gif`
+- BMP: `bmp`
 
 ### SVG
 
@@ -439,7 +422,7 @@ fn image_with_placeholder(url: Option<&str>) -> impl ElementBuilder {
 
 ## Best Practices
 
-1. Set explicit dimensions. Images need a width and a height for layout.
+1. Set explicit dimensions. An image without a size is 100 by 100 px.
 
 2. Use `cover` for photos. It fills the container well, without distortion.
 

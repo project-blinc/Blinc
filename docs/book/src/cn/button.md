@@ -86,7 +86,7 @@ has a class that your own rules can use:
 |-------|---------|
 | `.cn-button` | every cn button |
 | `.cn-button--primary`, `--secondary`, `--destructive`, `--outline`, `--ghost`, `--link` | the variant |
-| `.cn-button--sm`, `--md`, `--lg`, `--icon` | the size |
+| `.cn-button--sm`, `--md`, `--lg`, `--icon`, `--custom` | the size |
 
 ```css
 /* A brand colour for primary buttons, eased on hover. Your rules win over
@@ -101,7 +101,7 @@ has a class that your own rules can use:
 ```
 
 ```rust
-button("Delete").class("danger")
+button("Delete").build_component().class("danger")
 ```
 
 The `:hover:not(:disabled)` selector keeps a rule off a disabled button.

@@ -210,8 +210,9 @@ cn::comparison_bar_chart()
     .threshold(10.0)
 ```
 
-Any chart takes `.band(..)` for a shaded value range and
-`.marker(ChartMarker::new(v))` for a dashed line at a value. A band with no color
+Line, area, bar, spark and threshold charts take `.band(..)` for a shaded value range and
+`.marker(ChartMarker::new(v))` for a dashed line at a value. A histogram takes `.marker(v)` with a
+number. Pie and comparison charts take neither. A band with no color
 of its own takes the good, warning or bad color, in turn. The label of a band is
 `.cn-chart-band-label`. The notes of a comparison are `.cn-chart-note`. Past the
 threshold, a note has `data-tone="bad"`. For a decrease, the tone is `"good"`.

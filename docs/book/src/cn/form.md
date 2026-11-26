@@ -40,6 +40,8 @@ cn::input(&name).disabled(true)
 cn::input(&name).error("Name is required")
 
 // Text that follows signals: an empty error clears it
+use blinc::prelude::signal;
+
 let placeholder = signal("you@example.com".to_string());
 let error = signal(String::new());
 cn::input(&email)
@@ -188,11 +190,12 @@ The label also takes a string, Signal or Computed.
 
 ### Styling
 
-While a checkbox is checked, its element has a `checked` attribute. While it
-cannot be used, it has `disabled`. The `.cn-checkbox` rules of `CN_STYLES`,
-with a `transition`, set its fill, border color and hover look. They also set
-the disabled palette and the fade-in of the check mark. To restyle the
-checkbox, write your own rules:
+While a checkbox is checked, its element has a `checked` attribute. While it cannot be used, it has
+`disabled`. The `.blinc-checkbox` rules of the layout stylesheet set its look: the fill, the border,
+the hover look, the disabled colors and the fade-in of the check mark. The `.cn-checkbox` rules set
+the checked colors. You can change them with the variables `--cn-checkbox-checked-bg`,
+`--cn-checkbox-checked-border` and `--cn-checkbox-checked-color`. To restyle the checkbox, you can
+also write your own rules:
 
 ```css
 @layer components {
@@ -205,7 +208,7 @@ checkbox, write your own rules:
 ```
 
 ```rust
-checkbox(accepted).class("my-checkbox")
+checkbox(accepted).build_component().class("my-checkbox")
 ```
 
 ## Switch
@@ -242,7 +245,7 @@ define all of this for each size (`.cn-switch--sm`, `--md`, `--lg`):
 ```
 
 ```rust
-switch(dark).class("my-switch")
+switch(dark).build_component().class("my-switch")
 ```
 
 ## Radio Group
@@ -269,10 +272,11 @@ radio_group(size).disabled(locked)                  // all of them; a bool, Sign
 
 ### Styling
 
-While its option is selected, each ring has a `checked` attribute. While the
-option cannot be chosen, the ring has `disabled`. Hover also highlights an
-unselected option. The `.cn-radio` and `.cn-radio-dot` rules of `CN_STYLES` set
-the ring border, the fade-in of the dot, hover and the disabled fill:
+While its option is selected, each ring has a `checked` attribute. While the option cannot be chosen,
+the ring has `disabled`. The `.blinc-radio` rules of the layout stylesheet set the look of the ring,
+the fade-in of the dot, the hover look and the disabled fill. The `.cn-radio` and `.cn-radio-dot`
+rules set the colors. You can change them with the variables `--cn-radio-border`,
+`--cn-radio-hover-border`, `--cn-radio-selected` and `--cn-radio-dot`, or with rules:
 
 ```css
 @layer components {
@@ -293,22 +297,22 @@ toggle in a toolbar or as a filter.
 ```rust
 let bold = ctx.use_signal(false);
 
-toggle(bold)
+cn::toggle(bold)
     .label("B")
     .on_change(|on| println!("bold: {on}"))
 ```
 
 ```rust
 // An icon, with or without a label
-toggle(bold).icon(to_svg(icons::BOLD, 16.0))
+cn::toggle(bold).icon(to_svg(icons::BOLD, 16.0))
 
 // Outline variant: a hairline in both states
-toggle(bold).label("B").variant(ToggleVariant::Outline)
+cn::toggle(bold).label("B").variant(cn::ToggleVariant::Outline)
 
 // Sizes: Small (32px), Medium (36px), Large (40px)
-toggle(bold).label("B").size(ToggleSize::Small)
+cn::toggle(bold).label("B").size(cn::ToggleSize::Small)
 
-toggle(bold).label("B").disabled(locked)   // a bool, Signal or Computed
+cn::toggle(bold).label("B").disabled(locked)   // a bool, Signal or Computed
 ```
 
 ### Styling
@@ -327,16 +331,16 @@ can do the same:
 
 ```css
 @layer components {
-    .my-toggle[data-state="on"] {
+    #my-toggle[data-state="on"] {
         background: #16a34a !important;
         color: white !important;
     }
 }
-.my-toggle[data-size="lg"] { min-width: 48px; }
+#my-toggle[data-size="lg"] { min-width: 48px; }
 ```
 
 ```rust
-toggle(bold).class("my-toggle")
+cn::toggle(bold).id("my-toggle")
 ```
 
 ## Toggle Group
@@ -347,15 +351,15 @@ text alignment. The group reads and writes a `Signal<String>`:
 ```rust
 let align = ctx.use_signal("left".to_string());
 
-toggle_group(align)
-    .variant(ToggleVariant::Outline)
-    .item(toggle_item("left").label("Left"))
-    .item(toggle_item("center").label("Centre"))
-    .item(toggle_item("right").label("Right"))
+cn::toggle_group(align)
+    .variant(cn::ToggleVariant::Outline)
+    .item(cn::toggle_item("left").label("Left"))
+    .item(cn::toggle_item("center").label("Centre"))
+    .item(cn::toggle_item("right").label("Right"))
     .on_change(|value| println!("align: {value}"))
 
 // Items take an icon too, with or without a label
-toggle_item("add").icon(to_svg(icons::PLUS, 16.0)).label("Add")
+cn::toggle_item("add").icon(to_svg(icons::PLUS, 16.0)).label("Add")
 ```
 
 If you click the selected item, it stays selected. To clear the selection, set
@@ -510,6 +514,8 @@ The combobox is a select that you can search. It is bound to a `Signal<String>`
 that holds the selected value:
 
 ```rust
+use blinc::cn::components::combobox::ComboboxSize;
+
 let framework = ctx.use_signal(String::new());
 
 cn::combobox(framework)
@@ -696,9 +702,10 @@ div()
 
 ## Validation
 
-An `Email` or `Number` input tests its own value. While the value is not valid,
-the input sets `data-invalid`, and the `.cn-input` rules show a red border. To
-show your own message, write it to a signal, and show the signal in a label:
+An `Email`, `Number`, `Integer` or `Url` input tests its own value. The `required` and `min_length`
+constraints of the input data also test it. While the value is not valid, the input sets
+`data-invalid`, and the `.cn-input` rules show a red border. To show your own message, write it to a
+signal, and show the signal in a label:
 
 ```rust
 let email = text_input_data();

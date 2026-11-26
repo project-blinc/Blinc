@@ -232,7 +232,8 @@ navigation uses the shared `:focus-visible` rules.
 The panel classes are `.cn-dialog`, `.cn-sheet` and `.cn-drawer`. Dialog text
 uses `.cn-dialog-title` and `.cn-dialog-description`. Sheets use
 `.cn-sheet-title` and `.cn-sheet-description`. Drawers use `.cn-drawer-title`.
-Add a panel class with `.class("...")`, and override it in application CSS.
+To add a class to a dialog or a drawer, use `.class("...")`, and override it in application CSS.
+Sheets have no `.class` method.
 
 The overlay wrapper carries `data-motion="enter"` or `"exit"`. While its exit
 animation plays, it remains mounted. Child transforms stay inside that motion,
