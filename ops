@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1795778062,"nonce":"ZIEK1uHnWibdDbt1bFGRM3f7XZM=","message":"Fixed in e44ad41ffffa0319a89a1270d26e4b494f9f2572. The transition snapshot of a node with no shape of its own is the theme's shape, so the lock follows only what an animation writes.","files":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1795778062,"nonce":"GLV20QEJCZwfks4hrOjRTz5Hu2g=","status":2}]}
