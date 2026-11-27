@@ -1191,6 +1191,11 @@ impl MultiKeyframeAnimation {
         self.fill_mode = fill_mode;
     }
 
+    /// Whether the end values stay once the animation has finished.
+    pub fn holds_end(&self) -> bool {
+        matches!(self.fill_mode, FillMode::Forwards | FillMode::Both)
+    }
+
     /// Whether the animation repeats with no end.
     pub fn is_infinite(&self) -> bool {
         self.iterations < 0

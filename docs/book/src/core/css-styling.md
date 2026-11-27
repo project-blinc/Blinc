@@ -292,6 +292,9 @@ Corner shape is animatable via transitions and keyframes:
 }
 ```
 
+An animation draws each shape that it gives, round included. If an element sets no corner shape,
+a transition starts at the corners that the theme draws, and it ends at them.
+
 ### Border
 
 ```css

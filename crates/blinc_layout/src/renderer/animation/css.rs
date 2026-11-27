@@ -764,7 +764,7 @@ impl RenderTree {
             crate::tree::StableNodeId,
             blinc_animation::KeyframeProperties,
         );
-        let (playing, stopped): (Vec<Entry>, Vec<Entry>) = {
+        let (playing, stopped): (Vec<Entry>, Vec<(_, _, bool)>) = {
             let store = self.css_anim_store.lock().unwrap();
             let entries = if transitions {
                 &store.transitions
@@ -780,16 +780,19 @@ impl RenderTree {
                 .iter()
                 .filter_map(|sid| {
                     let a = entries.get(sid).filter(|a| !a.is_playing)?;
-                    Some((*sid, a.current_properties.clone()))
+                    // A transition ends on the shape the node's style gives it.
+                    let holds_shape = !transitions && a.animation.holds_end();
+                    Some((*sid, a.current_properties.clone(), holds_shape))
                 })
                 .collect();
             (playing, stopped)
         };
-        for (stable_id, props) in stopped {
+        for (stable_id, props, holds_shape) in stopped {
             if let Some(node_id) = self.layout_id(stable_id)
                 && let Some(mut render_node) = self.render_nodes.get_mut(&node_id)
             {
                 Self::apply_keyframe_props_to_render(&mut render_node.props, &props);
+                render_node.props.corner_shape_animated &= holds_shape;
             }
         }
         let mut still_playing = crate::tree::StableSet::default();
@@ -1786,6 +1789,7 @@ impl RenderTree {
         // Corner shape (superellipse)
         if let Some([tl, tr, br, bl]) = anim_props.corner_shape {
             props.corner_shape = blinc_core::CornerShape::new(tl, tr, br, bl);
+            props.corner_shape_animated = true;
         }
 
         // Overflow fade

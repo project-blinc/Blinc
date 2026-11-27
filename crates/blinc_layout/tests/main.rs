@@ -20,6 +20,7 @@ mod css_attribute_selectors;
 mod css_border_sides;
 mod css_class_animation;
 mod css_component_layer;
+mod css_corner_shape;
 mod css_font_inheritance;
 mod css_font_style;
 mod css_layer_bake;

@@ -242,7 +242,7 @@ impl RenderTree {
             (bounds.width, bounds.height),
             &theme_shape_n,
             radius_full_n,
-            render_node.props.corner_shape_locked,
+            render_node.props.keeps_corner_shape(),
         );
 
         // Push clip BEFORE rendering content if this element clips its children

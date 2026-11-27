@@ -142,7 +142,7 @@ impl RenderTree {
             (bounds.width, bounds.height),
             &theme_shape,
             radius_full,
-            render_node.props.corner_shape_locked,
+            render_node.props.keeps_corner_shape(),
         );
         let has_corner_shape_l = !resolved_corner_shape.is_round();
         if has_corner_shape_l && render_node.props.notch.is_none() {

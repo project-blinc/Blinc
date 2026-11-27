@@ -31,6 +31,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ### Changed
 - Breaking: the audio player and `MediaControls` show the controls of the video player, with a mute button and a volume bar in place of the volume percentage, and a drawn seek bar. A live stream has no seek bar. The `.blinc-media-seek-rail`, `.blinc-media-seek-fill` and `.blinc-media-seek-track` classes are gone: style the seek bar with the `--blinc-media-*` variables.
+- Breaking: `RenderProps` has a `corner_shape_animated` field, set while an animation or a transition writes the corner shape.
 - Breaking: `ImageRenderInfo` and the renderer's `ImageData` have a `placeholder_brush` field, and `placeholder_type` 4 means a brush.
 - Code blocks and the code editor take their colours from the theme with a syntax highlighter too. A highlighter names each token, the token gets the class `blinc-code-token-<kind>`, and the default stylesheet colours it from the theme through the `--blinc-syntax-*` variables. `TokenRule::themed` makes such a rule and `TokenType::css_class` names the class. A rule made with a colour keeps it.
 - Breaking: `SyntaxHighlighter::default_color`, `background_color` and `line_number_color` return `Option<Color>`, `None` unless implemented. `CodeConfig::corner_radius` is an `Option<f32>`, and the corners follow `--radius-md` unless set. Indent guides are drawn in `--border`.
@@ -154,6 +155,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - The volume bar of the media controls draws the columns up to the volume bright and the rest dim. The two default colours were the wrong way round, and a muted bar lit one column.
 - An inset box shadow starts at the padding box, inside the borders, of each side.
 - A shadow that names no colour is painted in its element's text colour, inherited or its own, and animations and transitions run from that colour. `RenderTree::current_color` and `resolved_shadows` are public.
+- An animated corner shape is drawn as the animation gives it, `round` included. A transition on an element with no corner shape of its own starts and ends at the theme's smoothed corners.
 - A corner shape that is set, `round` included, by `corner-shape` or `.corner_shape()`, is kept: the theme's corner smoothing applies only to elements that set none. `Div::merge` carries the shape.
 - `Div::set_style` and `Div::merge` keep a style's inset shadows, and a stateful's base takes a corner shape set after `on_state`.
 

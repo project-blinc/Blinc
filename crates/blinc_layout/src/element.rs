@@ -240,6 +240,9 @@ pub struct RenderProps {
     /// rule, and by `lock_corner_shape()` for floating overlay widgets
     /// that want circular corners under any theme.
     pub corner_shape_locked: bool,
+    /// Set while an animation or a transition writes `corner_shape`, which
+    /// keeps it from the theme's smoothing as `corner_shape_locked` does.
+    pub corner_shape_animated: bool,
     /// The outline the box's fill, border and shadow follow, where it is not a rounded rectangle.
     pub notch: Option<std::sync::Arc<crate::notch::NotchShape>>,
     /// Border color (None = no border) - used for uniform borders
@@ -464,6 +467,7 @@ impl Default for RenderProps {
             border_radius_explicit: false,
             corner_shape: CornerShape::default(),
             corner_shape_locked: false,
+            corner_shape_animated: false,
             notch: None,
             border_color: None,
             border_width: 0.0,
@@ -589,6 +593,12 @@ impl RenderProps {
                 self.tiers.mark(prop, D);
             }
         }
+    }
+
+    /// Whether `corner_shape` is drawn as it is, with no theme smoothing in
+    /// place of a round one.
+    pub fn keeps_corner_shape(&self) -> bool {
+        self.corner_shape_locked || self.corner_shape_animated
     }
 
     /// Marks the properties this value holds away from their defaults as

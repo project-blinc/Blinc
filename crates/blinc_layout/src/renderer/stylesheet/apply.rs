@@ -766,6 +766,31 @@ impl RenderTree {
         }
     }
 
+    /// The corner shape the theme draws a node with when it sets none.
+    fn themed_corner_shape(
+        &self,
+        node_id: LayoutNodeId,
+        props: &RenderProps,
+    ) -> blinc_core::CornerShape {
+        let (shape, radius_full) = match blinc_theme::ThemeState::try_get() {
+            Some(theme) => (theme.shape(), theme.radii().radius_full),
+            None => (blinc_theme::ShapeTokens::default(), 9999.0),
+        };
+        let size = self
+            .layout_tree
+            .get_bounds(node_id, (0.0, 0.0))
+            .map(|b| (b.width, b.height))
+            .unwrap_or_default();
+        crate::renderer::paint::helpers::resolve_corner_shape(
+            props.corner_shape,
+            props.border_radius,
+            size,
+            &shape,
+            radius_full,
+            false,
+        )
+    }
+
     /// Snapshot all animatable properties (visual + layout) for a node.
     ///
     /// Combines visual properties from RenderProps with layout properties
@@ -777,6 +802,14 @@ impl RenderTree {
     ) -> Option<blinc_animation::KeyframeProperties> {
         let render_node = self.render_nodes.get(&node_id)?;
         let mut kp = Self::render_props_to_keyframe_properties(&render_node.props);
+        // A transition starts and ends on the corners that are drawn, so a node with no
+        // shape of its own eases from and to the theme's.
+        if !render_node.props.keeps_corner_shape() {
+            kp.corner_shape = Some(
+                self.themed_corner_shape(node_id, &render_node.props)
+                    .to_array(),
+            );
+        }
         super::super::current_color::resolve_keyframe_colors(&mut kp, self.current_color(node_id));
 
         // Also extract layout properties from taffy style
