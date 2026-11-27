@@ -235,6 +235,37 @@ fn a_placeholder_rule_does_not_colour_the_field_itself() {
     assert_eq!(cfg.text_color, TextInputConfig::default().text_color);
 }
 
+/// A colour set on the field keeps over every rule that would set it, as an
+/// inline style does; the others still follow the stylesheet.
+#[test]
+fn a_colour_set_on_the_field_beats_the_stylesheet() {
+    ensure_theme_initialized();
+    let css = "
+        .field { color: #ff0000; caret-color: #ff0000; selection-color: #ff0000; }
+        .field::placeholder { color: #ff0000; }
+        .field::selection { background: #ff0000; }
+        #email { color: #ff0000; caret-color: #ff0000; }
+        #email::placeholder { color: #ff0000; }
+    ";
+    let sheet = Stylesheet::parse(css).expect("css");
+    let classes = [Arc::from("field")];
+    let (blue, green) = (Color::rgb(0.0, 0.0, 1.0), Color::rgb(0.0, 1.0, 0.0));
+    let data = text_input_data();
+    let input = text_input(&data).text_color(blue).placeholder_color(green);
+    let mut cfg = input.config.lock().unwrap().clone();
+    apply_css_overrides(
+        &mut cfg,
+        &sheet,
+        Some("email"),
+        &classes,
+        &TextFieldState::Idle,
+    );
+    assert_eq!(cfg.text_color, blue);
+    assert_eq!(cfg.placeholder_color, green);
+    assert_eq!(cfg.cursor_color, Color::rgb(1.0, 0.0, 0.0));
+    assert_eq!(cfg.selection_color, Color::rgb(1.0, 0.0, 0.0));
+}
+
 /// Focus is process-wide and `escape_in` blurs every field, so the tests that read focus back
 /// take the shared focus lock for their whole run.
 fn focus_lock() -> std::sync::MutexGuard<'static, ()> {

@@ -27,6 +27,18 @@ pub struct TextInputConfig {
     /// numeric / OTP-style fields where the value should sit
     /// visually centred in a fixed-width cell.
     pub text_align: blinc_core::TextAlign,
+    /// The colours set on the field itself.
+    pub inline: InlineColors,
+}
+
+/// Which colours were set on a field itself. As with an inline style, a
+/// stylesheet rule does not replace them.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct InlineColors {
+    pub text: bool,
+    pub placeholder: bool,
+    pub cursor: bool,
+    pub selection: bool,
 }
 
 impl Default for TextInputConfig {
@@ -47,6 +59,7 @@ impl Default for TextInputConfig {
             padding_x: 12.0,
             placeholder: String::new(),
             text_align: blinc_core::TextAlign::Left,
+            inline: InlineColors::default(),
         }
     }
 }

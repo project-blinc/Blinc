@@ -183,10 +183,6 @@ impl Combobox {
         let padding = config.size.padding();
         let radius = theme.radius(RadiusToken::Sm);
 
-        // Colors
-        let text_color = theme.color(ColorToken::TextPrimary);
-        let text_tertiary = theme.color(ColorToken::TextTertiary);
-
         let disabled = config.disabled.clone();
 
         // Whether the list is showing, the search field and what is typed in
@@ -357,8 +353,6 @@ impl Combobox {
                     font_size,
                     padding,
                     radius,
-                    text_color,
-                    text_tertiary,
                     allow_custom,
                     &placeholder_for_content,
                 )
@@ -658,8 +652,6 @@ fn build_dropdown_content(
     font_size: f32,
     padding: f32,
     radius: f32,
-    text_color: blinc_core::Color,
-    text_tertiary: blinc_core::Color,
     allow_custom: bool,
     placeholder: &Option<blinc_layout::binding::Reactive<String>>,
 ) -> Div {
@@ -700,8 +692,6 @@ fn build_dropdown_content(
         .rounded(theme.radii().radius_md)
         .placeholder(search_placeholder)
         .class("cn-combobox-search")
-        .text_color(text_color)
-        .placeholder_color(text_tertiary)
         .flex_grow()
         .on_change(move |new_value: &str| {
             search_query_for_sync.set(new_value.to_string());

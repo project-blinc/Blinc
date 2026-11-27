@@ -26,7 +26,7 @@ pub struct TextInput {
     inner: std::cell::RefCell<Div>,
     built: std::cell::OnceCell<Div>,
     data: SharedTextInputData,
-    config: Arc<Mutex<TextInputConfig>>,
+    pub(super) config: Arc<Mutex<TextInputConfig>>,
     /// Callback invoked when text value changes
     on_change_callback: Option<OnChangeCallback>,
     /// Caller's handle onto this field, if bound.
@@ -379,28 +379,46 @@ impl TextInput {
     }
 
     // ========== Text Color Configuration ==========
+    //
+    // A colour set here keeps over the stylesheet's rules.
 
     /// Set the text color
     pub fn text_color(self, color: Color) -> Self {
-        self.config.lock().unwrap().text_color = color;
+        {
+            let mut config = self.config.lock().unwrap();
+            config.text_color = color;
+            config.inline.text = true;
+        }
         self
     }
 
     /// Set the placeholder text color
     pub fn placeholder_color(self, color: Color) -> Self {
-        self.config.lock().unwrap().placeholder_color = color;
+        {
+            let mut config = self.config.lock().unwrap();
+            config.placeholder_color = color;
+            config.inline.placeholder = true;
+        }
         self
     }
 
     /// Set the cursor color
     pub fn cursor_color(self, color: Color) -> Self {
-        self.config.lock().unwrap().cursor_color = color;
+        {
+            let mut config = self.config.lock().unwrap();
+            config.cursor_color = color;
+            config.inline.cursor = true;
+        }
         self
     }
 
     /// Set the selection highlight color
     pub fn selection_color(self, color: Color) -> Self {
-        self.config.lock().unwrap().selection_color = color;
+        {
+            let mut config = self.config.lock().unwrap();
+            config.selection_color = color;
+            config.inline.selection = true;
+        }
         self
     }
 

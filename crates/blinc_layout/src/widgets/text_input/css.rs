@@ -66,10 +66,14 @@ pub(super) fn apply_css_overrides(
 
     // 3. `::placeholder` and `::selection`.
     let (placeholder, selection) = pseudo_element_colours(stylesheet, element_id, css_classes);
-    if let Some(color) = placeholder {
+    if let Some(color) = placeholder
+        && !cfg.inline.placeholder
+    {
         cfg.placeholder_color = color;
     }
-    if let Some(color) = selection {
+    if let Some(color) = selection
+        && !cfg.inline.selection
+    {
         cfg.selection_color = color;
     }
 }
@@ -131,7 +135,9 @@ pub(super) fn apply_style_to_config(
     }
 
     // Text color
-    if let Some(color) = style.text_color {
+    if let Some(color) = style.text_color
+        && !cfg.inline.text
+    {
         cfg.text_color = color;
     }
 
@@ -144,17 +150,23 @@ pub(super) fn apply_style_to_config(
     cfg.face.apply_style(style);
 
     // Caret (cursor) color
-    if let Some(color) = style.caret_color {
+    if let Some(color) = style.caret_color
+        && !cfg.inline.cursor
+    {
         cfg.cursor_color = color;
     }
 
     // Selection color
-    if let Some(color) = style.selection_color {
+    if let Some(color) = style.selection_color
+        && !cfg.inline.selection
+    {
         cfg.selection_color = color;
     }
 
     // Placeholder color
-    if let Some(color) = style.placeholder_color {
+    if let Some(color) = style.placeholder_color
+        && !cfg.inline.placeholder
+    {
         cfg.placeholder_color = color;
     }
 }

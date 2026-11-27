@@ -131,7 +131,6 @@ impl InputOtp {
         let font_size = config.size.font_size(&typography);
         let radius = theme.radius(RadiusToken::Md);
 
-        let text_primary = theme.color(ColorToken::TextPrimary);
         let text_tertiary = theme.color(ColorToken::TextTertiary);
 
         let length = config.length;
@@ -183,7 +182,6 @@ impl InputOtp {
                 .w(height)
                 .text_size(font_size)
                 .rounded(radius)
-                .text_color(text_primary)
                 .class("cn-input-otp-slot")
                 .class_when("cn-input-otp-slot--error", config.error.clone());
             row = row.child(wire_otp_slot(
