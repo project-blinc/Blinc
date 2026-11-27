@@ -103,6 +103,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - Web wheel input preserves source timestamps and successive finger-stroke boundaries, including Magic Mouse momentum tails and reversals, instead of combining them into one latched gesture.
 - Direct rendering paints foreground popup surfaces after ordinary text and SVGs, keeping background captions behind open controls.
 - Desktop and web runners reconcile overlay focus before styling and share navigation handling. Web consumes navigation keys without browser defaults or duplicate text input; desktop maps Shift+F10 for context menus.
+- A `:root` variable set by a later stylesheet reaches the stylesheets added before it, so an application can override the `--shadow-*` and other tokens the component rules read. Before, it did only after a colour scheme change.
 
 ### Added
 - The iOS runner has measurement hooks, off unless set: `BLINC_BENCH_STATS` prints the build, drawable-acquire and render time of each window of frames (`BLINC_BENCH_WINDOW`, 120 by default) with the process footprint, and `BLINC_BENCH_SCROLL` feeds a scripted drag and fling as touches. `tools/blinc-bench/mobile` has benchmark scenes that use them.

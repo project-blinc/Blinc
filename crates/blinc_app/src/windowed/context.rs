@@ -91,6 +91,8 @@ pub struct WindowedContext {
     /// Each entry corresponds to one `add_css()` call, in order.
     pub(super) css_sources: Vec<String>,
     pub(super) css_overrides: Vec<(String, String)>,
+    /// Stylesheets added already parsed, kept for when the sources are parsed again.
+    pub(super) added_sheets: Vec<blinc_layout::css_parser::Stylesheet>,
     #[cfg(all(
         feature = "css-hot-reload",
         debug_assertions,
@@ -165,6 +167,7 @@ impl WindowedContext {
             stylesheet: None,
             css_sources: Vec::new(),
             css_overrides: Vec::new(),
+            added_sheets: Vec::new(),
             #[cfg(all(
                 feature = "css-hot-reload",
                 debug_assertions,
@@ -223,6 +226,7 @@ impl WindowedContext {
             stylesheet: None,
             css_sources: Vec::new(),
             css_overrides: Vec::new(),
+            added_sheets: Vec::new(),
             #[cfg(all(
                 feature = "css-hot-reload",
                 debug_assertions,
@@ -281,6 +285,7 @@ impl WindowedContext {
             stylesheet: None,
             css_sources: Vec::new(),
             css_overrides: Vec::new(),
+            added_sheets: Vec::new(),
             #[cfg(all(
                 feature = "css-hot-reload",
                 debug_assertions,
@@ -348,6 +353,7 @@ impl WindowedContext {
             stylesheet: None,
             css_sources: Vec::new(),
             css_overrides: Vec::new(),
+            added_sheets: Vec::new(),
             #[cfg(all(
                 feature = "css-hot-reload",
                 debug_assertions,
@@ -403,6 +409,7 @@ impl WindowedContext {
             stylesheet: None,
             css_sources: Vec::new(),
             css_overrides: Vec::new(),
+            added_sheets: Vec::new(),
             #[cfg(all(
                 feature = "css-hot-reload",
                 debug_assertions,
@@ -459,6 +466,7 @@ impl WindowedContext {
             stylesheet: None,
             css_sources: Vec::new(),
             css_overrides: Vec::new(),
+            added_sheets: Vec::new(),
             #[cfg(all(
                 feature = "css-hot-reload",
                 debug_assertions,

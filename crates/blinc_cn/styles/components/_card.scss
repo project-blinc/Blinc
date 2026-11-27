@@ -8,6 +8,7 @@
     border-radius: var(--cn-card-radius, var(--radius-xl));
     padding: var(--space-6);
     gap: var(--space-4);
+    box-shadow: var(--shadow-sm);
 }
 
 .cn-card-header {

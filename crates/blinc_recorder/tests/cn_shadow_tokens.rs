@@ -183,3 +183,60 @@ fn form_fields_carry_the_small_shadow_until_disabled() {
         );
     }
 }
+
+/// An application's CSS, added after the components', changes their shadows: by the variable
+/// their rules read, or by a rule of its own. A shadow set in Rust stays.
+#[test]
+fn an_applications_variables_and_rules_reach_component_shadows() {
+    if !Headless::available() {
+        eprintln!("no GPU adapter: skipped");
+        return;
+    }
+    let mut ui = Headless::new(320, 200).unwrap();
+    ui.theme(
+        HybridTheme::bundle()
+            .with_css(blinc_cn::cn_styles::CN_STYLES)
+            .with_css(
+                ":root { --shadow-sm: 0 0 11px #ff00ff; --shadow-md: 0 0 13px #00ffff; }
+                 #flat { box-shadow: none; }",
+            ),
+        ColorScheme::Dark,
+    );
+    ui.mount(|_| {
+        div()
+            .w(320.0)
+            .h(200.0)
+            .flex_col()
+            .gap(2.0)
+            .child(card().id("themed"))
+            .child(card().id("flat"))
+            .child(card().id("fluent").shadow_lg())
+            .child(button("Primary"))
+    });
+    ui.leave().settle();
+
+    let blurs = |ui: &Headless, selector: &str| -> Vec<f32> {
+        let node = ui.find(selector).unwrap();
+        let props = &ui.tree().get_render_node(node).unwrap().props;
+        props
+            .shadow
+            .iter()
+            .filter(|s| s.color.a > 0.0)
+            .map(|s| s.blur)
+            .collect()
+    };
+    assert_eq!(blurs(&ui, "#themed"), [11.0], "the card reads --shadow-sm");
+    assert_eq!(
+        blurs(&ui, ".cn-button--primary"),
+        [13.0],
+        "the button reads --shadow-md"
+    );
+    assert!(blurs(&ui, "#flat").is_empty(), "a rule removes the shadow");
+    let large: Vec<f32> = blinc_theme::ThemeState::get()
+        .shadows()
+        .shadow_lg
+        .iter()
+        .map(|s| s.blur)
+        .collect();
+    assert_eq!(blurs(&ui, "#fluent"), large, "a shadow set in Rust stays");
+}

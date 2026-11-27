@@ -183,8 +183,7 @@ Cards take their colors from the theme. The `.cn-card` rule sets these:
 - Background: `--cn-card-bg`, with `--surface` as the default
 - Border: `--cn-card-border`, with `--border` as the default
 - Radius: `--cn-card-radius`, with `--radius-xl` as the default
-
-A card also has the small theme shadow.
+- Shadow: `--shadow-sm`
 
 To change the look, write rules for `.cn-card` in your CSS:
 
@@ -193,6 +192,7 @@ To change the look, write rules for `.cn-card` in your CSS:
     background: var(--surface-elevated);
     border-color: var(--primary);
     border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
 }
 ```
 

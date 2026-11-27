@@ -40,8 +40,9 @@ pub struct Card {
 impl Card {
     /// Create a new empty card
     pub fn new() -> Self {
-        // All visual props from CSS: .cn-card { background, border, border-radius, padding, gap }
-        let inner = div().class("cn-card").shadow_sm().flex_col().items_start();
+        // All visual props from CSS: .cn-card { background, border, border-radius, padding, gap,
+        // box-shadow }
+        let inner = div().class("cn-card").flex_col().items_start();
 
         Self { inner }
     }

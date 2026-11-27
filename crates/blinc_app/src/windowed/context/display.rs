@@ -229,9 +229,6 @@ impl WindowedContext {
     /// Stylesheets are visual-only: they update render props on existing nodes
     /// and trigger redraws. They never cause tree rebuilds.
     pub fn add_css(&mut self, css: &str) {
-        // Store raw CSS for reparsing on theme changes
-        self.css_sources.push(css.to_string());
-
         // Seed parser with theme variables + any previously defined CSS variables
         let mut external_vars = blinc_theme::ThemeState::try_get()
             .map(|t| t.to_css_variable_map())
@@ -241,12 +238,37 @@ impl WindowedContext {
                 external_vars.insert(k.clone(), v.clone());
             }
         }
+        // Store raw CSS for reparsing on theme changes
+        self.css_sources.push(css.to_string());
         match blinc_layout::css_parser::Stylesheet::parse_with_variables(css, &external_vars) {
-            Ok(sheet) => self.add_stylesheet(sheet),
+            Ok(sheet) => {
+                // As in a browser, a variable set here reaches the sources added before it, so
+                // they are all parsed again.
+                let sets_variables = sheet
+                    .variables()
+                    .iter()
+                    .any(|(name, value)| external_vars.get(name) != Some(value));
+                if sets_variables && self.css_sources.len() > 1 {
+                    match self.parse_css_sources(&self.css_overrides) {
+                        Ok(all) => return self.replace_stylesheet(all),
+                        Err(e) => tracing::warn!(
+                            "An earlier CSS source does not parse, so it keeps its variables: {}",
+                            e
+                        ),
+                    }
+                }
+                self.merge_stylesheet(sheet);
+            }
             Err(e) => {
                 tracing::warn!("Failed to parse CSS: {}", e);
             }
         }
+    }
+
+    fn replace_stylesheet(&mut self, sheet: blinc_layout::css_parser::Stylesheet) {
+        let sheet = Arc::new(sheet);
+        blinc_layout::css_parser::set_active_stylesheet(Arc::clone(&sheet));
+        self.stylesheet = Some(sheet);
     }
 
     /// Set a named CSS override, replacing that source on subsequent calls.
@@ -268,10 +290,7 @@ impl WindowedContext {
         }
         let sheet = self.parse_css_sources(&overrides)?;
         self.css_overrides = overrides;
-        self.stylesheet = Some(Arc::new(sheet));
-        blinc_layout::css_parser::set_active_stylesheet(Arc::clone(
-            self.stylesheet.as_ref().unwrap(),
-        ));
+        self.replace_stylesheet(sheet);
         self.ref_dirty_flag
             .store(true, std::sync::atomic::Ordering::SeqCst);
         blinc_layout::widgets::request_full_rebuild();
@@ -293,7 +312,12 @@ impl WindowedContext {
             .chain(overrides.iter().map(|(_, source)| source.as_str()))
             .collect::<Vec<_>>()
             .join("\n");
-        blinc_layout::css_parser::Stylesheet::parse_with_variables(&css, &variables)
+        let mut sheet =
+            blinc_layout::css_parser::Stylesheet::parse_with_variables(&css, &variables)?;
+        for added in &self.added_sheets {
+            sheet.merge(added.clone());
+        }
+        Ok(sheet)
     }
 
     /// Load and add a `.css` file to the application stylesheet.
@@ -312,6 +336,11 @@ impl WindowedContext {
     ///
     /// Multiple calls cascade — later rules override earlier ones.
     pub fn add_stylesheet(&mut self, sheet: blinc_layout::css_parser::Stylesheet) {
+        self.added_sheets.push(sheet.clone());
+        self.merge_stylesheet(sheet);
+    }
+
+    fn merge_stylesheet(&mut self, sheet: blinc_layout::css_parser::Stylesheet) {
         match self.stylesheet.as_mut() {
             Some(existing) => {
                 // Cascade: merge into existing (Arc::make_mut for COW)
@@ -359,6 +388,7 @@ impl WindowedContext {
         self.stylesheet = None;
         self.css_sources.clear();
         self.css_overrides.clear();
+        self.added_sheets.clear();
         self.rebuild_count = 0;
         blinc_layout::css_parser::clear_active_stylesheet();
     }
@@ -378,12 +408,7 @@ impl WindowedContext {
         );
 
         match self.parse_css_sources(&self.css_overrides) {
-            Ok(sheet) => {
-                self.stylesheet = Some(Arc::new(sheet));
-                blinc_layout::css_parser::set_active_stylesheet(Arc::clone(
-                    self.stylesheet.as_ref().unwrap(),
-                ));
-            }
+            Ok(sheet) => self.replace_stylesheet(sheet),
             Err(error) => tracing::warn!("Failed to reparse CSS on theme change: {}", error),
         }
     }
