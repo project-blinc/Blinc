@@ -154,9 +154,14 @@ impl ScrollRef {
         self.signal_id
     }
 
-    /// Trigger reactive update
+    /// Trigger reactive update, and ask for the frame that applies a pending
+    /// command: one can come from a timer or another thread while the window
+    /// is idle.
     fn trigger(&self) {
         (self.trigger)();
+        if let Some(scheduler) = crate::render_state::get_global_scheduler() {
+            scheduler.request_redraw();
+        }
     }
 
     /// Check if this ref is bound to a scroll container
@@ -514,9 +519,8 @@ pub fn use_scroll_ref_keyed<K: std::hash::Hash>(key: K) -> ScrollRef {
     };
     drop(hooks);
 
-    // No-op trigger — scroll operations are processed every frame
-    // by the renderer's `process_pending_scroll_refs()`, so we
-    // don't need to wake the reactive graph on each scroll command.
+    // No-op trigger: the renderer applies a pending command in the next
+    // frame, so the reactive graph does not need to wake for one.
     let noop_trigger: TriggerCallback = Arc::new(|| {});
     ScrollRef::with_inner(inner, signal_id, noop_trigger)
 }

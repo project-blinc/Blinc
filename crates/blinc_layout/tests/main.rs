@@ -52,6 +52,7 @@ mod rich_text_wrap;
 mod scroll_axis_routing;
 mod scroll_content_size;
 mod scroll_offset_pixels;
+mod scroll_ref_wake;
 mod shared_bounds;
 mod state_layers;
 mod state_pass_cost;

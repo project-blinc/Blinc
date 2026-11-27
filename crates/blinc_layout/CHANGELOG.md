@@ -95,6 +95,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- A `ScrollRef` command sent while the window is idle, from a timer or another thread, is applied at once. Before, it waited for the next input event.
 - Binding a `DivRef` to an element without an id no longer stops the elements under it from responding after another part of the tree is rebuilt.
 - A node with an id keeps the color, size and other values that an update gave it. The pass that runs on a hover, press or focus change no longer puts back what the node had when it first appeared.
 - A stylesheet `border`, `border-width` or `border-color` also applies to the sides that the builder or a lower rule set.
