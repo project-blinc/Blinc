@@ -523,14 +523,6 @@ impl RenderContext {
                         .border_color
                         .unwrap_or(blinc_core::Color::TRANSPARENT);
 
-                    // Shadow: use image's own (parent shadow renders via SDF).
-                    // ImageElement holds a single shadow — pick the topmost
-                    // layer of any compound stack.
-                    let shadow = tree
-                        .resolved_shadows(node, &render_node.props.shadow)
-                        .first()
-                        .copied();
-
                     // Filter: prefer own, fall back to parent
                     let own_filter = &render_node.props.filter;
                     let parent_filter = parent_props.and_then(|p| p.filter.as_ref());
@@ -629,7 +621,6 @@ impl RenderContext {
                         border_width: border_width * motion_k,
                         border_color,
                         css_affine: node_css_affine,
-                        shadow,
                         filter_a,
                         filter_b,
                         scroll_clip: scaled_scroll_clip,
@@ -724,10 +715,6 @@ impl RenderContext {
                             border_width: 0.0,
                             border_color: blinc_core::Color::TRANSPARENT,
                             css_affine: node_css_affine,
-                            shadow: tree
-                                .resolved_shadows(node, &render_node.props.shadow)
-                                .first()
-                                .copied(),
                             filter_a: render_node
                                 .props
                                 .filter

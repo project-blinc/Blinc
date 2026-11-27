@@ -540,31 +540,6 @@ impl RenderContext {
             };
             let (image_w, image_h) = (gpu_image.width(), gpu_image.height());
 
-            // Render shadow before image if present
-            if let Some(ref shadow) = image.shadow {
-                self.flush_image_run(target, &mut run);
-                let mut shadow_ctx = GpuPaintContext::new(viewport_width, viewport_height);
-                // Push scroll/parent clip so shadow doesn't escape the container
-                if let Some(clip) = image.clip_bounds {
-                    shadow_ctx.push_clip(blinc_core::ClipShape::RoundedRect {
-                        rect: blinc_core::Rect::new(clip[0], clip[1], clip[2], clip[3]),
-                        corner_radius: blinc_core::CornerRadius {
-                            top_left: image.clip_radius[0],
-                            top_right: image.clip_radius[1],
-                            bottom_right: image.clip_radius[2],
-                            bottom_left: image.clip_radius[3],
-                        },
-                        corner_shape: blinc_core::CornerShape::ROUND,
-                    });
-                }
-                let shadow_rect =
-                    blinc_core::Rect::new(image.x, image.y, image.width, image.height);
-                let shadow_radius = blinc_core::CornerRadius::uniform(image.border_radius);
-                shadow_ctx.draw_shadow(shadow_rect, shadow_radius, *shadow);
-                let shadow_batch = shadow_ctx.take_batch();
-                self.renderer.render_overlay(target, &shadow_batch);
-            }
-
             let instance = Self::image_instance(image, image_w, image_h, fade_factor, scale_factor);
 
             run.push((image.source.clone(), instance));

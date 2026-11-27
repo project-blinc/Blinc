@@ -22,6 +22,7 @@ mod grouped_text_tests;
 mod idle_release_tests;
 mod image_group_tests;
 mod image_opacity_tests;
+mod image_paint_tests;
 mod layer_batch_tests;
 mod layer_text_clip_tests;
 mod main_text_clip_tests;

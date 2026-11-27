@@ -64,6 +64,7 @@ All notable changes to `blinc_app` will be documented in this file.
 
 ### Fixed
 - An image's brush placeholder is drawn while the image loads.
+- An image's shadow is drawn once. It was drawn with the element and again with the image, so a translucent shadow came out darker.
 - An SVG inside an overflow fade fades with it, as text and shapes do.
 - A desktop or iOS window that has gone idle draws a frame when a shown scrollbar is due to fade, so the page scrollbar hides 1.5 s after a scroll instead of waiting for the next input, and its fade no longer lands on the frames of whatever the user does next.
 - Text, SVGs and images inside bound or scrolled content no longer draw on top of open menus, selects and toasts. The dynamic batch is drawn by paint layer, each layer followed by the motion content on it. The static batch's foreground (a select list beside bound content) goes in at its own layer, above the moving content and text below it and below overlays, and the dynamic batch's foreground follows. Collected content inside an overlay root takes a layer above what it covers, as the paint walker gives it. A batch that cannot be drawn in parts is drawn whole, with the static foreground below it.

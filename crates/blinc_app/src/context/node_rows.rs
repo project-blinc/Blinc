@@ -820,8 +820,8 @@ impl NodeRows {
 
     /// Give each image the text row of the node that owns it, and say from which row its clip
     /// moves. `false`, with the images as they were, when one has no owner or is drawn in a way
-    /// the affine does not carry: a shadow, or a placeholder while its image is not loaded,
-    /// which are drawn at the painted rect. The scroll clip is an ancestor's and stays.
+    /// the affine does not carry: a placeholder while its image is not loaded, which is drawn
+    /// at the painted rect. The scroll clip is an ancestor's and stays.
     fn give_image_slots(
         &mut self,
         images: &mut [ImageElement],
@@ -830,7 +830,7 @@ impl NodeRows {
     ) -> bool {
         let mut given = Vec::with_capacity(images.len());
         for image in images.iter() {
-            if image.shadow.is_some() || (image.placeholder_type != 0 && !loaded(&image.source)) {
+            if image.placeholder_type != 0 && !loaded(&image.source) {
                 return false;
             }
             let Some(slot) = self.owner(image.node, ancestors) else {

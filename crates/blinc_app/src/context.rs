@@ -520,8 +520,6 @@ struct ImageElement {
     border_color: blinc_core::Color,
     /// CSS transform as 6-element affine [a, b, c, d, tx, ty] (None = no transform)
     css_affine: Option<[f32; 6]>,
-    /// Drop shadow from CSS
-    shadow: Option<blinc_core::Shadow>,
     /// CSS filter A (grayscale, invert, sepia, hue_rotate_rad) — identity = `[0,0,0,0]`
     filter_a: [f32; 4],
     /// CSS filter B (brightness, contrast, saturate, unused) — identity = `[1,1,1,0]`
