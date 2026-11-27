@@ -7,6 +7,7 @@ All notable changes to `blinc_media` will be documented in this file.
 ### Fixed
 - A desktop audio player's position stops at the end of its track, `resume()` starts a finished track again, and a change to the player asks the window for a frame.
 - `AudioPlayer::seek` moves the sound on desktop. A position past the end goes to the end, and a seek after the track has finished holds it paused at the new position.
+- A desktop audio seek that the output device does not take, as when it is lost, gives up after a quarter of a second and leaves the position, instead of blocking the caller.
 
 ### Added
 - `VideoPlayer::dimensions_signal` is the pixel size of the current frame.

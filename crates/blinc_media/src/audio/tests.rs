@@ -174,3 +174,35 @@ fn a_finished_track_stays_at_its_end_and_plays_again() {
     let at = heard_at(&mut output);
     assert!(at < 200, "heard {at} ms");
 }
+
+#[test]
+fn a_seek_that_nothing_takes_gives_up() {
+    let (player, mut output) = detached();
+    player.play(AudioSource::bytes(ramp(10_000)));
+
+    // Nothing takes samples, as when the output device is lost.
+    let started = std::time::Instant::now();
+    player.seek(5_000);
+    assert!(started.elapsed() < Duration::from_secs(5));
+    assert!(player.position_ms() < 5_000, "the position stays");
+
+    // The device back, a new order is taken, and the old one's thread is released by it.
+    while_draining(&mut output, || player.seek(2_000));
+    assert!((2_000..5_000).contains(&player.position_ms()));
+}
+
+#[test]
+fn stopping_silences_a_sink_a_seek_still_waits_on() {
+    let (player, mut output) = detached();
+    player.play(AudioSource::bytes(ramp(10_000)));
+    player.seek(5_000);
+    player.stop();
+
+    let audible = output
+        .by_ref()
+        .take(2_000)
+        .skip(100)
+        .filter(|sample| *sample != 0.0)
+        .count();
+    assert_eq!(audible, 0);
+}

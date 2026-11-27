@@ -57,6 +57,11 @@ impl AudioSource {
 #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
 const END_MARGIN: std::time::Duration = std::time::Duration::from_millis(100);
 
+/// The longest a seek waits for the audio thread to take its order. An order nothing takes, as
+/// when the output device is lost, is never answered.
+#[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+const SEEK_WAIT: std::time::Duration = std::time::Duration::from_millis(250);
+
 /// A window that is drawing nothing shows a change to a player on its next frame.
 #[cfg(not(target_arch = "wasm32"))]
 fn request_redraw() {
@@ -85,7 +90,7 @@ struct AudioPlayerInner {
     /// rodio 0.22 Player (renamed from Sink in 0.19); appended sources
     /// play sequentially, volume + transport ops route through here.
     #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
-    sink: Option<rodio::Player>,
+    sink: Option<Arc<rodio::Player>>,
     /// MixerDeviceSink (renamed from OutputStream in 0.19). Owns the
     /// audio device handle; dropped when the player goes away.
     #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
@@ -274,7 +279,7 @@ impl AudioPlayer {
             let mut inner = self.inner.borrow_mut();
             #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
             {
-                inner.sink = None;
+                inner.drop_sink();
                 inner.source = None;
             }
             #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
@@ -445,6 +450,14 @@ impl Default for AudioPlayer {
 
 #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
 impl AudioPlayerInner {
+    /// Stops and lets go of the sink. A seek still waiting on it holds it too, so dropping it
+    /// alone would leave it playing.
+    fn drop_sink(&mut self) {
+        if let Some(sink) = self.sink.take() {
+            sink.stop();
+        }
+    }
+
     /// Decodes `source` into a new sink, and returns whether it decoded.
     fn load(&mut self, source: &AudioSource, paused: bool) -> bool {
         match source {
@@ -485,7 +498,8 @@ impl AudioPlayerInner {
             }
             sink.set_volume(self.volume);
             sink.append(source);
-            self.sink = Some(sink);
+            self.drop_sink();
+            self.sink = Some(Arc::new(sink));
         }
     }
 
@@ -502,7 +516,7 @@ impl AudioPlayerInner {
 
     /// Moves the sink to `position_ms`, and returns the position it moved to. A track at its end
     /// is opened again first: paused if it had finished, playing or paused as it was otherwise.
-    fn seek_sink(&mut self, position_ms: u64) -> Result<u64, rodio::source::SeekError> {
+    fn seek_sink(&mut self, position_ms: u64) -> Result<u64, String> {
         let end = std::time::Duration::from_millis(self.duration_ms);
         let reopen_paused = self.sink.as_ref().and_then(|sink| {
             let finished = sink.empty();
@@ -521,9 +535,24 @@ impl AudioPlayerInner {
             duration => position_ms.min(duration),
         };
         if let Some(sink) = &self.sink {
-            sink.try_seek(std::time::Duration::from_millis(position_ms))?;
+            seek_within(sink, std::time::Duration::from_millis(position_ms))?;
         }
         Ok(position_ms)
+    }
+}
+
+/// Orders `sink` to seek, from another thread, and waits for the answer no longer than
+/// [`SEEK_WAIT`]. A later order replaces one still waiting, which releases its thread.
+#[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+fn seek_within(sink: &Arc<rodio::Player>, position: std::time::Duration) -> Result<(), String> {
+    let (done, answer) = std::sync::mpsc::channel();
+    let sink = Arc::clone(sink);
+    std::thread::spawn(move || {
+        let _ = done.send(sink.try_seek(position));
+    });
+    match answer.recv_timeout(SEEK_WAIT) {
+        Ok(result) => result.map_err(|error| error.to_string()),
+        Err(_) => Err("the output device did not take the seek".to_string()),
     }
 }
 
