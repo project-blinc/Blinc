@@ -410,6 +410,7 @@ pub struct Div {
     pub(crate) render_layer: RenderLayer,
     pub(crate) material: Option<Material>,
     pub(crate) shadow: Vec<Shadow>,
+    pub(crate) inner_shadow: Vec<Shadow>,
     pub(crate) transform: Option<Transform>,
     /// Per-element transform origin in percentages `[x, y]` (0 = top-left,
     /// 100 = bottom-right, 50 = centre on each axis). Default `None`
@@ -570,6 +571,7 @@ impl Div {
             render_layer: RenderLayer::default(),
             material: None,
             shadow: Vec::new(),
+            inner_shadow: Vec::new(),
             transform: None,
             transform_origin: None,
             opacity: 1.0,
@@ -640,6 +642,7 @@ impl Div {
             render_layer: RenderLayer::default(),
             material: None,
             shadow: Vec::new(),
+            inner_shadow: Vec::new(),
             transform: None,
             transform_origin: None,
             opacity: 1.0,
@@ -1339,8 +1342,10 @@ impl Div {
         if let Some(fade) = style.overflow_fade {
             self.overflow_fade = fade;
         }
-        if !style.shadow.is_empty() {
+        // One `box-shadow` value: setting either list replaces both.
+        if style.sets_box_shadow() {
             self.shadow = style.shadow.clone();
+            self.inner_shadow = style.inner_shadow.clone();
         }
         if let Some(ref transform) = style.transform {
             self.transform = Some(transform.clone());
@@ -1666,8 +1671,10 @@ impl Div {
         if other.material.is_some() {
             self.material = other.material;
         }
-        if !other.shadow.is_empty() {
+        // One `box-shadow` value: setting either list replaces both.
+        if !other.shadow.is_empty() || !other.inner_shadow.is_empty() {
             self.shadow = other.shadow.clone();
+            self.inner_shadow = other.inner_shadow.clone();
         }
         if other.transform.is_some() {
             self.transform = other.transform;
@@ -3981,6 +3988,52 @@ impl Div {
         self
     }
 
+    /// Apply a single inset shadow, painted inside the padding box over the
+    /// background, as CSS `box-shadow: inset` (replaces any inset stack).
+    ///
+    /// Accepts either an eager `Shadow` or a signal of one.
+    pub fn inset_shadow(mut self, value: impl crate::binding::IntoReactive<Shadow>) -> Self {
+        use crate::binding::{Reactive, TypedPendingBinding};
+        let write = |props: &mut RenderProps, s: Shadow| props.inner_shadow = vec![s];
+        match value.into_reactive() {
+            Reactive::Const(shadow) => self.inner_shadow = vec![shadow],
+            Reactive::Bound(state) => {
+                if let Some(s) = state.try_get() {
+                    self.inner_shadow = vec![s];
+                }
+                self.pending_bindings
+                    .push(Box::new(TypedPendingBinding::new(
+                        state,
+                        crate::property::PropertyId::Shadow,
+                        write,
+                    )));
+            }
+            Reactive::Computed(computed) => {
+                if let Some(s) = computed.try_get() {
+                    self.inner_shadow = vec![s];
+                }
+                self.pending_bindings
+                    .push(Box::new(TypedPendingBinding::from_computed(
+                        computed,
+                        crate::property::PropertyId::Shadow,
+                        write,
+                    )));
+            }
+        }
+        self
+    }
+
+    /// Apply a stack of inset shadows.
+    pub fn inset_shadow_stack(mut self, shadows: Vec<Shadow>) -> Self {
+        self.inner_shadow = shadows;
+        self
+    }
+
+    /// Apply the theme's inner shadow.
+    pub fn shadow_inner(self) -> Self {
+        self.inset_shadow_stack(theme_shadow_stack(|s| &s.shadow_inner))
+    }
+
     /// Apply a drop shadow with the given parameters
     pub fn shadow_params(self, offset_x: f32, offset_y: f32, blur: f32, color: Color) -> Self {
         self.shadow(Shadow::new(offset_x, offset_y, blur, color))
@@ -5808,6 +5861,7 @@ impl ElementBuilder for Div {
             layer: self.render_layer,
             material: self.material.clone(),
             shadow: self.shadow.clone(),
+            inner_shadow: self.inner_shadow.clone(),
             transform: self.transform.clone(),
             transform_origin: self.transform_origin,
             opacity: self.opacity,

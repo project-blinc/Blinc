@@ -770,6 +770,10 @@ impl RenderProps {
             self.border_radius = other.border_radius;
             self.border_radius_explicit = other.border_radius_explicit;
         }
+        if other.corner_shape_locked || other.corner_shape != CornerShape::default() {
+            self.corner_shape = other.corner_shape;
+            self.corner_shape_locked |= other.corner_shape_locked;
+        }
         if other.notch.is_some() {
             self.notch = other.notch.clone();
         }

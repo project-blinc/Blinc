@@ -99,6 +99,22 @@ div().shadow_params(
 )
 ```
 
+### Inset Shadows
+
+An inset shadow draws inside the element, over its background, as CSS `box-shadow: inset` does.
+
+```rust
+use blinc::core::Shadow;
+
+div()
+    .w(120.0)
+    .h(50.0)
+    .inset_shadow(Shadow::new(0.0, 2.0, 8.0, Color::rgba(0.0, 0.0, 0.0, 0.3)))
+
+// The inner shadow of the theme
+div().shadow_inner()
+```
+
 ---
 
 ## Opacity

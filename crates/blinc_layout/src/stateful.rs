@@ -4491,6 +4491,12 @@ impl<S: StateTransitions> Stateful<S> {
         self
     }
 
+    /// Set an inset shadow (builder pattern)
+    pub fn inset_shadow(self, shadow: blinc_core::Shadow) -> Self {
+        self.merge_into_inner(Div::new().inset_shadow(shadow));
+        self
+    }
+
     /// Set small shadow (builder pattern)
     pub fn shadow_sm(self) -> Self {
         self.merge_into_inner(Div::new().shadow_sm());
@@ -5047,6 +5053,11 @@ impl<S: StateTransitions> BoundStateful<S> {
     /// Set shadow (builder pattern)
     pub fn shadow(self, shadow: blinc_core::Shadow) -> Self {
         self.transform_inner(|s| s.shadow(shadow))
+    }
+
+    /// Set an inset shadow (builder pattern)
+    pub fn inset_shadow(self, shadow: blinc_core::Shadow) -> Self {
+        self.transform_inner(|s| s.inset_shadow(shadow))
     }
 
     /// Set small shadow (builder pattern)

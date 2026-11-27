@@ -145,6 +145,23 @@ impl ElementStyle {
         self
     }
 
+    /// Set a single inset shadow, as CSS `box-shadow: inset` (replaces any inset stack).
+    pub fn inset_shadow(mut self, shadow: Shadow) -> Self {
+        self.inner_shadow = vec![shadow];
+        self
+    }
+
+    /// Set a stack of inset shadows.
+    pub fn inset_shadow_stack(mut self, shadows: Vec<Shadow>) -> Self {
+        self.inner_shadow = shadows;
+        self
+    }
+
+    /// Inner shadow preset using theme colors
+    pub fn shadow_inner(self) -> Self {
+        self.inset_shadow_stack(theme_shadow_stack(|s| &s.shadow_inner))
+    }
+
     /// Set shadow with parameters
     pub fn shadow_params(self, offset_x: f32, offset_y: f32, blur: f32, color: Color) -> Self {
         self.shadow(Shadow::new(offset_x, offset_y, blur, color))
@@ -174,6 +191,7 @@ impl ElementStyle {
     pub fn shadow_none(mut self) -> Self {
         // Use a fully transparent single-layer shadow to indicate "no shadow"
         self.shadow = vec![Shadow::new(0.0, 0.0, 0.0, Color::TRANSPARENT)];
+        self.inner_shadow.clear();
         self
     }
 }

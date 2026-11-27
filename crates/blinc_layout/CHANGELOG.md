@@ -18,6 +18,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - `Div::on_layout_change` calls back with the element's laid-out bounds after a layout that changes its size, for content that wraps to the width it is given.
 - `Notch::peak_top_at` and `Notch::peak_bottom_at` place a peak's apex off the edge's centre, such as a popover's pointer toward its anchor. `CenterPeak` has an `offset` field.
 - `ime::ImeSession`, `ime::char_offset`, `ime::utf16_offset`, `ime::valid_edit`, `EventContext::command_modifier` and `ua_styles::stylesheet_color` are public, for editable widgets outside this crate.
+- `Div` and `Stateful` take `.inset_shadow(..)`, and `Div` also `.inset_shadow_stack(..)` and `.shadow_inner()`.
 
 - Elements can register roles, child traversal, live-region defaults and advertised actions through `AccessibilitySemantics`. Custom roles use a generic platform fallback. Registered value/action providers and metadata updates survive incremental rendering.
 - Accessibility snapshots preserve container descendants, parent IDs, menu checkbox/radio variants, live-region properties and non-editable focus. Assistive focus uses the shared scope and event routing.
@@ -154,6 +155,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - An inset box shadow starts at the padding box, inside the borders, of each side.
 - A shadow that names no colour is painted in its element's text colour, inherited or its own, and animations and transitions run from that colour. `RenderTree::current_color` and `resolved_shadows` are public.
 - A corner shape that is set, `round` included, by `corner-shape` or `.corner_shape()`, is kept: the theme's corner smoothing applies only to elements that set none. `Div::merge` carries the shape.
+- `Div::set_style` and `Div::merge` keep a style's inset shadows, and a stateful's base takes a corner shape set after `on_state`.
 
 ### Added
 - `Image::retry(ImageRetry)` and `Image::no_retry()`: how an image whose load fails is tried again. `ImageRetry::backoff(first, max)` doubles the wait from `first` up to `max`, `.attempts(n)` limits the tries, `ImageRetry::NEVER` turns it off; the default waits half a second, doubling to half a minute, with no limit. `ImageRenderInfo` and `ImageData` carry it.
