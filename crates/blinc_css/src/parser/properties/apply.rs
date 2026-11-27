@@ -9,8 +9,7 @@ use blinc_core::{Color, CornerRadius, OverflowFade};
 use tracing::debug;
 
 use crate::element_style::{
-    ElementStyle, StyleAlign, StyleDisplay, StyleFlexDirection, StyleJustify, StyleOverflow,
-    StylePosition,
+    ElementStyle, StyleAlign, StyleDisplay, StyleFlexDirection, StyleJustify, StylePosition,
 };
 use crate::material::{GlassMaterial, Material, MetallicMaterial, RenderLayer, WoodMaterial};
 use crate::parser::*;
