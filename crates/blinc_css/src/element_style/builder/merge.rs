@@ -12,6 +12,15 @@ impl ElementStyle {
     /// Properties from `other` will override properties in `self` if they are set.
     /// Unset properties in `other` will not override.
     pub fn merge(&self, other: &ElementStyle) -> ElementStyle {
+        // The sides below, without what a uniform border above covers.
+        let mut under = ElementStyle {
+            border_top: self.border_top,
+            border_right: self.border_right,
+            border_bottom: self.border_bottom,
+            border_left: self.border_left,
+            ..ElementStyle::default()
+        };
+        under.reset_border_sides(other.border_width.is_some(), other.border_color.is_some());
         let mut merged = ElementStyle {
             component: self.component && other.component,
             important_colors: ImportantColors::combine(
@@ -105,20 +114,28 @@ impl ElementStyle {
                 .or_else(|| self.grid_template_rows.clone()),
             grid_column: other.grid_column.or(self.grid_column),
             grid_row: other.grid_row.or(self.grid_row),
-            row_gap: other.row_gap.or(self.row_gap),
-            column_gap: other.column_gap.or(self.column_gap),
+            row_gap: other
+                .row_gap
+                .or(self.row_gap.filter(|_| other.gap.is_none())),
+            column_gap: other
+                .column_gap
+                .or(self.column_gap.filter(|_| other.gap.is_none())),
             margin: merge_spacing(self.margin, other.margin),
             gap: other.gap.or(self.gap),
             overflow: other.overflow.or(self.overflow),
-            overflow_x: other.overflow_x.or(self.overflow_x),
-            overflow_y: other.overflow_y.or(self.overflow_y),
+            overflow_x: other
+                .overflow_x
+                .or(self.overflow_x.filter(|_| other.overflow.is_none())),
+            overflow_y: other
+                .overflow_y
+                .or(self.overflow_y.filter(|_| other.overflow.is_none())),
             overflow_fade: other.overflow_fade.or(self.overflow_fade),
             border_width: other.border_width.or(self.border_width),
             border_color: other.border_color.or(self.border_color),
-            border_top: merge_side(self.border_top, other.border_top),
-            border_right: merge_side(self.border_right, other.border_right),
-            border_bottom: merge_side(self.border_bottom, other.border_bottom),
-            border_left: merge_side(self.border_left, other.border_left),
+            border_top: merge_side(under.border_top, other.border_top),
+            border_right: merge_side(under.border_right, other.border_right),
+            border_bottom: merge_side(under.border_bottom, other.border_bottom),
+            border_left: merge_side(under.border_left, other.border_left),
             outline_width: other.outline_width.or(self.outline_width),
             outline_color: other.outline_color.or(self.outline_color),
             outline_offset: other.outline_offset.or(self.outline_offset),
@@ -273,6 +290,26 @@ impl ElementStyle {
     /// Check if no property is set
     pub fn is_empty(&self) -> bool {
         !self.has_visual_props() && !self.has_layout_props()
+    }
+}
+
+impl ElementStyle {
+    /// Drops the width, the colour or both from every per-side border, as a
+    /// uniform declaration of them does.
+    pub(crate) fn reset_border_sides(&mut self, width: bool, color: bool) {
+        for slot in [
+            &mut self.border_top,
+            &mut self.border_right,
+            &mut self.border_bottom,
+            &mut self.border_left,
+        ] {
+            *slot = slot
+                .map(|side| BorderSideStyle {
+                    width: side.width.filter(|_| !width),
+                    color: side.color.filter(|_| !color),
+                })
+                .filter(BorderSideStyle::is_set);
+        }
     }
 }
 

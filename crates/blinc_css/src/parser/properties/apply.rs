@@ -25,6 +25,9 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
     if super::apply_grid_property(style, name, value).is_some() {
         return;
     }
+    if super::apply_shorthand(style, name, value).is_some() {
+        return;
+    }
     match name {
         "background" | "background-color" => {
             if let Some(brush) = parse_brush(value) {
@@ -646,64 +649,6 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
             "baseline" => style.align_self = Some(StyleAlign::Baseline),
             _ => {}
         },
-        "gap" => {
-            if let Some(px) = parse_css_px(value) {
-                style.gap = Some(px);
-            }
-        }
-        "overflow" => match value.trim() {
-            "hidden" | "clip" => style.overflow = Some(StyleOverflow::Clip),
-            "visible" => style.overflow = Some(StyleOverflow::Visible),
-            "scroll" | "auto" => style.overflow = Some(StyleOverflow::Scroll),
-            _ => {}
-        },
-        "overflow-x" => match value.trim() {
-            "hidden" | "clip" => style.overflow_x = Some(StyleOverflow::Clip),
-            "visible" => style.overflow_x = Some(StyleOverflow::Visible),
-            "scroll" | "auto" => style.overflow_x = Some(StyleOverflow::Scroll),
-            _ => {}
-        },
-        "overflow-y" => match value.trim() {
-            "hidden" | "clip" => style.overflow_y = Some(StyleOverflow::Clip),
-            "visible" => style.overflow_y = Some(StyleOverflow::Visible),
-            "scroll" | "auto" => style.overflow_y = Some(StyleOverflow::Scroll),
-            _ => {}
-        },
-        "border" => {
-            // Shorthand: border: [width] [style] [color]
-            // Parts can be in any order. Style is ignored (always solid).
-            for part in value.split_whitespace() {
-                let p = part.trim();
-                if p == "solid" || p == "dashed" || p == "dotted" || p == "none" || p == "hidden" {
-                    continue; // skip style keyword
-                } else if let Some(px) = parse_css_px(p) {
-                    style.border_width = Some(px);
-                } else if let Some(color) = parse_color(p) {
-                    style.border_color = Some(color);
-                }
-            }
-        }
-        "border-width" => match try_parse_calc(value) {
-            CalcParseResult::Dynamic(expr) => {
-                style
-                    .dynamic_properties
-                    .get_or_insert_with(Vec::new)
-                    .push(crate::element_style::DynamicProperty::BorderWidth(expr));
-            }
-            CalcParseResult::Static(val) => {
-                style.border_width = Some(val.max(0.0));
-            }
-            CalcParseResult::NotCalc => {
-                if let Some(px) = parse_css_px(value) {
-                    style.border_width = Some(px);
-                }
-            }
-        },
-        "border-color" => {
-            if let Some(color) = parse_color(value) {
-                style.border_color = Some(color);
-            }
-        }
         "border-style" => {
             // Blinc borders are always solid; accept and ignore
         }

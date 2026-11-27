@@ -42,5 +42,7 @@ mod scroll_physics;
 mod scrollbar;
 pub mod selectors;
 pub mod state;
+mod uniform_border;
 
 pub(crate) use extra_layout::apply_extra_layout;
+pub(crate) use uniform_border::reset_uniform_border_sides;

@@ -16,6 +16,9 @@
 - `ElementStyle::inset_shadow`, `inset_shadow_stack` and `shadow_inner` set inset shadows, and `shadow_none` clears them.
 
 ### Fixed
+- `gap`, `overflow`, `border`, `border-width` and `border-color` drop what an earlier declaration or a lower rule set for the parts they cover, so `row-gap`, `overflow-x` or `border-top` no longer outlive a later shorthand.
+- `border: none` and `border: hidden` remove the border.
+- `border` and the per-side border properties read colors written with spaces, such as `rgb(0 0 255)` and `color-mix()`. A `border` value with a part that does not parse is rejected and reported.
 - A padding or margin longhand declares only its own side. `padding-right: 6px` no longer sets the other three sides to zero, in one rule or across rules. A later length replaces an earlier `auto` margin on the sides it sets.
 - `ElementStyle::merge` treats `shadow` and `inner_shadow` as the one `box-shadow` value: a style that sets either replaces both. `ElementStyle::sets_box_shadow` reports whether a style sets it.
 - `font-family` keeps every named family before the first generic keyword, in order (`StyleFontFamily::name` is the stack joined with `, `), and the generic keyword ends the list as in CSS. A quoted name may hold a comma and a quoted `serif` is a family called serif, not the generic. Before, only the first name was kept, so `font-family: "Inter", "Helvetica Neue", Arial, sans-serif` went from Inter straight to the generic sans.

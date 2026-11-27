@@ -10,9 +10,11 @@ mod border_sides;
 mod diagnostic;
 mod grid;
 mod layout_extras;
+mod shorthands;
 
 pub(crate) use apply::*;
 pub(crate) use border_sides::apply_border_side_property;
 pub(crate) use diagnostic::*;
 pub(crate) use grid::apply_grid_property;
 pub(crate) use layout_extras::apply_layout_extra;
+pub(crate) use shorthands::apply_shorthand;

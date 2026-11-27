@@ -38,6 +38,13 @@ pub(crate) fn apply_property_with_errors(
         return;
     }
 
+    if let Some(parsed) = super::apply_shorthand(style, name, value) {
+        if !parsed {
+            errors.push(ParseError::invalid_value(name, value, line, column));
+        }
+        return;
+    }
+
     if let Some(parsed) = super::apply_grid_property(style, name, value) {
         if !parsed {
             errors.push(ParseError::invalid_value(name, value, line, column));
@@ -792,69 +799,6 @@ pub(crate) fn apply_property_with_errors(
             "baseline" => style.align_self = Some(StyleAlign::Baseline),
             _ => errors.push(ParseError::invalid_value(name, value, line, column)),
         },
-        "gap" => {
-            if let Some(px) = parse_css_px(value) {
-                style.gap = Some(px);
-            } else {
-                errors.push(ParseError::invalid_value(name, value, line, column));
-            }
-        }
-        "overflow" => match value.trim() {
-            "hidden" | "clip" => style.overflow = Some(StyleOverflow::Clip),
-            "visible" => style.overflow = Some(StyleOverflow::Visible),
-            "scroll" | "auto" => style.overflow = Some(StyleOverflow::Scroll),
-            _ => errors.push(ParseError::invalid_value(name, value, line, column)),
-        },
-        "overflow-x" => match value.trim() {
-            "hidden" | "clip" => style.overflow_x = Some(StyleOverflow::Clip),
-            "visible" => style.overflow_x = Some(StyleOverflow::Visible),
-            "scroll" | "auto" => style.overflow_x = Some(StyleOverflow::Scroll),
-            _ => errors.push(ParseError::invalid_value(name, value, line, column)),
-        },
-        "overflow-y" => match value.trim() {
-            "hidden" | "clip" => style.overflow_y = Some(StyleOverflow::Clip),
-            "visible" => style.overflow_y = Some(StyleOverflow::Visible),
-            "scroll" | "auto" => style.overflow_y = Some(StyleOverflow::Scroll),
-            _ => errors.push(ParseError::invalid_value(name, value, line, column)),
-        },
-        "border" => {
-            // Shorthand: border: [width] [style] [color]
-            for part in value.split_whitespace() {
-                let p = part.trim();
-                if p == "solid" || p == "dashed" || p == "dotted" || p == "none" || p == "hidden" {
-                    continue;
-                } else if let Some(px) = parse_css_px(p) {
-                    style.border_width = Some(px);
-                } else if let Some(color) = parse_color(p) {
-                    style.border_color = Some(color);
-                }
-            }
-        }
-        "border-width" => match try_parse_calc(value) {
-            CalcParseResult::Dynamic(expr) => {
-                style
-                    .dynamic_properties
-                    .get_or_insert_with(Vec::new)
-                    .push(crate::element_style::DynamicProperty::BorderWidth(expr));
-            }
-            CalcParseResult::Static(val) => {
-                style.border_width = Some(val.max(0.0));
-            }
-            CalcParseResult::NotCalc => {
-                if let Some(px) = parse_css_px(value) {
-                    style.border_width = Some(px);
-                } else {
-                    errors.push(ParseError::invalid_value(name, value, line, column));
-                }
-            }
-        },
-        "border-color" => {
-            if let Some(color) = parse_color(value) {
-                style.border_color = Some(color);
-            } else {
-                errors.push(ParseError::invalid_value(name, value, line, column));
-            }
-        }
         "border-style" => {
             // Blinc borders are always solid; accept and ignore
         }

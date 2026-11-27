@@ -28,6 +28,7 @@ use crate::style_tier::{StyleProp, StyleTier};
 use crate::tree::LayoutNodeId;
 
 use super::super::RenderTree;
+use super::uniform_border::reset_uniform_border_sides;
 
 impl RenderTree {
     /// Per-side borders. A side without a declaration keeps what the
@@ -456,6 +457,17 @@ impl RenderTree {
             props.tiers.mark(StyleProp::BorderColor, tier);
             props.border_color = Some(bc);
         }
+        let covers = |prop| !skip(prop) && !skip(StyleProp::BorderSides);
+        reset_uniform_border_sides(
+            &mut props.border_sides,
+            props.border_color,
+            style
+                .border_width
+                .filter(|_| covers(StyleProp::BorderWidth)),
+            style
+                .border_color
+                .filter(|_| covers(StyleProp::BorderColor)),
+        );
         Self::apply_border_sides(props, style, tier);
         // Outline
         if let Some(ow) = style.outline_width

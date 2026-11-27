@@ -2,6 +2,7 @@
 //! `-width`, `-color` and `-style` longhands.
 
 use crate::element_style::{BorderSideStyle, ElementStyle};
+use crate::parser::util::split_whitespace_respecting_parens;
 use crate::parser::value::{parse_color, parse_css_px};
 
 const SIDES: [&str; 4] = ["top", "right", "bottom", "left"];
@@ -35,8 +36,8 @@ pub(crate) fn apply_border_side_property(
         "" => {
             // [width] [style] [color], any order; `none` removes the side.
             let mut parsed = BorderSideStyle::default();
-            for part in value.split_whitespace() {
-                match part {
+            for part in split_whitespace_respecting_parens(value) {
+                match part.as_str() {
                     "none" | "hidden" => parsed.width = Some(0.0),
                     "solid" | "dashed" | "dotted" => {}
                     p => {

@@ -1359,6 +1359,18 @@ impl Div {
         if let Some(opacity) = style.opacity {
             self.opacity = opacity;
         }
+        if let Some(width) = style.border_width {
+            self.border_width = width;
+        }
+        if let Some(color) = style.border_color {
+            self.border_color = Some(color);
+        }
+        crate::renderer::stylesheet::reset_uniform_border_sides(
+            &mut self.border_sides,
+            self.border_color,
+            style.border_width,
+            style.border_color,
+        );
         for (declared, slot) in [
             (style.border_top, 0),
             (style.border_right, 1),
@@ -1385,12 +1397,6 @@ impl Div {
                 2 => self.border_sides.bottom = resolved,
                 _ => self.border_sides.left = resolved,
             }
-        }
-        if let Some(width) = style.border_width {
-            self.border_width = width;
-        }
-        if let Some(color) = style.border_color {
-            self.border_color = Some(color);
         }
         if let Some(width) = style.outline_width {
             self.outline_width = width;
