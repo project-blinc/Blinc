@@ -359,7 +359,7 @@ russl::russl! {
                 mask_t = clamp(length(mask_uv - m_center) / max(m_radius, 0.001), 0.0, 1.0);
             }
             let mask_alpha = mix(input.mask_info.y, input.mask_info.z, mask_t);
-            color = Vec4::new(color.x * mask_alpha, color.y * mask_alpha, color.z * mask_alpha, color.w * mask_alpha);
+            color.w = color.w * mask_alpha;
         }
 
         // Premultiplied alpha, for the blend state One, OneMinusSrcAlpha.

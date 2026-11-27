@@ -919,7 +919,7 @@ russl::russl! {
                 mask_t = clamp(length(mask_uv - m_center) / max(m_radius, 0.001), 0.0, 1.0);
             }
             let mask_alpha = mix(prim.mask_info.y, prim.mask_info.z, mask_t);
-            result = Vec4::new(result.rgb * mask_alpha, result.a * mask_alpha);
+            result.a *= mask_alpha;
         }
 
         // Apply CSS filters (grayscale, invert, sepia, hue-rotate, brightness, contrast, saturate)

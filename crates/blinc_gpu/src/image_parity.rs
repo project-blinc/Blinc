@@ -522,13 +522,13 @@ fn images_draw_the_texel_through_the_formulas() {
         );
     }
 
-    // Mask gradients scale colour and alpha.
+    // Mask gradients scale the alpha alone.
     for lx in [10, 15] {
         let (rgb, a) = texel_rgba(lx, 6);
         let m = mix(1.0, 0.0, ((lx as f32 + 0.5) / 16.0).clamp(0.0, 1.0));
         assert_near(
             probe(&pixels, 96, 0, lx, 6),
-            over_clear(rgb.map(|c| c * m), a * m),
+            over_clear(rgb, a * m),
             "linear mask",
         );
     }
@@ -537,7 +537,7 @@ fn images_draw_the_texel_through_the_formulas() {
     let m = mix(1.0, 0.0, t);
     assert_near(
         probe(&pixels, 0, 24, 12, 4),
-        over_clear(rgb.map(|c| c * m), a * m),
+        over_clear(rgb, a * m),
         "radial mask",
     );
 

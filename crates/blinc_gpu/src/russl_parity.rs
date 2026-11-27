@@ -1033,6 +1033,34 @@ fn the_notch_pipeline_fills_the_top_slot_for_bulges_and_peaks_and_hollows_it_for
     }
 }
 
+/// A mask gradient lowers a shape's alpha and leaves its colour alone: the
+/// colour is straight here, and blending scales it by the alpha.
+#[test]
+fn a_mask_gradient_scales_the_alpha_of_a_shape_once() {
+    let Some((device, queue)) = device() else {
+        eprintln!("no adapter with vertex storage: skipped");
+        return;
+    };
+    let mut rect = GpuPrimitive::rect(14.0, 14.0, 100.0, 40.0).with_color(0.8, 0.6, 0.4, 1.0);
+    rect.mask_info = [1.0, 1.0, 0.0, 0.0];
+    rect.mask_params = [0.0, 0.0, 1.0, 0.0];
+    // A notch with square corners and no edge modifiers is the same rect.
+    let mut notch = rect;
+    notch.type_info[0] = 8;
+    for (prim, wgsl, name) in [
+        (rect, crate::sdf_russl::sdf_core::WGSL, "rect"),
+        (notch, crate::sdf_russl::sdf_notch::WGSL, "notch"),
+    ] {
+        let pixels = draw(&device, &queue, wgsl, &[], &[prim]);
+        let at = ((34 * SIZE + 64) * 4) as usize;
+        // The mask at the centre of that pixel, 50.5 of 100 along.
+        let want = [204u8, 153, 102, 126];
+        for (got, want) in pixels[at..at + 4].iter().zip(want) {
+            assert!(got.abs_diff(want) <= 1, "{name}: {:?}", &pixels[at..at + 4]);
+        }
+    }
+}
+
 /// A scene for the core shader: fills, borders, shadows, rotation and 3D tilt, clips (including a
 /// polygon whose vertices are read from the auxiliary data at index 1600), a mask and a filter,
 /// and with `mesh` triangles with per-vertex colours, whose data sits at index 1700.
