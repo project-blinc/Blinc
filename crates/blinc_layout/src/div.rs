@@ -495,6 +495,9 @@ pub struct Div {
     /// What [`Div::visible`] follows. Acted on in `build()`, once the
     /// display mode the element has when shown is final.
     pub(crate) visible_source: Option<VisibleSource>,
+    /// The layout style while `visible_source` hides the element, made when it
+    /// is first read.
+    hidden_style: std::cell::OnceCell<Box<Style>>,
     /// Children shown only while a condition holds, by index into
     /// `children`: what a signal-bound [`Div::when`] added. A child can
     /// appear under several conditions, and is shown while all hold.
@@ -614,6 +617,7 @@ impl Div {
             stateful_context_key: None,
             pending_bindings: Vec::new(),
             visible_source: None,
+            hidden_style: std::cell::OnceCell::new(),
             child_visibility: Vec::new(),
             region: None,
         }
@@ -685,6 +689,7 @@ impl Div {
             stateful_context_key: None,
             pending_bindings: Vec::new(),
             visible_source: None,
+            hidden_style: std::cell::OnceCell::new(),
             child_visibility: Vec::new(),
             region: None,
         }
@@ -1613,6 +1618,8 @@ impl Div {
     pub fn merge(&mut self, other: Div) {
         // Create a default for comparison
         let default = Div::new();
+
+        self.hidden_style.take();
 
         // Merge style if it differs from default
         // Style is complex, so we merge it field by field via taffy
@@ -5893,6 +5900,20 @@ impl ElementBuilder for Div {
     }
 
     fn layout_style(&self) -> Option<&taffy::Style> {
+        // An element `visible` hides is out of layout wherever its style is read:
+        // by the hash an update compares, and by the style it writes.
+        if self
+            .visible_source
+            .as_ref()
+            .is_some_and(|source| !source.current())
+        {
+            return Some(self.hidden_style.get_or_init(|| {
+                Box::new(Style {
+                    display: Display::None,
+                    ..self.style.clone()
+                })
+            }));
+        }
         Some(&self.style)
     }
 

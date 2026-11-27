@@ -3643,7 +3643,8 @@ impl<S: StateTransitions> Stateful<S> {
         // This preserves properties like rounded corners, shadows, overflow, etc.
         let inner_div = self.inner.borrow();
         let base_props = inner_div.render_props();
-        let base_style = inner_div.layout_style().cloned();
+        // The style as built: visibility is applied to what each refresh builds.
+        let base_style = Some(inner_div.style.clone());
         drop(inner_div);
 
         // Store the callback, base props, and base style

@@ -66,4 +66,5 @@ mod text_overrides;
 mod tree_update_isolation;
 mod update_text;
 mod viewport_cull_nested_scroll;
+mod visible_updates;
 mod when_reactive;
