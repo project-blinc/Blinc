@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1795823044,"nonce":"cn7+TBRGxV8fnWagEpe1ItiZPiY=","added":["bug","area:app"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1795823046,"nonce":"0WQoP8A7KyJWNBhag4szrXKBqCk=","message":"Fixed in f83751a9038d850bea45c0d9f6c14d85a7de8808. The layers to composite now come from their text, SVGs and images. Pixel test in the direct, motion and compositor paths.","files":null}]}
