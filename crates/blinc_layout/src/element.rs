@@ -235,14 +235,10 @@ pub struct RenderProps {
     pub border_radius_explicit: bool,
     /// Corner shape (superellipse n parameter per corner). Default is ROUND (n=1.0).
     pub corner_shape: CornerShape,
-    /// When `true`, the active theme's [`ShapeTokens`](blinc_theme::ShapeTokens)
-    /// must NOT substitute a squircle exponent onto this element's
-    /// corners even if `corner_shape.is_round()`. Used by floating
-    /// overlay widgets (popovers, dropdown panels, select menus,
-    /// combobox lists) that want their chrome to match the surrounding
-    /// UI's circular corners rather than picking up the theme's
-    /// squircle aesthetic. Default `false`: the paint walker is free
-    /// to substitute per the theme.
+    /// Keeps `corner_shape` as it is, round included, from the theme's
+    /// corner smoothing. Set wherever a shape is set, by a builder or a
+    /// rule, and by `lock_corner_shape()` for floating overlay widgets
+    /// that want circular corners under any theme.
     pub corner_shape_locked: bool,
     /// The outline the box's fill, border and shadow follow, where it is not a rounded rectangle.
     pub notch: Option<std::sync::Arc<crate::notch::NotchShape>>,
@@ -603,7 +599,10 @@ impl RenderProps {
         let set = [
             (self.background.is_some(), P::Background),
             (self.border_radius_explicit, P::BorderRadius),
-            (self.corner_shape != d.corner_shape, P::CornerShape),
+            (
+                self.corner_shape != d.corner_shape || self.corner_shape_locked,
+                P::CornerShape,
+            ),
             (!self.shadow.is_empty(), P::Shadow),
             (!self.inner_shadow.is_empty(), P::InnerShadow),
             (self.transform.is_some(), P::Transform),

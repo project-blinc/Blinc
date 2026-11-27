@@ -1334,6 +1334,7 @@ impl Div {
         }
         if let Some(cs) = style.corner_shape {
             self.corner_shape = cs;
+            self.corner_shape_locked = true;
         }
         if let Some(fade) = style.overflow_fade {
             self.overflow_fade = fade;
@@ -1648,6 +1649,10 @@ impl Div {
         if other.border_radius_explicit || other.border_radius != default.border_radius {
             self.border_radius = other.border_radius;
             self.border_radius_explicit = true;
+        }
+        if other.corner_shape_locked || other.corner_shape != default.corner_shape {
+            self.corner_shape = other.corner_shape;
+            self.corner_shape_locked |= other.corner_shape_locked;
         }
         if other.border_color.is_some() {
             self.border_color = other.border_color;
@@ -3511,15 +3516,19 @@ impl Div {
 
     /// Set uniform corner shape (superellipse exponent)
     ///
-    /// Values: 0.0 = bevel, 1.0 = round (default), 2.0 = squircle, -1.0 = scoop
+    /// Values: 0.0 = bevel, 1.0 = round, 2.0 = squircle, -1.0 = scoop. A shape set
+    /// here, round included, is kept: the theme's corner smoothing applies only to
+    /// elements that set none.
     pub fn corner_shape(mut self, n: f32) -> Self {
         self.corner_shape = CornerShape::uniform(n);
+        self.corner_shape_locked = true;
         self
     }
 
     /// Set per-corner shape values (top-left, top-right, bottom-right, bottom-left)
     pub fn corner_shapes(mut self, tl: f32, tr: f32, br: f32, bl: f32) -> Self {
         self.corner_shape = CornerShape::new(tl, tr, br, bl);
+        self.corner_shape_locked = true;
         self
     }
 
@@ -3544,16 +3553,10 @@ impl Div {
     /// [`ShapeTokens`](blinc_theme::ShapeTokens) (e.g. any of the
     /// Universal HID variants), the paint walker substitutes the
     /// theme's effective `n` onto rounded corners that pass the
-    /// threshold check. Calling `lock_corner_shape()` tells the
-    /// walker to leave this element's corners alone — useful for
-    /// floating overlay widgets (popovers, dropdown panels, select
-    /// menus) whose chrome should remain circular regardless of the
-    /// theme.
-    ///
-    /// Has no effect on themes that already use circular corners
-    /// (every existing platform bundle + Catppuccin BlincTheme) —
-    /// they short-circuit the substitution before this flag is
-    /// consulted.
+    /// threshold check, on elements that set no corner shape.
+    /// Calling `lock_corner_shape()` keeps this element's corners
+    /// circular without setting a shape, as floating overlay widgets
+    /// (popovers, dropdown panels, select menus) want.
     pub fn lock_corner_shape(mut self) -> Self {
         self.corner_shape_locked = true;
         self

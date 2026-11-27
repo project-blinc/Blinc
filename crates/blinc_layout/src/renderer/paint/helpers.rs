@@ -139,11 +139,10 @@ pub fn resolve_corner_shape(
     shape_locked: bool,
 ) -> CornerShape {
     if shape_locked || !explicit.is_round() {
-        // `shape_locked` is the explicit opt-out for floating
-        // overlay widgets that want circular corners regardless of
-        // theme. `!is_round()` covers user overrides via .squircle()
-        // / .bevel() / CSS `corner-shape:` — both keep precedence
-        // over the theme.
+        // `shape_locked` marks a shape that was set, round included, by a
+        // builder, a rule or `lock_corner_shape()`. A shape other than
+        // round counts as set without it, as one written straight into
+        // the props does.
         return explicit;
     }
     if theme_shape.is_off() {
@@ -313,6 +312,32 @@ mod resolve_corner_shape_tests {
             false,
         );
         assert_eq!(resolved, CornerShape::BEVEL);
+    }
+
+    #[test]
+    fn a_round_shape_that_was_set_is_kept_from_the_theme() {
+        use crate::div::{ElementBuilder, div};
+        let painted = |element: crate::div::Div| {
+            let props = element.render_props();
+            resolve_corner_shape(
+                props.corner_shape,
+                CornerRadius::uniform(20.0),
+                REC,
+                &hybrid_shape(),
+                9999.0,
+                props.corner_shape_locked,
+            )
+        };
+        assert_eq!(painted(div().corner_shape(1.0)), CornerShape::ROUND);
+        assert!(
+            !painted(div()).is_round(),
+            "the theme smooths an unset shape"
+        );
+
+        // A merged element, as a stateful's, carries its shape.
+        let mut merged = div();
+        merged.merge(div().corner_shape(1.0));
+        assert_eq!(painted(merged), CornerShape::ROUND);
     }
 
     #[test]

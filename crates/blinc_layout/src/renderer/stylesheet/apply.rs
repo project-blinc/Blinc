@@ -146,6 +146,8 @@ impl RenderTree {
         {
             props.tiers.mark(StyleProp::CornerShape, tier);
             props.corner_shape = cs;
+            // A shape a rule sets is kept from the theme's smoothing.
+            props.corner_shape_locked = true;
         }
         if let Some(fade) = style.overflow_fade
             && !skip(StyleProp::OverflowFade)

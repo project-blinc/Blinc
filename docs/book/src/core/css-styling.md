@@ -276,6 +276,9 @@ div().corner_bevel()                                       // Preset: bevel
 div().corner_scoop()                                       // Preset: scoop
 ```
 
+A theme can smooth corners. For example, the Hybrid theme draws large corners as squircles. This
+applies only to an element that sets no corner shape. A shape that you set, round included, stays.
+
 Corner shape is animatable via transitions and keyframes:
 
 ```css

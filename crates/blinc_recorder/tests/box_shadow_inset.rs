@@ -18,9 +18,9 @@ const CSS: &str = "
         left: 180px; top: 20px; border: 4px solid #000000;
         box-shadow: inset 12px -6px 8px 2px rgba(0, 0, 255, 0.6);
     }
-    /* A radius near half the height, which the theme leaves circular. */
+    /* Circular corners, which the theme would smooth if the rule did not set them. */
     #round {
-        left: 20px; top: 100px; border-radius: 24px;
+        left: 20px; top: 100px; border-radius: 20px; corner-shape: round;
         box-shadow: inset 0 0 10px 4px #ff0000;
     }
     #hard { left: 180px; top: 100px; box-shadow: inset 10px 0 0 0 #ff0000; }
@@ -188,11 +188,11 @@ fn box_shadows_paint_as_css_describes() {
 
     let pad = Shape {
         rect: [20.0, 100.0, 140.0, 150.0],
-        radius: 24.0,
+        radius: 20.0,
     };
     let hole = Shape {
         rect: [24.0, 104.0, 136.0, 146.0],
-        radius: 20.0,
+        radius: 16.0,
     };
     matches(
         &mut ui,

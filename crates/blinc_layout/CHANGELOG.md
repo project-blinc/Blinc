@@ -153,6 +153,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - The volume bar of the media controls draws the columns up to the volume bright and the rest dim. The two default colours were the wrong way round, and a muted bar lit one column.
 - An inset box shadow starts at the padding box, inside the borders, of each side.
 - A shadow that names no colour is painted in its element's text colour, inherited or its own, and animations and transitions run from that colour. `RenderTree::current_color` and `resolved_shadows` are public.
+- A corner shape that is set, `round` included, by `corner-shape` or `.corner_shape()`, is kept: the theme's corner smoothing applies only to elements that set none. `Div::merge` carries the shape.
 
 ### Added
 - `Image::retry(ImageRetry)` and `Image::no_retry()`: how an image whose load fails is tried again. `ImageRetry::backoff(first, max)` doubles the wait from `first` up to `max`, `.attempts(n)` limits the tries, `ImageRetry::NEVER` turns it off; the default waits half a second, doubling to half a minute, with no limit. `ImageRenderInfo` and `ImageData` carry it.
