@@ -1,8 +1,9 @@
 //! `box-shadow` values.
 //!
-//! Parses the explicit `[inset] offset-x offset-y blur [spread] color` form, and a
-//! comma-separated stack of them. A theme's shadows reach CSS as the `--shadow-*`
-//! variables, which are such stacks.
+//! Parses a comma-separated list of layers, each `inset? && <length>{2,4} && <color>?`: the
+//! offsets, then the blur radius and the spread when given, with `inset` and the colour before
+//! or after the lengths. A theme's shadows reach CSS as the `--shadow-*` variables, which are
+//! such lists.
 
 use crate::parser::*;
 use blinc_core::{Color, Shadow};
@@ -32,11 +33,8 @@ pub(crate) fn parse_shadow(value: &str) -> Option<Shadow> {
 
 /// Parse a CSS shadow value into its outer and inner layers.
 ///
-/// Handles:
-/// - `none` → a single transparent outer shadow,
-/// - `theme(shadow-*)` → the token's full layer stack,
-/// - one or more comma-separated explicit shadows, each of which may
-///   carry the `inset` keyword.
+/// `none` is a single transparent outer shadow. As in CSS, one layer that does not parse
+/// rejects the whole value.
 pub(crate) fn parse_shadow_layers(value: &str) -> Option<ShadowLayers> {
     let trimmed = value.trim();
     if trimmed.eq_ignore_ascii_case("none") {
@@ -48,12 +46,11 @@ pub(crate) fn parse_shadow_layers(value: &str) -> Option<ShadowLayers> {
 
     let mut layers = ShadowLayers::default();
     for part in split_commas_respecting_parens(trimmed) {
-        if let Some((shadow, inset)) = parse_explicit_shadow(part.trim()) {
-            if inset {
-                layers.inner.push(shadow);
-            } else {
-                layers.outer.push(shadow);
-            }
+        let (shadow, inset) = parse_explicit_shadow(part.trim())?;
+        if inset {
+            layers.inner.push(shadow);
+        } else {
+            layers.outer.push(shadow);
         }
     }
     if layers.is_empty() {
@@ -63,34 +60,50 @@ pub(crate) fn parse_shadow_layers(value: &str) -> Option<ShadowLayers> {
     }
 }
 
-/// Parse an explicit shadow: `[inset] offset-x offset-y blur [spread] color`.
-/// Returns the layer and whether it was marked `inset`.
+/// Parse one shadow layer, and return it with whether it is `inset`.
+///
+/// A layer with no colour, or `currentColor`, is black: the colour an element starts with.
 pub(crate) fn parse_explicit_shadow(input: &str) -> Option<(Shadow, bool)> {
-    let mut parts = split_whitespace_respecting_parens(input);
-
-    // CSS lets `inset` sit anywhere among the components, and authors
-    // write it first or last about equally. Lift it out, then parse what
-    // is left as the ordinary offset/blur/spread/colour form.
-    let before = parts.len();
-    parts.retain(|p| !p.trim().eq_ignore_ascii_case("inset"));
-    let inset = parts.len() != before;
-
-    if parts.len() >= 4 {
-        let offset_x = parse_length_value(&parts[0])?;
-        let offset_y = parse_length_value(&parts[1])?;
-        let blur = parse_length_value(&parts[2])?;
-        // Try the 5-part form: offset-x offset-y blur spread color
-        if parts.len() >= 5
-            && let Some(spread) = parse_length_value(&parts[3])
-        {
-            let color = parse_color(&parts[4])?;
-            let mut shadow = Shadow::new(offset_x, offset_y, blur, color);
-            shadow.spread = spread;
-            return Some((shadow, inset));
+    let mut inset = false;
+    let mut color = None;
+    let mut lengths = Vec::new();
+    // Set once something follows the lengths, which have to stand together.
+    let mut lengths_ended = false;
+    for part in split_whitespace_respecting_parens(input) {
+        if part.eq_ignore_ascii_case("inset") {
+            if inset {
+                return None;
+            }
+            inset = true;
+        } else if let Some(length) = parse_length_value(&part) {
+            if lengths_ended {
+                return None;
+            }
+            lengths.push(length);
+            continue;
+        } else {
+            let parsed = if part.eq_ignore_ascii_case("currentcolor") {
+                Color::BLACK
+            } else {
+                parse_color(&part)?
+            };
+            if color.replace(parsed).is_some() {
+                return None;
+            }
         }
-        // 4-part form: offset-x offset-y blur color
-        let color = parse_color(&parts[3])?;
-        return Some((Shadow::new(offset_x, offset_y, blur, color), inset));
+        lengths_ended = !lengths.is_empty();
     }
-    None
+
+    let (offset_x, offset_y, blur, spread) = match lengths[..] {
+        [x, y] => (x, y, 0.0, 0.0),
+        [x, y, blur] => (x, y, blur, 0.0),
+        [x, y, blur, spread] => (x, y, blur, spread),
+        _ => return None,
+    };
+    if blur < 0.0 {
+        return None;
+    }
+    let mut shadow = Shadow::new(offset_x, offset_y, blur, color.unwrap_or(Color::BLACK));
+    shadow.spread = spread;
+    Some((shadow, inset))
 }

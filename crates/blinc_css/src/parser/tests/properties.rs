@@ -115,6 +115,62 @@ mod inset_shadow_tests {
         assert_eq!(first.inner_shadow[0].blur, last.inner_shadow[0].blur);
     }
 
+    /// The blur, the spread and the colour may be left out, and the colour may come first.
+    #[test]
+    fn every_order_that_css_allows_parses() {
+        let layer = |css: &str| {
+            let s = parse(&format!("box-shadow: {css};"));
+            assert_eq!(s.shadow.len() + s.inner_shadow.len(), 1, "{css}");
+            let inset = !s.inner_shadow.is_empty();
+            let l = *s.shadow.iter().chain(&s.inner_shadow).next().unwrap();
+            (
+                [l.offset_x, l.offset_y, l.blur, l.spread],
+                [l.color.r, l.color.g, l.color.b],
+                inset,
+            )
+        };
+        let red = [1.0, 0.0, 0.0];
+        let black = [0.0; 3];
+        assert_eq!(layer("2px 3px #ff0000"), ([2.0, 3.0, 0.0, 0.0], red, false));
+        assert_eq!(layer("0 0 10px"), ([0.0, 0.0, 10.0, 0.0], black, false));
+        assert_eq!(
+            layer("0 0 10px currentColor"),
+            ([0.0, 0.0, 10.0, 0.0], black, false)
+        );
+        assert_eq!(
+            layer("#ff0000 2px 3px 4px"),
+            ([2.0, 3.0, 4.0, 0.0], red, false)
+        );
+        assert_eq!(
+            layer("inset #ff0000 2px 3px 4px 5px"),
+            ([2.0, 3.0, 4.0, 5.0], red, true)
+        );
+        assert_eq!(
+            layer("rgb(255, 0, 0) 2px 3px inset"),
+            ([2.0, 3.0, 0.0, 0.0], red, true)
+        );
+    }
+
+    /// A value CSS rejects sets nothing, and takes the layers beside it with it.
+    #[test]
+    fn a_value_css_rejects_sets_nothing() {
+        for css in [
+            "2px",
+            "2px 3px 4px 5px 6px red",
+            "2px red 3px",
+            "2px 3px -4px red",
+            "2px 3px red blue",
+            "inset 2px 3px inset",
+            "2px 3px red, nonsense",
+        ] {
+            let s = parse(&format!("box-shadow: {css};"));
+            assert!(
+                s.shadow.is_empty() && s.inner_shadow.is_empty(),
+                "{css} parsed"
+            );
+        }
+    }
+
     /// Without the keyword it must stay an outer shadow.
     #[test]
     fn a_plain_shadow_is_not_inset() {
