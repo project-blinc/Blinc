@@ -1567,10 +1567,9 @@ impl RenderTree {
                 };
                 super::helpers::draw_inset_shadows(
                     ctx,
-                    &render_node.props.inner_shadow,
+                    &render_node.props,
                     rect,
                     radius,
-                    render_node.props.border_width,
                     inset_alpha,
                 );
             }

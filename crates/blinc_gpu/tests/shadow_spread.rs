@@ -105,11 +105,16 @@ fn an_unblurred_edge_is_antialiased() {
         src.contains("clamp(0.5 - shadow_sdf_dist, 0.0, 1.0)"),
         "the outer edge with no blur is a hard step"
     );
+    assert!(
+        src.contains(
+            "clamp(0.5 - sd_shaped_rect(p, hole_origin, hole_size, hole_radii, shape), 0.0, 1.0)"
+        ),
+        "an inset shadow with no blur is not antialiased"
+    );
     assert_eq!(
-        src.matches("clamp(0.5 + spread - edge_dist, 0.0, 1.0)")
-            .count(),
+        src.matches("inset_shadow_alpha(sp,").count(),
         2,
-        "an inset shadow with no blur (box and circle) is not antialiased"
+        "the box and circle inset shadows do not share one model"
     );
 }
 

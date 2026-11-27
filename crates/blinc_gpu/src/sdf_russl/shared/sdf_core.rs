@@ -409,10 +409,8 @@ russl::russl! {
                 shadow_alpha = 0.5 * (1.0 + erf(-shadow_sdf_dist / sigma_d));
             }
 
-            let shadow_color = prim.shadow_color * shadow_alpha;
-
-            // Premultiply and blend
-            result = shadow_color;
+            // Straight alpha: only the alpha carries the falloff.
+            result = Vec4::new(prim.shadow_color.rgb, prim.shadow_color.a * shadow_alpha);
         }
 
         // Calculate main shape SDF
@@ -881,9 +879,15 @@ russl::russl! {
         }
 
         // Blend fill over shadow at FULL opacity first (fill fully covers shadow)
-        // This ensures no shadow bleeds through the shape regardless of edge AA
+        // This ensures no shadow bleeds through the shape regardless of edge AA. Both are
+        // straight alpha, so each colour counts by its own alpha.
         let full_fill = Vec4::new(fill_color.rgb, fill_color.a * clip_alpha);
-        result = full_fill + result * (1.0 - full_fill.a);
+        let under = result.a * (1.0 - full_fill.a);
+        let both = full_fill.a + under;
+        result = Vec4::new(
+            (full_fill.rgb * full_fill.a + result.rgb * under) / max(both, 0.000001),
+            both
+        );
 
         // NOW apply outer edge anti-aliasing to the combined result
         // This gives smooth edges against the background without shadow bleed

@@ -20,6 +20,7 @@ use blinc_core::{
 use blinc_theme::ShapeTokens;
 
 use super::super::RenderTree;
+use crate::element::{BorderSide, RenderProps};
 
 impl RenderTree {
     /// Extract start and end alpha values from gradient stops for mask gradient
@@ -207,44 +208,47 @@ pub fn resolve_corner_shape(
 
 /// Draw a node's inset shadows over its fill, `alpha` scaling their colour.
 ///
-/// CSS paints them over the background and under the border. Clipping to the
-/// padding box gives that picture without splitting the merged fill+border
-/// primitive, which keeps corners free of AA fringe. The shadow's geometry
-/// still comes from the border box, so its falloff starts where CSS says; the
-/// clip only keeps it off the border band.
+/// CSS paints them over the background and under the border, in the padding box:
+/// the border box less the border widths. The clip keeps them off the border
+/// band without splitting the merged fill+border primitive, which keeps corners
+/// free of AA fringe.
 pub(crate) fn draw_inset_shadows(
     ctx: &mut dyn DrawContext,
-    shadows: &[Shadow],
+    props: &RenderProps,
     rect: Rect,
     radius: CornerRadius,
-    border_width: f32,
     alpha: f32,
 ) {
-    if shadows.is_empty() {
+    if props.inner_shadow.is_empty() {
         return;
     }
-    let bw = border_width.max(0.0);
+    let uniform = props.border_width;
+    let side = |side: &Option<BorderSide>| side.as_ref().map_or(uniform, |s| s.width).max(0.0);
+    let sides = &props.border_sides;
+    let (top, right) = (side(&sides.top), side(&sides.right));
+    let (bottom, left) = (side(&sides.bottom), side(&sides.left));
     let pad = Rect {
-        origin: Point::new(rect.origin.x + bw, rect.origin.y + bw),
+        origin: Point::new(rect.origin.x + left, rect.origin.y + top),
         size: Size::new(
-            (rect.size.width - bw * 2.0).max(0.0),
-            (rect.size.height - bw * 2.0).max(0.0),
+            (rect.size.width - left - right).max(0.0),
+            (rect.size.height - top - bottom).max(0.0),
         ),
     };
     if pad.size.width <= 0.0 || pad.size.height <= 0.0 {
         return;
     }
+    // A corner is circular here, so the wider of its two borders sets its inner radius.
     let inner_radius = CornerRadius {
-        top_left: (radius.top_left - bw).max(0.0),
-        top_right: (radius.top_right - bw).max(0.0),
-        bottom_right: (radius.bottom_right - bw).max(0.0),
-        bottom_left: (radius.bottom_left - bw).max(0.0),
+        top_left: (radius.top_left - top.max(left)).max(0.0),
+        top_right: (radius.top_right - top.max(right)).max(0.0),
+        bottom_right: (radius.bottom_right - bottom.max(right)).max(0.0),
+        bottom_left: (radius.bottom_left - bottom.max(left)).max(0.0),
     };
     ctx.push_clip(ClipShape::rounded_rect(pad, inner_radius));
-    for shadow in shadows.iter().rev() {
+    for shadow in props.inner_shadow.iter().rev() {
         let mut shadow = *shadow;
         shadow.color.a *= alpha;
-        ctx.draw_inner_shadow(rect, radius, shadow);
+        ctx.draw_inner_shadow(pad, inner_radius, shadow);
     }
     ctx.pop_clip();
 }

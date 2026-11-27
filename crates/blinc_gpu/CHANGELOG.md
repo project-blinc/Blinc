@@ -6,6 +6,8 @@ All notable changes to `blinc_gpu` will be documented in this file.
 
 ### Fixed
 - A notch's shadow no longer drops out under the partly covered pixels of its edge, which drew a dotted line along a rounded corner.
+- Inset box shadows paint as a browser paints them: a Gaussian blur with a deviation of half the blur radius, a hole moved by the offset and shrunk by the spread, smooth corners, and about half strength at the edge. The circle inner shadow follows. `draw_inner_shadow` takes the padding box.
+- Coloured box shadows keep their colour. The falloff scaled the colour as well as its alpha, so they drew darker than a browser draws them.
 
 ### Added
 - The notch shader reads a peak's apex offset from the last lane of its edge modifier, which a peak did not use.

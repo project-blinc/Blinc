@@ -115,6 +115,95 @@ russl::russl! {
     }
 
     // ============================================================================
+    // Inset shadow coverage
+    // ============================================================================
+
+    // The share of a Gaussian of deviation `sigma` centred on `at` that lies between `from` and
+    // `to`.
+    pub fn gaussian_span(at: f32, from: f32, to: f32, sigma: f32) -> f32 {
+        let k = sqrt(0.5) / sigma;
+        return 0.5 * (erf((to - at) * k) - erf((from - at) * k));
+    }
+
+    // How far a corner of radius `r` and shape `n` pulls a row in from the side, for a row
+    // `into` pixels past where the corner begins, towards the end of the rect. The shapes are
+    // those of `sd_shaped_rect`.
+    pub fn corner_row_inset(r: f32, n: f32, into: f32) -> f32 {
+        if into <= 0.0 || r <= 0.0 || n >= 100.0 {
+            return 0.0;
+        }
+        if n <= -100.0 {
+            return r;
+        }
+        let t = clamp(into / r, 0.000001, 1.0);
+        let p = pow(2.0, min(abs(n), 5.0));
+        if n < 0.0 {
+            // A scoop: an arc about the corner's tip.
+            return r * pow(max(1.0 - pow(max(1.0 - t, 0.000001), p), 0.000001), 1.0 / p);
+        }
+        return r * (1.0 - pow(max(1.0 - pow(t, p), 0.000001), 1.0 / p));
+    }
+
+    // How much of a Gaussian of deviation `sigma` centred on `p` a shaped rect covers, which
+    // is the rect blurred, at `p`. Exact along each row; the rows are summed in slices, each
+    // weighted by its share of the Gaussian.
+    pub fn blurred_rect_coverage(p: Vec2, origin: Vec2, size: Vec2, radius: Vec4, shape: Vec4, sigma: f32) -> f32 {
+        let end = origin + size;
+        let radii = min(radius, Vec4::splat(min(size.x, size.y) * 0.5));
+        if radii.x + radii.y + radii.z + radii.w <= 0.0 {
+            return gaussian_span(p.x, origin.x, end.x, sigma) * gaussian_span(p.y, origin.y, end.y, sigma);
+        }
+        // Rows past three and a half deviations add less than one part in two thousand.
+        let top = max(origin.y, p.y - 3.5 * sigma);
+        let bottom = min(end.y, p.y + 3.5 * sigma);
+        if bottom <= top {
+            return 0.0;
+        }
+        let step = (bottom - top) / 12.0;
+        let mut covered = 0.0;
+        for i in 0u32..12u32 {
+            let from = top + step * (i as f32);
+            let row = from + step * 0.5;
+            let mut left = 0.0;
+            if row < origin.y + radii.x {
+                left = corner_row_inset(radii.x, shape.x, origin.y + radii.x - row);
+            } else if row > end.y - radii.w {
+                left = corner_row_inset(radii.w, shape.w, row - (end.y - radii.w));
+            }
+            let mut right = 0.0;
+            if row < origin.y + radii.y {
+                right = corner_row_inset(radii.y, shape.y, origin.y + radii.y - row);
+            } else if row > end.y - radii.z {
+                right = corner_row_inset(radii.z, shape.z, row - (end.y - radii.z));
+            }
+            covered += gaussian_span(p.y, from, from + step, sigma)
+                * gaussian_span(p.x, origin.x + left, end.x - right, sigma);
+        }
+        return covered;
+    }
+
+    // An inset shadow's strength at `p`, as CSS paints it: one less the blurred coverage of a
+    // hole, which is the padding box moved by the offset and shrunk by the spread. `shadow` is
+    // the offset, the blur radius and the spread; the Gaussian's deviation is half the blur.
+    pub fn inset_shadow_alpha(p: Vec2, origin: Vec2, size: Vec2, radius: Vec4, shape: Vec4, shadow: Vec4) -> f32 {
+        let spread = shadow.w;
+        let hole_origin = origin + shadow.xy + Vec2::splat(spread);
+        let hole_size = size - Vec2::splat(spread * 2.0);
+        if hole_size.x <= 0.0 || hole_size.y <= 0.0 {
+            return 1.0;
+        }
+        let hole_radii = shadow_spread_radius(radius, -spread);
+        let mut covered: f32;
+        if shadow.z < 0.001 {
+            // No blur: the edge of the hole, antialiased over a pixel.
+            covered = clamp(0.5 - sd_shaped_rect(p, hole_origin, hole_size, hole_radii, shape), 0.0, 1.0);
+        } else {
+            covered = blurred_rect_coverage(p, hole_origin, hole_size, hole_radii, shape, shadow.z * 0.5);
+        }
+        return clamp(1.0 - covered, 0.0, 1.0);
+    }
+
+    // ============================================================================
     // Fragment Shader
     // ============================================================================
 
@@ -194,8 +283,8 @@ russl::russl! {
                 shadow_alpha = 0.5 * (1.0 + erf(-shadow_sdf_dist / sigma_d));
             }
 
-            // Premultiply and blend
-            result = prim.shadow_color * shadow_alpha;
+            // The pipeline blends straight alpha: only the alpha carries the falloff.
+            result = Vec4::new(prim.shadow_color.rgb, prim.shadow_color.a * shadow_alpha);
         }
 
         // Main SDF switch - shadow-only primitives
@@ -212,43 +301,12 @@ russl::russl! {
                 return result;
             }
             4u32 /* PRIM_INNER_SHADOW */ => {
-                // Inner shadow - renders INSIDE the shape only
-                let shape_d = sd_shaped_rect(sp, origin, size, prim.corner_radius, prim.corner_shape);
-
-                // Hard clip at shape boundary - only render where d < 0 (inside)
-                if shape_d > 0.0 {
+                // Inside the shape only. The bounds and radii are the padding box's.
+                if sd_shaped_rect(sp, origin, size, prim.corner_radius, prim.corner_shape) > 0.0 {
                     discard!();
                 }
-
-                let blur = max(prim.shadow.z, 0.1);
-                let spread = prim.shadow.w;
-                let offset = prim.shadow.xy;
-
-                // Inner shadow effect: shadow darkens from outer edge inward
-                // Use distance from edge (negative shape_d = distance inside)
-                let edge_dist = -shape_d;  // Positive value = how far inside the shape
-
-                // Create shadow falloff from edge toward center
-                // At edge (edge_dist ~ 0): full shadow
-                // Further inside (edge_dist > blur + spread): no shadow
-                let shadow_range = blur + spread;
-                let mut shadow_alpha: f32;
-                if prim.shadow.z < 0.001 {
-                    // No blur: the edge of the spread, antialiased over a pixel.
-                    shadow_alpha = clamp(0.5 + spread - edge_dist, 0.0, 1.0);
-                } else {
-                    shadow_alpha = 1.0 - smoothstep(0.0, shadow_range, edge_dist - spread);
-                }
-
-                // Apply offset by shifting the shadow calculation
-                // Offset shifts which "edge" the shadow appears from
-                let offset_effect = dot(normalize(offset + Vec2::splat(0.001)), sp - center);
-                let offset_bias = clamp(offset_effect / (length(size) * 0.5), -1.0, 1.0) * length(offset);
-                let biased_alpha = shadow_alpha * (1.0 + offset_bias * 0.5);
-
-                let mut inner_result = prim.shadow_color;
-                inner_result.a *= clamp(biased_alpha, 0.0, 1.0) * clip_alpha;
-                return inner_result;
+                let strength = inset_shadow_alpha(sp, origin, size, prim.corner_radius, prim.corner_shape, prim.shadow);
+                return Vec4::new(prim.shadow_color.rgb, prim.shadow_color.a * strength * clip_alpha);
             }
             5u32 /* PRIM_CIRCLE_SHADOW */ => {
                 // Circle shadow - radially symmetric Gaussian blur
@@ -268,45 +326,21 @@ russl::russl! {
                 let aa_width = 0.75;
                 let shape_mask = smoothstep(-aa_width, aa_width, circle_d); // 0 inside, 1 outside, AA at edge
 
-                let mut circle_result = prim.shadow_color * shadow_alpha;
-                circle_result.a *= shape_mask * clip_alpha;
-                return circle_result;
+                return Vec4::new(
+                    prim.shadow_color.rgb,
+                    prim.shadow_color.a * shadow_alpha * shape_mask * clip_alpha
+                );
             }
             6u32 /* PRIM_CIRCLE_INNER_SHADOW */ => {
-                // Circle inner shadow - renders INSIDE the circle only
+                // Inside the circle only.
                 let radius = min(size.x, size.y) * 0.5;
-                let circle_d = sd_circle(sp, center, radius);
-
-                // Hard clip at circle boundary
-                if circle_d > 0.0 {
+                if sd_circle(sp, center, radius) > 0.0 {
                     discard!();
                 }
-
-                let blur = max(prim.shadow.z, 0.1);
-                let spread = prim.shadow.w;
-                let offset = prim.shadow.xy;
-
-                // Inner shadow effect: shadow darkens from outer edge inward
-                let edge_dist = -circle_d;  // How far inside the circle
-
-                // Create shadow falloff from edge toward center
-                let shadow_range = blur + spread;
-                let mut shadow_alpha: f32;
-                if prim.shadow.z < 0.001 {
-                    // No blur: the edge of the spread, antialiased over a pixel.
-                    shadow_alpha = clamp(0.5 + spread - edge_dist, 0.0, 1.0);
-                } else {
-                    shadow_alpha = 1.0 - smoothstep(0.0, shadow_range, edge_dist - spread);
-                }
-
-                // Apply offset
-                let offset_effect = dot(normalize(offset + Vec2::splat(0.001)), sp - center);
-                let offset_bias = clamp(offset_effect / radius, -1.0, 1.0) * length(offset);
-                let biased_alpha = shadow_alpha * (1.0 + offset_bias * 0.5);
-
-                let mut inner_result = prim.shadow_color;
-                inner_result.a *= clamp(biased_alpha, 0.0, 1.0) * clip_alpha;
-                return inner_result;
+                // A circle is a square with fully round corners.
+                let square = center - Vec2::splat(radius);
+                let strength = inset_shadow_alpha(sp, square, Vec2::splat(radius * 2.0), Vec4::splat(radius), Vec4::splat(1.0), prim.shadow);
+                return Vec4::new(prim.shadow_color.rgb, prim.shadow_color.a * strength * clip_alpha);
             }
             _ => {
                 // The return stays inside the arm: FXC takes a case that ends in `discard` for a

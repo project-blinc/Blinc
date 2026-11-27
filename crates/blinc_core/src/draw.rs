@@ -2179,7 +2179,9 @@ pub trait DrawContext {
     /// Draw a drop shadow (renders outside the shape)
     fn draw_shadow(&mut self, rect: Rect, corner_radius: CornerRadius, shadow: Shadow);
 
-    /// Draw an inner shadow (renders inside the shape, like CSS inset box-shadow)
+    /// Draw an inner shadow inside the shape, as a CSS inset `box-shadow`. The shape is the
+    /// padding box: the shadow's hole is this rect moved by the offset and shrunk by the
+    /// spread.
     fn draw_inner_shadow(&mut self, rect: Rect, corner_radius: CornerRadius, shadow: Shadow);
 
     /// Draw a circle drop shadow with radially symmetric blur

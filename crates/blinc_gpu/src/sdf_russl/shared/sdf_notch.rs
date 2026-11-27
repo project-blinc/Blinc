@@ -294,8 +294,7 @@ russl::russl! {
             if params.z >= 0.001 { shade = 0.5 * (1.0 + erf(distance / (0.7071067811865476 * params.z))); }
             let outside = smoothstep(-0.75, 0.75, d);
             let mask = if inset { 1.0 - outside } else { outside };
-            let color = prim.shadow_color * shade;
-            return Vec4::new(color.rgb, color.a * mask * clip_alpha);
+            return Vec4::new(prim.shadow_color.rgb, prim.shadow_color.a * shade * mask * clip_alpha);
         }
 
         let mut result = Vec4::splat(0.0);
