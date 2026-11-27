@@ -29,6 +29,7 @@
 //!     .child(content)
 //! ```
 
+use super::names::{Names, name_methods};
 use std::cell::{OnceCell, RefCell};
 
 use blinc_core::Color;
@@ -186,12 +187,17 @@ impl ElementBuilder for AspectRatio {
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.inner.element_classes()
     }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
+    }
 }
 
 /// Builder for aspect ratio container
 pub struct AspectRatioBuilder {
     config: RefCell<AspectRatioConfig>,
     built: OnceCell<AspectRatio>,
+    names: Names,
 }
 
 impl AspectRatioBuilder {
@@ -203,6 +209,7 @@ impl AspectRatioBuilder {
                 ..Default::default()
             }),
             built: OnceCell::new(),
+            names: Names::default(),
         }
     }
 
@@ -216,7 +223,9 @@ impl AspectRatioBuilder {
             // Take ownership of config, replacing with default
             let config = self.config.take();
             let built = BuiltAspectRatio::from_config(config);
-            AspectRatio { inner: built.inner }
+            AspectRatio {
+                inner: self.names.apply(built.inner),
+            }
         })
     }
 
@@ -260,8 +269,12 @@ impl AspectRatioBuilder {
     pub fn build_final(self) -> AspectRatio {
         let config = self.config.into_inner();
         let built = BuiltAspectRatio::from_config(config);
-        AspectRatio { inner: built.inner }
+        AspectRatio {
+            inner: self.names.apply(built.inner),
+        }
     }
+
+    name_methods!(names);
 }
 
 impl ElementBuilder for AspectRatioBuilder {
@@ -279,6 +292,10 @@ impl ElementBuilder for AspectRatioBuilder {
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.get_or_build().element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.get_or_build().inner)
     }
 }
 

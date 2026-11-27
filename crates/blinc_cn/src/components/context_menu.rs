@@ -49,6 +49,7 @@
 //!     })
 //! ```
 
+use super::names::{Names, name_methods};
 use std::sync::Arc;
 
 use blinc_core::context_state::BlincContextState;
@@ -78,6 +79,8 @@ pub struct ContextMenuItem {
     is_separator: bool,
     /// Submenu items (if this is a submenu trigger)
     submenu: Option<Vec<ContextMenuItem>>,
+    /// The classes and id of the submenu's panel
+    submenu_names: Names,
 }
 
 impl std::fmt::Debug for ContextMenuItem {
@@ -104,6 +107,7 @@ impl ContextMenuItem {
             disabled: false,
             is_separator: false,
             submenu: None,
+            submenu_names: Names::default(),
         }
     }
 
@@ -117,6 +121,7 @@ impl ContextMenuItem {
             disabled: false,
             is_separator: true,
             submenu: None,
+            submenu_names: Names::default(),
         }
     }
 
@@ -151,6 +156,16 @@ impl ContextMenuItem {
     pub fn submenu(mut self, items: Vec<ContextMenuItem>) -> Self {
         self.submenu = Some(items);
         self
+    }
+
+    /// This item opening the submenu `built` describes.
+    pub(super) fn opening(mut self, built: SubmenuBuilder) -> Self {
+        self.submenu_names = built.names;
+        self.submenu(built.items)
+    }
+
+    pub(super) fn submenu_names(&self) -> &Names {
+        &self.submenu_names
     }
 
     // =========================================================================
@@ -298,8 +313,7 @@ impl ContextMenuBuilder {
         F: FnOnce(SubmenuBuilder) -> SubmenuBuilder,
     {
         let sub = builder(SubmenuBuilder::new());
-        self.items
-            .push(ContextMenuItem::new(label).submenu(sub.items));
+        self.items.push(ContextMenuItem::new(label).opening(sub));
         self
     }
 
@@ -349,7 +363,7 @@ impl ContextMenuBuilder {
             .map(|s| s.peek_next_handle_id())
             .unwrap_or(0);
         let menu_handle = OverlayHandle::from_raw(next_handle_id);
-        let menu_id = format!("cn-context-menu-{}", next_handle_id);
+        let menu_id = user_id.unwrap_or_else(|| format!("cn-context-menu-{}", next_handle_id));
         let click_outside_key = format!("ctxmenu:{}", next_handle_id);
 
         // Track every menu+submenu id in the open chain — used by the root's
@@ -404,9 +418,6 @@ impl ContextMenuBuilder {
                 for c in &classes {
                     content = content.class(c);
                 }
-                if let Some(ref id) = user_id {
-                    content = content.id(id);
-                }
                 content
             })
             .show();
@@ -438,11 +449,15 @@ impl Default for ContextMenuBuilder {
 /// Builder for submenu items
 pub struct SubmenuBuilder {
     items: Vec<ContextMenuItem>,
+    names: Names,
 }
 
 impl SubmenuBuilder {
     fn new() -> Self {
-        Self { items: Vec::new() }
+        Self {
+            items: Vec::new(),
+            names: Names::default(),
+        }
     }
 
     /// Add a menu item
@@ -506,6 +521,8 @@ impl SubmenuBuilder {
     }
 
     /// Get the items from this submenu builder
+    name_methods!(names);
+
     pub fn items(self) -> Vec<ContextMenuItem> {
         self.items
     }
@@ -539,6 +556,7 @@ fn spawn_submenu(
     root_click_outside_key: String,
     id_chain: Signal<Vec<String>>,
     parent_submenu_state: Signal<Option<u64>>,
+    names: Names,
 ) -> OverlayHandle {
     let theme = ThemeState::get();
     let radius = theme.radius(RadiusToken::Md);
@@ -553,7 +571,10 @@ fn spawn_submenu(
         .map(|s| s.peek_next_handle_id())
         .unwrap_or(0);
     let submenu_handle = OverlayHandle::from_raw(next_handle_id);
-    let submenu_id = format!("cn-context-menu-{}", next_handle_id);
+    let submenu_id = names.id().map_or_else(
+        || format!("cn-context-menu-{}", next_handle_id),
+        str::to_string,
+    );
 
     // Append submenu_id to the root's inside set so clicks inside the submenu
     // don't dismiss the chain.
@@ -602,7 +623,7 @@ fn spawn_submenu(
                 padding,
             );
             content = content.id(&submenu_id_for_content);
-            content
+            names.apply(content)
         })
         .show();
 
@@ -663,6 +684,7 @@ fn build_menu_content(
             let item_on_click = item.on_click.clone();
             let has_submenu = item.submenu.is_some();
             let submenu_items = item.submenu.clone();
+            let submenu_names = item.submenu_names.clone();
 
             let child_submenu_for_hover_open = child_submenu_state;
             let child_submenu_for_hover_close = child_submenu_state;
@@ -780,6 +802,7 @@ fn build_menu_content(
                                 root_key_for_hover.clone(),
                                 id_chain_for_hover,
                                 child_submenu_for_hover_open,
+                                submenu_names.clone(),
                             );
                             child_submenu_for_hover_open.set(Some(handle.raw()));
                         }

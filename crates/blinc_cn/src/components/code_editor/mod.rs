@@ -25,6 +25,7 @@
 
 mod find;
 
+use crate::components::names::{Names, name_methods};
 use std::cell::{OnceCell, RefCell};
 use std::sync::Arc;
 
@@ -47,6 +48,7 @@ pub struct CodeEditorBuilder {
     height: Option<f32>,
     full_width: bool,
     built: OnceCell<Div>,
+    names: Names,
 }
 
 /// A code editor over `state`, with a floating find and replace bar.
@@ -60,6 +62,7 @@ pub fn code_editor(state: &SharedCodeEditorState) -> CodeEditorBuilder {
         height: None,
         full_width: false,
         built: OnceCell::new(),
+        names: Names::default(),
     }
 }
 
@@ -160,7 +163,9 @@ impl CodeEditorBuilder {
 
     fn get_or_build(&self) -> &Div {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            let mut root = div().class("cn-code-editor").relative().flex_col();
+            let mut root = self
+                .names
+                .apply(div().class("cn-code-editor").relative().flex_col());
             if let Some(width) = self.width {
                 root = root.w(width);
             }
@@ -204,6 +209,8 @@ impl CodeEditorBuilder {
                 .on_key_down(move |ctx| on_key(&state, ui, ctx))
         })
     }
+
+    name_methods!(names);
 }
 
 /// The find bar's keys, while the editor or one of the bar's fields has the keyboard.

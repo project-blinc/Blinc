@@ -21,6 +21,7 @@
 //! cn::icon(icons::SEARCH).size_px(32.0)
 //! ```
 
+use super::names::{Names, name_methods};
 use std::cell::OnceCell;
 use std::ops::{Deref, DerefMut};
 
@@ -136,6 +137,10 @@ impl ElementBuilder for Icon {
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.inner.element_classes()
     }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
+    }
 }
 
 impl Deref for Icon {
@@ -169,6 +174,7 @@ struct IconConfig {
 pub struct IconBuilder {
     config: IconConfig,
     built: OnceCell<Icon>,
+    names: Names,
 }
 
 impl IconBuilder {
@@ -187,12 +193,13 @@ impl IconBuilder {
                 stroke_width: None,
             },
             built: OnceCell::new(),
+            names: Names::default(),
         }
     }
 
     /// Get or lazily build the Icon
     fn get_or_build(&self) -> &Icon {
-        ::blinc_layout::build_once::build_once(&self.built, || Icon::from_config(&self.config))
+        ::blinc_layout::build_once::build_once(&self.built, || self.named())
     }
 
     /// Set icon size preset
@@ -227,8 +234,16 @@ impl IconBuilder {
 
     /// Build the icon (for explicit building if needed)
     pub fn build(self) -> Icon {
-        Icon::from_config(&self.config)
+        self.named()
     }
+
+    fn named(&self) -> Icon {
+        let mut icon = Icon::from_config(&self.config);
+        self.names.apply_to(&mut icon.inner);
+        icon
+    }
+
+    name_methods!(names);
 }
 
 impl ElementBuilder for IconBuilder {
@@ -254,6 +269,10 @@ impl ElementBuilder for IconBuilder {
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.get_or_build().element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(self.get_or_build())
     }
 }
 

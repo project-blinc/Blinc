@@ -20,6 +20,7 @@
 //!     .disabled(muted)
 //! ```
 
+use super::names::{Names, name_methods};
 use blinc_core::reactive::{Computed, ReactiveGraph, computed};
 use blinc_layout::InstanceKey;
 use blinc_layout::accessibility::{AccessibilityAction, AccessibilityBinding, AccessibilityValue};
@@ -350,9 +351,8 @@ impl Slider {
             slider
         };
         let inner = config
-            .classes
-            .iter()
-            .fold(inner, |d, c| d.class(c))
+            .names
+            .apply(inner)
             .attr_when("disabled", "", disabled);
 
         Self {
@@ -416,7 +416,7 @@ struct SliderConfig {
     show_value: bool,
     disabled: Computed<bool>,
     width: Option<f32>,
-    classes: Vec<String>,
+    names: Names,
     on_change: Option<Arc<dyn Fn(f32) + Send + Sync>>,
 }
 
@@ -432,7 +432,7 @@ impl SliderConfig {
             show_value: false,
             disabled: bound_flag(false),
             width: None,
-            classes: Vec::new(),
+            names: Names::default(),
             on_change: None,
         }
     }
@@ -518,11 +518,7 @@ impl SliderBuilder {
         self
     }
 
-    /// A class for rules of your own to match.
-    pub fn class(mut self, name: impl Into<String>) -> Self {
-        self.config.classes.push(name.into());
-        self
-    }
+    name_methods!(config.names);
 
     /// Called with each value the user sets; a value set from code is not
     /// reported.

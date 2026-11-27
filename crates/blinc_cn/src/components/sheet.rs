@@ -32,6 +32,7 @@
 //!     .show();
 //! ```
 
+use super::names::{Names, name_methods};
 use std::sync::Arc;
 
 use blinc_core::Color;
@@ -109,6 +110,7 @@ pub struct SheetBuilder {
     on_close: Option<Arc<dyn Fn() + Send + Sync>>,
     /// Unique key for motion animation
     key: InstanceKey,
+    names: Names,
 }
 
 impl SheetBuilder {
@@ -125,6 +127,7 @@ impl SheetBuilder {
             show_close: true,
             on_close: None,
             key: InstanceKey::new("sheet"),
+            names: Names::default(),
         }
     }
 
@@ -186,6 +189,8 @@ impl SheetBuilder {
     }
 
     /// Show the sheet
+    name_methods!(names);
+
     pub fn show(self) -> OverlayHandle {
         let theme = ThemeState::get();
 
@@ -197,6 +202,7 @@ impl SheetBuilder {
         let footer = self.footer;
         let show_close = self.show_close;
         let on_close = self.on_close;
+        let names = self.names;
 
         let edge_side = match side {
             SheetSide::Left => EdgeSide::Left,
@@ -245,7 +251,7 @@ impl SheetBuilder {
             .size(panel_w, panel_h)
             .motion_class(motion_class)
             .content(move || {
-                build_sheet_content(
+                names.apply(build_sheet_content(
                     side,
                     size,
                     &title,
@@ -254,7 +260,7 @@ impl SheetBuilder {
                     &footer,
                     show_close,
                     sheet_handle,
-                )
+                ))
             })
             .show();
 

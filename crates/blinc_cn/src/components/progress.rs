@@ -17,6 +17,7 @@
 //! cn::progress_indeterminate()
 //! ```
 
+use super::names::{Names, name_methods};
 use blinc_core::Color;
 use blinc_core::reactive::{Computed, ReactiveGraph, computed};
 use blinc_layout::binding::{IntoReactive, Reactive};
@@ -201,6 +202,7 @@ impl ElementBuilder for Progress {
 pub struct ProgressBuilder {
     config: ProgressConfig,
     built: std::cell::OnceCell<Progress>,
+    names: Names,
 }
 
 impl ProgressBuilder {
@@ -213,12 +215,15 @@ impl ProgressBuilder {
         Self {
             config: ProgressConfig::new(value),
             built: std::cell::OnceCell::new(),
+            names: Names::default(),
         }
     }
 
     fn get_or_build(&self) -> &Progress {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            Progress::from_config(self.config.clone())
+            let mut progress = Progress::from_config(self.config.clone());
+            self.names.apply_to(&mut progress.inner);
+            progress
         })
     }
 
@@ -254,8 +259,12 @@ impl ProgressBuilder {
 
     /// Build the final Progress component
     pub fn build_component(self) -> Progress {
-        Progress::from_config(self.config)
+        let mut progress = Progress::from_config(self.config);
+        self.names.apply_to(&mut progress.inner);
+        progress
     }
+
+    name_methods!(names);
 }
 
 impl ElementBuilder for ProgressBuilder {

@@ -25,6 +25,7 @@
 //!     .item("Profile", || {})
 //! ```
 
+use super::names::{Names, name_methods};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
@@ -223,7 +224,9 @@ impl Breadcrumb {
             }
         }
 
-        Self { inner: container }
+        Self {
+            inner: builder.names.apply(container),
+        }
     }
 
     /// Add a CSS class for selector matching
@@ -281,6 +284,10 @@ impl ElementBuilder for Breadcrumb {
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.inner.element_classes()
     }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
+    }
 }
 
 /// Builder for breadcrumb navigation
@@ -290,6 +297,7 @@ pub struct BreadcrumbBuilder {
     separator: BreadcrumbSeparator,
     size: BreadcrumbSize,
     built: std::cell::OnceCell<Breadcrumb>,
+    names: Names,
 }
 
 impl BreadcrumbBuilder {
@@ -302,6 +310,7 @@ impl BreadcrumbBuilder {
             separator: BreadcrumbSeparator::default(),
             size: BreadcrumbSize::default(),
             built: std::cell::OnceCell::new(),
+            names: Names::default(),
         }
     }
 
@@ -386,6 +395,8 @@ impl BreadcrumbBuilder {
         self.size = BreadcrumbSize::Large;
         self
     }
+
+    name_methods!(names);
 }
 
 impl Default for BreadcrumbBuilder {
@@ -421,6 +432,10 @@ impl ElementBuilder for BreadcrumbBuilder {
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.get_or_build().element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(self.get_or_build())
     }
 }
 

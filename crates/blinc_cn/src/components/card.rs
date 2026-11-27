@@ -248,6 +248,18 @@ impl CardHeader {
         );
         self
     }
+
+    /// Add a CSS class for selector matching
+    pub fn class(mut self, name: impl AsRef<str>) -> Self {
+        self.inner = self.inner.class(name);
+        self
+    }
+
+    /// Set the element ID for CSS selector matching
+    pub fn id(mut self, id: &str) -> Self {
+        self.inner = self.inner.id(id);
+        self
+    }
 }
 
 impl Default for CardHeader {
@@ -330,6 +342,18 @@ impl CardContent {
     /// Add a child element
     pub fn child(mut self, content: impl ElementBuilder + 'static) -> Self {
         self.inner = self.inner.child(content);
+        self
+    }
+
+    /// Add a CSS class for selector matching
+    pub fn class(mut self, name: impl AsRef<str>) -> Self {
+        self.inner = self.inner.class(name);
+        self
+    }
+
+    /// Set the element ID for CSS selector matching
+    pub fn id(mut self, id: &str) -> Self {
+        self.inner = self.inner.id(id);
         self
     }
 }
@@ -416,6 +440,18 @@ impl CardFooter {
     /// Add a child element
     pub fn child(mut self, content: impl ElementBuilder + 'static) -> Self {
         self.inner = self.inner.child(content);
+        self
+    }
+
+    /// Add a CSS class for selector matching
+    pub fn class(mut self, name: impl AsRef<str>) -> Self {
+        self.inner = self.inner.class(name);
+        self
+    }
+
+    /// Set the element ID for CSS selector matching
+    pub fn id(mut self, id: &str) -> Self {
+        self.inner = self.inner.id(id);
         self
     }
 }

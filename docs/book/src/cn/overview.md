@@ -48,6 +48,13 @@ fn main() -> Result<()> {
 }
 ```
 
+### Classes and IDs
+
+The cn builders take `.class(name)` and `.id(id)`, and you can select both in CSS. The names go on
+the element that the builder builds. For a dialog, a sheet, a drawer or a toast, they go on the
+panel. For a submenu, call them inside the submenu closure. On a resizable panel, `.id` names the
+saved size and not the element, so use `.class` to style the panel.
+
 ### Layering CSS overrides
 
 Chain [`with_css`](../core/theming.md#themebundlewith_css) (or `with_css_file`) on the bundle to attach extra

@@ -2,6 +2,7 @@
 //! the top, sweeping in and easing to new values. Hovering pulls a slice out
 //! and shows its value and share.
 
+use crate::components::names::{Names, name_methods};
 use std::cell::OnceCell;
 use std::f32::consts::{FRAC_PI_2, TAU};
 use std::sync::Arc;
@@ -186,7 +187,7 @@ pub struct PieBuilder {
     legend: bool,
     tooltip: bool,
     format: Format,
-    classes: Vec<String>,
+    names: Names,
     built: OnceCell<Div>,
 }
 
@@ -201,7 +202,7 @@ impl PieBuilder {
             legend: true,
             tooltip: true,
             format: Arc::new(compact),
-            classes: Vec::new(),
+            names: Names::default(),
             built: OnceCell::new(),
         }
     }
@@ -272,11 +273,7 @@ impl PieBuilder {
         self
     }
 
-    /// A class for rules of your own to match.
-    pub fn class(mut self, name: impl Into<String>) -> Self {
-        self.classes.push(name.into());
-        self
-    }
+    name_methods!(names);
 
     fn get_or_build(&self) -> &Div {
         ::blinc_layout::build_once::build_once(&self.built, || self.build_pie())
@@ -368,7 +365,7 @@ impl PieBuilder {
         if self.legend {
             root = root.child(legend(&slices));
         }
-        self.classes.iter().fold(root, |d, c| d.class(c))
+        self.names.apply(root)
     }
 }
 

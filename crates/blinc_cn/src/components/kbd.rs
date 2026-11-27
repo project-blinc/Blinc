@@ -18,6 +18,7 @@
 //! }
 //! ```
 
+use super::names::{Names, name_methods};
 use std::cell::OnceCell;
 
 use blinc_layout::div::{FontFamily, GenericFont};
@@ -66,6 +67,7 @@ impl std::fmt::Debug for KbdConfig {
 pub struct KbdBuilder {
     config: KbdConfig,
     built: OnceCell<Kbd>,
+    names: Names,
 }
 
 impl std::fmt::Debug for KbdBuilder {
@@ -89,6 +91,7 @@ impl KbdBuilder {
                 size: KbdSize::Medium,
             },
             built: OnceCell::new(),
+            names: Names::default(),
         }
     }
 
@@ -131,8 +134,12 @@ impl KbdBuilder {
                 },
             ));
 
-        Kbd { inner }
+        Kbd {
+            inner: self.names.apply(inner),
+        }
     }
+
+    name_methods!(names);
 }
 
 /// Built Kbd component
@@ -188,6 +195,10 @@ impl ElementBuilder for KbdBuilder {
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.get_or_build().inner.element_classes()
     }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.get_or_build().inner)
+    }
 }
 
 impl ElementBuilder for Kbd {
@@ -217,6 +228,10 @@ impl ElementBuilder for Kbd {
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.inner.element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
     }
 }
 

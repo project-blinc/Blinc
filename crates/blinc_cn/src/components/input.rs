@@ -37,6 +37,7 @@
 //!     .placeholder_color(Color::rgba(0.5, 0.5, 0.5, 1.0))
 //! ```
 
+use super::names::{Names, name_methods};
 use std::sync::Arc;
 
 use blinc_core::Color;
@@ -392,6 +393,7 @@ pub struct InputBuilder {
     config: InputConfig,
     /// Cached built Input - built lazily on first access
     built: std::cell::OnceCell<Input>,
+    names: Names,
 }
 
 impl InputBuilder {
@@ -403,13 +405,16 @@ impl InputBuilder {
                 ..Default::default()
             },
             built: std::cell::OnceCell::new(),
+            names: Names::default(),
         }
     }
 
     /// Get or build the inner Input
     fn get_or_build(&self) -> &Input {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            Input::with_config(self.config.clone())
+            let mut built = Input::with_config(self.config.clone());
+            self.names.apply_to(&mut built.inner);
+            built
         })
     }
 
@@ -585,8 +590,12 @@ impl InputBuilder {
 
     /// Build the final Input component
     pub fn build_component(self) -> Input {
-        Input::with_config(self.config)
+        let mut built = Input::with_config(self.config);
+        self.names.apply_to(&mut built.inner);
+        built
     }
+
+    name_methods!(names);
 }
 
 impl ElementBuilder for InputBuilder {

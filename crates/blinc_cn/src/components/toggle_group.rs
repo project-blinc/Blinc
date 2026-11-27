@@ -26,6 +26,7 @@
 //! `Signal<Vec<String>>` overload + a different click-handler that
 //! toggles set membership.
 
+use super::names::{Names, name_methods};
 use blinc_core::Color;
 use blinc_core::reactive::{ReactiveGraph, Signal, computed};
 use blinc_layout::binding::{IntoReactive, Reactive};
@@ -233,6 +234,7 @@ pub struct ToggleGroupBuilder {
     key: InstanceKey,
     config: ToggleGroupConfig,
     built: std::cell::OnceCell<ToggleGroup>,
+    names: Names,
 }
 
 impl ToggleGroupBuilder {
@@ -251,12 +253,15 @@ impl ToggleGroupBuilder {
                 on_change: None,
             },
             built: std::cell::OnceCell::new(),
+            names: Names::default(),
         }
     }
 
     fn get_or_build(&self) -> &ToggleGroup {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            ToggleGroup::with_config(&self.key, self.config.clone())
+            let mut built = ToggleGroup::with_config(&self.key, self.config.clone());
+            self.names.apply_to(&mut built.inner);
+            built
         })
     }
 
@@ -305,6 +310,8 @@ impl ToggleGroupBuilder {
         self.config.on_change = Some(Arc::new(handler));
         self
     }
+
+    name_methods!(names);
 }
 
 impl ElementBuilder for ToggleGroupBuilder {

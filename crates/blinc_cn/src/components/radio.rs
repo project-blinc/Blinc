@@ -176,6 +176,9 @@ impl RadioGroup {
         for c in &config.classes {
             inner = inner.class(c);
         }
+        if let Some(id) = &config.css_group_id {
+            inner = inner.id(id);
+        }
 
         Self { inner }
     }
@@ -461,6 +464,10 @@ impl ElementBuilder for RadioGroup {
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.inner.element_classes()
     }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
+    }
 }
 
 impl ElementBuilder for RadioGroupBuilder {
@@ -482,6 +489,10 @@ impl ElementBuilder for RadioGroupBuilder {
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.get_or_build().element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(self.get_or_build())
     }
 }
 

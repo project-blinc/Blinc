@@ -17,6 +17,7 @@
 //! }
 //! ```
 
+use super::names::{Names, name_methods};
 use blinc_core::reactive::{ReactiveGraph, Signal, computed};
 use blinc_icons::{icons, to_svg};
 use blinc_layout::InstanceKey;
@@ -59,6 +60,7 @@ pub struct NumberInputBuilder {
     key: InstanceKey,
     config: Config,
     built: std::cell::OnceCell<NumberInput>,
+    names: Names,
 }
 
 pub struct NumberInput {
@@ -85,12 +87,15 @@ impl NumberInputBuilder {
                 on_change: None,
             },
             built: std::cell::OnceCell::new(),
+            names: Names::default(),
         }
     }
 
     fn get_or_build(&self) -> &NumberInput {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            NumberInput::from_config(&self.key, self.config.clone())
+            let mut built = NumberInput::from_config(&self.key, self.config.clone());
+            self.names.apply_to(&mut built.inner);
+            built
         })
     }
 
@@ -154,6 +159,8 @@ impl NumberInputBuilder {
         self.config.on_change = Some(Arc::new(handler));
         self
     }
+
+    name_methods!(names);
 }
 
 /// A number input's dimensions at one size. Its scale is its own, a step

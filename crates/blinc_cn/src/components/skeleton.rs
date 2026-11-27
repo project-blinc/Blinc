@@ -141,6 +141,10 @@ impl ElementBuilder for Skeleton {
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.inner.element_classes()
     }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
+    }
 }
 
 /// Create a skeleton placeholder

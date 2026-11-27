@@ -27,6 +27,7 @@
 //! }
 //! ```
 
+use super::names::{Names, name_methods};
 use blinc_core::reactive::{Computed, ReactiveGraph, Signal, computed};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
@@ -82,6 +83,10 @@ impl ElementBuilder for Collapsible {
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.inner.element_classes()
     }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
+    }
 }
 
 /// Content builder, cloneable and re-callable.
@@ -136,6 +141,7 @@ pub struct CollapsibleBuilder {
     content: Option<ContentBuilderFn>,
     /// Cached built Collapsible - built lazily on first access
     built: std::cell::OnceCell<Collapsible>,
+    names: Names,
 }
 
 impl CollapsibleBuilder {
@@ -145,6 +151,7 @@ impl CollapsibleBuilder {
             is_open,
             content: None,
             built: std::cell::OnceCell::new(),
+            names: Names::default(),
         }
     }
 
@@ -153,12 +160,13 @@ impl CollapsibleBuilder {
         ::blinc_layout::build_once::build_once(&self.built, || {
             let content = self.content.clone();
             let body = move || content.as_ref().map_or_else(div, |f| f());
+            let inner = div()
+                .class("cn-collapsible")
+                .w_full()
+                .flex_col()
+                .child(fold_body(body, self.is_open));
             Collapsible {
-                inner: div()
-                    .class("cn-collapsible")
-                    .w_full()
-                    .flex_col()
-                    .child(fold_body(body, self.is_open)),
+                inner: self.names.apply(inner),
             }
         })
     }
@@ -182,6 +190,8 @@ impl CollapsibleBuilder {
     pub fn set_open(&self, open: bool) {
         self.is_open.set(open);
     }
+
+    name_methods!(names);
 }
 
 impl ElementBuilder for CollapsibleBuilder {
@@ -207,6 +217,10 @@ impl ElementBuilder for CollapsibleBuilder {
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.get_or_build().element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(self.get_or_build())
     }
 }
 
@@ -239,6 +253,18 @@ impl CollapsibleTrigger {
             )
             .on_click(move |_| is_open.set(!is_open.try_get().unwrap_or(false)));
         Self { inner }
+    }
+
+    /// Add a CSS class for selector matching
+    pub fn class(mut self, name: impl AsRef<str>) -> Self {
+        self.inner = self.inner.class(name);
+        self
+    }
+
+    /// Set the element ID for CSS selector matching
+    pub fn id(mut self, id: &str) -> Self {
+        self.inner = self.inner.id(id);
+        self
     }
 }
 

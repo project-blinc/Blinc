@@ -25,6 +25,7 @@
 //! cn::select(value).label("Favorite Fruit")
 //! ```
 
+use super::names::{Names, name_methods};
 use std::cell::OnceCell;
 use std::sync::Arc;
 
@@ -352,6 +353,10 @@ impl ElementBuilder for Select {
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.inner.element_classes()
     }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
+    }
 }
 
 /// Internal configuration for building a Select
@@ -393,6 +398,7 @@ pub struct SelectBuilder {
     config: SelectConfig,
     /// Cached built Select - built lazily on first access
     built: OnceCell<Select>,
+    names: Names,
 }
 
 impl SelectBuilder {
@@ -405,6 +411,7 @@ impl SelectBuilder {
             key: InstanceKey::new("select"),
             config: SelectConfig::new(value),
             built: OnceCell::new(),
+            names: Names::default(),
         }
     }
 
@@ -414,13 +421,16 @@ impl SelectBuilder {
             key: InstanceKey::explicit(key),
             config: SelectConfig::new(value),
             built: OnceCell::new(),
+            names: Names::default(),
         }
     }
 
     /// Get or build the inner Select
     fn get_or_build(&self) -> &Select {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            Select::from_config(self.key.get(), self.config.clone())
+            let mut built = Select::from_config(self.key.get(), self.config.clone());
+            self.names.apply_to(&mut built.inner);
+            built
         })
     }
 
@@ -492,6 +502,8 @@ impl SelectBuilder {
         self.config.on_change = Some(Arc::new(callback));
         self
     }
+
+    name_methods!(names);
 }
 
 impl ElementBuilder for SelectBuilder {
@@ -517,6 +529,10 @@ impl ElementBuilder for SelectBuilder {
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.get_or_build().inner.element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.get_or_build().inner)
     }
 }
 

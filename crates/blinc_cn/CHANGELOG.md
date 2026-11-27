@@ -28,6 +28,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - A collapsible, `collapsible_section`, accordion section and tree group builds its content the first time it opens, and keeps it: closing folds it without tearing it down. A section never opened builds nothing. `collapsible_section` takes its content as `Fn` rather than `FnOnce`.
 
 ### Added
+- The aspect ratio, breadcrumb, chart, code editor, collapsible, combobox, icon, input, OTP input, kbd, label, number input, gauge, progress, scroll area, select, slider, textarea and toggle group builders take `.class()` and `.id()`, as do the card header, content and footer, table rows, collapsible triggers, alert dialogs, sheets, toasts and submenus. A resizable panel takes `.class()`.
 - `Card::max_w` sets the largest width a card may take, so `.w_full().max_w(350.0)` is 350 px wide where there is room and narrower where there is not.
 - `TabsBuilder::closable` gives each trigger a close button, shown on the active trigger and while another is hovered, that reports the tab without selecting it.
 - `SidebarBuilder::toggle_item` adds an item that is active while a bool, signal or computed holds, for an item that opens a panel rather than navigating; pressing it leaves the selection alone.
@@ -42,6 +43,8 @@ All notable changes to `blinc_cn` will be documented in this file.
 - Typography has a dedicated guide covering all helpers, reactive content, inline composition and CSS class hooks; the gallery embeds that guide.
 
 ### Fixed
+- An `.id()` on an alert, badge, separator, skeleton or radio group, or on a built component such as `Label`, reaches the element. It was dropped.
+- A context menu with an `.id()` stays open for a press inside it, so its submenus open.
 - Bold, italic and code in the rich text editor sit on the same baseline as the text beside them.
 - The rich text caret moves down through a wrapped line, where it stopped at the wrap. End and a press past a wrapped line's end stay on that line.
 - `.cn-dropdown-trigger` takes its border width from the stylesheet, so a rule can change it.

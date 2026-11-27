@@ -1,6 +1,7 @@
 //! The kinds built on the plot: sparklines, threshold charts, histograms and
 //! comparisons, and the notes a comparison writes beside its bars.
 
+use crate::components::names::{Names, name_methods};
 use std::cell::OnceCell;
 use std::sync::Arc;
 
@@ -173,6 +174,7 @@ pub struct HistogramBuilder {
     height: f32,
     format: Arc<dyn Fn(f64) -> String + Send + Sync>,
     built: OnceCell<ChartBuilder>,
+    names: Names,
 }
 
 impl HistogramBuilder {
@@ -219,6 +221,8 @@ impl HistogramBuilder {
         self.format = Arc::new(format);
         self
     }
+
+    name_methods!(names);
 
     fn chart(&self) -> &ChartBuilder {
         ::blinc_layout::build_once::build_once(&self.built, || {
@@ -267,6 +271,7 @@ impl HistogramBuilder {
             if let Some(css) = &self.color {
                 chart = chart.color(css.clone());
             }
+            chart.names = self.names.clone();
             chart
         })
     }
@@ -284,6 +289,7 @@ pub fn histogram(values: impl IntoReactive<Vec<f64>>) -> HistogramBuilder {
         height: 200.0,
         format: Arc::new(compact),
         built: OnceCell::new(),
+        names: Names::default(),
     }
 }
 
@@ -313,6 +319,7 @@ pub struct ComparisonBuilder {
     height: f32,
     format: Arc<dyn Fn(f64) -> String + Send + Sync>,
     built: OnceCell<ChartBuilder>,
+    names: Names,
 }
 
 impl ComparisonBuilder {
@@ -350,6 +357,8 @@ impl ComparisonBuilder {
         self
     }
 
+    name_methods!(names);
+
     fn chart(&self) -> &ChartBuilder {
         ::blinc_layout::build_once::build_once(&self.built, || {
             let items = match self.data.clone() {
@@ -362,7 +371,7 @@ impl ComparisonBuilder {
             let (series, labels, notes) = (items.clone(), items.clone(), items);
             let threshold = self.threshold;
             let format = Arc::clone(&self.format);
-            bar_chart()
+            let mut chart = bar_chart()
                 .horizontal()
                 .data(computed(move |_: &ReactiveGraph| {
                     let list = series.try_get().unwrap_or_default();
@@ -396,7 +405,9 @@ impl ComparisonBuilder {
                         .collect()
                 }))
                 .format(move |v| format(v))
-                .height(self.height)
+                .height(self.height);
+            chart.names = self.names.clone();
+            chart
         })
     }
 }
@@ -434,6 +445,7 @@ pub fn comparison_bar_chart() -> ComparisonBuilder {
         height: 200.0,
         format: Arc::new(compact),
         built: OnceCell::new(),
+        names: Names::default(),
     }
 }
 

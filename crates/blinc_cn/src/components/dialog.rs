@@ -397,6 +397,18 @@ impl AlertDialogBuilder {
     }
 
     /// Show the alert dialog
+    /// Add a CSS class to the dialog, for selector matching
+    pub fn class(mut self, name: impl AsRef<str>) -> Self {
+        self.inner = self.inner.class(name);
+        self
+    }
+
+    /// Set the dialog's element ID for CSS selector matching
+    pub fn id(mut self, id: &str) -> Self {
+        self.inner = self.inner.id(id);
+        self
+    }
+
     pub fn show(self) -> OverlayHandle {
         self.inner.show()
     }

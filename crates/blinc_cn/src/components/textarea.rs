@@ -34,6 +34,7 @@
 //! ```
 
 use super::label::{LabelSize, label};
+use super::names::{Names, name_methods};
 use blinc_layout::prelude::*;
 use blinc_layout::widgets::text_area::{
     SharedTextAreaState, TextArea as LayoutTextArea, text_area,
@@ -306,6 +307,7 @@ pub struct TextareaBuilder {
     config: TextareaConfig,
     /// Cached built Textarea - built lazily on first access
     built: std::cell::OnceCell<Textarea>,
+    names: Names,
 }
 
 impl TextareaBuilder {
@@ -314,13 +316,16 @@ impl TextareaBuilder {
         Self {
             config: TextareaConfig::new(state.clone()),
             built: std::cell::OnceCell::new(),
+            names: Names::default(),
         }
     }
 
     /// Get or build the inner Textarea
     fn get_or_build(&self) -> &Textarea {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            Textarea::from_config(self.config.clone())
+            let mut built = Textarea::from_config(self.config.clone());
+            self.names.apply_to(&mut built.inner);
+            built
         })
     }
 
@@ -458,8 +463,12 @@ impl TextareaBuilder {
 
     /// Build the final Textarea component
     pub fn build_component(self) -> Textarea {
-        Textarea::from_config(self.config)
+        let mut built = Textarea::from_config(self.config);
+        self.names.apply_to(&mut built.inner);
+        built
     }
+
+    name_methods!(names);
 }
 
 impl ElementBuilder for TextareaBuilder {

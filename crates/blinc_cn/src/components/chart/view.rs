@@ -1,6 +1,7 @@
 //! A chart's elements: the canvas, the value and category labels around it,
 //! the tooltip that follows the pointer, and the legend; and its builder.
 
+use crate::components::names::{Names, name_methods};
 use std::cell::OnceCell;
 use std::sync::{Arc, Mutex};
 
@@ -33,7 +34,7 @@ pub struct ChartBuilder {
     tint: Option<String>,
     /// A note per category right of the plot, and its tone.
     notes: Option<Notes>,
-    classes: Vec<String>,
+    pub(super) names: Names,
     bounds: LayoutBoundsStorage,
     built: OnceCell<(Div, Arc<Plot>)>,
 }
@@ -77,7 +78,7 @@ impl ChartBuilder {
             width: None,
             tint: None,
             notes: None,
-            classes: Vec::new(),
+            names: Names::default(),
             bounds: Arc::new(Mutex::new(None)),
             built: OnceCell::new(),
         }
@@ -196,11 +197,7 @@ impl ChartBuilder {
         self
     }
 
-    /// A class for rules of your own to match.
-    pub fn class(mut self, name: impl Into<String>) -> Self {
-        self.classes.push(name.into());
-        self
-    }
+    name_methods!(names);
 
     /// The colour, any CSS colour, of the series that have none of their
     /// own; for a single series, its colour.
@@ -348,8 +345,7 @@ impl ChartBuilder {
             Some(w) => root.w(w),
             None => root.w_full(),
         };
-        let root = self.classes.iter().fold(root, |d, c| d.class(c));
-        (root, plot)
+        (self.names.apply(root), plot)
     }
 }
 

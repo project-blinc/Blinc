@@ -13,6 +13,7 @@
 //!     .format(|r| format!("{}–{} °C", r.start(), r.end()))
 //! ```
 
+use super::names::{Names, name_methods};
 use blinc_core::BlincContextState;
 use blinc_core::reactive::{Computed, ReactiveGraph, Signal};
 use blinc_layout::InstanceKey;
@@ -88,7 +89,7 @@ struct Config {
     format: Option<RangeFormat>,
     disabled: Computed<bool>,
     width: Option<f32>,
-    classes: Vec<String>,
+    names: Names,
     on_change: Option<RangeChange>,
 }
 
@@ -116,7 +117,7 @@ impl NumberRangeGaugeBuilder {
                 format: None,
                 disabled: bound_flag(false),
                 width: None,
-                classes: Vec::new(),
+                names: Names::default(),
                 on_change: None,
             },
             built: std::cell::OnceCell::new(),
@@ -168,11 +169,7 @@ impl NumberRangeGaugeBuilder {
         self
     }
 
-    /// A class for rules of your own to match.
-    pub fn class(mut self, name: impl Into<String>) -> Self {
-        self.config.classes.push(name.into());
-        self
-    }
+    name_methods!(config.names);
 
     /// Called with the interval after each edit the user makes; a value set
     /// from code is not reported.
@@ -290,15 +287,17 @@ impl NumberRangeGauge {
 
         let gauge = interactive(
             config
-                .classes
-                .iter()
-                .fold(shell(size, config.width, fit, &disabled), |d, c| d.class(c))
+                .names
+                .apply(shell(size, config.width, fit, &disabled))
                 .class("cn-number-range-gauge")
                 .child(upper_face)
                 .child(lower_face)
                 .child(value_label(size, label)),
             instance,
-            &format!("cn-number-gauge-{instance}"),
+            &config
+                .names
+                .id()
+                .map_or_else(|| format!("cn-number-gauge-{instance}"), str::to_string),
             disabled,
             Edits {
                 seek: Arc::new({

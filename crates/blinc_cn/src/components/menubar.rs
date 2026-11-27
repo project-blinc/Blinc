@@ -31,6 +31,7 @@
 //! }
 //! ```
 
+use super::names::Names;
 use std::cell::OnceCell;
 use std::sync::Arc;
 
@@ -171,8 +172,7 @@ impl MenubarMenu {
         F: FnOnce(SubmenuBuilder) -> SubmenuBuilder,
     {
         let sub = builder(SubmenuBuilder::new_public());
-        self.items
-            .push(ContextMenuItem::new(label).submenu(sub.items()));
+        self.items.push(ContextMenuItem::new(label).opening(sub));
         self
     }
 }
@@ -684,6 +684,7 @@ fn spawn_menubar_submenu(
     root_handle: OverlayHandle,
     parent_submenu_state: Signal<Option<u64>>,
     key: String,
+    names: Names,
 ) -> OverlayHandle {
     let theme = ThemeState::get();
     let radius = theme.radius(RadiusToken::Md);
@@ -726,7 +727,7 @@ fn spawn_menubar_submenu(
             }
         })
         .content(move || {
-            build_menubar_menu_div(
+            names.apply(build_menubar_menu_div(
                 &items,
                 min_width,
                 root_handle,
@@ -737,7 +738,7 @@ fn spawn_menubar_submenu(
                 radius,
                 font_size,
                 padding,
-            )
+            ))
         })
         .show();
 
@@ -810,6 +811,7 @@ fn build_menubar_menu_div(
             let item_on_click = item.get_on_click();
             let has_submenu = item.has_submenu();
             let submenu_items = item.get_submenu().cloned();
+            let submenu_names = item.submenu_names().clone();
 
             let child_submenu_for_hover_open = *child_submenu_state;
             let child_submenu_for_hover_close = *child_submenu_state;
@@ -896,6 +898,7 @@ fn build_menubar_menu_div(
                                 root_handle,
                                 child_submenu_for_hover_open,
                                 submenu_key_for_hover.clone(),
+                                submenu_names.clone(),
                             );
                             child_submenu_for_hover_open.set(Some(handle.raw()));
                         }

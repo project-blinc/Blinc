@@ -65,6 +65,7 @@
 //! .show();
 //! ```
 
+use super::names::{Names, name_methods};
 use std::sync::Arc;
 
 use blinc_core::Color;
@@ -138,6 +139,7 @@ pub struct ToastBuilder {
     body: Option<ToastBodyFn>,
     /// Fully custom content (replaces entire toast layout)
     custom_content: Option<ToastBodyFn>,
+    names: Names,
 }
 
 impl ToastBuilder {
@@ -154,6 +156,7 @@ impl ToastBuilder {
             show_close: true,
             body: None,
             custom_content: None,
+            names: Names::default(),
         }
     }
 
@@ -173,6 +176,7 @@ impl ToastBuilder {
             show_close: false,
             body: None,
             custom_content: Some(Arc::new(content)),
+            names: Names::default(),
         }
     }
 
@@ -244,6 +248,8 @@ impl ToastBuilder {
     }
 
     /// Show the toast
+    name_methods!(names);
+
     #[track_caller]
     pub fn show(self) -> ToastHandle {
         let title = self.title;
@@ -257,6 +263,7 @@ impl ToastBuilder {
         let duration_ms = self.duration_ms;
         let body = self.body;
         let custom_content = self.custom_content;
+        let names = self.names;
 
         // Pre-allocate handle id so action / close callbacks can capture the
         // dismiss target.
@@ -277,7 +284,7 @@ impl ToastBuilder {
             .motion_class(motion_class)
             .dismiss_on_click(false) // dismiss via explicit close button / action
             .content(move || {
-                build_toast_content(
+                names.apply(build_toast_content(
                     &title,
                     &description,
                     &icon_svg,
@@ -288,7 +295,7 @@ impl ToastBuilder {
                     &body,
                     &custom_content,
                     toast_handle,
-                )
+                ))
             });
 
         if duration_ms > 0 {

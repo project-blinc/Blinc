@@ -38,6 +38,7 @@
 //!     .child(content)
 //! ```
 
+use super::names::{Names, name_methods};
 use std::cell::{OnceCell, RefCell};
 
 use blinc_core::Color;
@@ -251,12 +252,17 @@ impl ElementBuilder for ScrollArea {
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.inner.element_classes()
     }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
+    }
 }
 
 /// Builder for scroll area
 pub struct ScrollAreaBuilder {
     config: RefCell<ScrollAreaConfig>,
     built: OnceCell<ScrollArea>,
+    names: Names,
 }
 
 impl ScrollAreaBuilder {
@@ -266,6 +272,7 @@ impl ScrollAreaBuilder {
         Self {
             config: RefCell::new(ScrollAreaConfig::default()),
             built: OnceCell::new(),
+            names: Names::default(),
         }
     }
 
@@ -275,7 +282,9 @@ impl ScrollAreaBuilder {
             let config = self.config.take();
             let built = BuiltScrollArea::from_config(config);
             ScrollArea {
-                inner: div().class("cn-scroll-area").child(built.inner),
+                inner: self
+                    .names
+                    .apply(div().class("cn-scroll-area").child(built.inner)),
             }
         })
     }
@@ -381,9 +390,13 @@ impl ScrollAreaBuilder {
         let config = self.config.into_inner();
         let built = BuiltScrollArea::from_config(config);
         ScrollArea {
-            inner: div().class("cn-scroll-area").child(built.inner),
+            inner: self
+                .names
+                .apply(div().class("cn-scroll-area").child(built.inner)),
         }
     }
+
+    name_methods!(names);
 }
 
 impl Default for ScrollAreaBuilder {
@@ -411,6 +424,10 @@ impl ElementBuilder for ScrollAreaBuilder {
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.get_or_build().element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(self.get_or_build())
     }
 }
 

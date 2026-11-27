@@ -1,6 +1,7 @@
 //! Themed OTP input wrapper around
 //! [`blinc_layout::widgets::input_otp`](mod@blinc_layout::widgets::input_otp).
 
+use super::names::{Names, name_methods};
 use std::sync::Arc;
 
 use blinc_core::reactive::Signal;
@@ -32,6 +33,7 @@ struct Config {
 pub struct InputOtpBuilder {
     config: Config,
     built: std::cell::OnceCell<InputOtp>,
+    names: Names,
 }
 
 pub struct InputOtp {
@@ -55,12 +57,15 @@ impl InputOtpBuilder {
                 on_complete: None,
             },
             built: std::cell::OnceCell::new(),
+            names: Names::default(),
         }
     }
 
     fn get_or_build(&self) -> &InputOtp {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            InputOtp::from_config(self.config.clone())
+            let mut built = InputOtp::from_config(self.config.clone());
+            self.names.apply_to(&mut built.inner);
+            built
         })
     }
 
@@ -114,6 +119,8 @@ impl InputOtpBuilder {
         self.config.on_complete = Some(Arc::new(handler));
         self
     }
+
+    name_methods!(names);
 }
 
 impl InputOtp {

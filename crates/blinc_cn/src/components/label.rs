@@ -17,6 +17,7 @@
 //! cn::label("Username").disabled()
 //! ```
 
+use super::names::{Names, name_methods};
 use blinc_layout::prelude::*;
 use blinc_theme::{ColorToken, ThemeState, TypographyTokens};
 
@@ -147,6 +148,7 @@ pub struct LabelBuilder {
     pub(crate) config: LabelConfig,
     /// Cached built Label - built lazily on first access
     built: std::cell::OnceCell<Label>,
+    names: Names,
 }
 
 impl LabelBuilder {
@@ -155,13 +157,16 @@ impl LabelBuilder {
         Self {
             config: LabelConfig::new(text.into_reactive()),
             built: std::cell::OnceCell::new(),
+            names: Names::default(),
         }
     }
 
     /// Get or build the inner Label
     fn get_or_build(&self) -> &Label {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            Label::with_config(self.config.clone())
+            let mut label = Label::with_config(self.config.clone());
+            self.names.apply_to(&mut label.inner);
+            label
         })
     }
 
@@ -185,8 +190,12 @@ impl LabelBuilder {
 
     /// Build the final Label component
     pub fn build_component(self) -> Label {
-        Label::with_config(self.config)
+        let mut label = Label::with_config(self.config);
+        self.names.apply_to(&mut label.inner);
+        label
     }
+
+    name_methods!(names);
 }
 
 impl ElementBuilder for Label {
@@ -209,6 +218,10 @@ impl ElementBuilder for Label {
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.inner.element_classes()
     }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
+    }
 }
 
 impl ElementBuilder for LabelBuilder {
@@ -230,6 +243,10 @@ impl ElementBuilder for LabelBuilder {
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.get_or_build().element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(self.get_or_build())
     }
 }
 

@@ -121,6 +121,8 @@ struct ResizablePanelConfig {
     content: Option<Box<dyn ElementBuilder>>,
     /// Unique ID for this panel
     id: String,
+    /// CSS classes of the panel's element
+    classes: Vec<String>,
     /// Whether the panel is shown; `None` is always.
     visible: Option<Reactive<bool>>,
     /// While it holds, the panel is the given size and has no handle.
@@ -137,6 +139,7 @@ impl Default for ResizablePanelConfig {
             flex_grow: 1.0,
             content: None,
             id: String::new(),
+            classes: Vec::new(),
             visible: None,
             collapsed: None,
         }
@@ -156,9 +159,15 @@ impl ResizablePanelBuilder {
         }
     }
 
-    /// Set the panel ID (used for state persistence)
+    /// Set the panel ID (used for state persistence). It is not the element's ID.
     pub fn id(mut self, id: impl Into<String>) -> Self {
         self.config.id = id.into();
+        self
+    }
+
+    /// Add a CSS class to the panel's element, for selector matching
+    pub fn class(mut self, name: impl AsRef<str>) -> Self {
+        self.config.classes.push(name.as_ref().to_string());
         self
     }
 
@@ -447,7 +456,10 @@ impl ResizableGroup {
                 sized
             };
 
-            let panel_wrapper = panel_wrapper
+            let panel_wrapper = panel_config
+                .classes
+                .iter()
+                .fold(panel_wrapper, |panel, class| panel.class(class))
                 .id(&format!("{key}__panel_{i}"))
                 .bind(&panel_refs[i]);
             let panel_wrapper = match panel_config.visible {
