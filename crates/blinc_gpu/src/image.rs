@@ -335,7 +335,7 @@ impl GpuImage {
 /// - `dst_rect`: `vec4<f32>` (16 bytes) - destination rectangle
 /// - `src_uv`: `vec4<f32>` (16 bytes) - source UV coordinates
 /// - `tint`: `vec4<f32>` (16 bytes) - tint color
-/// - `params`: `vec4<f32>` (16 bytes) - border_radius, opacity, border_width, packed_border_color
+/// - `params`: `vec3<f32>` + `u32` (16 bytes) - border_radius, opacity, border_width, packed border color
 /// - `clip_bounds`: `vec4<f32>` (16 bytes) - clip region
 /// - `clip_radius`: `vec4<f32>` (16 bytes) - clip corner radii
 /// - `filter_a`: `vec4<f32>` (16 bytes) - grayscale, invert, sepia, hue_rotate_rad
@@ -379,6 +379,31 @@ pub struct GpuImageInstance {
     /// Pointers are one more than their auxiliary row index; zeros keep native drawing.
     pub abi_clip: [f32; 4],
 }
+
+/// How the image pipelines read a [`GpuImageInstance`]: every field as a
+/// `vec4<f32>` at its offset, but the fourth of `params`, which holds the bits
+/// of the packed border colour and is read as a `u32`.
+pub(crate) const IMAGE_INSTANCE_ATTRIBUTES: [wgpu::VertexAttribute; 14] = {
+    const FIELD: u64 = std::mem::size_of::<[f32; 4]>() as u64;
+    let mut attributes = [wgpu::VertexAttribute {
+        format: wgpu::VertexFormat::Float32x4,
+        offset: 0,
+        shader_location: 0,
+    }; 14];
+    let mut field = 0;
+    while field < 13 {
+        attributes[field].offset = field as u64 * FIELD;
+        attributes[field].shader_location = field as u32;
+        field += 1;
+    }
+    attributes[3].format = wgpu::VertexFormat::Float32x3;
+    attributes[13] = wgpu::VertexAttribute {
+        format: wgpu::VertexFormat::Uint32,
+        offset: 3 * FIELD + 3 * std::mem::size_of::<f32>() as u64,
+        shader_location: 13,
+    };
+    attributes
+};
 
 impl Default for GpuImageInstance {
     fn default() -> Self {

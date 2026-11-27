@@ -1,5 +1,6 @@
 //! Image blending variants share the same geometry and clipping shader.
 use super::{GpuImageInstance, GpuRenderer, IMAGE_DT_SHADER, IMAGE_SHADER};
+use crate::image::IMAGE_INSTANCE_ATTRIBUTES;
 
 #[derive(Clone, Copy)]
 pub(super) enum ImageBlend {
@@ -25,85 +26,7 @@ impl GpuRenderer {
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<GpuImageInstance>() as u64,
                         step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: &[
-                            // dst_rect
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 0,
-                                shader_location: 0,
-                            },
-                            // src_uv
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 16,
-                                shader_location: 1,
-                            },
-                            // tint
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 32,
-                                shader_location: 2,
-                            },
-                            // params (border_radius, opacity, border_width, packed_border_color)
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 48,
-                                shader_location: 3,
-                            },
-                            // clip_bounds (x, y, width, height)
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 64,
-                                shader_location: 4,
-                            },
-                            // clip_radius (tl, tr, br, bl)
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 80,
-                                shader_location: 5,
-                            },
-                            // filter_a (grayscale, invert, sepia, hue_rotate_rad)
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 96,
-                                shader_location: 6,
-                            },
-                            // filter_b (brightness, contrast, saturate, unused)
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 112,
-                                shader_location: 7,
-                            },
-                            // transform (a, b, c, d) - 2x2 affine matrix
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 128,
-                                shader_location: 8,
-                            },
-                            // clip2_bounds (x, y, width, height) - secondary sharp clip
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 144,
-                                shader_location: 9,
-                            },
-                            // mask_params (gradient geometry)
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 160,
-                                shader_location: 10,
-                            },
-                            // mask_info (type, start_alpha, end_alpha, 0)
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 176,
-                                shader_location: 11,
-                            },
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 192,
-                                shader_location: 12,
-                            },
-                        ],
+                        attributes: &IMAGE_INSTANCE_ATTRIBUTES,
                     }],
                     compilation_options: Default::default(),
                 },

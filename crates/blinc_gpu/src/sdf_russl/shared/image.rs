@@ -20,9 +20,9 @@ russl::russl! {
         #[location(0)] uv: Vec2,
         #[location(1)] tint: Vec4,
         #[location(2)] local_pos: Vec2,
-        #[location(3)] rect_size: Vec2,
-        // (border_radius, opacity, border_width, packed border colour as f32 bits)
-        #[location(4)] params: Vec4,
+        // (width, height, corner radius, border width)
+        #[location(3)] shape: Vec4,
+        #[location(4)] #[flat] border_colour: Vec4,
         #[location(5)] world_pos: Vec2,
         #[location(6)] clip_bounds: Vec4,
         #[location(7)] clip_radius: Vec4,
@@ -43,8 +43,8 @@ russl::russl! {
         #[location(1)] src_uv: Vec4,
         // Tint colour (RGBA)
         #[location(2)] tint: Vec4,
-        // (border_radius, opacity, border_width, packed_border_color)
-        #[location(3)] params: Vec4,
+        // (border_radius, opacity, border_width)
+        #[location(3)] params: Vec3,
         // Clip bounds (x, y, width, height); a very negative x means no clip
         #[location(4)] clip_bounds: Vec4,
         // Clip corner radii (top-left, top-right, bottom-right, bottom-left)
@@ -63,6 +63,8 @@ russl::russl! {
         #[location(11)] mask_info: Vec4,
         // ABI metadata: clip header pointer, alpha-mask flag, mapping header pointer, reserved
         #[location(12)] abi_clip: Vec4,
+        // Border colour, 8 bits a channel from red down
+        #[location(13)] border_packed: u32,
     ) -> VertexOutput {
         // Two triangles over the quad. A match rather than an indexed array: the PowerVR Vulkan
         // driver compiles indexing a constant array wrongly (see `sdf_core`).
@@ -104,10 +106,16 @@ russl::russl! {
         let mut output: VertexOutput;
         output.position = Vec4::new(ndc_x, ndc_y, 0.0, 1.0);
         output.uv = uv;
-        output.tint = tint;
+        // The opacity goes with the tint's alpha: both scale the texel's.
+        output.tint = Vec4::new(tint.x, tint.y, tint.z, tint.w * params.y);
         output.local_pos = local_pos * Vec2::new(dst_rect.z, dst_rect.w);
-        output.rect_size = Vec2::new(dst_rect.z, dst_rect.w);
-        output.params = params;
+        output.shape = Vec4::new(dst_rect.z, dst_rect.w, params.x, params.z);
+        output.border_colour = Vec4::new(
+            ((border_packed >> 24u32) & 0xFFu32) as f32 / 255.0,
+            ((border_packed >> 16u32) & 0xFFu32) as f32 / 255.0,
+            ((border_packed >> 8u32) & 0xFFu32) as f32 / 255.0,
+            (border_packed & 0xFFu32) as f32 / 255.0,
+        );
         output.world_pos = Vec2::new(x, y);
         output.clip_bounds = clip_bounds;
         output.clip_radius = clip_radius;
@@ -268,9 +276,9 @@ russl::russl! {
             discard!();
         }
 
-        let border_radius = input.params.x;
-        let opacity = input.params.y;
-        let border_width = input.params.z;
+        let rect_size = input.shape.xy;
+        let border_radius = input.shape.z;
+        let border_width = input.shape.w;
 
         // Level 0 explicitly: the discards above make the control flow non-uniform, where an
         // implicit-derivative sample is not allowed. The texture has no mipmaps.
@@ -309,22 +317,13 @@ russl::russl! {
             color = apply_image_filter(color, fa, fb);
         }
 
-        color.w = color.w * opacity;
-
         // Rounded corners, and a border that fades in from the inside.
         if border_radius > 0.0 || border_width > 0.0 {
-            let sdf = rounded_rect_sdf(input.local_pos, input.rect_size, border_radius);
+            let sdf = rounded_rect_sdf(input.local_pos, rect_size, border_radius);
             let outer_aa = 1.0 - smoothstep(-1.0, 1.0, sdf);
 
             if border_width > 0.0 {
-                // The border colour is packed in `params.w`, 8 bits a channel.
-                let packed = input.params.w.to_bits();
-                let bc = Vec4::new(
-                    ((packed >> 24u32) & 0xFFu32) as f32 / 255.0,
-                    ((packed >> 16u32) & 0xFFu32) as f32 / 255.0,
-                    ((packed >> 8u32) & 0xFFu32) as f32 / 255.0,
-                    (packed & 0xFFu32) as f32 / 255.0,
-                );
+                let bc = input.border_colour;
                 let border_factor = smoothstep(-border_width - 1.0, -border_width + 1.0, sdf);
                 color = Vec4::new(
                     mix(color.x, bc.x, border_factor),
@@ -342,7 +341,7 @@ russl::russl! {
         // Mask gradient: linear or radial in the image's own space.
         let mask_type = input.mask_info.x;
         if mask_type > 0.5 {
-            let mask_uv = input.local_pos / max(input.rect_size, Vec2::splat(0.001));
+            let mask_uv = input.local_pos / max(rect_size, Vec2::splat(0.001));
             let mut mask_t: f32;
             if mask_type < 1.5 {
                 let m_start = input.mask_params.xy;

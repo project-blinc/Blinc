@@ -20,16 +20,6 @@ fn texel(x: u32, y: u32) -> [u8; 4] {
 }
 
 /// The vertex attributes of an instance: thirteen vec4s.
-fn attributes() -> Vec<wgpu::VertexAttribute> {
-    (0..13)
-        .map(|i| wgpu::VertexAttribute {
-            format: wgpu::VertexFormat::Float32x4,
-            offset: i as u64 * 16,
-            shader_location: i,
-        })
-        .collect()
-}
-
 /// Draw `instances` with `source` and read the pixels back. `data_texture` is the tier without
 /// storage buffers: the auxiliary data is an `RGBA32F` texture.
 fn draw(
@@ -81,7 +71,6 @@ fn draw(
         source: wgpu::ShaderSource::Wgsl(source.into()),
     });
     let format = wgpu::TextureFormat::Rgba8Unorm;
-    let attributes = attributes();
     let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: None,
         layout: Some(
@@ -97,7 +86,7 @@ fn draw(
             buffers: &[wgpu::VertexBufferLayout {
                 array_stride: std::mem::size_of::<GpuImageInstance>() as u64,
                 step_mode: wgpu::VertexStepMode::Instance,
-                attributes: &attributes,
+                attributes: &crate::image::IMAGE_INSTANCE_ATTRIBUTES,
             }],
             compilation_options: Default::default(),
         },
@@ -627,4 +616,51 @@ fn images_draw_the_texel_through_the_formulas() {
         over_clear(rgb, a),
         "quarter turn",
     );
+}
+
+/// A border is drawn in the colour it was given, whatever bits that colour packs to.
+#[test]
+fn image_borders_keep_their_colour() {
+    let Some((device, queue)) = harness::device() else {
+        eprintln!("no adapter: skipped");
+        return;
+    };
+    let colours: [[f32; 4]; 6] = [
+        [1.0, 1.0, 1.0, 1.0],
+        [0.0, 0.0, 0.0, 1.0],
+        [1.0, 0.5, 0.0, 1.0],
+        [0.0, 0.004, 1.0, 1.0],
+        [0.5, 0.0, 1.0, 0.5],
+        [0.25, 0.5, 0.0, 1.0],
+    ];
+    let instances: Vec<_> = colours
+        .iter()
+        .enumerate()
+        .map(|(i, [r, g, b, a])| {
+            GpuImageInstance::new(i as f32 * 20.0, 0.0, 16.0, 16.0)
+                .with_image_border(4.0, *r, *g, *b, *a)
+        })
+        .collect();
+    let tiers = [
+        (crate::sdf_russl::image::WGSL, false),
+        (crate::sdf_russl::image_dt::WGSL, true),
+    ];
+    for (source, data_texture) in tiers {
+        let pixels = draw(
+            &device,
+            &queue,
+            source,
+            data_texture,
+            &instances,
+            &[[0.0; 4]],
+        );
+        for (i, [r, g, b, a]) in colours.iter().enumerate() {
+            // One pixel in from the top edge is inside the border alone.
+            assert_near(
+                pixel(&pixels, i as u32 * 20 + 8, 1),
+                over_clear([*r, *g, *b], *a),
+                &format!("border {i}, data texture {data_texture}"),
+            );
+        }
+    }
 }
