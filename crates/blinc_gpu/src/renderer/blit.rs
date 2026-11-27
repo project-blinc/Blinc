@@ -65,6 +65,84 @@ impl GpuRenderer {
         );
     }
 
+    /// [`Self::blit_tight_texture_to_target`] for premultiplied colour, which is
+    /// what drawing onto a transparent texture leaves.
+    #[allow(clippy::too_many_arguments)]
+    pub fn blit_premultiplied_texture_to_target(
+        &mut self,
+        source: &wgpu::TextureView,
+        source_size: (u32, u32),
+        target: &wgpu::TextureView,
+        dest_pos: (f32, f32),
+        dest_size: (f32, f32),
+        opacity: f32,
+        blend_mode: blinc_core::BlendMode,
+        clip: Option<([f32; 4], [f32; 4])>,
+        transform_3d: Option<blinc_core::Transform3DParams>,
+        rotate_z_rad: f32,
+    ) {
+        self.blit_tight(
+            source,
+            source_size,
+            target,
+            (dest_pos, dest_size),
+            opacity,
+            blend_mode,
+            clip,
+            transform_3d,
+            rotate_z_rad,
+            true,
+        );
+    }
+
+    /// Composites a layer drawn by one of the tight layer passes onto `target`
+    /// and releases it. The pass leaves premultiplied colour; effects read and
+    /// write straight colour, so a layer with effects is straightened first.
+    pub(super) fn composite_tight_layer(
+        &mut self,
+        layer: super::LayerTexture,
+        content_size: (u32, u32),
+        target: &wgpu::TextureView,
+        dest: ((f32, f32), (f32, f32)),
+        config: &blinc_core::LayerConfig,
+        clip: Option<([f32; 4], [f32; 4])>,
+    ) {
+        let premultiplied = config.effects.is_empty();
+        let source = if premultiplied {
+            layer
+        } else {
+            let straight = self
+                .layer_texture_cache
+                .acquire_exact(&self.device, layer.size, false);
+            self.ensure_overlay_alpha();
+            self.overlay_alpha.as_ref().unwrap().straighten(
+                &self.device,
+                &|commands| self.uploads.submit(&self.queue, [commands]),
+                &self.bind_group_layouts.composite,
+                &self.path_image_sampler,
+                &layer,
+                &straight,
+            );
+            self.layer_texture_cache.release(layer);
+            let effected = self.apply_layer_effects(&straight, &config.effects);
+            self.layer_texture_cache.release(straight);
+            effected
+        };
+        self.blit_tight(
+            &source.view,
+            content_size,
+            target,
+            dest,
+            config.opacity,
+            config.blend_mode,
+            clip,
+            config.transform_3d,
+            0.0,
+            premultiplied,
+        );
+        self.layer_texture_cache.release(source);
+    }
+
     /// [`Self::blit_tight_texture_to_target`] for a source of straight or premultiplied colour.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn blit_tight(

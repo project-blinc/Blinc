@@ -512,43 +512,16 @@ impl GpuRenderer {
                 layer_size.1 + effect_expansion.1 + effect_expansion.3,
             );
 
-            // Skip texture copy when no effects - use layer_texture directly
-            if config.effects.is_empty() {
-                // Blit directly without effect processing (skip copy)
-                self.blit_tight_texture_to_target(
-                    &layer_texture.view,
-                    tight_size,
-                    target,
-                    expanded_pos,
-                    expanded_size,
-                    config.opacity,
-                    config.blend_mode,
-                    layer_clip,
-                    config.transform_3d,
-                    0.0,
-                );
-                self.layer_texture_cache.release(layer_texture);
-            } else {
-                // Apply effects to the tight texture
-                let effected = self.apply_layer_effects(&layer_texture, &config.effects);
-                self.layer_texture_cache.release(layer_texture);
-
-                // Blit the effected texture back to target at the correct position
-                // Pass through the clip bounds so effects don't bleed outside scroll containers
-                self.blit_tight_texture_to_target(
-                    &effected.view,
-                    tight_size,
-                    target,
-                    expanded_pos,
-                    expanded_size,
-                    config.opacity,
-                    config.blend_mode,
-                    layer_clip,
-                    config.transform_3d,
-                    0.0,
-                );
-                self.layer_texture_cache.release(effected);
-            }
+            // The layer's clip holds for what its effects spread past it, so
+            // they do not bleed outside a scroll container.
+            self.composite_tight_layer(
+                layer_texture,
+                tight_size,
+                target,
+                (expanded_pos, expanded_size),
+                &config,
+                layer_clip,
+            );
         }
     }
 

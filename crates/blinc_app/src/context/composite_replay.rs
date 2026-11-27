@@ -594,8 +594,9 @@ impl RenderContext {
         // Restore viewport
         self.renderer.restore_viewport();
 
-        // Blit with perspective transform
-        self.renderer.blit_tight_texture_to_target(
+        // Blit with perspective transform. The content was drawn onto a
+        // transparent texture, so its colour is premultiplied.
+        self.renderer.blit_premultiplied_texture_to_target(
             &layer_tex.view,
             layer_tex.size,
             target,

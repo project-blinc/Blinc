@@ -301,8 +301,9 @@ fn layer_composite_draws_what_the_inline_shader_drew_for_every_blend_mode() {
             W::F(cos_ry),
             W::F(sin_rz),
             W::F(cos_rz),
-            // premultiplied, padding
-            W::U(0),
+            // premultiplied, padding. The inline shader took the source of a
+            // blend mode as premultiplied, and of a normal blend as straight.
+            W::U(u32::from(blend_mode != 0)),
             W::U(0),
             W::U(0),
             W::U(0),

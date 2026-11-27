@@ -315,9 +315,10 @@ russl::russl! {
             let screen_uv = input.frag_pos / UNIFORMS.viewport_size;
             let dst = DEST_TEXTURE.sample_level(DEST_SAMPLER, screen_uv, 0.0);
 
-            // Unpremultiply the source (src.a > 0, since src_alpha > 0.001 and opacity <= 1) and
-            // the destination.
-            let src_c = src.xyz / src.w;
+            // Unpremultiply the source where it is premultiplied (src.a > 0, since
+            // src_alpha > 0.001 and opacity <= 1), and the destination.
+            let mut src_c = src.xyz;
+            if UNIFORMS.premultiplied == 1u32 { src_c = src.xyz / src.w; }
             let dst_c = if dst.w < 0.001 { Vec3::splat(0.0) } else { dst.xyz / dst.w };
 
             let blended = apply_blend_mode(src_c, dst_c, UNIFORMS.blend_mode);

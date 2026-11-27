@@ -498,37 +498,14 @@ impl GpuRenderer {
                 // rect). Empty intersection ⇒ the blit is a no-op.
                 self.set_pending_damage_scissor(damage_scissor);
 
-                if config.effects.is_empty() {
-                    self.blit_tight_texture_to_target(
-                        &layer_texture.view,
-                        tight_size,
-                        &view,
-                        expanded_pos,
-                        expanded_size,
-                        config.opacity,
-                        config.blend_mode,
-                        layer_clip,
-                        config.transform_3d,
-                        0.0,
-                    );
-                    self.layer_texture_cache.release(layer_texture);
-                } else {
-                    let effected = self.apply_layer_effects(&layer_texture, &config.effects);
-                    self.layer_texture_cache.release(layer_texture);
-                    self.blit_tight_texture_to_target(
-                        &effected.view,
-                        tight_size,
-                        &view,
-                        expanded_pos,
-                        expanded_size,
-                        config.opacity,
-                        config.blend_mode,
-                        layer_clip,
-                        config.transform_3d,
-                        0.0,
-                    );
-                    self.layer_texture_cache.release(effected);
-                }
+                self.composite_tight_layer(
+                    layer_texture,
+                    tight_size,
+                    &view,
+                    (expanded_pos, expanded_size),
+                    &config,
+                    layer_clip,
+                );
 
                 self.clear_pending_damage_scissor();
             }

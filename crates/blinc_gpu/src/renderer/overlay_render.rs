@@ -248,40 +248,14 @@ impl GpuRenderer {
                 layer_size.1 + effect_expansion.1 + effect_expansion.3,
             );
 
-            if config.effects.is_empty() {
-                // Blend-mode only: blit directly
-                self.blit_tight_texture_to_target(
-                    &layer_texture.view,
-                    tight_size,
-                    target,
-                    expanded_pos,
-                    expanded_size,
-                    config.opacity,
-                    config.blend_mode,
-                    layer_clip,
-                    config.transform_3d,
-                    0.0,
-                );
-                self.layer_texture_cache.release(layer_texture);
-            } else {
-                // Apply effects then blit
-                let effected = self.apply_layer_effects(&layer_texture, &config.effects);
-                self.layer_texture_cache.release(layer_texture);
-
-                self.blit_tight_texture_to_target(
-                    &effected.view,
-                    tight_size,
-                    target,
-                    expanded_pos,
-                    expanded_size,
-                    config.opacity,
-                    config.blend_mode,
-                    layer_clip,
-                    config.transform_3d,
-                    0.0,
-                );
-                self.layer_texture_cache.release(effected);
-            }
+            self.composite_tight_layer(
+                layer_texture,
+                tight_size,
+                target,
+                (expanded_pos, expanded_size),
+                &config,
+                layer_clip,
+            );
         }
     }
 

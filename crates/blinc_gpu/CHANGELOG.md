@@ -5,6 +5,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Translucent content in an opacity or effect layer is no longer faded twice by the direct, static and overlay render paths, and a blend mode over a layer with effects keeps its colors. `GpuRenderer::blit_premultiplied_texture_to_target` is new.
 - A newly loaded mesh no longer draws with the buffers or textures of one that was dropped, and two meshes that share vertices keep their own indices.
 - A linear or radial mask gradient fades an element or an image by its own amount. The color under the mask no longer darkens as it fades.
 - A circle or an ellipse with a border gets the border all the way round when the core shader draws it.
