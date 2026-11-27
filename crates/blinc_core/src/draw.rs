@@ -1072,10 +1072,17 @@ struct TextureDataInner {
     /// after the first GPU upload. For compressed variants this
     /// holds the already-encoded BC blocks, not raw RGBA.
     rgba: std::sync::Mutex<Option<std::sync::Arc<[u8]>>>,
-    /// Identifier used as the key in GPU texture caches. Captured at
-    /// construction from the original `Arc<[u8]>` pointer and
-    /// preserved even after `rgba` has been dropped.
+    /// Identifier used as the key in GPU texture caches, kept after `rgba`
+    /// has been dropped.
     cache_key: usize,
+}
+
+/// A cache key no earlier texture had. A cache entry can outlive its texture,
+/// so a key taken from an address would find it again for whatever is
+/// allocated there next.
+fn next_cache_key() -> usize {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 impl TextureData {
@@ -1088,14 +1095,10 @@ impl TextureData {
             "TextureData::new: byte count doesn't match dimensions",
         );
         let arc_bytes: std::sync::Arc<[u8]> = bytes.into();
-        // `Arc::as_ptr(&Arc<[u8]>)` returns a fat `*const [u8]` — cast
-        // through the thin `*const u8` element pointer to get a plain
-        // address for the cache key.
-        let cache_key = std::sync::Arc::as_ptr(&arc_bytes) as *const u8 as usize;
         Self {
             inner: std::sync::Arc::new(TextureDataInner {
                 rgba: std::sync::Mutex::new(Some(arc_bytes)),
-                cache_key,
+                cache_key: next_cache_key(),
             }),
             width,
             height,
@@ -1136,11 +1139,10 @@ impl TextureData {
             "TextureData::new_compressed: byte count doesn't match {format:?} block count"
         );
         let arc_bytes: std::sync::Arc<[u8]> = bytes.into();
-        let cache_key = std::sync::Arc::as_ptr(&arc_bytes) as *const u8 as usize;
         Self {
             inner: std::sync::Arc::new(TextureDataInner {
                 rgba: std::sync::Mutex::new(Some(arc_bytes)),
-                cache_key,
+                cache_key: next_cache_key(),
             }),
             width,
             height,
@@ -1148,9 +1150,9 @@ impl TextureData {
         }
     }
 
-    /// Stable identifier for the backing CPU buffer, suitable for use
-    /// as a GPU cache key. Preserved across `clone()` and across
-    /// [`Self::drop_cpu_bytes`].
+    /// Identifies this texture, for use as a GPU cache key. Shared by its
+    /// clones, kept across [`Self::drop_cpu_bytes`], and never given to
+    /// another texture.
     pub fn cache_key(&self) -> usize {
         self.inner.cache_key
     }
@@ -3282,5 +3284,25 @@ mod tests {
         ctx.fill_rounded_rect(Rect::new(10.0, 10.0, 80.0, 30.0), 4.0.into(), Color::RED);
 
         assert_eq!(ctx.commands().len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod texture_key_tests {
+    use super::TextureData;
+
+    #[test]
+    fn a_texture_key_is_shared_by_clones_and_never_reused() {
+        let first = TextureData::new(vec![0; 4], 1, 1);
+        assert_eq!(first.clone().cache_key(), first.cache_key());
+        first.drop_cpu_bytes();
+
+        // Each of these is dropped before the next is made, so the allocator
+        // is free to put them all at one address.
+        let keys: std::collections::HashSet<usize> = (0..200)
+            .map(|_| TextureData::new(vec![0; 64], 4, 4).cache_key())
+            .collect();
+        assert_eq!(keys.len(), 200);
+        assert!(!keys.contains(&first.cache_key()));
     }
 }

@@ -5,6 +5,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- A newly loaded mesh no longer draws with the buffers or textures of one that was dropped, and two meshes that share vertices keep their own indices.
 - A linear or radial mask gradient fades an element or an image by its own amount. The color under the mask no longer darkens as it fades.
 - A circle or an ellipse with a border gets the border all the way round when the core shader draws it.
 - An image border is drawn in its color. White, black and other colors came out wrong or faded.

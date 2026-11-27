@@ -44,6 +44,29 @@ pub(crate) struct MeshBufferCacheEntry {
     pub(crate) vertex: wgpu::Buffer,
     pub(crate) index: wgpu::Buffer,
     pub(crate) index_count: u32,
+    /// The data the buffers were made from. Holding it weakly keeps its
+    /// addresses, which are the entry's key, from going to other data.
+    pub(crate) _source: (
+        std::sync::Weak<Vec<blinc_core::draw::Vertex>>,
+        std::sync::Weak<Vec<u32>>,
+    ),
+}
+
+/// A mesh's morph deltas on the GPU. The targets are held weakly, so their
+/// address stays theirs while the entry lives.
+pub(crate) type MorphCacheEntry = (
+    std::sync::Weak<Vec<blinc_core::draw::MorphTarget>>,
+    wgpu::Buffer,
+);
+
+/// A mesh's vertex and index data, by their addresses.
+pub(crate) type MeshKey = (usize, usize);
+
+fn mesh_key(mesh: &blinc_core::draw::MeshData) -> MeshKey {
+    (
+        std::sync::Arc::as_ptr(&mesh.vertices) as usize,
+        std::sync::Arc::as_ptr(&mesh.indices) as usize,
+    )
 }
 
 /// Upper bound on directional lights the mesh shader will sample.
@@ -140,7 +163,7 @@ pub(crate) struct MeshPipeline {
     /// by the `Arc<MeshData>` raw pointer. Deltas are static after
     /// glTF parse so the upload happens once per mesh, reused across
     /// frames. FIFO-evicted at [`MORPH_CACHE_CAPACITY`].
-    pub(crate) morph_deltas_cache: std::collections::VecDeque<(usize, wgpu::Buffer)>,
+    pub(crate) morph_deltas_cache: std::collections::VecDeque<MorphCacheEntry>,
     /// Depth buffer for the main mesh pass.
     pub(crate) main_depth: Option<wgpu::Texture>,
     pub(crate) main_depth_view: Option<wgpu::TextureView>,
@@ -157,11 +180,11 @@ pub(crate) struct MeshPipeline {
     pub(crate) env_cubemap: wgpu::Texture,
     pub(crate) env_cubemap_view: wgpu::TextureView,
     pub(crate) env_sampler: wgpu::Sampler,
-    /// Per-mesh vertex + index buffer cache. Keyed by the raw pointer
-    /// of the mesh's `Arc<MeshData>`. FIFO-evicted at
-    /// `MESH_CACHE_CAPACITY` to bound GPU memory for streaming scenes.
-    pub(crate) cached_mesh_buffers: std::collections::HashMap<usize, MeshBufferCacheEntry>,
-    pub(crate) cached_mesh_buffer_keys: std::collections::VecDeque<usize>,
+    /// Per-mesh vertex + index buffer cache, keyed by the mesh's data.
+    /// FIFO-evicted at `MESH_CACHE_CAPACITY` to bound GPU memory for
+    /// streaming scenes.
+    pub(crate) cached_mesh_buffers: std::collections::HashMap<MeshKey, MeshBufferCacheEntry>,
+    pub(crate) cached_mesh_buffer_keys: std::collections::VecDeque<MeshKey>,
     /// GPU texture cache, keyed by `TextureData::cache_key()`.
     /// Materials that reference the same underlying image share a
     /// single `GpuImage`.
@@ -1500,13 +1523,13 @@ impl GpuRenderer {
         // the prior frame's commands, so memory grows by O(frames ×
         // meshes × vertex_bytes) until the process dies (observed:
         // 50 GB on the strangler rig after a few minutes).
-        let mesh_ptr = std::sync::Arc::as_ptr(&mesh.vertices) as usize;
+        let mesh_key = mesh_key(mesh);
         let needs_buffers = !self
             .mesh_pipeline
             .as_ref()
             .unwrap()
             .cached_mesh_buffers
-            .contains_key(&mesh_ptr);
+            .contains_key(&mesh_key);
         if needs_buffers {
             let vertex_data: &[u8] = unsafe {
                 std::slice::from_raw_parts(
@@ -1533,10 +1556,14 @@ impl GpuRenderer {
                 vertex: vertex_buffer,
                 index: index_buffer,
                 index_count: mesh.indices.len() as u32,
+                _source: (
+                    std::sync::Arc::downgrade(&mesh.vertices),
+                    std::sync::Arc::downgrade(&mesh.indices),
+                ),
             };
             let mp_mut = self.mesh_pipeline.as_mut().unwrap();
-            mp_mut.cached_mesh_buffers.insert(mesh_ptr, entry);
-            mp_mut.cached_mesh_buffer_keys.push_back(mesh_ptr);
+            mp_mut.cached_mesh_buffers.insert(mesh_key, entry);
+            mp_mut.cached_mesh_buffer_keys.push_back(mesh_key);
             while mp_mut.cached_mesh_buffer_keys.len() > MESH_CACHE_CAPACITY {
                 if let Some(old_key) = mp_mut.cached_mesh_buffer_keys.pop_front() {
                     mp_mut.cached_mesh_buffers.remove(&old_key);
@@ -1547,7 +1574,7 @@ impl GpuRenderer {
             let mp = self.mesh_pipeline.as_ref().unwrap();
             let entry = mp
                 .cached_mesh_buffers
-                .get(&mesh_ptr)
+                .get(&mesh_key)
                 .expect("mesh buffer cache entry must exist after insert");
             (entry.vertex.clone(), entry.index.clone(), entry.index_count)
         };
@@ -1727,13 +1754,13 @@ impl GpuRenderer {
         // (tl;dr: the outer `Arc<MeshData>` pointer changes on every
         // per-frame `Arc::new(per_draw)` clone, causing a fresh
         // buffer upload per frame and an unbounded GPU memory leak).
-        let mesh_ptr = std::sync::Arc::as_ptr(&mesh.vertices) as usize;
+        let mesh_key = mesh_key(mesh);
         let needs_buffers = !self
             .mesh_pipeline
             .as_ref()
             .unwrap()
             .cached_mesh_buffers
-            .contains_key(&mesh_ptr);
+            .contains_key(&mesh_key);
         if needs_buffers {
             // Safety: `Vertex` is `#[repr(C)]` with only f32/u32 fields
             // so a raw reinterpret to `&[u8]` is well-defined.
@@ -1762,10 +1789,14 @@ impl GpuRenderer {
                 vertex: vertex_buffer,
                 index: index_buffer,
                 index_count: mesh.indices.len() as u32,
+                _source: (
+                    std::sync::Arc::downgrade(&mesh.vertices),
+                    std::sync::Arc::downgrade(&mesh.indices),
+                ),
             };
             let mp_mut = self.mesh_pipeline.as_mut().unwrap();
-            mp_mut.cached_mesh_buffers.insert(mesh_ptr, entry);
-            mp_mut.cached_mesh_buffer_keys.push_back(mesh_ptr);
+            mp_mut.cached_mesh_buffers.insert(mesh_key, entry);
+            mp_mut.cached_mesh_buffer_keys.push_back(mesh_key);
             // Cap the cache — drop the oldest entry (FIFO) when full.
             // An LRU policy would need a touch-on-hit step; FIFO is
             // good enough for the common case where every mesh in a
@@ -1786,7 +1817,7 @@ impl GpuRenderer {
             let mp = self.mesh_pipeline.as_ref().unwrap();
             let entry = mp
                 .cached_mesh_buffers
-                .get(&mesh_ptr)
+                .get(&mesh_key)
                 .expect("mesh buffer cache entry must exist after insert");
             (entry.vertex.clone(), entry.index.clone(), entry.index_count)
         };
@@ -2200,7 +2231,10 @@ impl GpuRenderer {
         };
         if let Some(key) = morph_cache_key {
             let mp_mut = self.mesh_pipeline.as_mut().unwrap();
-            let already_cached = mp_mut.morph_deltas_cache.iter().any(|(k, _)| *k == key);
+            let already_cached = mp_mut
+                .morph_deltas_cache
+                .iter()
+                .any(|(targets, _)| targets.as_ptr() as usize == key);
             if !already_cached {
                 // Flatten all targets into a single `Vec<f32>`. Layout
                 // per (target, vertex) is two vec4s: position delta
@@ -2237,7 +2271,9 @@ impl GpuRenderer {
                         contents: bytemuck::cast_slice(&flat),
                         usage: wgpu::BufferUsages::STORAGE,
                     });
-                mp_mut.morph_deltas_cache.push_back((key, buffer));
+                mp_mut
+                    .morph_deltas_cache
+                    .push_back((std::sync::Arc::downgrade(&mesh.morph_targets), buffer));
                 while mp_mut.morph_deltas_cache.len() > MORPH_CACHE_CAPACITY {
                     mp_mut.morph_deltas_cache.pop_front();
                 }
@@ -2404,7 +2440,7 @@ impl GpuRenderer {
                         .and_then(|k| {
                             mp.morph_deltas_cache
                                 .iter()
-                                .find(|(key, _)| *key == k)
+                                .find(|(targets, _)| targets.as_ptr() as usize == k)
                                 .map(|(_, b)| b)
                         })
                         .unwrap_or(&mp.morph_deltas_dummy);
