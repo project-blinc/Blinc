@@ -240,8 +240,9 @@ impl RenderContext {
         let mut texts = Vec::new();
         let mut fg_texts = Vec::new();
         let mut motion_subtree_texts: Vec<TextElement> = Vec::new();
-        let mut layer_3d_texts: NodeMap<(Transform3DLayerInfo, Vec<TextElement>)> =
-            std::collections::HashMap::default();
+        // The 3D layers that hold any text, SVG or image, and their content.
+        let mut layers_3d: NodeMap<Transform3DLayerInfo> = std::collections::HashMap::default();
+        let mut layer_3d_texts: NodeMap<Vec<TextElement>> = std::collections::HashMap::default();
         let mut captured = std::collections::HashMap::new();
         if !used_fast_paint {
             self.captured_runs.clear();
@@ -322,11 +323,10 @@ impl RenderContext {
                 continue;
             }
             if let Some(ref info) = text.transform_3d_layer {
-                layer_3d_texts
+                layers_3d
                     .entry(info.node_id)
-                    .or_insert_with(|| (info.clone(), Vec::new()))
-                    .1
-                    .push(text);
+                    .or_insert_with(|| info.clone());
+                layer_3d_texts.entry(info.node_id).or_default().push(text);
             } else if text.composite_ancestor.is_some() {
                 // Route promoted text through its live-opacity overlay patch, including
                 // foreground content.
@@ -375,6 +375,9 @@ impl RenderContext {
                 continue;
             }
             if let Some(ref info) = svg.transform_3d_layer {
+                layers_3d
+                    .entry(info.node_id)
+                    .or_insert_with(|| info.clone());
                 layer_3d_svgs.entry(info.node_id).or_default().push(svg);
             } else if svg.in_motion_subtree || svg.composite_ancestor.is_some() {
                 // Route promoted SVGs through the same live-opacity overlay as their text.
@@ -451,6 +454,9 @@ impl RenderContext {
             }
 
             if let Some(ref info) = image.transform_3d_layer {
+                layers_3d
+                    .entry(info.node_id)
+                    .or_insert_with(|| info.clone());
                 layer_3d_images.entry(info.node_id).or_default().push(image);
             } else if image.in_motion_subtree {
                 motion_subtree_images.push(image);
@@ -481,8 +487,6 @@ impl RenderContext {
             }
         }
         // Collect unique 3D layer IDs for rendering
-        let layer_3d_ids: Vec<LayoutNodeId> = layer_3d_texts.keys().cloned().collect();
-
         let PreparedFrameText {
             glyphs_by_layer,
             css_transformed_text_prims,
@@ -591,19 +595,15 @@ impl RenderContext {
 
         // Render 3D-layer text/SVGs/images: for each 3D layer group, render to an
         // offscreen texture and blit with the same perspective transform as the parent.
-        for layer_id in &layer_3d_ids {
-            if let Some((info, layer_texts)) = layer_3d_texts.get(layer_id) {
-                let layer_svgs_vec = layer_3d_svgs.get(layer_id);
-                let layer_images_vec = layer_3d_images.get(layer_id);
-                self.render_3d_layer_elements(
-                    target,
-                    info,
-                    layer_texts,
-                    layer_svgs_vec.map(|v| v.as_slice()).unwrap_or(&[]),
-                    layer_images_vec.map(|v| v.as_slice()).unwrap_or(&[]),
-                    scale_factor,
-                );
-            }
+        for (layer_id, info) in &layers_3d {
+            self.render_3d_layer_elements(
+                target,
+                info,
+                layer_3d_texts.get(layer_id).map_or(&[], Vec::as_slice),
+                layer_3d_svgs.get(layer_id).map_or(&[], Vec::as_slice),
+                layer_3d_images.get(layer_id).map_or(&[], Vec::as_slice),
+                scale_factor,
+            );
         }
 
         self.has_active_flows = skeleton_shown;

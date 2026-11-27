@@ -63,6 +63,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - The iOS and Android runners present through the compositor as the desktop runner does: a frame with no input, state change, scroll or CSS motion blits the cached static layer and re-records only canvas and overlay content, instead of repainting the tree. Input, text and key events, keyboard insets, rebuilds, stateful updates, scrolling, overlays and CSS state changes request a full paint, and a full paint runs at least once a second. The iOS surface is configured with `COPY_DST`; Android adds it when the surface supports it and otherwise keeps the direct path.
 
 ### Fixed
+- An image or icon in an element with a 3D transform is drawn when the element holds no text.
 - An image's brush placeholder is drawn while the image loads.
 - A glass or blur image placeholder blurs what is behind the image while it loads, inside groups, moving containers and 3D layers too, and content painted after the image stays above it. In a moving container inside a 3D layer it shows its tint.
 - A window with a glass element on the page draws its background images. The page background was painted over them, so they did not show. They are drawn over the background and under the glass, which blurs them.
