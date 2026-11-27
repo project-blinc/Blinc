@@ -52,6 +52,7 @@ mod build;
 mod child_index;
 mod css_backgrounds;
 mod cull;
+pub(crate) mod current_color;
 mod cursor;
 mod events;
 mod held_scrollbars;

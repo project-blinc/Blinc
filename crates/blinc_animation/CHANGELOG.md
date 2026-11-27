@@ -13,6 +13,7 @@ All notable changes to `blinc_animation` will be documented in this file.
 - `Easing::to_curve`, `Spring::to_descriptor`, `AnimatedValue::descriptor` and `SchedulerHandle::get_spring`.
 - `descriptor::lerp_color_premultiplied`, the sRGB premultiplied colour mix CSS uses.
 - The curve maths is checked against one file of float64 vectors computed outside either implementation (`tests/vectors/curves.txt`, made by `generate.py`): the CPU code and the shader in blinc_gpu both agree with it to better than 1e-6 of the distance moved.
+- `MultiKeyframeAnimation::map_properties` rewrites the keyframes of an animation before it plays.
 
 ### Fixed
 - The README's examples use the API that exists. They called `Spring::animate_to` and `update`, `SpringConfig::bouncy`, `KeyframeAnimation::update`, `Timeline::play` and `AnimationScheduler::global`, none of which are there.

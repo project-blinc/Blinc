@@ -206,7 +206,8 @@ pub fn resolve_corner_shape(
     )
 }
 
-/// Draw a node's inset shadows over its fill, `alpha` scaling their colour.
+/// Draw a node's inset shadows over its fill, `alpha` scaling their colour. `shadows` are the
+/// node's inset shadows with `currentColor` resolved.
 ///
 /// CSS paints them over the background and under the border, in the padding box:
 /// the border box less the border widths. The clip keeps them off the border
@@ -215,11 +216,12 @@ pub fn resolve_corner_shape(
 pub(crate) fn draw_inset_shadows(
     ctx: &mut dyn DrawContext,
     props: &RenderProps,
+    shadows: &[Shadow],
     rect: Rect,
     radius: CornerRadius,
     alpha: f32,
 ) {
-    if props.inner_shadow.is_empty() {
+    if shadows.is_empty() {
         return;
     }
     let uniform = props.border_width;
@@ -245,7 +247,7 @@ pub(crate) fn draw_inset_shadows(
         bottom_left: (radius.bottom_left - bottom.max(left)).max(0.0),
     };
     ctx.push_clip(ClipShape::rounded_rect(pad, inner_radius));
-    for shadow in props.inner_shadow.iter().rev() {
+    for shadow in shadows.iter().rev() {
         let mut shadow = *shadow;
         shadow.color.a *= alpha;
         ctx.draw_inner_shadow(pad, inner_radius, shadow);

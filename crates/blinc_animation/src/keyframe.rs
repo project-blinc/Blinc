@@ -1354,6 +1354,13 @@ impl MultiKeyframeAnimation {
         &self.keyframes
     }
 
+    /// Rewrite the properties of every keyframe, before playback
+    pub fn map_properties(&mut self, mut rewrite: impl FnMut(&mut KeyframeProperties)) {
+        for keyframe in &mut self.keyframes {
+            rewrite(&mut keyframe.properties);
+        }
+    }
+
     /// Sample the animation at a specific progress (0.0 to 1.0)
     ///
     /// This is useful for externally-timed animations where you manage

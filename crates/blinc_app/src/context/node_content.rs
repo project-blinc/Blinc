@@ -374,7 +374,10 @@ impl RenderContext {
                         decoration_color: render_node.props.text_decoration_color,
                         decoration_thickness: render_node.props.text_decoration_thickness,
                         css_affine: text_affine,
-                        text_shadow: render_node.props.text_shadow,
+                        text_shadow: render_node
+                            .props
+                            .text_shadow
+                            .map(|shadow| shadow.with_current_color(tree.current_color(node))),
                         transform_3d_layer: inside_3d_layer.clone(),
                         is_foreground: children_inside_foreground,
                         in_motion_subtree: inside_motion_subtree,
@@ -523,7 +526,10 @@ impl RenderContext {
                     // Shadow: use image's own (parent shadow renders via SDF).
                     // ImageElement holds a single shadow — pick the topmost
                     // layer of any compound stack.
-                    let shadow = render_node.props.shadow.first().copied();
+                    let shadow = tree
+                        .resolved_shadows(node, &render_node.props.shadow)
+                        .first()
+                        .copied();
 
                     // Filter: prefer own, fall back to parent
                     let own_filter = &render_node.props.filter;
@@ -718,7 +724,10 @@ impl RenderContext {
                             border_width: 0.0,
                             border_color: blinc_core::Color::TRANSPARENT,
                             css_affine: node_css_affine,
-                            shadow: render_node.props.shadow.first().copied(),
+                            shadow: tree
+                                .resolved_shadows(node, &render_node.props.shadow)
+                                .first()
+                                .copied(),
                             filter_a: render_node
                                 .props
                                 .filter
@@ -1047,7 +1056,9 @@ impl RenderContext {
                                 decoration_color: render_node.props.text_decoration_color,
                                 decoration_thickness: render_node.props.text_decoration_thickness,
                                 css_affine: node_css_affine,
-                                text_shadow: render_node.props.text_shadow,
+                                text_shadow: render_node.props.text_shadow.map(|shadow| {
+                                    shadow.with_current_color(tree.current_color(node))
+                                }),
                                 transform_3d_layer: inside_3d_layer.clone(),
                                 is_foreground: children_inside_foreground,
                                 in_motion_subtree: inside_motion_subtree,

@@ -775,6 +775,7 @@ impl RenderTree {
     ) -> Option<blinc_animation::KeyframeProperties> {
         let render_node = self.render_nodes.get(&node_id)?;
         let mut kp = Self::render_props_to_keyframe_properties(&render_node.props);
+        super::super::current_color::resolve_keyframe_colors(&mut kp, self.current_color(node_id));
 
         // Also extract layout properties from taffy style
         if let Some(style) = self.layout_tree.get_style(node_id) {

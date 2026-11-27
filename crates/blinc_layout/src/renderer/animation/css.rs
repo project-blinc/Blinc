@@ -57,7 +57,8 @@ impl RenderTree {
         };
 
         // Resolve the full keyframe animation
-        if let Some(animation) = stylesheet.resolve_keyframe_animation(&element_id) {
+        if let Some(mut animation) = stylesheet.resolve_keyframe_animation(&element_id) {
+            self.resolve_animation_colors(node_id, &mut animation);
             let stable_id = self.stable_id_or_warn(node_id);
             self.css_anim_store.lock().unwrap().animations.insert(
                 stable_id,
@@ -92,6 +93,18 @@ impl RenderTree {
         self.start_css_animation_from(node_id, &anim_config)
     }
 
+    /// Gives an animation's `currentColor` keyframes the node's colour.
+    fn resolve_animation_colors(
+        &self,
+        node_id: LayoutNodeId,
+        animation: &mut blinc_animation::MultiKeyframeAnimation,
+    ) {
+        let current = self.current_color(node_id);
+        animation.map_properties(|properties| {
+            super::super::current_color::resolve_keyframe_colors(properties, current)
+        });
+    }
+
     /// Start the keyframes `anim_config` names on a node, replacing any
     /// animation it is playing.
     pub(crate) fn start_css_animation_from(
@@ -122,6 +135,7 @@ impl RenderTree {
         } else {
             anim_config.iteration_count as i32
         };
+        self.resolve_animation_colors(node_id, &mut animation);
         animation.set_iterations(iterations);
         animation.set_delay(anim_config.delay_ms);
         animation.set_direction(anim_config.direction.to_play_direction());
@@ -161,9 +175,10 @@ impl RenderTree {
         };
 
         // Resolve animation for the specific state
-        if let Some(animation) =
+        if let Some(mut animation) =
             stylesheet.resolve_keyframe_animation_with_state(&element_id, state)
         {
+            self.resolve_animation_colors(node_id, &mut animation);
             let stable_id = self.stable_id_or_warn(node_id);
             self.css_anim_store.lock().unwrap().animations.insert(
                 stable_id,

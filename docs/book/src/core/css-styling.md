@@ -308,8 +308,9 @@ Corner shape is animatable via transitions and keyframes:
 
 A layer is two offsets, then an optional blur radius and an optional spread, with an optional color
 and an optional `inset`. The color and `inset` can come before or after the lengths. If a layer has no
-color, Blinc draws it black. A browser uses the text color. If one layer is not valid, Blinc ignores
-the whole declaration.
+color, or its color is `currentColor`, it takes the text color of the element, as in a browser. The
+same applies to `text-shadow` and `drop-shadow()`. If one layer is not valid, Blinc ignores the whole
+declaration.
 
 The blur is a Gaussian blur with a standard deviation of half the blur radius, as in a browser. An
 `inset` layer paints inside the padding box, over the background and under the border. A

@@ -197,13 +197,18 @@ impl RenderTree {
                     let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
                     let radius = render_node.props.border_radius;
 
-                    if let Some(glass) = render_node.props.glass_style(glass_depth) {
+                    if let Some(glass) = self.glass_of(node, &render_node.props, glass_depth) {
                         ctx.fill_rect(rect, radius, Brush::Glass(glass));
                     } else if let Some(shape) = &render_node.props.notch {
-                        shape.paint(ctx, rect, &render_node.props, 1.0);
+                        let shadows = self.resolved_shadows(node, &render_node.props.shadow);
+                        shape.paint(ctx, rect, &render_node.props, &shadows, 1.0);
                     } else {
                         // Draw the shadow stack back-to-front (ambient first, key on top).
-                        for shadow in render_node.props.shadow.iter().rev() {
+                        for shadow in self
+                            .resolved_shadows(node, &render_node.props.shadow)
+                            .iter()
+                            .rev()
+                        {
                             ctx.draw_shadow(rect, radius, *shadow);
                         }
 
@@ -336,6 +341,7 @@ impl RenderTree {
                         super::helpers::draw_inset_shadows(
                             ctx,
                             &render_node.props,
+                            &self.resolved_shadows(node, &render_node.props.inner_shadow),
                             rect,
                             radius,
                             1.0,

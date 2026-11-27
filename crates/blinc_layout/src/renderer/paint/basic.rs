@@ -149,16 +149,21 @@ impl RenderTree {
             ctx.set_corner_shape(resolved_corner_shape.to_array());
         }
 
-        if let Some(glass) = render_node.props.glass_style(0) {
+        if let Some(glass) = self.glass_of(node, &render_node.props, 0) {
             ctx.fill_rect(rect, radius, Brush::Glass(glass));
         } else if let Some(shape) = &render_node.props.notch {
-            shape.paint(ctx, rect, &render_node.props, 1.0);
+            let shadows = self.resolved_shadows(node, &render_node.props.shadow);
+            shape.paint(ctx, rect, &render_node.props, &shadows, 1.0);
         } else {
             // For non-glass elements, draw shadow stack first (renders
             // behind the element). Iterate back-to-front so the outermost
             // ambient layer paints first and the tight key-light layer
             // lands on top.
-            for shadow in render_node.props.shadow.iter().rev() {
+            for shadow in self
+                .resolved_shadows(node, &render_node.props.shadow)
+                .iter()
+                .rev()
+            {
                 ctx.draw_shadow(rect, radius, *shadow);
             }
 
@@ -278,7 +283,14 @@ impl RenderTree {
                 }
             }
 
-            super::helpers::draw_inset_shadows(ctx, &render_node.props, rect, radius, 1.0);
+            super::helpers::draw_inset_shadows(
+                ctx,
+                &render_node.props,
+                &self.resolved_shadows(node, &render_node.props.inner_shadow),
+                rect,
+                radius,
+                1.0,
+            );
         }
 
         // Only glass needs foreground borders (special compositing).

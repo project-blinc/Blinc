@@ -130,12 +130,15 @@ mod inset_shadow_tests {
             )
         };
         let red = [1.0, 0.0, 0.0];
-        let black = [0.0; 3];
+        let current = {
+            let c = blinc_core::Shadow::CURRENT_COLOR;
+            [c.r, c.g, c.b]
+        };
         assert_eq!(layer("2px 3px #ff0000"), ([2.0, 3.0, 0.0, 0.0], red, false));
-        assert_eq!(layer("0 0 10px"), ([0.0, 0.0, 10.0, 0.0], black, false));
+        assert_eq!(layer("0 0 10px"), ([0.0, 0.0, 10.0, 0.0], current, false));
         assert_eq!(
             layer("0 0 10px currentColor"),
-            ([0.0, 0.0, 10.0, 0.0], black, false)
+            ([0.0, 0.0, 10.0, 0.0], current, false)
         );
         assert_eq!(
             layer("#ff0000 2px 3px 4px"),

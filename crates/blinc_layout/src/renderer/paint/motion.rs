@@ -1058,7 +1058,7 @@ impl RenderTree {
                         offset_y: offset_y * self.scale_factor,
                         blur: blur * self.scale_factor,
                         spread: spread * self.scale_factor,
-                        color: *color,
+                        color: self.resolved_effect_color(node, *color),
                     },
                     other => other.clone(),
                 })
@@ -1177,7 +1177,11 @@ impl RenderTree {
             if !render_node.props.is_glass() && render_node.props.notch.is_none() {
                 // Iterate the shadow stack back-to-front so the ambient layer
                 // paints first and the tight key-light layer lands on top.
-                for shadow in render_node.props.shadow.iter().rev() {
+                for shadow in self
+                    .resolved_shadows(node, &render_node.props.shadow)
+                    .iter()
+                    .rev()
+                {
                     // When using opacity layer, draw shadow at full opacity (layer handles it)
                     // Otherwise, apply motion opacity to shadow color for fallback
                     let layer = if !has_opacity_layer && motion_opacity < 1.0 {
@@ -1447,7 +1451,7 @@ impl RenderTree {
             let all_same_per_side = per_side_data.as_ref().map(|d| d.2).unwrap_or(false);
             let merge_per_side = has_per_side_border && all_same_per_side && !is_glass;
 
-            if let Some(glass) = render_node.props.glass_style(glass_depth) {
+            if let Some(glass) = self.glass_of(node, &render_node.props, glass_depth) {
                 ctx.fill_rect(rect, radius, Brush::Glass(glass));
             } else if let Some(shape) = &render_node.props.notch {
                 let alpha = if !has_opacity_layer && motion_opacity < 1.0 {
@@ -1457,7 +1461,8 @@ impl RenderTree {
                 };
                 let shadows =
                     ctx.bg_primitive_count() + render_node.props.shadow.len().saturating_sub(1);
-                shape.paint(ctx, rect, &render_node.props, alpha);
+                let cast = self.resolved_shadows(node, &render_node.props.shadow);
+                shape.paint(ctx, rect, &render_node.props, &cast, alpha);
                 if effective_layer == RenderLayer::Background
                     && render_node.props.background.is_some()
                 {
@@ -1568,6 +1573,7 @@ impl RenderTree {
                 super::helpers::draw_inset_shadows(
                     ctx,
                     &render_node.props,
+                    &self.resolved_shadows(node, &render_node.props.inner_shadow),
                     rect,
                     radius,
                     inset_alpha,
@@ -2650,7 +2656,9 @@ impl RenderTree {
                 // composite-layer fast-path animations interpolate one
                 // shadow. Multi-layer animation needs a per-layer
                 // CssAnimPaintMeta extension (follow-up).
-                let (last_shadow_params, last_shadow_color) = match render_node.props.shadow.first()
+                let (last_shadow_params, last_shadow_color) = match self
+                    .resolved_shadows(node, &render_node.props.shadow)
+                    .first()
                 {
                     Some(s) => (
                         [s.offset_x, s.offset_y, s.blur, s.spread],

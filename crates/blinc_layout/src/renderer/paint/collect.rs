@@ -53,7 +53,7 @@ impl RenderTree {
         };
 
         if let Some(render_node) = self.render_nodes.get(&node)
-            && let Some(glass) = render_node.props.glass_style(0)
+            && let Some(glass) = self.glass_of(node, &render_node.props, 0)
         {
             panels.push(GlassPanel {
                 bounds,

@@ -297,20 +297,12 @@ pub(crate) fn parse_css_filter(value: &str) -> Option<crate::element_style::CssF
                     continue;
                 }
                 if func_lower == "drop-shadow" {
-                    let parts = split_whitespace_respecting_parens(arg_str);
-                    if parts.len() >= 3 {
-                        let x = parse_length_value(&parts[0]);
-                        let y = parse_length_value(&parts[1]);
-                        let blur_val = parse_length_value(&parts[2]);
-                        let color = if parts.len() >= 4 {
-                            parse_color(&parts[3])
-                        } else {
-                            Some(blinc_core::Color::rgba(0.0, 0.0, 0.0, 0.5))
-                        };
-                        if let (Some(x), Some(y), Some(b), Some(c)) = (x, y, blur_val, color) {
-                            filter.drop_shadow = Some(blinc_core::Shadow::new(x, y, b, c));
-                            found_any = true;
-                        }
+                    // A shadow layer with neither `inset` nor a spread.
+                    if let Some((shadow, false)) = parse_explicit_shadow(arg_str)
+                        && shadow.spread == 0.0
+                    {
+                        filter.drop_shadow = Some(shadow);
+                        found_any = true;
                     }
                     continue;
                 }

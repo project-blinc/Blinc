@@ -330,6 +330,7 @@ impl NotchShape {
         ctx: &mut dyn DrawContext,
         rect: Rect,
         props: &RenderProps,
+        shadows: &[Shadow],
         alpha: f32,
     ) {
         let radii = self.radii(props.border_radius);
@@ -346,7 +347,7 @@ impl NotchShape {
             ctx.fill_notch(rect, radii, types, top, bottom, border, shadow, brush);
         };
         // The first shadow is on top, and goes with the fill.
-        let mut shadows = props.shadow.iter().copied();
+        let mut shadows = shadows.iter().copied();
         let first = shadows.next();
         for shadow in shadows.rev() {
             draw(None, Some(shadow), Brush::Solid(Color::TRANSPARENT));

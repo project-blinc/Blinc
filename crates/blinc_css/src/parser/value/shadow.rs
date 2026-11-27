@@ -62,7 +62,8 @@ pub(crate) fn parse_shadow_layers(value: &str) -> Option<ShadowLayers> {
 
 /// Parse one shadow layer, and return it with whether it is `inset`.
 ///
-/// A layer with no colour, or `currentColor`, is black: the colour an element starts with.
+/// A layer with no colour, or `currentColor`, takes the element's text colour: it is carried as
+/// [`Shadow::CURRENT_COLOR`].
 pub(crate) fn parse_explicit_shadow(input: &str) -> Option<(Shadow, bool)> {
     let mut inset = false;
     let mut color = None;
@@ -83,7 +84,7 @@ pub(crate) fn parse_explicit_shadow(input: &str) -> Option<(Shadow, bool)> {
             continue;
         } else {
             let parsed = if part.eq_ignore_ascii_case("currentcolor") {
-                Color::BLACK
+                Shadow::CURRENT_COLOR
             } else {
                 parse_color(&part)?
             };
@@ -103,7 +104,8 @@ pub(crate) fn parse_explicit_shadow(input: &str) -> Option<(Shadow, bool)> {
     if blur < 0.0 {
         return None;
     }
-    let mut shadow = Shadow::new(offset_x, offset_y, blur, color.unwrap_or(Color::BLACK));
+    let color = color.unwrap_or(Shadow::CURRENT_COLOR);
+    let mut shadow = Shadow::new(offset_x, offset_y, blur, color);
     shadow.spread = spread;
     Some((shadow, inset))
 }

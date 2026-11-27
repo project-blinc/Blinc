@@ -17,3 +17,4 @@
 - Root variables apply to rules declared earlier, including rules in component layers.
 - Incomplete blocks, strings and comments report syntax errors so live editors can retain the last valid stylesheet.
 - `box-shadow` and `text-shadow` accept every order CSS allows: two to four lengths, the colour before or after them or left out (black), and `inset` on either side. As in CSS, a layer that does not parse, or a negative blur, rejects the whole value.
+- A shadow with no colour, or `currentColor`, takes its element's text colour, in `box-shadow`, `text-shadow` and `drop-shadow()`. It is carried as `Shadow::CURRENT_COLOR`. `drop-shadow()` also takes its colour before or after the lengths, and a blur is optional.

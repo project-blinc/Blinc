@@ -70,5 +70,6 @@ mod plain_shader_parity;
 mod scroll_momentum;
 mod scroll_paint_stale;
 mod scroll_perf;
+mod shadow_current_color;
 mod style_pass_cost;
 mod virtual_list_gap;

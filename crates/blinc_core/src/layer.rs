@@ -1250,6 +1250,24 @@ pub struct Shadow {
 }
 
 impl Shadow {
+    /// Stands for CSS `currentColor`, the text colour of the element casting the shadow, which
+    /// is put in when it is painted. No colour that can be written has these channels.
+    pub const CURRENT_COLOR: Color = Color::rgba(-1.0, -1.0, -1.0, 1.0);
+
+    /// Whether this shadow takes its element's text colour.
+    pub fn uses_current_color(&self) -> bool {
+        self.color.r < 0.0
+    }
+
+    /// This shadow with `currentColor` replaced by `current`, whose alpha the shadow's own
+    /// alpha scales. Any other colour stays.
+    pub fn with_current_color(mut self, current: Color) -> Self {
+        if self.uses_current_color() {
+            self.color = Color::rgba(current.r, current.g, current.b, current.a * self.color.a);
+        }
+        self
+    }
+
     pub fn new(offset_x: f32, offset_y: f32, blur: f32, color: Color) -> Self {
         Self {
             offset_x,
