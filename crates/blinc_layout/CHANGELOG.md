@@ -95,6 +95,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- A stylesheet padding or margin longhand keeps the other sides that the builder or a lower rule set.
 - The modifiers of a `link()` combine. `.font_size()`, `.text_color()`, the underline modifiers and `.on_click()` no longer each start again from the default link.
 - `.underline_on_hover()` underlines a link while the pointer is over it.
 - A link added with `.link_range()` opens its URL on a click and shows the pointer cursor. The link targets of a rich text follow later changes to its size, weight, style, family and line height.

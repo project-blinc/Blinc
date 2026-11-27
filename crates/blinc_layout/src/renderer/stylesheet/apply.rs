@@ -20,6 +20,7 @@
 //!   concrete `ClipShape` given element bounds. `clip_length_to_percent`
 //!   is a small helper shared with the CSS animation interpolator.
 
+use crate::renderer::stylesheet::apply_extra_layout;
 use blinc_core::{BlurQuality, ClipShape, LayerEffect, Point, Rect, Vec2};
 
 use crate::element::RenderProps;
@@ -631,22 +632,6 @@ impl RenderTree {
                 taffy_style.flex_shrink = 0.0;
             }
         }
-        if let Some(ref p) = es.padding {
-            taffy_style.padding = taffy::geometry::Rect {
-                top: LengthPercentage::length(p.top),
-                right: LengthPercentage::length(p.right),
-                bottom: LengthPercentage::length(p.bottom),
-                left: LengthPercentage::length(p.left),
-            };
-        }
-        if let Some(ref m) = es.margin {
-            taffy_style.margin = taffy::geometry::Rect {
-                top: LengthPercentageAuto::length(m.top),
-                right: LengthPercentageAuto::length(m.right),
-                bottom: LengthPercentageAuto::length(m.bottom),
-                left: LengthPercentageAuto::length(m.left),
-            };
-        }
         if let Some(g) = es.gap {
             taffy_style.gap = taffy::geometry::Size {
                 width: LengthPercentage::length(g),
@@ -1089,135 +1074,5 @@ impl RenderTree {
             blinc_core::ClipLength::Percent(p) => *p,
             blinc_core::ClipLength::Px(px) => *px,
         }
-    }
-}
-
-/// Layout values that are more than a pixel length: percent and `none` for
-/// min and max sizes, `auto` margins, `flex-basis` and per-axis gaps. Runs
-/// after the margin and gap shorthands so it can refine them.
-pub(crate) fn apply_extra_layout(
-    es: &crate::element_style::ElementStyle,
-    style: &mut taffy::Style,
-) {
-    use crate::element_style::StyleDimension as D;
-    use taffy::style::{Dimension, LengthPercentage, LengthPercentageAuto};
-    let size = |d: D| match d {
-        D::Length(px) => Dimension::length(px),
-        D::Percent(p) => Dimension::percent(p),
-        D::Auto => Dimension::auto(),
-    };
-    let limit = |d: D| match d {
-        D::Length(px) => LengthPercentageAuto::length(px),
-        D::Percent(p) => LengthPercentageAuto::percent(p),
-        D::Auto => LengthPercentageAuto::auto(),
-    };
-    if let Some(d) = es.min_width {
-        style.min_size.width = limit(d);
-    }
-    if let Some(d) = es.min_height {
-        style.min_size.height = limit(d);
-    }
-    if let Some(d) = es.max_width {
-        style.max_size.width = limit(d);
-    }
-    if let Some(d) = es.max_height {
-        style.max_size.height = limit(d);
-    }
-    if let Some(ratio) = es.aspect_ratio {
-        style.aspect_ratio = (ratio > 0.0).then_some(ratio);
-    }
-    if let Some(d) = es.flex_basis {
-        style.flex_basis = size(d);
-    }
-    if es.margin_auto[0] {
-        style.margin.top = LengthPercentageAuto::auto();
-    }
-    if es.margin_auto[1] {
-        style.margin.right = LengthPercentageAuto::auto();
-    }
-    if es.margin_auto[2] {
-        style.margin.bottom = LengthPercentageAuto::auto();
-    }
-    if es.margin_auto[3] {
-        style.margin.left = LengthPercentageAuto::auto();
-    }
-    if let Some(gap) = es.row_gap {
-        style.gap.height = LengthPercentage::length(gap);
-    }
-    if let Some(gap) = es.column_gap {
-        style.gap.width = LengthPercentage::length(gap);
-    }
-    apply_grid(es, style);
-}
-
-fn apply_grid(es: &crate::element_style::ElementStyle, style: &mut taffy::Style) {
-    use crate::element_style::{
-        StyleGridLine, StyleGridPlacement, StyleTrack, StyleTrackBound, StyleTrackItem,
-    };
-    use taffy::style::{
-        GridPlacement, GridTemplateComponent, MaxTrackSizingFunction, MinTrackSizingFunction,
-        TrackSizingFunction,
-    };
-
-    fn min_fn(b: StyleTrackBound) -> MinTrackSizingFunction {
-        match b {
-            StyleTrackBound::Length(px) => MinTrackSizingFunction::length(px),
-            StyleTrackBound::Percent(p) => MinTrackSizingFunction::percent(p),
-            StyleTrackBound::MinContent => MinTrackSizingFunction::min_content(),
-            StyleTrackBound::MaxContent => MinTrackSizingFunction::max_content(),
-            StyleTrackBound::Auto | StyleTrackBound::Fr(_) => MinTrackSizingFunction::auto(),
-        }
-    }
-    fn max_fn(b: StyleTrackBound) -> MaxTrackSizingFunction {
-        match b {
-            StyleTrackBound::Length(px) => MaxTrackSizingFunction::length(px),
-            StyleTrackBound::Percent(p) => MaxTrackSizingFunction::percent(p),
-            StyleTrackBound::MinContent => MaxTrackSizingFunction::min_content(),
-            StyleTrackBound::MaxContent => MaxTrackSizingFunction::max_content(),
-            StyleTrackBound::Auto => MaxTrackSizingFunction::auto(),
-            StyleTrackBound::Fr(f) => MaxTrackSizingFunction::fr(f),
-        }
-    }
-    fn track(t: &StyleTrack) -> TrackSizingFunction {
-        TrackSizingFunction {
-            min: min_fn(t.min),
-            max: max_fn(t.max),
-        }
-    }
-    fn template(items: &[StyleTrackItem]) -> Vec<GridTemplateComponent<String>> {
-        items
-            .iter()
-            .map(|item| match item {
-                StyleTrackItem::Single(t) => GridTemplateComponent::Single(track(t)),
-                StyleTrackItem::Repeat(n, tracks) => {
-                    taffy::style_helpers::repeat(*n, tracks.iter().map(track).collect::<Vec<_>>())
-                }
-            })
-            .collect()
-    }
-    fn line(l: StyleGridLine) -> GridPlacement<String> {
-        match l {
-            StyleGridLine::Auto => GridPlacement::Auto,
-            StyleGridLine::Line(n) => taffy::style_helpers::line(n),
-            StyleGridLine::Span(n) => taffy::style_helpers::span(n),
-        }
-    }
-    fn placement(p: StyleGridPlacement) -> taffy::geometry::Line<GridPlacement<String>> {
-        taffy::geometry::Line {
-            start: line(p.start),
-            end: line(p.end),
-        }
-    }
-    if let Some(cols) = &es.grid_template_columns {
-        style.grid_template_columns = template(cols);
-    }
-    if let Some(rows) = &es.grid_template_rows {
-        style.grid_template_rows = template(rows);
-    }
-    if let Some(p) = es.grid_column {
-        style.grid_column = placement(p);
-    }
-    if let Some(p) = es.grid_row {
-        style.grid_row = placement(p);
     }
 }

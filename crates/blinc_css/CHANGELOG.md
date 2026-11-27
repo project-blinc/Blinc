@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Breaking: the sides of `SpacingRect` are `Option<f32>`, and `None` means that the style does not declare that side. `uniform`, `xy` and `new` set all four. `SpacingRect::merge` and `SpacingRect::sides` are new.
+
 ### Added
 - `Stylesheet::layout_reads_ancestor_position()` says whether a stateless layout rule reads where an ancestor of its subject sits among its siblings, as `.row:last-child .cell` or `.a + .b .c` do.
 - `Stylesheet::stateless_layout_rules()` says, for each complex rule, whether it sets a layout property and needs no interaction state. It is worked out with the rule index, once per set of rules.
@@ -13,6 +16,7 @@
 - `ElementStyle::inset_shadow`, `inset_shadow_stack` and `shadow_inner` set inset shadows, and `shadow_none` clears them.
 
 ### Fixed
+- A padding or margin longhand declares only its own side. `padding-right: 6px` no longer sets the other three sides to zero, in one rule or across rules. A later length replaces an earlier `auto` margin on the sides it sets.
 - `ElementStyle::merge` treats `shadow` and `inner_shadow` as the one `box-shadow` value: a style that sets either replaces both. `ElementStyle::sets_box_shadow` reports whether a style sets it.
 - `font-family` keeps every named family before the first generic keyword, in order (`StyleFontFamily::name` is the stack joined with `, `), and the generic keyword ends the list as in CSS. A quoted name may hold a comma and a quoted `serif` is a family called serif, not the generic. Before, only the first name was kept, so `font-family: "Inter", "Helvetica Neue", Arial, sans-serif` went from Inter straight to the generic sans.
 - Root variables apply to rules declared earlier, including rules in component layers.

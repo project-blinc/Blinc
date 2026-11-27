@@ -9,8 +9,8 @@ use blinc_core::{Color, CornerRadius, OverflowFade};
 use tracing::debug;
 
 use crate::element_style::{
-    ElementStyle, SpacingRect, StyleAlign, StyleDisplay, StyleFlexDirection, StyleJustify,
-    StyleOverflow, StylePosition,
+    ElementStyle, StyleAlign, StyleDisplay, StyleFlexDirection, StyleJustify, StyleOverflow,
+    StylePosition,
 };
 use crate::material::{GlassMaterial, Material, MetallicMaterial, RenderLayer, WoodMaterial};
 use crate::parser::*;
@@ -646,59 +646,6 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
             "baseline" => style.align_self = Some(StyleAlign::Baseline),
             _ => {}
         },
-        "padding" => {
-            if let Some(rect) = parse_css_spacing(value) {
-                style.padding = Some(rect);
-            }
-        }
-        "padding-top" => {
-            if let Some(px) = parse_css_px(value) {
-                let mut p = style.padding.unwrap_or(SpacingRect {
-                    top: 0.0,
-                    right: 0.0,
-                    bottom: 0.0,
-                    left: 0.0,
-                });
-                p.top = px;
-                style.padding = Some(p);
-            }
-        }
-        "padding-right" => {
-            if let Some(px) = parse_css_px(value) {
-                let mut p = style.padding.unwrap_or(SpacingRect {
-                    top: 0.0,
-                    right: 0.0,
-                    bottom: 0.0,
-                    left: 0.0,
-                });
-                p.right = px;
-                style.padding = Some(p);
-            }
-        }
-        "padding-bottom" => {
-            if let Some(px) = parse_css_px(value) {
-                let mut p = style.padding.unwrap_or(SpacingRect {
-                    top: 0.0,
-                    right: 0.0,
-                    bottom: 0.0,
-                    left: 0.0,
-                });
-                p.bottom = px;
-                style.padding = Some(p);
-            }
-        }
-        "padding-left" => {
-            if let Some(px) = parse_css_px(value) {
-                let mut p = style.padding.unwrap_or(SpacingRect {
-                    top: 0.0,
-                    right: 0.0,
-                    bottom: 0.0,
-                    left: 0.0,
-                });
-                p.left = px;
-                style.padding = Some(p);
-            }
-        }
         "gap" => {
             if let Some(px) = parse_css_px(value) {
                 style.gap = Some(px);

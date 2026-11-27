@@ -1324,7 +1324,7 @@ impl Div {
     #[inline]
     pub fn set_style(&mut self, style: &ElementStyle) {
         use crate::element_style::{
-            SpacingRect, StyleAlign, StyleDisplay, StyleFlexDirection, StyleJustify, StyleOverflow,
+            StyleAlign, StyleDisplay, StyleFlexDirection, StyleJustify, StyleOverflow,
         };
 
         // Visual properties
@@ -1498,34 +1498,6 @@ impl Div {
         }
 
         // Layout: spacing
-        if let Some(SpacingRect {
-            top,
-            right,
-            bottom,
-            left,
-        }) = style.padding
-        {
-            self.style.padding = Rect {
-                top: LengthPercentage::length(top),
-                right: LengthPercentage::length(right),
-                bottom: LengthPercentage::length(bottom),
-                left: LengthPercentage::length(left),
-            };
-        }
-        if let Some(SpacingRect {
-            top,
-            right,
-            bottom,
-            left,
-        }) = style.margin
-        {
-            self.style.margin = Rect {
-                top: LengthPercentageAuto::length(top),
-                right: LengthPercentageAuto::length(right),
-                bottom: LengthPercentageAuto::length(bottom),
-                left: LengthPercentageAuto::length(left),
-            };
-        }
         if let Some(gap) = style.gap {
             self.style.gap = taffy::Size {
                 width: LengthPercentage::length(gap),

@@ -67,44 +67,50 @@ pub enum ScrollbarWidth {
 // Layout Style Types
 // ============================================================================
 
-/// Spacing values for padding and margin (all in pixels)
+/// Padding or margin in pixels, per side. A side that is `None` is not
+/// declared by this style, so the cascade leaves it to the styles below.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct SpacingRect {
-    pub top: f32,
-    pub right: f32,
-    pub bottom: f32,
-    pub left: f32,
+    pub top: Option<f32>,
+    pub right: Option<f32>,
+    pub bottom: Option<f32>,
+    pub left: Option<f32>,
 }
 
 impl SpacingRect {
     /// All sides equal
     pub fn uniform(px: f32) -> Self {
-        Self {
-            top: px,
-            right: px,
-            bottom: px,
-            left: px,
-        }
+        Self::new(px, px, px, px)
     }
 
     /// Horizontal and vertical
     pub fn xy(x: f32, y: f32) -> Self {
-        Self {
-            top: y,
-            right: x,
-            bottom: y,
-            left: x,
-        }
+        Self::new(y, x, y, x)
     }
 
     /// Individual sides
     pub fn new(top: f32, right: f32, bottom: f32, left: f32) -> Self {
         Self {
-            top,
-            right,
-            bottom,
-            left,
+            top: Some(top),
+            right: Some(right),
+            bottom: Some(bottom),
+            left: Some(left),
         }
+    }
+
+    /// `self` with the sides that `over` declares taken from `over`
+    pub fn merge(self, over: Self) -> Self {
+        Self {
+            top: over.top.or(self.top),
+            right: over.right.or(self.right),
+            bottom: over.bottom.or(self.bottom),
+            left: over.left.or(self.left),
+        }
+    }
+
+    /// The sides as top, right, bottom, left
+    pub fn sides(self) -> [Option<f32>; 4] {
+        [self.top, self.right, self.bottom, self.left]
     }
 }
 

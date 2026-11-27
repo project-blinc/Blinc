@@ -801,7 +801,7 @@ fn three_value_spacing_shorthand_is_top_horizontal_bottom() {
         .get_class("x")
         .and_then(|s| s.padding)
         .expect("padding");
-    assert_eq!((p.top, p.right, p.bottom, p.left), (8.0, 12.0, 4.0, 12.0));
+    assert_eq!(p.sides(), [Some(8.0), Some(12.0), Some(4.0), Some(12.0)]);
 }
 
 #[test]

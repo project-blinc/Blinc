@@ -91,13 +91,8 @@ impl ElementStyle {
             align_items: other.align_items.or(self.align_items),
             justify_content: other.justify_content.or(self.justify_content),
             align_self: other.align_self.or(self.align_self),
-            padding: other.padding.or(self.padding),
-            margin_auto: [
-                other.margin_auto[0] || self.margin_auto[0],
-                other.margin_auto[1] || self.margin_auto[1],
-                other.margin_auto[2] || self.margin_auto[2],
-                other.margin_auto[3] || self.margin_auto[3],
-            ],
+            padding: merge_spacing(self.padding, other.padding),
+            margin_auto: merge_margin_auto(self, other),
             flex_basis: other.flex_basis.or(self.flex_basis),
             aspect_ratio: other.aspect_ratio.or(self.aspect_ratio),
             grid_template_columns: other
@@ -112,7 +107,7 @@ impl ElementStyle {
             grid_row: other.grid_row.or(self.grid_row),
             row_gap: other.row_gap.or(self.row_gap),
             column_gap: other.column_gap.or(self.column_gap),
-            margin: other.margin.or(self.margin),
+            margin: merge_spacing(self.margin, other.margin),
             gap: other.gap.or(self.gap),
             overflow: other.overflow.or(self.overflow),
             overflow_x: other.overflow_x.or(self.overflow_x),
@@ -279,6 +274,22 @@ impl ElementStyle {
     pub fn is_empty(&self) -> bool {
         !self.has_visual_props() && !self.has_layout_props()
     }
+}
+
+fn merge_spacing(a: Option<SpacingRect>, b: Option<SpacingRect>) -> Option<SpacingRect> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(a.merge(b)),
+        (a, b) => b.or(a),
+    }
+}
+
+/// Which margin sides are `auto`: a side `over` declares takes its answer
+/// from `over`, and any other keeps what is below.
+fn merge_margin_auto(under: &ElementStyle, over: &ElementStyle) -> [bool; 4] {
+    let declared = over.margin.map_or([None; 4], SpacingRect::sides);
+    std::array::from_fn(|side| {
+        over.margin_auto[side] || (declared[side].is_none() && under.margin_auto[side])
+    })
 }
 
 fn merge_side(a: Option<BorderSideStyle>, b: Option<BorderSideStyle>) -> Option<BorderSideStyle> {

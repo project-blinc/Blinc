@@ -65,7 +65,7 @@ impl RenderTree {
         subtree_filter: Option<&NodeSet>,
     ) {
         use crate::element_style::{
-            SpacingRect, StyleAlign, StyleDisplay, StyleFlexDirection, StyleJustify, StyleOverflow,
+            StyleAlign, StyleDisplay, StyleFlexDirection, StyleJustify, StyleOverflow,
             StylePosition,
         };
 
@@ -268,30 +268,6 @@ impl RenderTree {
             }
 
             // Spacing
-            if let Some(SpacingRect {
-                top,
-                right,
-                bottom,
-                left,
-            }) = es.padding
-            {
-                style.padding.top = LengthPercentage::length(top);
-                style.padding.right = LengthPercentage::length(right);
-                style.padding.bottom = LengthPercentage::length(bottom);
-                style.padding.left = LengthPercentage::length(left);
-            }
-            if let Some(SpacingRect {
-                top,
-                right,
-                bottom,
-                left,
-            }) = es.margin
-            {
-                style.margin.top = LengthPercentageAuto::length(top);
-                style.margin.right = LengthPercentageAuto::length(right);
-                style.margin.bottom = LengthPercentageAuto::length(bottom);
-                style.margin.left = LengthPercentageAuto::length(left);
-            }
             if let Some(gap) = es.gap {
                 style.gap = taffy::Size {
                     width: LengthPercentage::length(gap),
@@ -392,7 +368,7 @@ impl RenderTree {
     /// Use this in the full rebuild path where both operations are needed together.
     pub fn apply_all_stylesheet_styles(&mut self) {
         use crate::element_style::{
-            SpacingRect, StyleAlign, StyleDisplay, StyleFlexDirection, StyleJustify, StyleOverflow,
+            StyleAlign, StyleDisplay, StyleFlexDirection, StyleJustify, StyleOverflow,
             StylePosition,
         };
 
@@ -769,30 +745,6 @@ impl RenderTree {
             }
 
             // Spacing
-            if let Some(SpacingRect {
-                top,
-                right,
-                bottom,
-                left,
-            }) = es.padding
-            {
-                style.padding.top = LengthPercentage::length(top);
-                style.padding.right = LengthPercentage::length(right);
-                style.padding.bottom = LengthPercentage::length(bottom);
-                style.padding.left = LengthPercentage::length(left);
-            }
-            if let Some(SpacingRect {
-                top,
-                right,
-                bottom,
-                left,
-            }) = es.margin
-            {
-                style.margin.top = LengthPercentageAuto::length(top);
-                style.margin.right = LengthPercentageAuto::length(right);
-                style.margin.bottom = LengthPercentageAuto::length(bottom);
-                style.margin.left = LengthPercentageAuto::length(left);
-            }
             if let Some(gap) = es.gap {
                 style.gap = taffy::Size {
                     width: LengthPercentage::length(gap),

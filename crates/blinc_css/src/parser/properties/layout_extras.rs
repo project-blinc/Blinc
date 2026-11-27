@@ -1,9 +1,8 @@
-//! Layout declarations that take more than a pixel length: percent and
-//! `none` for min and max sizes, `auto` margins, `flex-basis`, and the
-//! per-axis gaps.
+//! Layout declarations shared by both parsers: min and max sizes, padding and
+//! margin with their longhands, `flex-basis`, and the per-axis gaps.
 
-use crate::element_style::{ElementStyle, StyleDimension};
-use crate::parser::value::{parse_css_dimension, parse_css_px};
+use crate::element_style::{ElementStyle, SpacingRect, StyleDimension};
+use crate::parser::value::{parse_css_dimension, parse_css_px, parse_css_spacing};
 
 /// Applies the declaration if `name` is one of these. `None` if it is not;
 /// otherwise whether the value parsed.
@@ -45,6 +44,11 @@ pub(crate) fn apply_layout_extra(
         "flex-basis" => Some(set_size(&mut style.flex_basis, value)),
         "row-gap" => Some(set_px(&mut style.row_gap, value)),
         "column-gap" => Some(set_px(&mut style.column_gap, value)),
+        "padding" => Some(apply_padding(style, value)),
+        "padding-top" => Some(set_px(&mut padding_mut(style).top, value)),
+        "padding-right" => Some(set_px(&mut padding_mut(style).right, value)),
+        "padding-bottom" => Some(set_px(&mut padding_mut(style).bottom, value)),
+        "padding-left" => Some(set_px(&mut padding_mut(style).left, value)),
         "margin" => Some(apply_margin(style, value)),
         "margin-top" => Some(apply_margin_side(style, 0, value)),
         "margin-right" => Some(apply_margin_side(style, 1, value)),
@@ -81,6 +85,22 @@ fn set_px(slot: &mut Option<f32>, value: &str) -> bool {
     }
 }
 
+/// The padding to declare a side on. A value that does not parse leaves it
+/// declaring nothing.
+fn padding_mut(style: &mut ElementStyle) -> &mut SpacingRect {
+    style.padding.get_or_insert_with(SpacingRect::default)
+}
+
+fn apply_padding(style: &mut ElementStyle, value: &str) -> bool {
+    match parse_css_spacing(value) {
+        Some(rect) => {
+            style.padding = Some(rect);
+            true
+        }
+        None => false,
+    }
+}
+
 /// One to four margin values, each a length or `auto`, expanded as CSS does.
 fn apply_margin(style: &mut ElementStyle, value: &str) -> bool {
     let mut parsed = Vec::new();
@@ -101,12 +121,12 @@ fn apply_margin(style: &mut ElementStyle, value: &str) -> bool {
         _ => return false,
     };
     let sides = [top, right, bottom, left];
-    style.margin = Some(crate::element_style::SpacingRect {
-        top: top.unwrap_or(0.0),
-        right: right.unwrap_or(0.0),
-        bottom: bottom.unwrap_or(0.0),
-        left: left.unwrap_or(0.0),
-    });
+    style.margin = Some(SpacingRect::new(
+        top.unwrap_or(0.0),
+        right.unwrap_or(0.0),
+        bottom.unwrap_or(0.0),
+        left.unwrap_or(0.0),
+    ));
     style.margin_auto = [
         sides[0].is_none(),
         sides[1].is_none(),
@@ -126,19 +146,13 @@ fn apply_margin_side(style: &mut ElementStyle, side: usize, value: &str) -> bool
             None => return false,
         }
     };
-    let mut m = style.margin.unwrap_or(crate::element_style::SpacingRect {
-        top: 0.0,
-        right: 0.0,
-        bottom: 0.0,
-        left: 0.0,
-    });
+    let m = style.margin.get_or_insert_with(SpacingRect::default);
     match side {
-        0 => m.top = px,
-        1 => m.right = px,
-        2 => m.bottom = px,
-        _ => m.left = px,
+        0 => m.top = Some(px),
+        1 => m.right = Some(px),
+        2 => m.bottom = Some(px),
+        _ => m.left = Some(px),
     }
-    style.margin = Some(m);
     style.margin_auto[side] = auto;
     true
 }

@@ -396,12 +396,11 @@ impl CssKeyframes {
         if let Some(crate::element_style::StyleDimension::Length(h)) = style.height {
             props.height = Some(h);
         }
-        if let Some(ref p) = style.padding {
-            props.padding = Some([p.top, p.right, p.bottom, p.left]);
-        }
-        if let Some(ref m) = style.margin {
-            props.margin = Some([m.top, m.right, m.bottom, m.left]);
-        }
+        // A keyframe holds all four sides, so one it does not declare is zero.
+        let sides =
+            |rect: crate::element_style::SpacingRect| rect.sides().map(|side| side.unwrap_or(0.0));
+        props.padding = style.padding.map(sides);
+        props.margin = style.margin.map(sides);
         if let Some(g) = style.gap {
             props.gap = Some(g);
         }

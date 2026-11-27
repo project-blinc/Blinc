@@ -35,6 +35,7 @@
 pub mod apply;
 pub mod base;
 pub mod classes;
+mod extra_layout;
 pub mod layout;
 pub(crate) mod layout_scope;
 mod scroll_physics;
@@ -42,4 +43,4 @@ mod scrollbar;
 pub mod selectors;
 pub mod state;
 
-pub(crate) use apply::apply_extra_layout;
+pub(crate) use extra_layout::apply_extra_layout;
