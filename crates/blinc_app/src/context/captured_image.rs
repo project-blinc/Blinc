@@ -1,4 +1,5 @@
 //! Prepare loaded textures and placeholders at native group paint positions.
+use super::image_rendering::has_backdrop_placeholder;
 use super::{DrawContext, GpuPaintContext, ImageElement, PrimitiveBatch, Rect, RenderContext};
 use blinc_core::{Affine2D, ClipShape, Color, CornerRadius, DrawContextExt, Transform};
 
@@ -12,11 +13,14 @@ impl RenderContext {
         dpi: f32,
         ordinal: u32,
     ) -> PrimitiveBatch {
-        // The groups around the image apply their own opacity.
-        self.paint_image(image, image.content_opacity, viewport, dpi, ordinal)
+        // The groups around the image apply their own opacity. What is inserted into their
+        // stream cannot hold glass.
+        self.paint_image(image, image.content_opacity, viewport, dpi, ordinal, false)
     }
 
-    /// The image, or its placeholder while it is not loaded, at `opacity`.
+    /// The image, or its placeholder while it is not loaded, at `opacity`. With `backdrop`
+    /// the batch goes where glass can be drawn; without, a glass or blur placeholder is its
+    /// tint.
     pub(super) fn paint_image(
         &mut self,
         image: &ImageElement,
@@ -24,6 +28,7 @@ impl RenderContext {
         viewport: (u32, u32),
         dpi: f32,
         ordinal: u32,
+        backdrop: bool,
     ) -> PrimitiveBatch {
         let mut paint = if let Some(path) = &image.path_clip {
             path.clip_context(None, viewport)
@@ -96,10 +101,13 @@ impl RenderContext {
                 Rect::new(x, y, w, h),
                 style,
             );
-        } else if !loaded && image.placeholder_type == 4 {
+        } else if !loaded
+            && image.placeholder_type == 4
+            && (backdrop || !has_backdrop_placeholder(image))
+        {
             paint.push_opacity(opacity);
             fill_placeholder_brush(&mut paint, image, dpi);
-        } else if !loaded && matches!(image.placeholder_type, 1 | 3) {
+        } else if !loaded && matches!(image.placeholder_type, 1 | 3 | 4) {
             paint.push_opacity(opacity);
             let [r, g, b, a] = image.placeholder_color;
             let radius = CornerRadius::uniform(image.border_radius);

@@ -740,8 +740,9 @@ impl Image {
     }
 
     /// Set a brush as placeholder. A gradient fills the image's box, with its
-    /// coordinates in the box's pixels. A glass or blur brush draws its tint
-    /// colour only.
+    /// coordinates in the box's pixels. A glass or blur brush blurs what is
+    /// behind the box. Inside an opacity group, a motion container or a 3D layer
+    /// it shows its tint colour only.
     ///
     /// # Example
     /// ```ignore
@@ -909,17 +910,19 @@ impl ElementBuilder for Image {
                 placeholder_brush = Some(std::sync::Arc::new(brush.clone()));
                 4
             }
-            // The image pipeline has no backdrop to blur: the tint stands in.
-            Placeholder::Brush(Brush::Glass(glass)) => {
+            // The tint stands in where the image is drawn with nothing to blur.
+            Placeholder::Brush(brush @ Brush::Glass(glass)) => {
                 placeholder_color = solid(&glass.tint);
-                1
+                placeholder_brush = Some(std::sync::Arc::new(brush.clone()));
+                4
             }
-            Placeholder::Brush(Brush::Blur(blur)) => {
+            Placeholder::Brush(brush @ Brush::Blur(blur)) => {
                 if let Some(tint) = &blur.tint {
                     placeholder_color = solid(tint);
                     placeholder_color[3] *= blur.opacity;
                 }
-                1
+                placeholder_brush = Some(std::sync::Arc::new(brush.clone()));
+                4
             }
         };
 
@@ -1114,6 +1117,14 @@ mod tests {
         assert!(matches!(
             gradient.placeholder_brush.as_deref(),
             Some(Brush::Gradient(_))
+        ));
+
+        let glass = info(Brush::Glass(blinc_core::GlassStyle::new().tint(Color::RED)));
+        assert_eq!(glass.placeholder_type, 4);
+        assert_eq!(glass.placeholder_color, [1.0, 0.0, 0.0, 1.0]);
+        assert!(matches!(
+            glass.placeholder_brush.as_deref(),
+            Some(Brush::Glass(_))
         ));
 
         let image = info(Brush::Image(blinc_core::ImageBrush::new("thumb.jpg")));

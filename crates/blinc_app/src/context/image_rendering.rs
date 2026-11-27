@@ -7,7 +7,7 @@ use super::{
 mod instance;
 mod placeholder;
 
-pub(super) use placeholder::is_near_view;
+pub(super) use placeholder::{blurs_in_the_frame, has_backdrop_placeholder, is_near_view};
 
 impl RenderContext {
     /// Evict matching file-backed images and invalidate source-keyed SVG caches.
@@ -379,6 +379,11 @@ impl RenderContext {
 
             // If image is not loaded and has a placeholder, render placeholder
             if gpu_image.is_none() && image.placeholder_type != 0 {
+                // A glass or blur placeholder of an image drawn in the frame is among the
+                // frame's glass.
+                if blurs_in_the_frame(image) {
+                    continue;
+                }
                 self.flush_image_run(target, &mut run);
                 let batch = self.paint_image(
                     image,
@@ -386,6 +391,7 @@ impl RenderContext {
                     (viewport_width as u32, viewport_height as u32),
                     scale_factor,
                     0,
+                    false,
                 );
                 self.renderer.render_overlay(target, &batch);
                 continue;

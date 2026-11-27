@@ -179,9 +179,11 @@ img("photo.jpg")
 |-------------|-------------|
 | `None` | No placeholder. The area stays empty until the bitmap arrives |
 | `Color(color)` | Solid color background. The default is a translucent gray |
-| `Brush(brush)` | A gradient fills the image box. An image brush shows its image. A glass or blur brush shows its tint color only |
+| `Brush(brush)` | A gradient fills the image box. An image brush shows its image. A glass or blur brush blurs the content behind the box |
 | `Image(url)` | Another image (a low-res thumbnail or a blur hash). Preloaded on tree build |
 | `Skeleton` | Shimmer band animation that needs no asset |
+
+A glass or blur brush shows its tint color only in three places: a motion container, a 3D layer, and a parent that has opacity, a filter or a blend mode.
 
 #### Failed loads
 

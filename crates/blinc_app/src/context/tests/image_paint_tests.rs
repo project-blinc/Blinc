@@ -183,3 +183,56 @@ fn a_skeleton_placeholder_moves_in_every_frame_path() {
         assert_ne!(row(30), row(90), "mode {mode}");
     }
 }
+
+/// A red bar under the left half of the box of an image that has a glass placeholder, with
+/// the image at `opacity`.
+fn glass_placeholder_page(tint: Color, opacity: f32) -> RenderTree {
+    use blinc_core::{Brush, GlassStyle};
+    let picture = blinc_layout::image("missing-glass-placeholder.png")
+        .size(80.0, 60.0)
+        .placeholder_brush(Brush::Glass(GlassStyle::new().blur(20.0).tint(tint)));
+    let bar = div()
+        .absolute()
+        .left(20.0)
+        .top(20.0)
+        .w(40.0)
+        .h(60.0)
+        .bg(Color::RED);
+    laid_out(
+        page()
+            .child(bar)
+            .child(at(20.0, 20.0, picture).opacity(opacity)),
+        1,
+    )
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn a_glass_placeholder_blurs_what_is_behind_it() {
+    for mode in 0..4 {
+        let mut context = super::main_text_clip_tests::context(true, 1);
+        let tree = glass_placeholder_page(Color::TRANSPARENT, 1.0);
+        let state = state();
+        for n in 0..3 {
+            let drawn = frame(&mut context, &tree, &state, mode);
+            // Blur spreads the bar past its edge, where a flat tint would leave it hard.
+            let past_the_bar = drawn.get_pixel(63, 50).0;
+            assert!(
+                past_the_bar[0] > 20 && past_the_bar[2] > 20,
+                "mode {mode} frame {n}: {past_the_bar:?}"
+            );
+            super::opacity_group_tests::pixel(&drawn, (110, 50), [0, 0, 255, 255]);
+        }
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn a_glass_placeholder_in_a_group_shows_its_tint() {
+    for mode in 0..4 {
+        let mut context = super::main_text_clip_tests::context(true, 1);
+        let tree = glass_placeholder_page(Color::GREEN, 0.5);
+        let drawn = frame(&mut context, &tree, &state(), mode);
+        super::opacity_group_tests::pixel(&drawn, (80, 50), [0, 128, 127, 255]);
+    }
+}

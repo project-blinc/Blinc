@@ -3,7 +3,7 @@ use super::cached_text;
 use super::composite_replay::{ALL_Z, LayerScope, MotionBand};
 use super::frame_dispatch::FrameContent;
 use super::frame_text::{self, PreparedFrameText};
-use super::image_rendering::is_near_view;
+use super::image_rendering::{blurs_in_the_frame, has_backdrop_placeholder, is_near_view};
 use super::node_rows;
 use super::{
     DebugMode, DrawContext, GpuPaintContext, ImageElement, LayoutNodeId, PrimitiveBatch,
@@ -401,18 +401,20 @@ impl RenderContext {
             .collect();
         self.images_need_repaint = false;
         let mut skeleton_shown = false;
+        let mut glass_placeholders = Vec::new();
         for image in all_images {
             use slotmap::Key as _;
             let key = image.node.data().as_ffi();
             let missing = !self.image_cache.contains(&image.source);
-            // A skeleton moves until its image arrives.
+            // A skeleton moves, and a glass placeholder is in the cached batch, until the
+            // image arrives.
             if missing
-                && image.placeholder_type == 3
                 && !self.image_failures.gave_up(&image.source)
                 && is_near_view(&image, (width as f32, height as f32), 0.0)
             {
-                skeleton_shown = true;
-                self.images_need_repaint = true;
+                skeleton_shown |= image.placeholder_type == 3;
+                self.images_need_repaint |=
+                    image.placeholder_type == 3 || has_backdrop_placeholder(&image);
             }
             if captured_images.contains(&key) {
                 let fading = self
@@ -432,6 +434,17 @@ impl RenderContext {
                     );
                 }
                 continue;
+            }
+
+            if missing && !used_fast_paint && image.opacity > 0.0 && blurs_in_the_frame(&image) {
+                glass_placeholders.push(self.paint_image(
+                    &image,
+                    image.opacity,
+                    (width, height),
+                    scale_factor,
+                    0,
+                    true,
+                ));
             }
 
             if let Some(ref info) = image.transform_3d_layer {
@@ -458,6 +471,10 @@ impl RenderContext {
                 dynamic.resolve_deferred_content(&mut captured);
                 self.preload_mask_images(&dynamic);
                 self.cached_dynamic_batch = Some(dynamic);
+            }
+            // Merging closes the batch's streams, so it follows the deferred content.
+            for glass in glass_placeholders {
+                batch.merge(glass);
             }
         }
         // Collect unique 3D layer IDs for rendering
