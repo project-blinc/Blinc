@@ -36,6 +36,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - `ResizablePanelBuilder::visible` shows and hides a panel from a bool, signal or computed, in place: the panel and its handle leave layout and the flexible panels take the space, and the panel returns at its size.
 - `ResizablePanelBuilder::collapsed` folds a fixed panel to a given size, below its minimum and without its handle, in place, and reopens it at the size it had.
 - `ResizableGroupBuilder::handle_hit_padding` sets how far a handle's grab area reaches past its line.
+- The button, checkbox, switch and toggle builders take `.class()` and `.id()`, and the button builder `.attr()`.
 
 ### Documentation
 - Typography has a dedicated guide covering all helpers, reactive content, inline composition and CSS class hooks; the gallery embeds that guide.
@@ -70,6 +71,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - Navigation menus use the configured panel width and reopen after dismissal.
 - Dropdown, context and menubar menus move actual keyboard focus, skip disabled rows, support submenu keys and restore trigger focus. Menus dismiss on Tab; pressable controls use `:focus-visible` rings.
 - The card takes its shadow from the `.cn-card` rule, so a stylesheet and the `--shadow-sm` variable change it.
+- A click on the label of a switch toggles it. The switch's class and id name its track, which carries `checked` and `disabled`.
 
 ## [0.6.0] - 2026-11-04
 

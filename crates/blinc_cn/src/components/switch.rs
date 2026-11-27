@@ -95,6 +95,8 @@ impl SwitchSize {
 pub struct Switch {
     /// The fully-built inner element (Div containing switch and optional label)
     inner: Div,
+    /// What `inner` is built from, and rebuilt from when a class or the id changes.
+    config: SwitchConfig,
 }
 
 impl Switch {
@@ -122,7 +124,7 @@ impl Switch {
             .h(thumb_size)
             .style(&style! { rounded: thumb_size / 2.0 });
 
-        let switch = div()
+        let mut switch = div()
             .class("cn-switch")
             .class("tabindex=0")
             .class(config.size.css_class())
@@ -136,6 +138,13 @@ impl Switch {
             // `:checked` and `:disabled` rules follow the switch in place.
             .attr_when("checked", "", on)
             .attr_when("disabled", "", config.disabled.clone());
+        // A caller's names go on the track, which carries `checked` and `disabled`.
+        for name in &config.classes {
+            switch = switch.class(name);
+        }
+        if let Some(id) = &config.element_id {
+            switch = switch.id(id);
+        }
 
         // The track and its label both toggle; the bound `disabled` is read
         // when the click arrives.
@@ -154,13 +163,13 @@ impl Switch {
             }
         };
 
-        let inner = if let Some(label) = config.label {
+        let inner = if let Some(label) = config.label.clone() {
             let row_toggle = toggle.clone();
             let switch = switch.on_click(move |_| toggle());
             // The row carries `disabled` too, so the label's colour is a rule.
             div()
                 .class("cn-switch-row")
-                .attr_when("disabled", "", config.disabled)
+                .attr_when("disabled", "", config.disabled.clone())
                 .flex_row()
                 .gap(theme.spacing().space_1)
                 .items_center()
@@ -177,19 +186,19 @@ impl Switch {
             div().child(switch.on_click(move |_| toggle()))
         };
 
-        Self { inner }
+        Self { inner, config }
     }
 
-    /// Add a CSS class for selector matching
+    /// Add a CSS class to the track, for selector matching
     pub fn class(mut self, name: impl AsRef<str>) -> Self {
-        self.inner = self.inner.class(name);
-        self
+        self.config.classes.push(name.as_ref().to_string());
+        Self::with_config(self.config)
     }
 
-    /// Set the element ID for CSS selector matching
+    /// Set the element ID of the track for CSS selector matching
     pub fn id(mut self, id: &str) -> Self {
-        self.inner = self.inner.id(id);
-        self
+        self.config.element_id = Some(id.to_string());
+        Self::with_config(self.config)
     }
 }
 
@@ -214,6 +223,14 @@ impl ElementBuilder for Switch {
         self.inner.layout_style()
     }
 
+    fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
+        ElementBuilder::event_handlers(&self.inner)
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
+    }
+
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.inner.element_classes()
     }
@@ -227,6 +244,8 @@ struct SwitchConfig {
     label: Option<Reactive<String>>,
     disabled: Reactive<bool>,
     on_change: Option<Arc<dyn Fn(bool) + Send + Sync>>,
+    classes: Vec<String>,
+    element_id: Option<String>,
 }
 
 impl SwitchConfig {
@@ -237,6 +256,8 @@ impl SwitchConfig {
             label: None,
             disabled: Reactive::Const(false),
             on_change: None,
+            classes: Vec::new(),
+            element_id: None,
         }
     }
 }
@@ -293,6 +314,18 @@ impl SwitchBuilder {
         self
     }
 
+    /// Add a CSS class to the track, for selector matching
+    pub fn class(mut self, name: impl AsRef<str>) -> Self {
+        self.config.classes.push(name.as_ref().to_string());
+        self
+    }
+
+    /// Set the element ID of the track for CSS selector matching
+    pub fn id(mut self, id: &str) -> Self {
+        self.config.element_id = Some(id.to_string());
+        self
+    }
+
     /// Build the final Switch component
     pub fn build_component(self) -> Switch {
         Switch::with_config(self.config)
@@ -318,6 +351,14 @@ impl ElementBuilder for SwitchBuilder {
 
     fn layout_style(&self) -> Option<&taffy::Style> {
         self.get_or_build().layout_style()
+    }
+
+    fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
+        ElementBuilder::event_handlers(self.get_or_build())
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(self.get_or_build())
     }
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {

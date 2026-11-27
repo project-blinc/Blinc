@@ -7,6 +7,7 @@ mod build_scope;
 mod canvas_order;
 mod cn_accessibility_overlays;
 mod cn_badge_snapshots;
+mod cn_builder_names;
 mod cn_button_snapshots;
 mod cn_calendar;
 mod cn_chart;

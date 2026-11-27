@@ -208,7 +208,7 @@ also write your own rules:
 ```
 
 ```rust
-checkbox(accepted).build_component().class("my-checkbox")
+checkbox(accepted).class("my-checkbox")
 ```
 
 ## Switch
@@ -228,7 +228,7 @@ switch(dark).disabled(locked)          // a bool, Signal or Computed
 
 ### Styling
 
-The switch element is the track, and a thumb is inside it. While the switch is
+The switch element is the track, and a thumb is inside it. `.class()` and `.id()` name the track. While the switch is
 on, the track has a `checked` attribute. The thumb slides by a transform. While
 pressed, the thumb shrinks slightly. The `.cn-switch` rules of `CN_STYLES`
 define all of this for each size (`.cn-switch--sm`, `--md`, `--lg`):
@@ -245,7 +245,7 @@ define all of this for each size (`.cn-switch--sm`, `--md`, `--lg`):
 ```
 
 ```rust
-switch(dark).build_component().class("my-switch")
+switch(dark).class("my-switch")
 ```
 
 ## Radio Group

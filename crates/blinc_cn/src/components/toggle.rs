@@ -154,6 +154,7 @@ struct ToggleConfig {
     disabled: Reactive<bool>,
     on_change: Option<Arc<dyn Fn(bool) + Send + Sync>>,
     css_element_id: Option<String>,
+    classes: Vec<String>,
 }
 
 /// The fully-built cn toggle.
@@ -183,6 +184,9 @@ impl Toggle {
         }
         if let Some(id) = config.css_element_id {
             inner = inner.id(&id);
+        }
+        for name in &config.classes {
+            inner = inner.class(name);
         }
         if let Some(cb) = config.on_change {
             inner = inner.on_change(move |on| cb(on));
@@ -257,6 +261,7 @@ impl ToggleBuilder {
                 disabled: Reactive::Const(false),
                 on_change: None,
                 css_element_id: None,
+                classes: Vec::new(),
             },
             built: std::cell::OnceCell::new(),
         }
@@ -310,6 +315,13 @@ impl ToggleBuilder {
         self
     }
 
+    /// Add a CSS class for selector matching
+    pub fn class(mut self, name: impl AsRef<str>) -> Self {
+        self.config.classes.push(name.as_ref().to_string());
+        self
+    }
+
+    /// Set the element ID for CSS selector matching
     pub fn id(mut self, id: impl Into<String>) -> Self {
         self.config.css_element_id = Some(id.into());
         self

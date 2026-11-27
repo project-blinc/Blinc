@@ -101,7 +101,7 @@ has a class that your own rules can use:
 ```
 
 ```rust
-button("Delete").build_component().class("danger")
+button("Delete").class("danger")
 ```
 
 The `:hover:not(:disabled)` selector keeps a rule off a disabled button.

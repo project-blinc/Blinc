@@ -228,6 +228,8 @@ pub fn button(label: impl IntoReactive<String>) -> ButtonBuilder {
             icon_size: None,
             text_color: None,
             on_click: None,
+            classes: Vec::new(),
+            element_id: None,
         },
         built: std::cell::OnceCell::new(),
     }
@@ -252,6 +254,9 @@ struct ButtonConfig {
     icon_size: Option<f32>,
     text_color: Option<Color>,
     on_click: Option<Arc<dyn Fn(&blinc_layout::event_handler::EventContext) + Send + Sync>>,
+    /// Classes and attributes the caller adds.
+    classes: Vec<String>,
+    element_id: Option<String>,
 }
 
 impl Clone for ButtonConfig {
@@ -266,6 +271,8 @@ impl Clone for ButtonConfig {
             icon_size: self.icon_size,
             text_color: self.text_color,
             on_click: self.on_click.clone(),
+            classes: self.classes.clone(),
+            element_id: self.element_id.clone(),
         }
     }
 }
@@ -412,6 +419,13 @@ impl Button {
             btn = btn.on_click(move |ctx| handler(ctx));
         }
 
+        for name in &config.classes {
+            btn = btn.class(name);
+        }
+        if let Some(id) = &config.element_id {
+            btn = btn.id(id);
+        }
+
         Self { inner: btn }
     }
 
@@ -496,6 +510,8 @@ impl ButtonBuilder {
                 icon_size: None,
                 text_color: None,
                 on_click: None,
+                classes: Vec::new(),
+                element_id: None,
             },
             built: std::cell::OnceCell::new(),
         }
@@ -556,6 +572,25 @@ impl ButtonBuilder {
         F: Fn(&blinc_layout::event_handler::EventContext) + Send + Sync + 'static,
     {
         self.config.on_click = Some(Arc::new(handler));
+        self
+    }
+
+    /// Add a CSS class for selector matching
+    pub fn class(mut self, name: impl AsRef<str>) -> Self {
+        self.config.classes.push(name.as_ref().to_string());
+        self
+    }
+
+    /// Set an attribute, such as the `aria-label` that names an icon-only button.
+    pub fn attr(mut self, name: &str, value: &str) -> Self {
+        // Attributes travel as `name=value` classes.
+        self.config.classes.push(format!("{name}={value}"));
+        self
+    }
+
+    /// Set the element ID for CSS selector matching
+    pub fn id(mut self, id: &str) -> Self {
+        self.config.element_id = Some(id.to_string());
         self
     }
 

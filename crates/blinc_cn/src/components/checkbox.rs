@@ -125,6 +125,12 @@ impl Checkbox {
         if let Some(on_change) = config.on_change {
             inner = inner.on_change(move |checked| on_change(checked));
         }
+        for name in &config.classes {
+            inner = inner.class(name);
+        }
+        if let Some(id) = &config.element_id {
+            inner = inner.id(id);
+        }
 
         Self { inner }
     }
@@ -188,6 +194,8 @@ struct CheckboxConfig {
     label: Option<Reactive<String>>,
     disabled: Reactive<bool>,
     on_change: Option<Arc<dyn Fn(bool) + Send + Sync>>,
+    classes: Vec<String>,
+    element_id: Option<String>,
 }
 
 impl CheckboxConfig {
@@ -198,6 +206,8 @@ impl CheckboxConfig {
             label: None,
             disabled: Reactive::Const(false),
             on_change: None,
+            classes: Vec::new(),
+            element_id: None,
         }
     }
 }
@@ -266,6 +276,18 @@ impl CheckboxBuilder {
         self
     }
 
+    /// Add a CSS class to the box, for selector matching
+    pub fn class(mut self, name: impl AsRef<str>) -> Self {
+        self.config.classes.push(name.as_ref().to_string());
+        self
+    }
+
+    /// Set the element ID of the box for CSS selector matching
+    pub fn id(mut self, id: &str) -> Self {
+        self.config.element_id = Some(id.to_string());
+        self
+    }
+
     /// Build the final Checkbox component
     pub fn build_component(self) -> Checkbox {
         Checkbox::with_config(self.key.get(), self.config)
@@ -303,6 +325,10 @@ impl ElementBuilder for CheckboxBuilder {
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.get_or_build().element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        self.get_or_build().element_id()
     }
 }
 
