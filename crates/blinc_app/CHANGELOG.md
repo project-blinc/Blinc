@@ -64,7 +64,7 @@ All notable changes to `blinc_app` will be documented in this file.
 
 ### Fixed
 - An image's brush placeholder is drawn while the image loads.
-- A glass or blur image placeholder blurs what is behind the image while it loads, inside parents with opacity, filters or blend modes too. Inside a container with a bound position, scale or rotation, or a 3D layer, it shows its tint.
+- A glass or blur image placeholder blurs what is behind the image while it loads, inside groups, moving containers and 3D layers too, and content painted after the image stays above it. In a moving container inside a 3D layer it shows its tint.
 - A window with a glass element on the page draws its background images. The page background was painted over them, so they did not show. They are drawn over the background and under the glass, which blurs them.
 - Image placeholders are drawn in frames with glass, inside the same clips, transforms and opacity as the image. A CSS translate on an image follows the display scale in those frames.
 - A skeleton image placeholder moves in a window, where it stood still.

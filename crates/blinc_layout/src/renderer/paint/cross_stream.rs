@@ -15,6 +15,7 @@ pub(in crate::renderer) struct PlanKey {
     capabilities: DeferredContent,
     glass_layers: bool,
     css_opacity: Vec<LayoutNodeId>,
+    pending_backdrops: Vec<LayoutNodeId>,
 }
 
 impl RenderTree {
@@ -37,6 +38,7 @@ impl RenderTree {
             capabilities: DeferredContent,
             glass_layers: bool,
             css_opacity: &NodeSet,
+            pending: &NodeSet,
             groups: &mut Vec<(LayoutNodeId, DeferredContent)>,
         ) -> (bool, bool, DeferredContent, bool, bool) {
             let Some(render) = tree.render_nodes.get(&node) else {
@@ -52,7 +54,11 @@ impl RenderTree {
                 || props.motion.is_some()
                 || tree.motion_bindings.contains_key(&node)
                 || css_opacity.contains(&node);
-            let is_glass = props.is_glass();
+            // An image still loading with a glass placeholder is glass where glass can be
+            // grouped. Elsewhere it stays an image, so its ancestors keep their groups.
+            let awaits_glass =
+                glass_layers && !scope.blocked_glass && !scope.portal && pending.contains(&node);
+            let is_glass = props.is_glass() || awaits_glass;
             let mut content = DeferredContent {
                 glass: false,
                 background_glass: false,
@@ -107,6 +113,7 @@ impl RenderTree {
                         capabilities,
                         glass_layers,
                         css_opacity,
+                        pending,
                         groups,
                     );
                 native &= child_native;
@@ -154,8 +161,9 @@ impl RenderTree {
                 groups.truncate(start);
             }
             content.glass &= native;
+            // A loading image keeps its place in the paint order, as the image will.
             content.background_glass = content.glass
-                && !is_glass
+                && !props.is_glass()
                 && !foreground
                 && (!transparent_wrapper || content.background_glass);
             let needs_content_group = content.any()
@@ -213,6 +221,9 @@ impl RenderTree {
             .unwrap_or_default();
         let mut css_opacity_nodes: Vec<LayoutNodeId> = css_opacity.iter().copied().collect();
         css_opacity_nodes.sort_unstable();
+        let pending = self.pending_backdrop_images.borrow();
+        let mut pending_backdrops: Vec<LayoutNodeId> = pending.iter().copied().collect();
+        pending_backdrops.sort_unstable();
         let key = PlanKey {
             layout: self.layout_tree.epoch(),
             nodes: self.render_nodes.revision(),
@@ -221,6 +232,7 @@ impl RenderTree {
             capabilities,
             glass_layers,
             css_opacity: css_opacity_nodes,
+            pending_backdrops,
         };
         if self.cross_stream_plan_key.borrow().as_ref() == Some(&key) {
             return;
@@ -236,6 +248,7 @@ impl RenderTree {
                 capabilities,
                 glass_layers,
                 &css_opacity,
+                &pending,
                 &mut planned,
             );
             groups.extend(planned);

@@ -48,6 +48,7 @@ mod accessibility;
 mod animation;
 mod ime;
 pub use animation::css::css_animation_playing;
+mod backdrop_placeholders;
 mod build;
 mod child_index;
 mod css_backgrounds;
@@ -863,6 +864,10 @@ pub struct RenderTree {
     cross_stream_groups: RefCell<NodeMap<DeferredContent>>,
     /// What `cross_stream_groups` was planned from: a plan is made again only when it changes.
     cross_stream_plan_key: RefCell<Option<paint::cross_stream::PlanKey>>,
+    /// Images whose glass or blur placeholder shows, planned as glass until they load.
+    pending_backdrop_images: RefCell<NodeSet>,
+    /// The images that have such a placeholder.
+    backdrop_placeholders: RefCell<backdrop_placeholders::Found>,
     /// When `true`, the paint walker skips invoking each
     /// `Canvas` node's `render_fn` while still recording the
     /// `CanvasPaintRecord` for later replay. Used by the layer
@@ -1311,6 +1316,8 @@ impl RenderTree {
             retained_canvas_redraws: RefCell::new(Vec::new()),
             cross_stream_groups: RefCell::new(HashMap::default()),
             cross_stream_plan_key: RefCell::new(None),
+            pending_backdrop_images: RefCell::new(NodeSet::default()),
+            backdrop_placeholders: RefCell::new(None),
             skip_canvas_drawing: Cell::new(false),
             painted_node_ids: RefCell::new(HashSet::default()),
             painted_changes: Cell::new(0),

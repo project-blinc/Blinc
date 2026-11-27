@@ -741,8 +741,9 @@ impl Image {
 
     /// Set a brush as placeholder. A gradient fills the image's box, with its
     /// coordinates in the box's pixels. A glass or blur brush blurs what is
-    /// behind the box. Inside a container with a bound position, scale or
-    /// rotation, and inside a 3D layer, it shows its tint colour only.
+    /// behind the box, and content painted after the image stays above it. In a
+    /// container with a bound position, scale or rotation inside a 3D layer, it
+    /// shows its tint colour only.
     ///
     /// # Example
     /// ```ignore

@@ -103,6 +103,9 @@ impl RenderContext {
         .flatten()
         .filter(|_| self.apply_binding_deltas(tree, scale_factor));
         let used_fast_paint = canvas_output.is_some();
+        if !used_fast_paint {
+            self.mark_pending_backdrops(tree);
+        }
 
         // Create a single paint context for all layers with text rendering support
         let rows_mode = self.rows_mode();

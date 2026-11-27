@@ -11,13 +11,12 @@ pub(in crate::context) fn has_backdrop_placeholder(image: &ImageElement) -> bool
         )
 }
 
-/// Whether such a placeholder joins the glass of the frame, for an image the frame draws
-/// itself. An image in a 3D layer, or moving with a motion binding, is drawn apart, with no
-/// backdrop, and shows the tint.
+/// Whether such a placeholder joins the glass of the frame, for an image the paint walk did
+/// not group: one in a 3D layer or an overlay, where it is flat, as a glass element there
+/// is. One that a motion binding moves there is drawn after the glass, with no backdrop, and
+/// shows the tint.
 pub(in crate::context) fn blurs_in_the_frame(image: &ImageElement) -> bool {
-    has_backdrop_placeholder(image)
-        && !image.in_motion_subtree
-        && image.transform_3d_layer.is_none()
+    has_backdrop_placeholder(image) && !image.in_motion_subtree
 }
 
 /// Whether the image is within `margin` of its clip, or of the viewport when it has none.

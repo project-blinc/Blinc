@@ -94,6 +94,19 @@ impl RenderContext {
         }
     }
 
+    /// Tell the tree which of its images with a glass or blur placeholder have not loaded,
+    /// before it is painted.
+    pub(super) fn mark_pending_backdrops(&mut self, tree: &blinc_layout::RenderTree) {
+        self.take_decoded_images();
+        let images = tree.backdrop_placeholder_images();
+        tree.set_pending_backdrop_images(
+            images
+                .iter()
+                .filter(|(_, source)| !self.image_cache.contains(source))
+                .map(|(node, _)| *node),
+        );
+    }
+
     /// Load image sources and populate the bounded GPU cache before dispatch.
     pub(super) fn preload_images(
         &mut self,

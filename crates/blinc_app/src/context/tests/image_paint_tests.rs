@@ -198,7 +198,7 @@ fn glass_placeholder_page(tint: Color, opacity: f32, in_motion: bool) -> RenderT
         .w(40.0)
         .h(60.0)
         .bg(Color::RED);
-    let holder = at(20.0, 20.0, picture).opacity(opacity);
+    let holder = at(20.0, 20.0, picture).id("holder").opacity(opacity);
     let root = page().child(bar);
     let root = if in_motion {
         root.child(blinc_layout::motion::motion().child(holder))
@@ -245,6 +245,156 @@ fn a_glass_placeholder_blurs_inside_a_group() {
                     "mode {mode} frame {n} opacity {opacity} motion {in_motion}: {past_the_bar:?}"
                 );
                 super::opacity_group_tests::pixel(&drawn, (110, 50), [0, 0, 255, 255]);
+            }
+        }
+    }
+}
+
+/// The glass placeholder page with the image in a container whose translate is `x`.
+fn moving_placeholder_page(
+    source: &str,
+    x: blinc_layout::motion::SharedAnimatedValue,
+) -> RenderTree {
+    use blinc_core::{Brush, GlassStyle};
+    let glass = Brush::Glass(GlassStyle::new().blur(20.0).tint(Color::TRANSPARENT));
+    let picture = blinc_layout::image(source)
+        .size(80.0, 60.0)
+        .fade_in(std::time::Duration::ZERO)
+        .placeholder_brush(glass);
+    let bar = div()
+        .absolute()
+        .left(20.0)
+        .top(20.0)
+        .w(40.0)
+        .h(60.0)
+        .bg(Color::RED);
+    laid_out(
+        page()
+            .child(bar)
+            .child(at(20.0, 20.0, picture).motion().translate_x(x)),
+        1,
+    )
+}
+
+fn animated(start: f32) -> blinc_layout::motion::SharedAnimatedValue {
+    let scheduler = blinc_animation::AnimationScheduler::new();
+    Arc::new(Mutex::new(blinc_animation::AnimatedValue::with_default(
+        scheduler.handle(),
+        start,
+    )))
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn a_glass_placeholder_blurs_under_a_moving_binding() {
+    for mode in 0..4 {
+        let mut context = super::main_text_clip_tests::context(true, 1);
+        let x = animated(0.0);
+        let tree = moving_placeholder_page("missing-moving-placeholder.png", x.clone());
+        let state = state();
+        // At each place, the bar's far edge is blurred only where the image is over it.
+        for (offset, left_edge_blurred) in [(0.0, true), (30.0, false), (0.0, true)] {
+            x.lock().unwrap().set_immediate(offset);
+            let drawn = frame(&mut context, &tree, &state, mode);
+            let past_the_bar = drawn.get_pixel(63, 50).0;
+            assert!(
+                past_the_bar[0] > 20 && past_the_bar[2] > 20,
+                "mode {mode} at {offset}: {past_the_bar:?}"
+            );
+            let left = drawn.get_pixel(23, 50).0;
+            assert_eq!(
+                left != [255, 0, 0, 255],
+                left_edge_blurred,
+                "mode {mode} at {offset}: {left:?}"
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn a_moving_image_leaves_its_glass_when_it_loads() {
+    for mode in 0..4 {
+        let path = std::env::temp_dir().join(format!(
+            "blinc-moving-glass-{}-{mode}.png",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let mut context = super::main_text_clip_tests::context(true, 1);
+        let x = animated(0.0);
+        let tree = moving_placeholder_page(&path.to_string_lossy(), x.clone());
+        let state = state();
+        frame(&mut context, &tree, &state, mode);
+        assert_eq!(tree.backdrop_placeholder_images().len(), 1);
+
+        image::RgbaImage::from_pixel(4, 4, image::Rgba([0, 255, 0, 255]))
+            .save(&path)
+            .unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut drawn = frame(&mut context, &tree, &state, mode);
+        while drawn.get_pixel(90, 50).0[1] < 200 && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            drawn = frame(&mut context, &tree, &state, mode);
+        }
+        x.lock().unwrap().set_immediate(30.0);
+        for _ in 0..2 {
+            let drawn = frame(&mut context, &tree, &state, mode);
+            super::opacity_group_tests::pixel(&drawn, (120, 50), [0, 255, 0, 255]);
+            super::opacity_group_tests::pixel(&drawn, (23, 50), [255, 0, 0, 255]);
+        }
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn a_glass_placeholder_blurs_in_a_3d_layer() {
+    for mode in 0..4 {
+        let mut context = super::main_text_clip_tests::context(true, 1);
+        let mut tree = glass_placeholder_page(Color::TRANSPARENT, 1.0, false);
+        let holder = tree.query_by_id("holder").unwrap();
+        tree.update_render_props(holder, |p| p.rotate_y = Some(0.01));
+        let state = state();
+        for n in 0..3 {
+            let drawn = frame(&mut context, &tree, &state, mode);
+            let past_the_bar = drawn.get_pixel(63, 50).0;
+            assert!(
+                past_the_bar[0] > 20 && past_the_bar[2] > 20,
+                "mode {mode} frame {n}: {past_the_bar:?}"
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn a_glass_placeholder_keeps_later_content_above_it() {
+    use blinc_core::{Brush, GlassStyle};
+    for (bound, opacity) in [(false, 1.0), (false, 0.5), (true, 1.0)] {
+        for mode in 0..4 {
+            let mut context = super::main_text_clip_tests::context(true, 1);
+            let glass = Brush::Glass(GlassStyle::new().blur(20.0).tint(Color::TRANSPARENT));
+            let picture = blinc_layout::image("missing-under-badge.png")
+                .size(80.0, 60.0)
+                .placeholder_brush(glass);
+            let holder = at(20.0, 20.0, picture).opacity(opacity);
+            let badge = div()
+                .absolute()
+                .left(80.0)
+                .top(30.0)
+                .w(30.0)
+                .h(20.0)
+                .bg(Color::GREEN);
+            let root = if bound {
+                page().child(holder.motion().translate_x(animated(0.0)))
+            } else {
+                page().child(holder)
+            };
+            let tree = laid_out(root.child(badge), 1);
+            let state = state();
+            for _ in 0..2 {
+                let drawn = frame(&mut context, &tree, &state, mode);
+                super::opacity_group_tests::pixel(&drawn, (90, 40), [0, 255, 0, 255]);
             }
         }
     }

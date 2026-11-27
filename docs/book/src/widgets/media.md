@@ -183,7 +183,7 @@ img("photo.jpg")
 | `Image(url)` | Another image (a low-res thumbnail or a blur hash). Preloaded on tree build |
 | `Skeleton` | Shimmer band animation that needs no asset |
 
-A glass or blur brush shows its tint color only in two places. One is a container whose position, scale or rotation follows an animated value. The other is a 3D layer.
+Content that you draw after the image stays above a glass or blur placeholder. The placeholder shows its tint color only in one place. That place is a container in a 3D layer whose position, scale or rotation follows an animated value.
 
 #### Failed loads
 
