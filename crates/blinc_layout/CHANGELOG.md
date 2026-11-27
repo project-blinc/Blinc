@@ -95,6 +95,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- A node with an id keeps the color, size and other values that an update gave it. The pass that runs on a hover, press or focus change no longer puts back what the node had when it first appeared.
 - A stylesheet `border`, `border-width` or `border-color` also applies to the sides that the builder or a lower rule set.
 - A stylesheet padding or margin longhand keeps the other sides that the builder or a lower rule set.
 - The modifiers of a `link()` combine. `.font_size()`, `.text_color()`, the underline modifiers and `.on_click()` no longer each start again from the default link.

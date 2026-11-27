@@ -476,8 +476,10 @@ impl RenderTree {
                 } else {
                     self.element_registry.clear_classes(rebuild.parent_id);
                 }
-                self.base_styles.remove(&rebuild.parent_id);
-                self.state_layers.remove(&rebuild.parent_id);
+                self.forget_state_base(
+                    rebuild.parent_id,
+                    rebuild.new_child.layout_style().is_some(),
+                );
                 self.dynamic_classes.remove(&rebuild.parent_id);
                 // Also update the taffy layout style (width, height, padding, etc.)
                 if let Some(style) = rebuild.new_child.layout_style() {
@@ -643,7 +645,9 @@ impl RenderTree {
         // `layout_style()` value doesn't include those adjustments and
         // patching with it would silently strip the padding taffy was
         // given at original build time.
-        if let Some(style) = new_element.effective_layout_style() {
+        let layout = new_element.effective_layout_style();
+        self.forget_state_base(parent_id, layout.is_some());
+        if let Some(style) = layout {
             self.layout_tree.set_style(parent_id, style);
         }
         if let Some(mut render_node) = self.render_nodes.get_mut(&parent_id) {
@@ -671,7 +675,9 @@ impl RenderTree {
                 // preserves widget-internal style adjustments (Notch
                 // scoop padding, etc.) — see the parent-node patch
                 // above for the rationale.
-                if let Some(style) = new_child.effective_layout_style() {
+                let layout = new_child.effective_layout_style();
+                self.forget_state_base(*child_id, layout.is_some());
+                if let Some(style) = layout {
                     self.layout_tree.set_style(*child_id, style);
                 }
 
@@ -745,6 +751,7 @@ impl RenderTree {
         for (i, child_id) in existing_children.iter().enumerate() {
             if let Some(new_child) = new_children.get(i) {
                 // Full replace of visual props, preserving node_id and motion
+                self.forget_state_base(*child_id, false);
                 let mut new_props = new_child.render_props();
                 if let Some(mut render_node) = self.render_nodes.get_mut(child_id) {
                     new_props.node_id = render_node.props.node_id;

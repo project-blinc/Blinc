@@ -72,5 +72,6 @@ mod scroll_momentum;
 mod scroll_paint_stale;
 mod scroll_perf;
 mod shadow_current_color;
+mod stateful_ids;
 mod style_pass_cost;
 mod virtual_list_gap;

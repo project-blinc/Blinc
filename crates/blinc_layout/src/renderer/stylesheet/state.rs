@@ -107,6 +107,18 @@ impl RenderTree {
             .map(Cow::Borrowed)
     }
 
+    /// Drops what the state pass holds for a node whose element was replaced in
+    /// place: the props it returns to, the state rules over them and, where the
+    /// element brought a layout style, the one it returns to. The next pass
+    /// reads them from the node again.
+    pub(crate) fn forget_state_base(&mut self, node: LayoutNodeId, layout_replaced: bool) {
+        self.base_styles.remove(&node);
+        self.state_layers.remove(&node);
+        if layout_replaced {
+            self.base_taffy_styles.remove(&node);
+        }
+    }
+
     /// Apply state-specific styles from the stylesheet to a node.
     ///
     /// This is called when a node's interaction state changes (hover, pressed, focused).
