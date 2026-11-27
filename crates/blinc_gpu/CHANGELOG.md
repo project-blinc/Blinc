@@ -6,6 +6,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 
 ### Fixed
 - A linear or radial mask gradient fades an element or an image by its own amount. The color under the mask no longer darkens as it fades.
+- A circle or an ellipse with a border gets the border all the way round when the core shader draws it.
 - An image border is drawn in its color. White, black and other colors came out wrong or faded.
 - A notch's shadow no longer drops out under the partly covered pixels of its edge, which drew a dotted line along a rounded corner.
 - Inset box shadows paint as a browser paints them: a Gaussian blur with a deviation of half the blur radius, a hole moved by the offset and shrunk by the spread, smooth corners, and about half strength at the edge. The circle inner shadow follows. `draw_inner_shadow` takes the padding box.

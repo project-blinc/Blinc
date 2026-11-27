@@ -460,7 +460,9 @@ fn plain_scene() -> Vec<GpuPrimitive> {
         GpuPrimitive::rect(8.0, 96.0, 60.0, 24.0)
             .with_color(0.1, 0.7, 0.6, 1.0)
             .with_corner_radius(40.0),
-        GpuPrimitive::circle(94.0, 108.0, 14.0).with_color(0.2, 0.8, 0.3, 0.9),
+        GpuPrimitive::circle(94.0, 108.0, 14.0)
+            .with_color(0.2, 0.8, 0.3, 0.9)
+            .with_border(2.0, 0.0, 0.0, 0.0, 1.0),
         GpuPrimitive::rect(100.0, 56.0, 24.0, 40.0)
             .with_color(0.6, 0.1, 0.7, 1.0)
             .with_corner_radii(4.0, 16.0, 4.0, 16.0)
@@ -1058,6 +1060,50 @@ fn a_mask_gradient_scales_the_alpha_of_a_shape_once() {
         for (got, want) in pixels[at..at + 4].iter().zip(want) {
             assert!(got.abs_diff(want) <= 1, "{name}: {:?}", &pixels[at..at + 4]);
         }
+    }
+}
+
+/// The core shader draws the border of a circle and of an ellipse all the way
+/// round, on the diagonals as well as at the four extremes.
+#[test]
+fn the_core_shader_draws_a_curved_border_all_round() {
+    let Some((device, queue)) = device() else {
+        eprintln!("no adapter with vertex storage: skipped");
+        return;
+    };
+    let circle = GpuPrimitive::circle(64.0, 64.0, 30.0)
+        .with_color(0.2, 0.8, 0.3, 1.0)
+        .with_border(4.0, 0.0, 0.0, 0.0, 1.0);
+    let mut ellipse = GpuPrimitive::rect(14.0, 34.0, 100.0, 60.0)
+        .with_color(0.2, 0.8, 0.3, 1.0)
+        .with_border(4.0, 0.0, 0.0, 0.0, 1.0);
+    ellipse.type_info[0] = crate::primitives::PrimitiveType::Ellipse as u32;
+    for (prim, half, name) in [
+        (circle, [30.0_f32, 30.0], "circle"),
+        (ellipse, [50.0, 30.0], "ellipse"),
+    ] {
+        let pixels = draw(
+            &device,
+            &queue,
+            crate::sdf_russl::sdf_core::WGSL,
+            &[],
+            &[prim],
+        );
+        // The point of the outline at 45 degrees of its parameter, drawn in by
+        // half the border.
+        let diagonal = std::f32::consts::FRAC_1_SQRT_2;
+        let at = |inset: f32| {
+            let x = (64.0 - (half[0] - inset) * diagonal) as u32;
+            let y = (64.0 - (half[1] - inset) * diagonal) as u32;
+            let i = ((y * SIZE + x) * 4) as usize;
+            [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]]
+        };
+        assert_eq!(at(2.0), [0, 0, 0, 255], "{name}: on the border");
+        let fill = at(10.0);
+        assert!(
+            fill[1].abs_diff(204) <= 1,
+            "{name}: inside the border {fill:?}"
+        );
     }
 }
 

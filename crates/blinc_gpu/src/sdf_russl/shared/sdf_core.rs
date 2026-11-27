@@ -774,13 +774,17 @@ russl::russl! {
             // border at all. Send them to the SDF branch.
             let is_concave_corner = corner_n < 0.0;
 
-            if is_within_inner_straight && !is_near_rounded_corner && !is_concave_corner {
+            // A circle or ellipse has no straight edges or corner radius: only its
+            // distance says where the border is.
+            let is_curved = prim_type == 1u32 /* PRIM_CIRCLE */ || prim_type == 2u32 /* PRIM_ELLIPSE */;
+
+            if is_within_inner_straight && !is_near_rounded_corner && !is_concave_corner && !is_curved {
                 // No border here, keep fill_color as-is
             } else {
                 // Calculate inner SDF based on context
                 let mut inner_sdf: f32;
 
-                if is_concave_corner {
+                if is_concave_corner || is_curved {
                     // The asymmetric branch below insets the corner RADIUS,
                     // which only means something for a convex corner. Now
                     // that `d` is a true distance, offsetting it is exact for
