@@ -86,31 +86,28 @@ impl RenderContext {
                 .iter()
                 .partition(|img| img.layer == RenderLayer::Background);
 
-            // Pre-render background images to both backdrop and target so glass can blur them
             let has_bg_images = !bg_images.is_empty();
+            // Background images go over the background and under the glass, which blurs them,
+            // so a frame that has any draws its background and glass in separate steps.
+            let in_steps = has_layer_effects_in_batch || load || has_bg_images;
             if has_bg_images {
                 let backdrop_tex = self.backdrop_texture.take().unwrap();
                 self.renderer
                     .clear_target(&backdrop_tex.view, wgpu::Color::TRANSPARENT);
-                if !load {
-                    self.renderer.clear_target(
-                        target,
-                        wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: self.clear_alpha as f64,
-                        },
+                // Glass painted among the background samples a backdrop holding them already.
+                if batch.has_background_glass() {
+                    self.render_images(
+                        &backdrop_tex.view,
+                        bg_images.iter().copied(),
+                        width as f32,
+                        height as f32,
+                        scale_factor,
                     );
-                }
-                self.render_images_ref(&backdrop_tex.view, &bg_images);
-                if !load {
-                    self.render_images_ref(target, &bg_images);
                 }
                 self.backdrop_texture = Some(backdrop_tex);
             }
 
-            if has_layer_effects_in_batch || load {
+            if in_steps {
                 // Render the backdrop, grouped content, images and glass in composition
                 // order.
                 if batch.has_external_gpu_draws() || batch.has_background_glass() || load {
@@ -144,25 +141,37 @@ impl RenderContext {
                         .render_unordered_dynamic_images(target, &batch.dynamic_images);
                 }
 
-                // Render background images to target after clear (so they're visible behind glass)
                 if has_bg_images {
-                    self.render_images_ref(target, &bg_images);
+                    let backdrop_tex = self.backdrop_texture.take().unwrap();
+                    for view in [target, &backdrop_tex.view] {
+                        self.render_images(
+                            view,
+                            bg_images.iter().copied(),
+                            width as f32,
+                            height as f32,
+                            scale_factor,
+                        );
+                    }
+                    self.backdrop_texture = Some(backdrop_tex);
                 }
 
                 // Finally render glass primitives on top
-                if batch.glass_count() > 0 {
-                    let backdrop = self.backdrop_texture.as_ref().unwrap();
-                    self.renderer.render_glass(target, &backdrop.view, batch);
-                }
+                let backdrop = self.backdrop_texture.as_ref().unwrap();
+                self.renderer.render_glass_layers(
+                    target,
+                    &backdrop.view,
+                    (backdrop.width, backdrop.height),
+                    batch,
+                );
             } else {
-                // No layer effects, use optimized glass frame rendering
+                // Background and glass only, in one pass of the encoder.
                 let backdrop = self.backdrop_texture.as_ref().unwrap();
                 self.renderer.render_glass_frame(
                     target,
                     &backdrop.view,
                     (backdrop.width, backdrop.height),
                     batch,
-                    has_bg_images,
+                    false,
                 );
             }
 
@@ -178,13 +187,15 @@ impl RenderContext {
                 }
             }
 
-            // Render remaining bg images (only if not already pre-rendered for glass)
-            if !has_bg_images {
-                self.render_images_ref(target, &bg_images);
-            }
-            self.render_images_ref(target, &fg_images);
+            self.render_images(
+                target,
+                fg_images.iter().copied(),
+                width as f32,
+                height as f32,
+                scale_factor,
+            );
 
-            if has_layer_effects_in_batch || load {
+            if in_steps {
                 self.renderer.update_aux_data_for_batch(batch);
                 let backdrop = self.backdrop_texture.as_ref().unwrap();
                 self.renderer
@@ -300,7 +311,13 @@ impl RenderContext {
 
                 // Render z=0 images
                 if let Some(z0_images) = images_by_layer.get(&0) {
-                    self.render_images_ref(target, z0_images);
+                    self.render_images(
+                        target,
+                        z0_images.iter().copied(),
+                        width as f32,
+                        height as f32,
+                        scale_factor,
+                    );
                 }
 
                 // Render z=0 text (must render before z=1 primitives for proper z-ordering)
@@ -331,7 +348,13 @@ impl RenderContext {
 
                     // Render images for this layer
                     if let Some(layer_images) = images_by_layer.get(&z) {
-                        self.render_images_ref(target, layer_images);
+                        self.render_images(
+                            target,
+                            layer_images.iter().copied(),
+                            width as f32,
+                            height as f32,
+                            scale_factor,
+                        );
                     }
 
                     // Render text for this layer (interleaved with primitives for proper z-order)

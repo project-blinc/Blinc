@@ -337,7 +337,7 @@ pub struct RenderContext {
     has_active_flows: bool,
     /// Whether image fades require another frame, tracked independently of flow shaders.
     has_pending_image_fade: bool,
-    captured_images_need_repaint: bool,
+    images_need_repaint: bool,
     /// Whether the collected content (texts, SVGs, images, motion text and images) is that of the
     /// last full paint. A cleared cache reads as empty, so a frame may reuse them, and skip
     /// collecting, only while this is set.
@@ -689,7 +689,7 @@ impl RenderContext {
             cursor_pos: [0.0; 2],
             has_active_flows: false,
             has_pending_image_fade: false,
-            captured_images_need_repaint: false,
+            images_need_repaint: false,
             collected_valid: false,
             #[cfg(not(target_arch = "wasm32"))]
             image_decode: None,

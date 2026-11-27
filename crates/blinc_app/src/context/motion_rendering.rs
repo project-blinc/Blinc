@@ -3,6 +3,7 @@ use super::cached_text;
 use super::composite_replay::{ALL_Z, LayerScope, MotionBand};
 use super::frame_dispatch::FrameContent;
 use super::frame_text::{self, PreparedFrameText};
+use super::image_rendering::is_near_view;
 use super::node_rows;
 use super::{
     DebugMode, DrawContext, GpuPaintContext, ImageElement, LayoutNodeId, PrimitiveBatch,
@@ -96,7 +97,7 @@ impl RenderContext {
             && self.cached_glyphs_by_layer.is_some()
             && self.cached_fg_glyphs.is_some()
             && self.cached_css_transformed_text_prims.is_some()
-            && !self.captured_images_need_repaint
+            && !self.images_need_repaint
             && !tree.css_active_off_rows())
         .then(|| self.redraw_canvas_output(tree, width, height))
         .flatten()
@@ -398,19 +399,27 @@ impl RenderContext {
             )
             .copied()
             .collect();
-        self.captured_images_need_repaint = false;
-        let mut captured_skeleton = false;
+        self.images_need_repaint = false;
+        let mut skeleton_shown = false;
         for image in all_images {
             use slotmap::Key as _;
             let key = image.node.data().as_ffi();
+            let missing = !self.image_cache.contains(&image.source);
+            // A skeleton moves until its image arrives.
+            if missing
+                && image.placeholder_type == 3
+                && !self.image_failures.gave_up(&image.source)
+                && is_near_view(&image, (width as f32, height as f32), 0.0)
+            {
+                skeleton_shown = true;
+                self.images_need_repaint = true;
+            }
             if captured_images.contains(&key) {
-                let missing = !self.image_cache.contains(&image.source);
                 let fading = self
                     .image_fade_deadlines
                     .get(&image.source)
                     .is_some_and(|deadline| web_time::Instant::now() < *deadline);
-                self.captured_images_need_repaint |= missing || fading;
-                captured_skeleton |= missing && image.placeholder_type == 3;
+                self.images_need_repaint |= missing || fading;
                 if !used_fast_paint {
                     captured.insert(
                         key,
@@ -577,7 +586,7 @@ impl RenderContext {
             }
         }
 
-        self.has_active_flows = captured_skeleton;
+        self.has_active_flows = skeleton_shown;
 
         // Poll the device to free completed command buffers
         self.renderer.poll();

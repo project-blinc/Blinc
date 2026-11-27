@@ -64,6 +64,9 @@ All notable changes to `blinc_app` will be documented in this file.
 
 ### Fixed
 - An image's brush placeholder is drawn while the image loads.
+- A window with a glass element on the page draws its background images. The page background was painted over them, so they did not show. They are drawn over the background and under the glass, which blurs them.
+- Image placeholders are drawn in frames with glass, inside the same clips, transforms and opacity as the image. A CSS translate on an image follows the display scale in those frames.
+- A skeleton image placeholder moves in a window, where it stood still.
 - An image's shadow is drawn once. It was drawn with the element and again with the image, so a translucent shadow came out darker.
 - An SVG inside an overflow fade fades with it, as text and shapes do.
 - A desktop or iOS window that has gone idle draws a frame when a shown scrollbar is due to fade, so the page scrollbar hides 1.5 s after a scroll instead of waiting for the next input, and its fade no longer lands on the frames of whatever the user does next.

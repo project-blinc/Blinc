@@ -40,7 +40,7 @@ impl RenderContext {
             .retain(|_, deadline| now < *deadline);
         self.has_pending_image_fade = !self.image_fade_deadlines.is_empty();
 
-        if self.has_pending_image_fade || self.captured_images_need_repaint {
+        if self.has_pending_image_fade || self.images_need_repaint {
             // Refresh cached pixels while image opacity changes.
             self.renderer.invalidate_static_layer();
         }
@@ -295,7 +295,13 @@ impl RenderContext {
                                     })
                                     .collect();
                                 if !filtered_refs.is_empty() {
-                                    self.render_images_ref(&static_view, &filtered_refs);
+                                    self.render_images(
+                                        &static_view,
+                                        filtered_refs,
+                                        width as f32,
+                                        height as f32,
+                                        scale_factor,
+                                    );
                                 }
                             }
                             self.renderer.clear_pending_scissor();
@@ -324,7 +330,13 @@ impl RenderContext {
                             && !images.is_empty()
                         {
                             let refs: Vec<&ImageElement> = images.iter().collect();
-                            self.render_images_ref(&static_view, &refs);
+                            self.render_images(
+                                &static_view,
+                                refs,
+                                width as f32,
+                                height as f32,
+                                scale_factor,
+                            );
                         }
                     }
                 }
@@ -574,7 +586,13 @@ impl RenderContext {
                                         })
                                         .collect();
                                     if !filtered_refs.is_empty() {
-                                        self.render_images_ref(&static_view, &filtered_refs);
+                                        self.render_images(
+                                            &static_view,
+                                            filtered_refs,
+                                            width as f32,
+                                            height as f32,
+                                            scale_factor,
+                                        );
                                     }
                                 }
                                 self.renderer.clear_pending_scissor();

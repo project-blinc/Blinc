@@ -196,6 +196,28 @@ impl GpuRenderer {
         self.update_aux_data_buffer(batch);
     }
 
+    /// Draws a batch's glass, nested glass after the glass it is in, over what `target`
+    /// holds. Nothing else of the batch is drawn.
+    pub fn render_glass_layers(
+        &mut self,
+        target: &wgpu::TextureView,
+        backdrop: &wgpu::TextureView,
+        backdrop_size: (u32, u32),
+        batch: &PrimitiveBatch,
+    ) {
+        if batch.glass_primitives.is_empty() && batch.nested_glass_primitives.is_empty() {
+            return;
+        }
+        // Reuse the native glass sequence without replaying the background.
+        let mut glass = PrimitiveBatch::new();
+        glass.glass_primitives.clone_from(&batch.glass_primitives);
+        glass
+            .nested_glass_primitives
+            .clone_from(&batch.nested_glass_primitives);
+        glass.aux_data.clone_from(&batch.aux_data);
+        self.render_glass_frame(target, backdrop, backdrop_size, &glass, true);
+    }
+
     pub(super) fn render_image_glass_frame(
         &mut self,
         target: &wgpu::TextureView,
@@ -219,16 +241,7 @@ impl GpuRenderer {
             }
             self.render_overlay_msaa(target, batch, 1);
         }
-        if !batch.glass_primitives.is_empty() || !batch.nested_glass_primitives.is_empty() {
-            // Reuse the native glass sequence without replaying the background.
-            let mut glass = PrimitiveBatch::new();
-            glass.glass_primitives.clone_from(&batch.glass_primitives);
-            glass
-                .nested_glass_primitives
-                .clone_from(&batch.nested_glass_primitives);
-            glass.aux_data.clone_from(&batch.aux_data);
-            self.render_glass_frame(target, backdrop, backdrop_size, &glass, true);
-        }
+        self.render_glass_layers(target, backdrop, backdrop_size, batch);
         self.update_aux_data_buffer(batch);
         self.render_foreground_with_glass(target, backdrop, batch);
     }

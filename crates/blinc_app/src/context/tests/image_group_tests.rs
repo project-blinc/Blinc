@@ -317,7 +317,7 @@ fn image_group_load_fade_refreshes_and_settles() {
                     255,
                 ],
             );
-            assert_eq!(context.captured_images_need_repaint, fade < 1.0);
+            assert_eq!(context.images_need_repaint, fade < 1.0);
         }
         let a = frame(&mut context, &tree, &state, compositor);
         let b = frame(&mut context, &tree, &state, compositor);
@@ -401,7 +401,7 @@ fn image_group_placeholders_refresh_and_sources_recover() {
                     _ => [0, 128, 255, 255],
                 },
             );
-            assert!(context.captured_images_need_repaint);
+            assert!(context.images_need_repaint);
             assert_eq!(context.has_active_flows, kind == 3);
             if kind == 3 {
                 context.frame_count = 30;
@@ -411,7 +411,7 @@ fn image_group_placeholders_refresh_and_sources_recover() {
             std::fs::write(&path, PNG).unwrap();
             let loaded = frame(&mut context, &tree, &state, compositor);
             pixel(&loaded, (30, 30), [0, 128, 128, 255]);
-            assert!(!context.captured_images_need_repaint);
+            assert!(!context.images_need_repaint);
             assert!(!context.has_active_flows);
             std::fs::remove_file(&path).unwrap();
             context.invalidate_asset_path(&path);
@@ -544,7 +544,7 @@ fn image_group_compositor_replay_keeps_evicted_texture_without_reload() {
             let replay = frame(&mut context, &tree, &state, compositor);
             assert_eq!(reference, replay);
             assert!(context.image_cache.is_empty());
-            assert!(!context.captured_images_need_repaint);
+            assert!(!context.images_need_repaint);
             assert_eq!(
                 context
                     .cached_bg_batch

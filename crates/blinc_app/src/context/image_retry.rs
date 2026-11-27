@@ -34,6 +34,13 @@ impl ImageFailures {
             .is_none_or(|f| f.retry_at.is_some_and(|at| Instant::now() >= at))
     }
 
+    /// Whether `source` failed and has no tries left.
+    pub fn gave_up(&self, source: &str) -> bool {
+        self.failed
+            .get(source)
+            .is_some_and(|f| f.retry_at.is_none())
+    }
+
     /// Record a failed load of `source`, waiting as `retry` says before the next try.
     pub fn failed(&mut self, source: &str, fade_duration_ms: u32, retry: ImageRetry) {
         let failures = self.failed.get(source).map_or(0, |f| f.failures) + 1;

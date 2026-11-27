@@ -5,6 +5,9 @@ use super::{
 };
 
 mod instance;
+mod placeholder;
+
+pub(super) use placeholder::is_near_view;
 
 impl RenderContext {
     /// Evict matching file-backed images and invalidate source-keyed SVG caches.
@@ -50,18 +53,6 @@ impl RenderContext {
         }
     }
 
-    /// Render images to the backdrop texture (for images that should be blurred by glass)
-    pub(super) fn render_images_to_backdrop(&mut self, images: &[&ImageElement]) {
-        let Some(ref backdrop) = self.backdrop_texture else {
-            return;
-        };
-        // Create a new view to avoid borrow conflicts
-        let target = backdrop
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        self.render_images_ref(&target, images);
-    }
-
     /// Put the images the worker has finished into the cache, and ask for a full paint when one
     /// arrived, so it is drawn. Start again the failed loads whose wait is over.
     pub(super) fn take_decoded_images(&mut self) {
@@ -98,7 +89,7 @@ impl RenderContext {
                 {
                     self.image_fade_deadlines.insert(decoded.source, deadline);
                 }
-                self.captured_images_need_repaint = true;
+                self.images_need_repaint = true;
             }
         }
     }
@@ -112,6 +103,7 @@ impl RenderContext {
     ) {
         // Buffer zone: load images that are within 100px of becoming visible
         const VISIBILITY_BUFFER: f32 = 100.0;
+        let viewport = (viewport_width, viewport_height);
         self.take_decoded_images();
 
         // Eagerly load placeholder images for any lazy element with placeholder_type == 2
@@ -147,44 +139,9 @@ impl RenderContext {
                 continue;
             }
 
-            // Check if lazy loading is enabled (loading_strategy == 1)
-            if image.loading_strategy == 1 {
-                // If image has clip bounds from a scroll container, use those for visibility check
-                // The clip bounds represent the visible area of the parent scroll container
-                let is_visible = if let Some([clip_x, clip_y, clip_w, clip_h]) = image.clip_bounds {
-                    // Check if image intersects with its clip region (+ buffer for prefetching)
-                    let clip_left = clip_x - VISIBILITY_BUFFER;
-                    let clip_top = clip_y - VISIBILITY_BUFFER;
-                    let clip_right = clip_x + clip_w + VISIBILITY_BUFFER;
-                    let clip_bottom = clip_y + clip_h + VISIBILITY_BUFFER;
-
-                    let image_right = image.x + image.width;
-                    let image_bottom = image.y + image.height;
-
-                    image.x < clip_right
-                        && image_right > clip_left
-                        && image.y < clip_bottom
-                        && image_bottom > clip_top
-                } else {
-                    // No clip bounds - check against viewport
-                    let viewport_left = -VISIBILITY_BUFFER;
-                    let viewport_top = -VISIBILITY_BUFFER;
-                    let viewport_right = viewport_width + VISIBILITY_BUFFER;
-                    let viewport_bottom = viewport_height + VISIBILITY_BUFFER;
-
-                    let image_right = image.x + image.width;
-                    let image_bottom = image.y + image.height;
-
-                    image.x < viewport_right
-                        && image_right > viewport_left
-                        && image.y < viewport_bottom
-                        && image_bottom > viewport_top
-                };
-
-                if !is_visible {
-                    // Skip loading - image is not yet visible
-                    continue;
-                }
+            // A lazy image (loading_strategy == 1) waits until it is near what shows.
+            if image.loading_strategy == 1 && !is_near_view(image, viewport, VISIBILITY_BUFFER) {
+                continue;
             }
 
             // A failed load waits as the image's retry says.
@@ -388,10 +345,10 @@ impl RenderContext {
     }
 
     /// Render collected images with their transforms, clips, masks and filters.
-    pub(super) fn render_images(
+    pub(super) fn render_images<'a>(
         &mut self,
         target: &wgpu::TextureView,
-        images: &[ImageElement],
+        images: impl IntoIterator<Item = &'a ImageElement>,
         viewport_width: f32,
         viewport_height: f32,
         scale_factor: f32,
@@ -417,121 +374,20 @@ impl RenderContext {
             } else {
                 1.0
             };
-            // Fade activity is determined before the compositor cache decision.
+            // Fade activity is determined before the compositor cache decision, by
+            // `has_pending_image_fade`.
 
             // If image is not loaded and has a placeholder, render placeholder
             if gpu_image.is_none() && image.placeholder_type != 0 {
                 self.flush_image_run(target, &mut run);
-                match image.placeholder_type {
-                    // Type 1: Solid color
-                    1 => {
-                        let color = blinc_core::Color::rgba(
-                            image.placeholder_color[0],
-                            image.placeholder_color[1],
-                            image.placeholder_color[2],
-                            image.placeholder_color[3],
-                        );
-                        let mut ctx = GpuPaintContext::new(viewport_width, viewport_height);
-                        let rect =
-                            blinc_core::Rect::new(image.x, image.y, image.width, image.height);
-                        ctx.fill_rounded_rect(
-                            rect,
-                            blinc_core::CornerRadius::uniform(image.border_radius),
-                            color,
-                        );
-                        let batch = ctx.take_batch();
-                        self.renderer.render_overlay(target, &batch);
-                    }
-                    // Type 2: Image placeholder (e.g., low-res thumbnail or blur hash)
-                    2 => {
-                        if let Some(ref placeholder_src) = image.placeholder_image
-                            && let Some(placeholder_gpu) = self.image_cache.get(placeholder_src)
-                        {
-                            let (src_rect, dst_rect) = calculate_fit_rects(
-                                placeholder_gpu.width(),
-                                placeholder_gpu.height(),
-                                image.width,
-                                image.height,
-                                ObjectFit::Cover,
-                                ObjectPosition::new(0.5, 0.5),
-                            );
-                            let src_uv = src_rect_to_uv(
-                                src_rect,
-                                placeholder_gpu.width(),
-                                placeholder_gpu.height(),
-                            );
-                            let instance = GpuImageInstance::new(
-                                image.x + dst_rect[0],
-                                image.y + dst_rect[1],
-                                dst_rect[2],
-                                dst_rect[3],
-                            )
-                            .with_src_uv(src_uv[0], src_uv[1], src_uv[2], src_uv[3])
-                            .with_border_radius(image.border_radius)
-                            .with_opacity(image.opacity);
-                            self.renderer.render_images(
-                                target,
-                                placeholder_gpu.view(),
-                                &[instance],
-                            );
-                        }
-                    }
-                    // Type 4: Brush fill
-                    4 => {
-                        let mut ctx = GpuPaintContext::new(viewport_width, viewport_height);
-                        ctx.push_opacity(image.opacity);
-                        super::captured_image::fill_placeholder_brush(
-                            &mut ctx,
-                            image,
-                            scale_factor,
-                        );
-                        let batch = ctx.take_batch();
-                        self.renderer.render_overlay(target, &batch);
-                    }
-                    // Type 3: Skeleton shimmer (animated gradient sweep)
-                    3 => {
-                        let t =
-                            self.frame_count.saturating_mul(16).rem_euclid(2400) as f32 / 2400.0;
-                        let base_a = image.placeholder_color[3].max(0.4);
-                        let base = blinc_core::Color::rgba(
-                            image.placeholder_color[0],
-                            image.placeholder_color[1],
-                            image.placeholder_color[2],
-                            base_a,
-                        );
-                        let highlight_a = (base_a + 0.25).min(1.0);
-                        let highlight = blinc_core::Color::rgba(
-                            (image.placeholder_color[0] + 0.15).min(1.0),
-                            (image.placeholder_color[1] + 0.15).min(1.0),
-                            (image.placeholder_color[2] + 0.15).min(1.0),
-                            highlight_a,
-                        );
-                        let mut ctx = GpuPaintContext::new(viewport_width, viewport_height);
-                        let rect =
-                            blinc_core::Rect::new(image.x, image.y, image.width, image.height);
-                        // Base background
-                        ctx.fill_rounded_rect(
-                            rect,
-                            blinc_core::CornerRadius::uniform(image.border_radius),
-                            base,
-                        );
-                        // Shimmer band — narrow vertical strip swept horizontally
-                        let band_w = (image.width * 0.25).max(40.0);
-                        let band_x = image.x + (image.width + band_w) * t - band_w;
-                        let band_rect =
-                            blinc_core::Rect::new(band_x, image.y, band_w, image.height);
-                        ctx.fill_rounded_rect(
-                            band_rect,
-                            blinc_core::CornerRadius::uniform(image.border_radius),
-                            highlight,
-                        );
-                        let batch = ctx.take_batch();
-                        self.renderer.render_overlay(target, &batch);
-                        // Mark frame as needing redraw for animation
-                        self.has_active_flows = true;
-                    }
-                    _ => {}
-                }
+                let batch = self.paint_image(
+                    image,
+                    image.opacity,
+                    (viewport_width as u32, viewport_height as u32),
+                    scale_factor,
+                    0,
+                );
+                self.renderer.render_overlay(target, &batch);
                 continue;
             }
 
@@ -570,46 +426,5 @@ impl RenderContext {
             .collect();
         self.renderer.render_image_set(target, &draws);
         run.clear();
-    }
-
-    /// Render borrowed image elements through the standard image path.
-    pub(super) fn render_images_ref(
-        &mut self,
-        target: &wgpu::TextureView,
-        images: &[&ImageElement],
-    ) {
-        for image in images {
-            // Get cached GPU image
-            let Some(gpu_image) = self.image_cache.get(&image.source) else {
-                continue; // Skip images that failed to load
-            };
-
-            // Compute fade-in opacity multiplier
-            let fade_factor = if image.fade_duration_ms > 0 {
-                if let Some(loaded_at) = self.image_load_times.get(&image.source) {
-                    let elapsed_ms = loaded_at.elapsed().as_secs_f32() * 1000.0;
-                    (elapsed_ms / image.fade_duration_ms as f32).clamp(0.0, 1.0)
-                } else {
-                    1.0
-                }
-            } else {
-                1.0
-            };
-            // Fade signal lives on `has_pending_image_fade`, set
-            // at the top of `try_render_with_compositor` from
-            // `image_load_times`. No per-dispatch set needed here.
-
-            let instance = Self::image_instance(
-                image,
-                gpu_image.width(),
-                gpu_image.height(),
-                fade_factor,
-                1.0,
-            );
-
-            // Render the image
-            self.renderer
-                .render_images(target, gpu_image.view(), &[instance]);
-        }
     }
 }

@@ -75,3 +75,111 @@ fn an_image_shadow_is_drawn_once() {
         }
     }
 }
+
+/// A page with a background, one image with what `picture` adds, and a glass element apart
+/// from it.
+fn beside_glass(picture: Div) -> Div {
+    page().child(picture).child(
+        div()
+            .absolute()
+            .left(110.0)
+            .top(80.0)
+            .w(40.0)
+            .h(30.0)
+            .glass(),
+    )
+}
+
+fn green() -> blinc_layout::image::Image {
+    blinc_layout::image(super::overlay_group_tests::IMAGE)
+        .size(40.0, 30.0)
+        .fade_in(std::time::Duration::ZERO)
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn glass_leaves_the_images_beside_it_drawn() {
+    for mode in 0..4 {
+        for scale in [1, 2] {
+            let mut context = super::main_text_clip_tests::context(true, 1);
+            let moved = green().transform(blinc_core::Transform::translate(40.0, 0.0));
+            let tree = laid_out(beside_glass(at(20.0, 20.0, moved)), scale);
+            let state = state();
+            for _ in 0..2 {
+                let drawn = frame(&mut context, &tree, &state, mode);
+                for (x, expected) in [(30, [0, 0, 255, 255]), (80, [0, 255, 0, 255])] {
+                    super::opacity_group_tests::pixel(&drawn, (x * scale, 35 * scale), expected);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn glass_blurs_the_image_under_it() {
+    for mode in 0..4 {
+        let mut context = super::main_text_clip_tests::context(true, 1);
+        let tree = laid_out(
+            page().child(at(40.0, 30.0, green())).child(
+                div()
+                    .absolute()
+                    .left(45.0)
+                    .top(35.0)
+                    .w(30.0)
+                    .h(20.0)
+                    .glass(),
+            ),
+            1,
+        );
+        let drawn = frame(&mut context, &tree, &state(), mode);
+        let inside = drawn.get_pixel(60, 45).0;
+        assert!(inside[1] > 100, "mode {mode}: {inside:?}");
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn glass_leaves_the_placeholders_beside_it_drawn() {
+    use blinc_layout::image::Placeholder;
+    let thumbnail = Placeholder::Image(super::overlay_group_tests::IMAGE.into());
+    for (placeholder, expected) in [
+        (Placeholder::Color(Color::CYAN), [0, 255, 255, 255]),
+        (thumbnail, [0, 255, 0, 255]),
+    ] {
+        for mode in 0..4 {
+            let mut context = super::main_text_clip_tests::context(true, 1);
+            let picture = blinc_layout::image("missing-beside-glass.png")
+                .size(40.0, 30.0)
+                .placeholder(placeholder.clone());
+            let tree = laid_out(beside_glass(at(20.0, 20.0, picture)), 1);
+            let state = state();
+            for _ in 0..2 {
+                let drawn = frame(&mut context, &tree, &state, mode);
+                super::opacity_group_tests::pixel(&drawn, (40, 35), expected);
+            }
+        }
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn a_skeleton_placeholder_moves_in_every_frame_path() {
+    for mode in 0..3 {
+        let mut context = super::main_text_clip_tests::context(true, 1);
+        let picture = blinc_layout::image("missing-skeleton.png")
+            .size(120.0, 40.0)
+            .skeleton();
+        let tree = laid_out(page().child(at(20.0, 20.0, picture)), 1);
+        let state = state();
+        let mut row = |n: u64| {
+            context.frame_count = n;
+            let drawn = frame(&mut context, &tree, &state, mode);
+            assert!(context.has_active_flows(), "mode {mode}: no next frame");
+            (20..140)
+                .map(|x| drawn.get_pixel(x, 40).0)
+                .collect::<Vec<_>>()
+        };
+        assert_ne!(row(30), row(90), "mode {mode}");
+    }
+}

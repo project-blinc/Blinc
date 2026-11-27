@@ -12,6 +12,19 @@ impl RenderContext {
         dpi: f32,
         ordinal: u32,
     ) -> PrimitiveBatch {
+        // The groups around the image apply their own opacity.
+        self.paint_image(image, image.content_opacity, viewport, dpi, ordinal)
+    }
+
+    /// The image, or its placeholder while it is not loaded, at `opacity`.
+    pub(super) fn paint_image(
+        &mut self,
+        image: &ImageElement,
+        opacity: f32,
+        viewport: (u32, u32),
+        dpi: f32,
+        ordinal: u32,
+    ) -> PrimitiveBatch {
         let mut paint = if let Some(path) = &image.path_clip {
             path.clip_context(None, viewport)
         } else {
@@ -45,7 +58,7 @@ impl RenderContext {
         }
         let mut content = image.clone();
         content.css_affine = None;
-        content.opacity = image.content_opacity;
+        content.opacity = opacity;
         let loaded = self.image_cache.contains(&image.source);
         let source = if loaded {
             Some(&image.source)
@@ -84,10 +97,10 @@ impl RenderContext {
                 style,
             );
         } else if !loaded && image.placeholder_type == 4 {
-            paint.push_opacity(image.content_opacity);
+            paint.push_opacity(opacity);
             fill_placeholder_brush(&mut paint, image, dpi);
         } else if !loaded && matches!(image.placeholder_type, 1 | 3) {
-            paint.push_opacity(image.content_opacity);
+            paint.push_opacity(opacity);
             let [r, g, b, a] = image.placeholder_color;
             let radius = CornerRadius::uniform(image.border_radius);
             let rect = Rect::new(image.x, image.y, image.width, image.height);
