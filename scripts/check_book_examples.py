@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 BOOK = ROOT / "docs/book/src"
@@ -17,6 +18,21 @@ BLOCKS = re.compile(r"^```(rust[^\n]*|css)\n(.*?)^```", re.M | re.S)
 
 def blocks(chapter):
     return [(language, source) for language, source in BLOCKS.findall((BOOK / chapter).read_text())]
+
+
+def workspace_patches():
+    """The workspace's crates.io patches, as lines for another manifest.
+
+    The temporary crate is checked offline, so it has to build the copies the
+    workspace builds: the registry's copy of a patched crate may not be there.
+    """
+    manifest = tomllib.loads((ROOT / "Cargo.toml").read_text())
+    patches = manifest.get("patch", {}).get("crates-io", {})
+    return "".join(
+        f'{name} = {{ path = {json.dumps(str(ROOT / patch["path"]))} }}\n'
+        for name, patch in patches.items()
+        if "path" in patch
+    )
 
 
 def check(directory, target=None):
@@ -44,6 +60,7 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 debug = false
 '''
+    manifest += "[patch.crates-io]\n" + workspace_patches()
     (directory / "Cargo.toml").write_text(manifest)
     if (ROOT / "Cargo.lock").is_file():
         shutil.copy2(ROOT / "Cargo.lock", directory / "Cargo.lock")
