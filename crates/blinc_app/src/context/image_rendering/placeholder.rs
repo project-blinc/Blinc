@@ -12,8 +12,8 @@ pub(in crate::context) fn has_backdrop_placeholder(image: &ImageElement) -> bool
 }
 
 /// Whether such a placeholder joins the glass of the frame, for an image the frame draws
-/// itself. An image in a 3D layer or a motion container is drawn apart, with no backdrop,
-/// and shows the tint, as does one inside a group.
+/// itself. An image in a 3D layer, or moving with a motion binding, is drawn apart, with no
+/// backdrop, and shows the tint.
 pub(in crate::context) fn blurs_in_the_frame(image: &ImageElement) -> bool {
     has_backdrop_placeholder(image)
         && !image.in_motion_subtree

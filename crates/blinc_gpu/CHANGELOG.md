@@ -12,6 +12,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 
 ### Added
 - `GpuRenderer::render_glass_layers` draws a batch's glass, and the glass nested in it, over what a target holds.
+- A batch inserted at a deferred image brings its glass into the groups the image is in.
 - The notch shader reads a peak's apex offset from the last lane of its edge modifier, which a peak did not use.
 - `GpuRenderer::overlay_divides_at` says whether a batch can be drawn in parts divided at given primitive indices, and `render_overlay_part` draws one part as `render_overlay_msaa` at one sample draws the whole batch, so content drawn apart from the batch can go between the parts.
 - `GpuRenderer::begin_frame_submission` and `end_frame_submission` bracket a frame: between them the renderer's passes record into one shared command encoder and the frame is submitted once, at the end. Devices without storage buffers keep submitting each pass. `GpuRenderer::queue` and `queue_arc` submit what the renderer has recorded before handing out the queue, so work submitted through it lands after the renderer's.

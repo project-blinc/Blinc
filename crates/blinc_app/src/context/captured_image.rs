@@ -13,9 +13,17 @@ impl RenderContext {
         dpi: f32,
         ordinal: u32,
     ) -> PrimitiveBatch {
-        // The groups around the image apply their own opacity. What is inserted into their
-        // stream cannot hold glass.
-        self.paint_image(image, image.content_opacity, viewport, dpi, ordinal, false)
+        // The groups around the image apply their own opacity, and a 3D layer leaves glass
+        // nothing to sample.
+        let backdrop = image.transform_3d_layer.is_none();
+        self.paint_image(
+            image,
+            image.content_opacity,
+            viewport,
+            dpi,
+            ordinal,
+            backdrop,
+        )
     }
 
     /// The image, or its placeholder while it is not loaded, at `opacity`. With `backdrop`

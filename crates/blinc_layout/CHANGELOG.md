@@ -148,7 +148,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Returning from a pressed scale to the identity transform does not restart hover colour transitions.
 - Repeated hover evaluation preserves settled transition targets instead of restarting them. Complex state selectors respect component layers and application specificity.
 - Overlay focus returns to stable trigger identities on dismissal, and nested scopes constrain Tab to the topmost active popup. Pointer focus persists without a keyboard ring. Menu roles support roving focus, submenu keys and keyboard context-menu activation.
-- `.placeholder_brush()` draws its brush while the image loads. A gradient fills the image's box, an image brush shows its image, and a glass or blur brush blurs what is behind the box. Inside a motion container, a 3D layer or a parent with opacity, a filter or a blend mode, a glass or blur brush shows its tint colour.
+- `.placeholder_brush()` draws its brush while the image loads. A gradient fills the image's box, an image brush shows its image, and a glass or blur brush blurs what is behind the box. Inside a container with a bound position, scale or rotation, or a 3D layer, a glass or blur brush shows its tint colour.
 - `.show_dimensions()` on a video player shows the size of the frame under the controls.
 - `virtual_list(..).gap_px(..)` puts the gap between the rows, and the scroll range counts it.
 - The controls of the desktop audio player follow playback: the play button, the time, the seek bar and the volume. `MediaControls::new` reads its player as it paints, for any `Player`.

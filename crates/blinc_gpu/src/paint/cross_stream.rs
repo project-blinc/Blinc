@@ -59,6 +59,10 @@ impl GpuPaintContext<'_> {
             return false;
         }
         let opacity = self.combined_opacity();
+        let image_paint = matches!(kind, DeferredNode::Image)
+            .then(|| self.group_gpu_paint())
+            .flatten();
+        let frame_size = (self.viewport.width as u32, self.viewport.height as u32);
         let command = match kind {
             DeferredNode::Text => LayerCommand::DeferredText { id, opacity },
             DeferredNode::Svg => LayerCommand::DeferredSvg { id, opacity },
@@ -76,6 +80,12 @@ impl GpuPaintContext<'_> {
             }
             DeferredNode::Image => {
                 batch.cross_stream_groups.image_nodes.insert(id);
+                if let Some(paint) = image_paint {
+                    batch
+                        .cross_stream_groups
+                        .image_paints
+                        .insert(id, (paint, frame_size));
+                }
             }
         }
         if foreground {

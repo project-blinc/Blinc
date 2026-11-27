@@ -185,8 +185,8 @@ fn a_skeleton_placeholder_moves_in_every_frame_path() {
 }
 
 /// A red bar under the left half of the box of an image that has a glass placeholder, with
-/// the image at `opacity`.
-fn glass_placeholder_page(tint: Color, opacity: f32) -> RenderTree {
+/// the image at `opacity`, or inside a motion container.
+fn glass_placeholder_page(tint: Color, opacity: f32, in_motion: bool) -> RenderTree {
     use blinc_core::{Brush, GlassStyle};
     let picture = blinc_layout::image("missing-glass-placeholder.png")
         .size(80.0, 60.0)
@@ -198,12 +198,14 @@ fn glass_placeholder_page(tint: Color, opacity: f32) -> RenderTree {
         .w(40.0)
         .h(60.0)
         .bg(Color::RED);
-    laid_out(
-        page()
-            .child(bar)
-            .child(at(20.0, 20.0, picture).opacity(opacity)),
-        1,
-    )
+    let holder = at(20.0, 20.0, picture).opacity(opacity);
+    let root = page().child(bar);
+    let root = if in_motion {
+        root.child(blinc_layout::motion::motion().child(holder))
+    } else {
+        root.child(holder)
+    };
+    laid_out(root, 1)
 }
 
 #[test]
@@ -211,7 +213,7 @@ fn glass_placeholder_page(tint: Color, opacity: f32) -> RenderTree {
 fn a_glass_placeholder_blurs_what_is_behind_it() {
     for mode in 0..4 {
         let mut context = super::main_text_clip_tests::context(true, 1);
-        let tree = glass_placeholder_page(Color::TRANSPARENT, 1.0);
+        let tree = glass_placeholder_page(Color::TRANSPARENT, 1.0, false);
         let state = state();
         for n in 0..3 {
             let drawn = frame(&mut context, &tree, &state, mode);
@@ -228,11 +230,22 @@ fn a_glass_placeholder_blurs_what_is_behind_it() {
 
 #[test]
 #[ignore] // Requires GPU
-fn a_glass_placeholder_in_a_group_shows_its_tint() {
-    for mode in 0..4 {
-        let mut context = super::main_text_clip_tests::context(true, 1);
-        let tree = glass_placeholder_page(Color::GREEN, 0.5);
-        let drawn = frame(&mut context, &tree, &state(), mode);
-        super::opacity_group_tests::pixel(&drawn, (80, 50), [0, 128, 127, 255]);
+fn a_glass_placeholder_blurs_inside_a_group() {
+    for (opacity, in_motion) in [(0.5, false), (1.0, true), (0.5, true)] {
+        for mode in 0..4 {
+            let mut context = super::main_text_clip_tests::context(true, 1);
+            let tree = glass_placeholder_page(Color::TRANSPARENT, opacity, in_motion);
+            let state = state();
+            for n in 0..3 {
+                let drawn = frame(&mut context, &tree, &state, mode);
+                // The blurred bar, faded by the group, over the sharp page.
+                let past_the_bar = drawn.get_pixel(63, 50).0;
+                assert!(
+                    past_the_bar[0] > 10 && past_the_bar[2] > 120,
+                    "mode {mode} frame {n} opacity {opacity} motion {in_motion}: {past_the_bar:?}"
+                );
+                super::opacity_group_tests::pixel(&drawn, (110, 50), [0, 0, 255, 255]);
+            }
+        }
     }
 }

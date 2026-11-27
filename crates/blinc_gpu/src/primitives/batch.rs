@@ -691,6 +691,9 @@ impl PrimitiveBatch {
         self.cross_stream_groups
             .image_nodes
             .extend(other.cross_stream_groups.image_nodes);
+        self.cross_stream_groups
+            .image_paints
+            .extend(other.cross_stream_groups.image_paints);
         let shift = self.aux_data.len() as f32;
         for glyph in &mut other.glyphs {
             if glyph.flags[1] > 0.0 {

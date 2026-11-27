@@ -1,5 +1,6 @@
 //! Join native group fragments before batch-local indices are dispatched.
-use super::{ImagePaintOrder, LayerCommand, PrimitiveBatch};
+use super::{DynamicImage, ImagePaintOrder, LayerCommand, PrimitiveBatch};
+use crate::paint::GroupGlass;
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
@@ -28,6 +29,9 @@ pub struct CrossStreamGroups {
     pub text_nodes: HashSet<u64>,
     pub svg_nodes: HashSet<u64>,
     pub image_nodes: HashSet<u64>,
+    /// For each deferred image, the clips of the frame where it was deferred and the frame's
+    /// size, which place glass its batch brings.
+    pub(crate) image_paints: HashMap<u64, (DynamicImage, (u32, u32))>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -297,6 +301,21 @@ fn emit(
                 if let Some(mut batch) = text.as_mut().unwrap().remove(id) {
                     debug_assert!(batch.glyphs.is_empty());
                     let shift = source.aux_data.len() as f32;
+                    // Glass goes under the rest of what is inserted, as it was painted.
+                    if let Some((paint, frame_size)) =
+                        source.cross_stream_groups.image_paints.get(id)
+                    {
+                        for mut glass in batch.glass_primitives.drain(..) {
+                            if glass.clip_radius[3] < 0.0 {
+                                glass.clip_radius[0] += shift;
+                            }
+                            if let Some(glass) =
+                                GroupGlass::placed(glass, false, paint.clone(), *frame_size)
+                            {
+                                command(output, LayerCommand::Glass(Box::new(glass)));
+                            }
+                        }
+                    }
                     for primitive in &mut batch.primitives {
                         primitive.rebase_aux(shift);
                         primitive.color[3] *= opacity;
@@ -428,5 +447,6 @@ impl PrimitiveBatch {
         self.cross_stream_groups.text_nodes = source.cross_stream_groups.text_nodes;
         self.cross_stream_groups.svg_nodes = source.cross_stream_groups.svg_nodes;
         self.cross_stream_groups.image_nodes = source.cross_stream_groups.image_nodes;
+        self.cross_stream_groups.image_paints = source.cross_stream_groups.image_paints;
     }
 }
