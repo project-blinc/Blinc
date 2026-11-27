@@ -14,6 +14,15 @@ use std::sync::{Arc, Mutex, Weak};
 use crate::tree::LayoutNodeId;
 
 /// Serial for auto-assigned element ids, so each ref's id is its own.
+/// What starts an id a ref gives an element that has none.
+const ASSIGNED_ID_PREFIX: &str = "__blinc_ref_";
+
+/// Whether `id` is one a ref made up. It addresses the element and is no part
+/// of the element's identity, which is settled before any ref binds.
+pub(crate) fn is_ref_assigned_id(id: &str) -> bool {
+    id.starts_with(ASSIGNED_ID_PREFIX)
+}
+
 fn next_serial() -> u64 {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
@@ -116,7 +125,7 @@ impl DivRef {
                     // id is reissued, so a node-derived id would match
                     // again after recycling and defeat the staleness
                     // check below.
-                    let fresh = format!("__blinc_ref_{}", next_serial());
+                    let fresh = format!("{ASSIGNED_ID_PREFIX}{}", next_serial());
                     registry.register(fresh.clone(), node_id);
                     fresh
                 }

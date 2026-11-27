@@ -44,6 +44,7 @@ use std::sync::Arc;
 
 use blinc_core::BlincContextState;
 
+pub(crate) use div_ref::is_ref_assigned_id;
 pub use div_ref::{DivRef, DivRefInner};
 pub use handle::{ElementEvent, ElementHandle, MotionHandle};
 pub use input_ref::InputRef;

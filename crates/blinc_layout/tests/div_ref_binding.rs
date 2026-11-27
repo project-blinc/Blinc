@@ -231,3 +231,45 @@ fn an_input_ref_does_not_touch_the_fields_id() {
     );
     assert!(email.exists(), "and the binding still holds");
 }
+
+/// The id a ref gives an element is no part of the element's identity, so what
+/// sits under a bound element keeps its handlers when another subtree is rebuilt.
+#[test]
+fn a_bound_elements_descendants_keep_their_handlers_across_a_rebuild_elsewhere() {
+    use blinc_core::events::event_types::POINTER_UP;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let card = DivRef::new();
+    let clicks = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&clicks);
+    let host = div()
+        .w(100.0)
+        .h(100.0)
+        .child(
+            div()
+                .bind(&card)
+                .child(div().w(40.0).h(40.0).on_click(move |_| {
+                    counted.fetch_add(1, Ordering::SeqCst);
+                })),
+        )
+        .child(div().child(div().h(5.0)));
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(100.0, 100.0);
+
+    let root = tree.root().unwrap();
+    let bound = tree.layout_tree.children(root)[0];
+    let other = tree.layout_tree.children(root)[1];
+    let target = tree.layout_tree.children(bound)[0];
+    let before = tree.stable_id(target);
+    tree.dispatch_event(target, POINTER_UP, 10.0, 10.0);
+    assert_eq!(clicks.load(Ordering::SeqCst), 1);
+
+    tree.with_property_updates(|| {
+        blinc_layout::queue_subtree_rebuild(other, div().child(div().h(10.0)))
+    });
+    assert!(tree.process_pending_subtree_rebuilds());
+    assert_eq!(tree.stable_id(target), before);
+    tree.dispatch_event(target, POINTER_UP, 10.0, 10.0);
+    assert_eq!(clicks.load(Ordering::SeqCst), 2);
+}

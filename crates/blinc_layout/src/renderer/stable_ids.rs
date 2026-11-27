@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 
+use crate::selector::is_ref_assigned_id;
 use crate::tree::{LayoutNodeId, StableNodeId};
 
 use super::RenderTree;
@@ -32,7 +33,7 @@ impl RenderTree {
         self.layout_to_stable.clear();
 
         let Some(root_id) = self.root else { return };
-        let root_widget_key = self.element_registry.get_id(root_id);
+        let root_widget_key = self.widget_key(root_id);
         let root_stable = StableNodeId::ROOT.derive_child(0, root_widget_key.as_deref());
         self.register_stable(root_stable, root_id);
         self.mint_descendants(root_id, root_stable);
@@ -50,6 +51,13 @@ impl RenderTree {
         self.mint_descendants(parent, stable);
     }
 
+    /// The element id that names `node`: the one it was built with.
+    fn widget_key(&self, node: LayoutNodeId) -> Option<String> {
+        self.element_registry
+            .get_id(node)
+            .filter(|id| !is_ref_assigned_id(id))
+    }
+
     fn mint_descendants(&mut self, node: LayoutNodeId, stable: StableNodeId) {
         // The registration needs `&mut self`, so the descent keeps its own stack rather than
         // recursing through borrows of the layout tree.
@@ -63,7 +71,7 @@ impl RenderTree {
                 .iter()
                 .map(|&child| match crate::region::row_key(child) {
                     Some(key) => (Some(key), true),
-                    None => (self.element_registry.get_id(child), false),
+                    None => (self.widget_key(child), false),
                 })
                 .collect();
             let mut key_counts: HashMap<&str, usize> = HashMap::new();
