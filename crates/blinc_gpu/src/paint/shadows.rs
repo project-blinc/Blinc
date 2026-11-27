@@ -174,6 +174,9 @@ impl GpuPaintContext<'_> {
 
     pub(super) fn draw_circle_shadow_impl(&mut self, center: Point, radius: f32, shadow: Shadow) {
         let transformed_center = self.transform_point(center);
+        // The radius and the shadow are given in logical pixels, as the centre is.
+        let s = self.circle_scale();
+        let radius = radius * s;
         let opacity = self.combined_opacity();
         let (clip_bounds, clip_radius, clip_corner_shape, clip_type) = self.get_clip_data();
 
@@ -191,7 +194,12 @@ impl GpuPaintContext<'_> {
             color2: [0.0, 0.0, 0.0, 0.0],
             border: [0.0; 4],
             border_color: [0.0; 4],
-            shadow: [shadow.offset_x, shadow.offset_y, shadow.blur, shadow.spread],
+            shadow: [
+                shadow.offset_x * s,
+                shadow.offset_y * s,
+                shadow.blur * s,
+                shadow.spread * s,
+            ],
             shadow_color: [
                 shadow.color.r,
                 shadow.color.g,
@@ -242,6 +250,9 @@ impl GpuPaintContext<'_> {
         shadow: Shadow,
     ) {
         let transformed_center = self.transform_point(center);
+        // The radius and the shadow are given in logical pixels, as the centre is.
+        let s = self.circle_scale();
+        let radius = radius * s;
         let opacity = self.combined_opacity();
         let (clip_bounds, clip_radius, clip_corner_shape, clip_type) = self.get_clip_data();
 
@@ -258,7 +269,12 @@ impl GpuPaintContext<'_> {
             color2: [0.0, 0.0, 0.0, 0.0],
             border: [0.0; 4],
             border_color: [0.0; 4],
-            shadow: [shadow.offset_x, shadow.offset_y, shadow.blur, shadow.spread],
+            shadow: [
+                shadow.offset_x * s,
+                shadow.offset_y * s,
+                shadow.blur * s,
+                shadow.spread * s,
+            ],
             shadow_color: [
                 shadow.color.r,
                 shadow.color.g,

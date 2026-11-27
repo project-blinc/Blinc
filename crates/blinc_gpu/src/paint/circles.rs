@@ -5,15 +5,15 @@ use crate::primitives::{FillType, GpuGlassPrimitive, GpuPrimitive, PrimitiveType
 use blinc_core::{Brush, Point, Rect, Stroke};
 
 impl GpuPaintContext<'_> {
+    /// What the current transform scales a circle's radius by: the mean of its two axes.
+    pub(super) fn circle_scale(&self) -> f32 {
+        let [a, b, c, d, ..] = self.current_affine().elements;
+        ((a * a + b * b).sqrt() + (c * c + d * d).sqrt()) / 2.0
+    }
+
     pub(super) fn fill_circle_impl(&mut self, center: Point, radius: f32, brush: Brush) {
         let transformed_center = self.transform_point(center);
-        let affine = self.current_affine();
-        let a = affine.elements[0];
-        let b = affine.elements[1];
-        let c = affine.elements[2];
-        let d = affine.elements[3];
-        let scale = ((a * a + b * b).sqrt() + (c * c + d * d).sqrt()) / 2.0;
-        let transformed_radius = radius * scale;
+        let transformed_radius = radius * self.circle_scale();
 
         // Handle glass brush specially - push to glass primitives
         if let Brush::Glass(style) = &brush {
@@ -115,12 +115,7 @@ impl GpuPaintContext<'_> {
         brush: Brush,
     ) {
         let transformed_center = self.transform_point(center);
-        let affine = self.current_affine();
-        let a = affine.elements[0];
-        let b = affine.elements[1];
-        let c = affine.elements[2];
-        let d = affine.elements[3];
-        let scale = ((a * a + b * b).sqrt() + (c * c + d * d).sqrt()) / 2.0;
+        let scale = self.circle_scale();
         let transformed_radius = radius * scale;
 
         let (color, _, gradient_params, fill_type) = self.brush_to_colors(&brush);

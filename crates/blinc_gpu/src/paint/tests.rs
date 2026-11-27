@@ -344,3 +344,29 @@ fn composite_layer_nested_push_preserves_outer_clip_base() {
     assert_eq!(ctx.composite_layer_clip_base(), None);
     ctx.pop_clip();
 }
+
+#[test]
+fn circle_shadows_scale_with_the_display() {
+    use blinc_core::{Point, Shadow};
+
+    let mut ctx = GpuPaintContext::new(800.0, 600.0);
+    ctx.push_transform(Transform::scale(2.0, 2.0));
+    let shadow = Shadow {
+        offset_x: 1.0,
+        offset_y: 2.0,
+        blur: 3.0,
+        spread: 4.0,
+        color: Color::BLACK,
+    };
+    ctx.draw_circle_shadow(Point::new(50.0, 40.0), 10.0, shadow);
+    ctx.draw_circle_inner_shadow(Point::new(50.0, 40.0), 10.0, shadow);
+    ctx.pop_transform();
+
+    let batch = ctx.take_batch();
+    assert_eq!(batch.primitives.len(), 2);
+    for primitive in &batch.primitives {
+        assert_eq!(primitive.bounds, [80.0, 60.0, 40.0, 40.0]);
+        assert_eq!(primitive.corner_radius, [20.0; 4]);
+        assert_eq!(primitive.shadow, [2.0, 4.0, 6.0, 8.0]);
+    }
+}
