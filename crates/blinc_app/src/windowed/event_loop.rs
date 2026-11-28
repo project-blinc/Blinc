@@ -542,10 +542,10 @@ where
         self.wake_proxy_for_pacing.wake_at(wait);
     }
 
-    /// When a scroll offset or the layout has moved what is under a still pointer, run the move
-    /// again at the pointer, so hover, its styles and the cursor follow content that moves while
-    /// the mouse does not: a list scrolling, rows mounting. The move takes the path a real one
-    /// does, short of the cache of the last hit it would otherwise stop at.
+    /// Run the move again at the pointer, so hover, its styles and the cursor follow it, when a
+    /// scroll offset or the layout has moved what is under a still pointer (a list scrolling, rows
+    /// mounting), or when a move was dropped. The move takes the path a real one does, short of
+    /// the cache of the last hit it would otherwise stop at.
     fn refresh_hover(
         &mut self,
         wid: blinc_platform::WindowId,
@@ -560,10 +560,11 @@ where
         let stamp = (tree.scroll_signature(), tree.layout_tree.epoch());
         let moved = self.ws.hover_stamp.is_some_and(|last| last != stamp);
         self.ws.hover_stamp = Some(stamp);
+        let dropped = std::mem::take(&mut self.ws.hover_pending);
         let Some((x, y)) = self.ws.pointer_px else {
             return;
         };
-        if !moved || ctx.event_router.is_press_in_flight() {
+        if !(moved || dropped) || ctx.event_router.is_press_in_flight() {
             return;
         }
         ctx.event_router.forget_last_hit();

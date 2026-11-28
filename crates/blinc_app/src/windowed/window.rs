@@ -100,6 +100,9 @@ pub(crate) struct WindowState {
     pub last_pointer_dispatch: Option<std::time::Instant>,
     /// Where the pointer is, in physical pixels, while it is over the window.
     pub pointer_px: Option<(f32, f32)>,
+    /// A dropped move left what the pointer hovered, so the next frame runs the
+    /// move at the pointer (`DesktopLoop::refresh_hover`).
+    pub hover_pending: bool,
     /// The scroll offsets and layout the pointer was last tested against: when they change, what
     /// is under a still pointer may have too (`DesktopLoop::refresh_hover`).
     pub hover_stamp: Option<(u64, u64)>,
@@ -165,6 +168,7 @@ impl WindowState {
             last_router_state_fp: None,
             last_pointer_dispatch: None,
             pointer_px: None,
+            hover_pending: false,
             hover_stamp: None,
             #[cfg(all(feature = "wayland-frame-gate", target_os = "linux"))]
             wayland_gate: None,

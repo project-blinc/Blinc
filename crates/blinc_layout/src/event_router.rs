@@ -33,6 +33,7 @@
 //! router.on_mouse_up(&tree, 100.0, 200.0, MouseButton::Left);
 //! ```
 
+mod above;
 pub(crate) mod focus;
 
 /// The focused node whose keyboard focus ring is visible.
@@ -215,6 +216,9 @@ pub struct EventRouter {
     /// case `last_leaf_has_no_children = true` and this check is
     /// vacuous.
     last_leaf_children_bounds: Vec<(f32, f32, f32, f32)>,
+    /// Where an element the hit test would take first covers the last hit's
+    /// leaf: a sibling of it or of an ancestor, drawn above.
+    last_leaf_covered: Vec<(f32, f32, f32, f32)>,
 }
 
 impl Default for EventRouter {
@@ -259,6 +263,7 @@ impl EventRouter {
             last_hit_chain: Vec::new(),
             last_leaf_has_no_children: false,
             last_leaf_children_bounds: Vec::new(),
+            last_leaf_covered: Vec::new(),
         }
     }
 
@@ -330,25 +335,23 @@ impl EventRouter {
         if !inside_leaf {
             return false;
         }
-        // Cursor is inside the previous leaf. The hover set is
-        // unchanged ONLY if no direct child of the leaf now contains
-        // the cursor — otherwise the child would become the new
-        // deepest hit and a POINTER_ENTER would be due.
+        // The hover set is unchanged only if neither a direct child
+        // of the leaf nor an element drawn above it now holds the
+        // cursor: either would become the deepest hit and be due a
+        // POINTER_ENTER.
+        let holds = |&(cx, cy, cw, ch): &(f32, f32, f32, f32)| {
+            x >= cx && x < cx + cw && y >= cy && y < cy + ch
+        };
+        if self.last_leaf_covered.iter().any(holds) {
+            return false;
+        }
         //
         // Leaves with no children (`last_leaf_has_no_children`) skip
         // this loop entirely. Leaves with children pay an O(children)
         // bounds check per move; in cn_demo's deepest leaves that's
         // a handful of containers — orders of magnitude cheaper than
         // the recursive hit_test we'd otherwise run.
-        if self.last_leaf_has_no_children {
-            return true;
-        }
-        for (cx, cy, cw, ch) in self.last_leaf_children_bounds.iter().copied() {
-            if x >= cx && x < cx + cw && y >= cy && y < cy + ch {
-                return false;
-            }
-        }
-        true
+        self.last_leaf_has_no_children || !self.last_leaf_children_bounds.iter().any(holds)
     }
 
     /// Update stored cursor coordinates without running the hit-
@@ -865,10 +868,22 @@ impl EventRouter {
             self.last_leaf_children_bounds.clear();
             self.last_leaf_children_bounds
                 .extend_from_slice(&topmost.leaf_children_bounds);
+            self.last_leaf_covered = above::rects_above(
+                tree,
+                &topmost.ancestors,
+                &topmost.ancestor_bounds,
+                (
+                    topmost.bounds_x,
+                    topmost.bounds_y,
+                    topmost.bounds_width,
+                    topmost.bounds_height,
+                ),
+            );
         } else {
             self.last_hit_chain.clear();
             self.last_leaf_has_no_children = false;
             self.last_leaf_children_bounds.clear();
+            self.last_leaf_covered.clear();
         }
 
         // Resolve current hover set to stable ids so the diff against

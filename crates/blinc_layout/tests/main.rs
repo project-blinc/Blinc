@@ -33,6 +33,7 @@ mod css_state_transition;
 mod div_ref_binding;
 mod fallback_measure;
 mod flow_loop;
+mod hover_shortcut;
 mod ime;
 mod incidental_align_self;
 mod initial_focus;

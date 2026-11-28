@@ -63,6 +63,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - The iOS and Android runners present through the compositor as the desktop runner does: a frame with no input, state change, scroll or CSS motion blits the cached static layer and re-records only canvas and overlay content, instead of repainting the tree. Input, text and key events, keyboard insets, rebuilds, stateful updates, scrolling, overlays and CSS state changes request a full paint, and a full paint runs at least once a second. The iOS surface is configured with `COPY_DST`; Android adds it when the surface supports it and otherwise keeps the direct path.
 
 ### Fixed
+- On desktop, hover follows the pointer onto an element drawn over the one it was on, such as a close button over a tab's highlight, and a fast pointer that stops no longer leaves the hover on an element it left.
 - Translucent images and text in an element with a 3D transform are no longer faded twice.
 - An image or icon in an element with a 3D transform is drawn when the element holds no text.
 - An image's brush placeholder is drawn while the image loads.

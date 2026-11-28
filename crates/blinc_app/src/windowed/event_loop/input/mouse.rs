@@ -178,13 +178,9 @@ pub(super) fn collect_mouse(
                 // are still updated inline so the next paint
                 // reflects the latest cursor position.
                 //
-                // The last move before a stop won't be lost
-                // because: any new event after the 8ms window
-                // dispatches with its own (current) (lx, ly).
-                // The "user moved fast then stopped exactly
-                // mid-window" edge case leaves hover state up
-                // to 8 ms stale until the next event — half a
-                // 60 Hz frame, imperceptible.
+                // A dropped move can be the last one. Where it
+                // left what the pointer hovers, a frame is asked
+                // for and runs the move at the pointer.
                 if let Some(last) = ws.last_pointer_dispatch {
                     const COALESCE_WINDOW: std::time::Duration =
                         std::time::Duration::from_millis(8);
@@ -219,6 +215,10 @@ pub(super) fn collect_mouse(
                         // stays current so
                         // `cursor_inside_last_leaf` and
                         // other queries see the latest pos.
+                        if !router.cursor_inside_last_leaf(lx, ly) {
+                            ws.hover_pending = true;
+                            window.request_redraw();
+                        }
                         router.set_mouse_position(lx, ly);
                         router.clear_event_callback();
                         return Some(ControlFlow::Continue);
