@@ -1,8 +1,8 @@
 {
   "animated": true,
   "artifacts_sha256": {
-    "poster.png": "723733f511511e5542fffdc41c9d607578ada3d248f15cd0c44eb5a71ac2283a",
-    "preview.gif": "66b3ede0d13336a433df76614690fbe9f3e93d1d9f4906fa8711e9bb1122b894"
+    "poster.png": "a4347015c85d59727a0a23b516e2e796a03b7cd751027028b4279157bfe8da4a",
+    "preview.gif": "60ab834531946a13a960984d06e4d750d8440bfbfd40526afa21993c438b4b38"
   },
   "cursor": "interaction-specific pointer movement and deliberate actions",
   "delay_ms": 60,
