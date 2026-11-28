@@ -102,9 +102,8 @@ fn a_checkbox_looks_the_same_in_every_state() {
                 )
             },
         );
-        // `#cb:checked` and `#cb:hover` outrank the widget's own rules. Under the pointer the hover
-        // fill still beats the checked fill, though it comes first in the sheet: pointer-state rules
-        // apply after attribute rules (git-bug 15eec65).
+        // The two rules are equally specific, so the later one gives the fill to a box that is
+        // checked and under the pointer; the border is the hover rule's alone.
         out += &scenario(
             "core under hover and checked rules",
             "#cb:hover { background: #336699; border-color: #ff8800 } #cb:checked { background: #228844; accent-color: #ff0000 }",

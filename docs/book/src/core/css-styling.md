@@ -2001,12 +2001,14 @@ Each frame, CSS processing happens in this order:
 
 ### Specificity
 
-Rules follow CSS specificity, applied in order:
+Rules follow CSS specificity:
 
-1. Type/class/combinator selectors (lowest)
-2. ID selectors (highest)
-3. Later rules override earlier rules at the same specificity level
-4. State styles (`:hover`, etc.) layer on top of base styles
+1. A rule with more ID selectors wins. If the rules have the same number, the rule with more classes,
+   attributes and pseudo-classes wins. Element types decide last.
+2. If two rules have the same specificity, the later rule wins.
+3. `:hover`, `:active` and `:focus` count as pseudo-classes. They give a rule no other priority. If
+   `.box:checked` comes after `.box:hover`, a checked box under the pointer takes the `:checked` value.
+4. Rules in `@layer components` rank below all other rules.
 
 ---
 

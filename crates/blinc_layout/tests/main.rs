@@ -30,6 +30,7 @@ mod css_line_height;
 mod css_shorthand_reset;
 mod css_spacing_cascade;
 mod css_state_after_update;
+mod css_state_cascade;
 mod css_state_transition;
 mod div_ref_binding;
 mod fallback_measure;

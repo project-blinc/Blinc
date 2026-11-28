@@ -12,8 +12,8 @@
 //!   `(ids, classes, types)` tuple used to break ties when several
 //!   rules match the same node.
 //! - **Per-frame application**: `apply_complex_selector_styles` resets
-//!   nodes that left their state since last frame, re-applies the
-//!   matching state rules, and starts CSS transitions when the
+//!   nodes that left their state since last frame, applies the matching
+//!   state rules in cascade order, and starts CSS transitions when the
 //!   `before → after` snapshot diff intersects a `transition:` spec.
 //!   `apply_svg_tag_styles` is the SVG-tag-rule sibling pass
 //!   (`#chart circle { ... }`).
@@ -24,6 +24,8 @@
 //! of the public `RenderTree` surface.
 
 use std::collections::{HashMap, HashSet};
+
+use indexmap::IndexMap;
 
 use crate::css_parser::{
     Combinator, ComplexSelector, CompoundSelector, ElementState, SelectorPart, StructuralPseudo,
@@ -519,21 +521,21 @@ impl RenderTree {
         // If any prev_affected nodes were reset, styles changed
         let mut any_applied = !prev_affected.is_empty();
 
-        let mut state_rules: Vec<_> = complex_rules
-            .iter()
-            .filter(|(selector, _)| selector.has_state())
+        let rank = |i: &usize| {
+            (
+                Self::rule_order(&complex_rules[*i].0, &complex_rules[*i].1),
+                *i,
+            )
+        };
+        let mut state_rules: Vec<usize> = (0..complex_rules.len())
+            .filter(|&i| complex_rules[i].0.has_state())
             .collect();
-        state_rules.sort_by_key(|(selector, style)| Self::rule_order(selector, style));
-        for (selector, style) in state_rules {
-            // Base (non-state) rules are already applied:
-            //   - At tree build time by apply_stylesheet_base_styles()
-            //   - For prev_affected (leaving-state) nodes in the reset section above
-            // Only state-dependent rules (:hover, :active, :focus, etc.) need per-frame matching.
-            let is_state_rule = selector.has_state();
-            if !is_state_rule {
-                continue;
-            }
+        state_rules.sort_by_key(rank);
 
+        // The state rules that match each node, in cascade order.
+        let mut matched: IndexMap<LayoutNodeId, Vec<usize>> = IndexMap::new();
+        for i in state_rules {
+            let selector = &complex_rules[i].0;
             let candidates = self.state_rule_candidates(
                 selector,
                 &holders,
@@ -541,7 +543,7 @@ impl RenderTree {
                 &pressed_nodes,
                 focused_node,
             );
-            for &node_id in &candidates {
+            for node_id in candidates {
                 if self.complex_selector_matches(
                     selector,
                     node_id,
@@ -549,88 +551,66 @@ impl RenderTree {
                     &pressed_nodes,
                     focused_node,
                 ) {
-                    // Save base styles for nodes affected by state rules (for future reset)
-                    if is_state_rule {
-                        if !self.base_styles.contains_key(&node_id)
-                            && let Some(render_node) = self.render_nodes.get(&node_id)
-                        {
-                            self.base_styles.insert(node_id, render_node.props.clone());
-                        }
-                        if !self.base_taffy_styles.contains_key(&node_id)
-                            && let Some(taffy_style) = self.layout_tree.get_style(node_id)
-                        {
-                            self.base_taffy_styles.insert(node_id, taffy_style);
-                        }
-                        self.complex_state_affected.insert(node_id);
-                    }
-
-                    // Check for transition support — look in both ID-based and class-based rules
-                    let transition_set = {
-                        // First try by element ID
-                        let by_id = self.element_registry.get_id(node_id).and_then(|eid| {
-                            stylesheet.get(&eid).and_then(|s| s.transition.clone())
-                        });
-                        // If not found, check if any matching base complex rule has a transition
-                        by_id.or_else(|| {
-                            complex_rules.iter().find_map(|(sel, sty)| {
-                                if !sel.has_state()
-                                    && self.complex_selector_matches(
-                                        sel,
-                                        node_id,
-                                        &hovered_nodes,
-                                        &pressed_nodes,
-                                        focused_node,
-                                    )
-                                {
-                                    sty.transition.clone()
-                                } else {
-                                    None
-                                }
-                            })
-                        })
-                    };
-
-                    // For nodes already in prev_affected (sustaining a state from
-                    // last frame), skip transition detection — the existing transition
-                    // is already in progress or completed. Re-detecting every frame
-                    // can cause spurious restarts due to snapshot mismatches between
-                    // overlaid and non-overlaid properties.
-                    let is_sustaining = prev_affected.contains(&node_id);
-
-                    let before_kp = if !is_sustaining && transition_set.is_some() {
-                        self.snapshot_before_keyframe_properties(node_id)
-                    } else {
-                        None
-                    };
-
-                    if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
-                        Self::apply_element_style_to_props(&mut render_node.props, style);
-                        self.state_layers
-                            .entry(node_id)
-                            .or_default()
-                            .push(style.clone());
-                        any_applied = true;
-                    }
-                    // Apply layout changes from complex selector styles
-                    if style.has_layout_props()
-                        && let Some(mut taffy_style) = self.layout_tree.get_style(node_id)
-                    {
-                        Self::apply_element_style_to_taffy(&mut taffy_style, style);
-                        self.layout_tree.set_style(node_id, taffy_style);
-                    }
-
-                    // Detect transitions only for newly entering state (not sustaining)
-                    if let (Some(before_kp), Some(transition_set)) = (before_kp, transition_set)
-                        && let Some(after_kp) = self.snapshot_keyframe_properties(node_id)
-                    {
-                        self.detect_and_start_transitions(
-                            node_id,
-                            &before_kp,
-                            &after_kp,
-                            &transition_set,
-                        );
-                    }
+                    matched.entry(node_id).or_default().push(i);
                 }
+            }
+        }
+
+        for (node_id, rules) in matched {
+            // Save base styles for nodes affected by state rules (for future reset)
+            if !self.base_styles.contains_key(&node_id)
+                && let Some(render_node) = self.render_nodes.get(&node_id)
+            {
+                self.base_styles.insert(node_id, render_node.props.clone());
+            }
+            if !self.base_taffy_styles.contains_key(&node_id)
+                && let Some(taffy_style) = self.layout_tree.get_style(node_id)
+            {
+                self.base_taffy_styles.insert(node_id, taffy_style);
+            }
+            self.complex_state_affected.insert(node_id);
+
+            // A node that held a state last frame has its transition running or done:
+            // detecting one again each frame would restart it.
+            let transition_set = (!prev_affected.contains(&node_id))
+                .then(|| {
+                    self.complex_transition_for(
+                        node_id,
+                        &stylesheet,
+                        &hovered_nodes,
+                        &pressed_nodes,
+                        focused_node,
+                    )
+                })
+                .flatten();
+            let before_kp = transition_set
+                .as_ref()
+                .and_then(|_| self.snapshot_before_keyframe_properties(node_id));
+
+            let cascade = self.state_cascade(node_id, &stylesheet, &rules);
+            if let Some(mut render_node) = self.render_nodes.get_mut(&node_id) {
+                for style in &cascade {
+                    Self::apply_element_style_to_props(&mut render_node.props, style);
+                }
+                self.state_layers
+                    .entry(node_id)
+                    .or_default()
+                    .extend(cascade.iter().map(|style| (*style).clone()));
+                any_applied = true;
+            }
+            if cascade.iter().any(|style| style.has_layout_props())
+                && let Some(mut taffy_style) = self.layout_tree.get_style(node_id)
+            {
+                for style in cascade.iter().filter(|style| style.has_layout_props()) {
+                    Self::apply_element_style_to_taffy(&mut taffy_style, style);
+                }
+                self.layout_tree.set_style(node_id, taffy_style);
+            }
+
+            if let (Some(before_kp), Some(transition_set)) = (before_kp, transition_set)
+                && let Some(after_kp) = self.snapshot_keyframe_properties(node_id)
+            {
+                self.detect_and_start_transitions(node_id, &before_kp, &after_kp, &transition_set);
             }
         }
 
@@ -684,6 +664,46 @@ impl RenderTree {
         }
 
         any_applied
+    }
+
+    /// What goes over a node's base for the state rules `state` that match it, in cascade order
+    /// (a component's own rules first, then by specificity, then as written): those rules, with
+    /// each other rule of the node's that ranks above the first of them. What ranks below is in
+    /// the base already.
+    fn state_cascade<'s>(
+        &self,
+        node: LayoutNodeId,
+        stylesheet: &'s crate::css_parser::Stylesheet,
+        state: &[usize],
+    ) -> Vec<&'s crate::element_style::ElementStyle> {
+        let rules = stylesheet.complex_rules();
+        let rank = |i: usize| (Self::rule_order(&rules[i].0, &rules[i].1), i);
+        let Some(first) = state.iter().map(|&i| rank(i)).min() else {
+            return Vec::new();
+        };
+        let mut ranked: Vec<_> = state
+            .iter()
+            .copied()
+            .chain(
+                self.matching_base_rules(node, stylesheet)
+                    .into_iter()
+                    .filter(|&i| rank(i) > first),
+            )
+            .map(|i| (rank(i), &rules[i].1))
+            .collect();
+        // The `#id` rule is kept apart from the others, with the specificity of one id.
+        if let Some(style) = self
+            .element_registry
+            .get_id(node)
+            .and_then(|id| stylesheet.get(&id))
+        {
+            let id_rank = ((!style.component, (1, 0, 0)), usize::MAX);
+            if id_rank > first {
+                ranked.push((id_rank, style));
+            }
+        }
+        ranked.sort_by_key(|(rank, _)| *rank);
+        ranked.into_iter().map(|(_, style)| style).collect()
     }
 
     /// The nodes a rule with a pointer or focus state can match: those reachable from a node that
