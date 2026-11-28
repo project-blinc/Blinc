@@ -346,8 +346,7 @@ fn number_field(
         .class("tabindex=text")
         .disabled(config.disabled.clone());
 
-    // Keyboard stepping (↑ / ↓ / `+` / `−`): `+1` increments and `-1`
-    // decrements, as the buttons do.
+    // ↑ and ↓ step the value, as the buttons do.
     {
         let state = config.state;
         let (min, max, step) = (config.min, config.max, config.step);

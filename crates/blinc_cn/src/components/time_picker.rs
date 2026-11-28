@@ -401,6 +401,7 @@ fn segment(c: &Config, part: Segment) -> (Div, Reactive<bool>) {
         }
     });
     let edit = c.clone();
+    let typed = data.clone();
     let step = c.clone();
     let stepped = data.clone();
     let submit = data.clone();
@@ -423,7 +424,10 @@ fn segment(c: &Config, part: Segment) -> (Div, Reactive<bool>) {
         .class(&format!("cn-time-picker-{}", part.name()))
         .disabled(c.disabled.clone())
         .on_change(move |text| {
-            if let Ok(value) = text.parse::<u8>() {
+            // A segment holds digits: the sign a number field takes is undone.
+            if !text.chars().all(|c| c.is_ascii_digit()) {
+                show(&typed, part.get(&edit, edit.value.get()));
+            } else if let Ok(value) = text.parse::<u8>() {
                 let (min, max) = part.bounds(&edit);
                 if (min..=max).contains(&value) {
                     part.set(&edit, value);

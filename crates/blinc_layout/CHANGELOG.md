@@ -96,6 +96,8 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- `number_input` steps its value with ↑ and ↓. At a bound, `step_up` and `step_down` change nothing and report nothing, and a step redraws the field.
+- `TextInput::on_step` takes only ↑ and ↓. `+`, `-` and `=` are typed, so a negative number can be entered.
 - `Text::word_spacing` is drawn. It counts each word separator, such as a space, and the box is measured with it. `TextMeasureContext` has a `word_spacing` field.
 - A text that does not wrap holds its builder `letter_spacing`: its box was as wide as the text without it.
 - Code editor and code block rows are all the same height when the font size times the line height is not a whole number of pixels. `CodeConfig::line_height_px` is that height.

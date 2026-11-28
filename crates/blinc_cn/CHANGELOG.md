@@ -43,6 +43,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 - Typography has a dedicated guide covering all helpers, reactive content, inline composition and CSS class hooks; the gallery embeds that guide.
 
 ### Fixed
+- `number_input` takes a typed minus sign: `+` and `-` no longer step the value. ↑, ↓, the buttons and the wheel step it.
 - `Input` colors set with `text_color` and the like take effect, and the combobox search field and one-time code slots take their text color from the stylesheet.
 - An `.id()` on an alert, badge, separator, skeleton or radio group, or on a built component such as `Label`, reaches the element. It was dropped.
 - A context menu with an `.id()` stays open for a press inside it, so its submenus open.

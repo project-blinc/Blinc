@@ -127,6 +127,19 @@ fn time_fields_wrap_and_preserve_unedited_parts() {
 }
 
 #[test]
+fn a_time_segment_takes_no_sign() {
+    if !Headless::available() {
+        return;
+    }
+    let mut ui = session(ColorScheme::Dark);
+    let (value, _, changes) = mount_time(&mut ui, TimeFormat::TwentyFourHour, false);
+    replace_text(&mut ui, ".cn-time-picker-hour", "-");
+    assert_eq!(text(&ui, ".cn-time-picker-hour"), "23");
+    assert_eq!(value.get(), TimeOfDay::new(23, 58, 45).unwrap());
+    assert!(changes.lock().unwrap().is_empty());
+}
+
+#[test]
 fn twelve_hour_noon_midnight_and_hidden_seconds() {
     if !Headless::available() {
         return;

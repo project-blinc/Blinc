@@ -22,14 +22,9 @@
 //!
 //! # Stepping
 //!
-//! v1 doesn't intercept `↑` / `↓` / `PageUp` / `PageDown` keys —
-//! `text_input`'s `on_key_down` already owns the keyboard for cursor
-//! / selection / clipboard, and forking it here would require an
-//! escape hatch that doesn't exist yet. Use [`NumberInputBuilder::step`]
-//! together with `cn::number_input`'s `+` / `−` buttons (or any
-//! caller-supplied buttons that call [`step_up`] / [`step_down`]) to
-//! step the value. Keyboard stepping is a follow-up, tracked as
-//! git-bug e750fa9.
+//! With the field focused, `↑` adds [`NumberInputBuilder::step`] to the value
+//! and `↓` takes it away, within `min` and `max`. Buttons of the caller's own do
+//! the same through [`step_up`] / [`step_down`].
 
 use std::sync::Arc;
 
@@ -40,7 +35,7 @@ use crate::div::{ElementBuilder, ElementTypeId};
 use crate::element::RenderProps;
 use crate::tree::{LayoutNodeId, LayoutTree};
 use crate::widgets::text_input::{
-    InputType, SharedTextInputData, TextInput, text_input, text_input_data,
+    InputType, SharedTextInputData, TextInput, refresh_text_input, text_input, text_input_data,
 };
 
 /// Numeric value bound to a [`Signal<f64>`]. Use `f64` for the
@@ -71,31 +66,29 @@ pub struct NumberInputConfig {
 /// Increment `state` by `step`, clamping against `[min, max]`. Used by
 /// caller-supplied `+` buttons (notably `cn::number_input`).
 pub fn step_up(config: &NumberInputConfig) {
-    let next = clamp(
-        config.state.try_get().unwrap_or(0.0) + config.step,
-        config.min,
-        config.max,
-    );
-    set_value(config, next);
+    step_by(config, config.step);
 }
 
 /// Decrement `state` by `step`, clamping against `[min, max]`.
 pub fn step_down(config: &NumberInputConfig) {
-    let next = clamp(
-        config.state.try_get().unwrap_or(0.0) - config.step,
-        config.min,
-        config.max,
-    );
-    set_value(config, next);
+    step_by(config, -config.step);
 }
 
-fn set_value(config: &NumberInputConfig, next: f64) {
+/// Move the value by `amount` within the bounds, and show it. At a bound there
+/// is nothing to change or report.
+fn step_by(config: &NumberInputConfig, amount: f64) {
+    let current = config.state.try_get().unwrap_or(0.0);
+    let next = clamp(current + amount, config.min, config.max);
+    if (next - current).abs() < f64::EPSILON {
+        return;
+    }
     config.state.set(next);
     if let Ok(mut d) = config.data.lock() {
         d.value = format_value(next, config.precision);
         d.cursor = d.value.chars().count();
         d.selection_start = None;
     }
+    refresh_text_input(&config.data);
     if let Some(ref cb) = config.on_change {
         cb(next);
     }
@@ -288,7 +281,10 @@ impl NumberInput {
         // typing without the wrapper "correcting" them mid-edit. On
         // blur (or commit), `state` already holds the last successfully
         // parsed value, which is the source of truth.
-        let mut input = text_input(&b.config.data).input_type(InputType::Number);
+        let stepped = b.config.clone();
+        let mut input = text_input(&b.config.data)
+            .input_type(InputType::Number)
+            .on_step(move |delta| step_by(&stepped, f64::from(delta) * stepped.step));
 
         if let Some(w) = b.width {
             input = input.w(w);

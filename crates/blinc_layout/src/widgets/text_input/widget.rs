@@ -192,13 +192,9 @@ impl TextInput {
         self
     }
 
-    /// Register a stepper hook fired on ↑ / ↓ / `+` / `−` keys while
-    /// the field is focused. The argument is `+1` for increment,
-    /// `-1` for decrement. When this is set, the keys are
-    /// *consumed* — the default behaviour (character insertion for
-    /// `+` / `−`, no-op for arrows on a single-line field) is
-    /// skipped. Used by `cn::number_input` to wire keyboard
-    /// stepping to the bound `State<f64>`.
+    /// Register a stepper hook fired on the ↑ and ↓ keys while the field is
+    /// focused, with `+1` for ↑ and `-1` for ↓. Characters, `+` and `-`
+    /// among them, are typed as usual.
     pub fn on_step<F>(self, callback: F) -> Self
     where
         F: Fn(i32) + Send + Sync + 'static,

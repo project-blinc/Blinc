@@ -43,6 +43,7 @@ mod interaction;
 mod letter_spacing_trailing;
 mod media_controls_in_place;
 mod media_rules;
+mod number_input_keys;
 mod paint_layers;
 mod property_updates;
 mod region;

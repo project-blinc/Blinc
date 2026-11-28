@@ -156,7 +156,7 @@ rules can select on it:
 | `InputSize::Medium` (default) | `md` | 32px | 32px | 48px | 13px |
 | `InputSize::Large` | `lg` | 40px | 36px | 52px | 14px |
 
-Typing, the arrow keys, the buttons and the mouse wheel all keep the value
+Typing, the Up and Down keys, the buttons and the mouse wheel all keep the value
 between `min` and `max`. One wheel line is one step, and wheel up increases the
 value. Trackpad movement adds up into steps. A disabled input ignores the wheel.
 The width of the control depends on the bounds, not on the value. Thus, typing

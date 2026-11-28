@@ -385,20 +385,6 @@ impl TextInput {
                     }
 
                     if let Some(c) = ctx.key_char {
-                        // Stepper hook: `+` / `−` (or `=` which sits
-                        // on the same physical key on US layouts) step
-                        // the value when `on_step` is registered.
-                        // Skip the character insert so the field
-                        // doesn't end up with stray `+` chars in the
-                        // value buffer.
-                        if matches!(c, '+' | '-' | '=')
-                            && let Some(cb) = d.on_step_callback.as_ref().map(Arc::clone)
-                        {
-                            let delta = if c == '-' { -1 } else { 1 };
-                            drop(d);
-                            cb(delta);
-                            return;
-                        }
                         d.insert(&c.to_string());
                         d.reset_cursor_blink();
                         tracing::debug!("TextInput received char: {:?}, value: {}", c, d.value);
