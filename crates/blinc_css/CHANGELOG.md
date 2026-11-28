@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- `ElementStyle` gains `skew_in_transform`, which says that `transform` already holds the skew, as a parsed `transform` does. Exhaustive struct literals need the field.
 - Breaking: the sides of `SpacingRect` are `Option<f32>`, and `None` means that the style does not declare that side. `uniform`, `xy` and `new` set all four. `SpacingRect::merge` and `SpacingRect::sides` are new.
 
 ### Added

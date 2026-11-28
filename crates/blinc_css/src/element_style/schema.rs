@@ -73,6 +73,9 @@ pub struct ElementStyle {
     pub inner_shadow: Vec<Shadow>,
     /// Transform (scale, rotate, translate)
     pub transform: Option<Transform>,
+    /// Whether `transform` already holds `skew_x` and `skew_y`, as a parsed `transform` does.
+    /// Otherwise they are applied on top of it.
+    pub skew_in_transform: bool,
     /// Material effect (glass, metallic, wood)
     pub material: Option<Material>,
     /// Render layer ordering

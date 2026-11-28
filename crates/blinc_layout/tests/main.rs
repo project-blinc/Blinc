@@ -28,6 +28,7 @@ mod css_layer_bake;
 mod css_layout_extras;
 mod css_line_height;
 mod css_shorthand_reset;
+mod css_skew;
 mod css_spacing_cascade;
 mod css_state_after_update;
 mod css_state_cascade;

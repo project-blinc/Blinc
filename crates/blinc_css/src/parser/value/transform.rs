@@ -29,6 +29,7 @@ pub(crate) fn parse_transform_with_3d(value: &str, style: &mut ElementStyle) -> 
     // `none` resets: a later rule or state clearing an earlier transform.
     if value.trim().eq_ignore_ascii_case("none") {
         style.transform = Some(Transform::Affine2D(Affine2D::IDENTITY));
+        style.skew_in_transform = false;
         return true;
     }
 
@@ -41,6 +42,7 @@ pub(crate) fn parse_transform_with_3d(value: &str, style: &mut ElementStyle) -> 
 
     let mut affine = Affine2D::IDENTITY;
     let mut has_2d = false;
+    let mut skewed = false;
     let mut parsed_any = false;
 
     for func in &functions {
@@ -61,12 +63,14 @@ pub(crate) fn parse_transform_with_3d(value: &str, style: &mut ElementStyle) -> 
             style.skew_x = Some(deg);
             affine = affine.then(&Affine2D::skew_x(deg.to_radians()));
             has_2d = true;
+            skewed = true;
             parsed_any = true;
         // 2D: skewY
         } else if let Some(deg) = parse_function_angle(func, "skewY") {
             style.skew_y = Some(deg);
             affine = affine.then(&Affine2D::skew_y(deg.to_radians()));
             has_2d = true;
+            skewed = true;
             parsed_any = true;
         // 2D: skew(x, y)
         } else if let Some((sx, sy)) = parse_skew_function(func) {
@@ -75,6 +79,7 @@ pub(crate) fn parse_transform_with_3d(value: &str, style: &mut ElementStyle) -> 
             affine = affine.then(&Affine2D::skew_x(sx.to_radians()));
             affine = affine.then(&Affine2D::skew_y(sy.to_radians()));
             has_2d = true;
+            skewed = true;
             parsed_any = true;
         // 2D: scale
         } else if let Ok((_, (sx, sy))) = parse_scale_values::<nom::error::Error<&str>>(func) {
@@ -106,6 +111,7 @@ pub(crate) fn parse_transform_with_3d(value: &str, style: &mut ElementStyle) -> 
 
     if has_2d {
         style.transform = Some(Transform::Affine2D(affine));
+        style.skew_in_transform = skewed;
     }
 
     parsed_any

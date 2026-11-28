@@ -488,8 +488,8 @@ impl RenderTree {
             props.tiers.mark(StyleProp::OutlineOffset, tier);
             props.outline_offset = offset;
         }
-        // Skew (composed into existing transform as Affine2D)
-        if style.skew_x.is_some() || style.skew_y.is_some() {
+        // Skew the style's transform does not hold goes on top of the transform.
+        if !style.skew_in_transform && (style.skew_x.is_some() || style.skew_y.is_some()) {
             use blinc_core::Affine2D;
             let mut skew_affine = Affine2D::IDENTITY;
             if let Some(sx) = style.skew_x {

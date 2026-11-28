@@ -96,6 +96,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- `transform: skewX(..)`, `skewY(..)` and `skew(..)` in a stylesheet skew by the angle given. They skewed twice as far.
 - A rule with `:hover`, `:active` or `:focus` is ordered with the other rules by specificity and position. A checked, hovered element takes a later `:checked` rule's value, a later `:disabled` rule wins over `:hover`, and an `#id` rule is no longer overridden by a class's `:hover` rule.
 - `number_input` steps its value with ↑ and ↓. At a bound, `step_up` and `step_down` change nothing and report nothing, and a step redraws the field.
 - `TextInput::on_step` takes only ↑ and ↓. `+`, `-` and `=` are typed, so a negative number can be entered.

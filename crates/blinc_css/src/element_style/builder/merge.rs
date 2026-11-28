@@ -64,6 +64,13 @@ impl ElementStyle {
             scale_x: other.scale_x.or(self.scale_x),
             scale_y: other.scale_y.or(self.scale_y),
             skew_x: other.skew_x.or(self.skew_x),
+            skew_in_transform: if other.transform.is_some() {
+                other.skew_in_transform
+            } else if other.skew_x.is_some() || other.skew_y.is_some() {
+                false
+            } else {
+                self.skew_in_transform
+            },
             skew_y: other.skew_y.or(self.skew_y),
             translate_pct: other.translate_pct.or(self.translate_pct),
             transform_origin: other.transform_origin.or(self.transform_origin),
