@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1795829428,"nonce":"ngU6dmFFDflE0hAg9Bt1hP3DWDM=","added":["bug","area:css","area:layout"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1795829930,"nonce":"7LfFirKJxsmsiWTVsE0JXsppBhQ=","message":"Fixed in ac77879e346ec26bc1fd15fbdad032c43824d37c: ElementStyle::skew_in_transform marks a transform that already holds the skew.","files":null}]}
