@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1795823100,"nonce":"In8wwjP+9Zy/pDlxVWOl0psdAgM=","added":["bug","area:core"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1795825065,"nonce":"x1ZYZ3I22I1WoWvCMsXZwJM971g=","message":"Fixed in cae6b4f13c620538d17e4f54955cabea8757696a: Default is written out, with an opacity of 1. The two failures left under --run-ignored all in blinc_layout are 3a4eab0.","files":null}]}
