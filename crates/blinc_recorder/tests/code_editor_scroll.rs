@@ -87,7 +87,7 @@ fn a_longer_text_follows_the_cursor_to_its_last_line() {
     let (row, pad) = {
         let d = state.lock().unwrap();
         assert_eq!(d.cursor.line, 39);
-        (d.config.font_size * d.config.line_height, d.config.padding)
+        (d.config.line_height_px(), d.config.padding)
     };
     // The last row's foot is at the foot of the box.
     let (offset, ..) = scrolled(&state);

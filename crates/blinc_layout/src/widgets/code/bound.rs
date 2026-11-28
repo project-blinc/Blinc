@@ -37,7 +37,7 @@ pub(super) fn structure(
     config: &CodeConfig,
     container: Div,
 ) -> Div {
-    let line_height_px = config.font_size * config.line_height;
+    let line_height_px = config.line_height_px();
     let ink = config.plain_ink();
     let lines = computed(move |g| {
         let text = source.read(g).unwrap_or_default();

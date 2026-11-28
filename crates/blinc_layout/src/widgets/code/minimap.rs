@@ -238,7 +238,7 @@ pub(super) fn scroll_to(state: &SharedCodeEditorState, y: f32, height: f32) {
             return;
         };
         let lines = data.visible_lines().len();
-        let line_height = data.config.font_size * data.config.line_height;
+        let line_height = data.config.line_height_px();
         let pad = data.config.padding;
         if let Ok(mut physics) = data.scroll_physics.lock() {
             let (viewport, content) = (physics.viewport_height, physics.content_height);

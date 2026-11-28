@@ -173,6 +173,12 @@ impl Default for CodeConfig {
 }
 
 impl CodeConfig {
+    /// The height of a row in pixels: the font size times the line height,
+    /// whole, so rows laid out one under another are all the same height.
+    pub fn line_height_px(&self) -> f32 {
+        (self.font_size * self.line_height).round()
+    }
+
     /// The colour plain text is styled with. Without a configured one it is
     /// a placeholder: [`build_styled_line`] leaves such text uncoloured.
     fn plain_ink(&self) -> Color {
@@ -900,7 +906,7 @@ impl CodeEditorData {
         } else if !select {
             self.selection_start = None;
         }
-        let line_height = self.config.font_size * self.config.line_height;
+        let line_height = self.config.line_height_px();
         let page_lines = (self.view_height() / line_height).floor() as usize;
         let row = self.row_of(self.cursor.line);
         self.cursor.line = self.line_at_row(row.saturating_sub(page_lines.max(1)));
@@ -915,7 +921,7 @@ impl CodeEditorData {
         } else if !select {
             self.selection_start = None;
         }
-        let line_height = self.config.font_size * self.config.line_height;
+        let line_height = self.config.line_height_px();
         let page_lines = (self.view_height() / line_height).floor() as usize;
         let row = self.row_of(self.cursor.line);
         self.cursor.line = self.line_at_row(row + page_lines.max(1));
@@ -990,7 +996,7 @@ impl CodeEditorData {
 
     /// The position in the text nearest `(x, y)`, measured from the first row's top left.
     fn position_at(&mut self, x: f32, y: f32) -> TextPosition {
-        let line_height = self.config.font_size * self.config.line_height;
+        let line_height = self.config.line_height_px();
         let line_idx = self.line_at_row((y / line_height).floor() as usize);
 
         let line = self.lines[line_idx].clone();
@@ -1020,7 +1026,7 @@ impl CodeEditorData {
 
     /// Total content height in pixels (includes padding)
     pub fn content_height(&self) -> f32 {
-        let line_height = self.config.font_size * self.config.line_height;
+        let line_height = self.config.line_height_px();
         let pad = self.config.padding;
         self.visible_lines().len() as f32 * line_height + pad * 2.0
     }
@@ -1044,7 +1050,7 @@ impl CodeEditorData {
         self.settle_folds();
         self.reveal_cursor();
         self.keep_caret_in_view_x();
-        let line_height = self.config.font_size * self.config.line_height;
+        let line_height = self.config.line_height_px();
         let pad = self.config.padding;
         let viewport = self.view_height();
         if viewport <= 0.0 {
@@ -1263,7 +1269,7 @@ impl Code {
         }
 
         let styled = self.get_styled_content();
-        let line_height_px = self.config.font_size * self.config.line_height;
+        let line_height_px = self.config.line_height_px();
         let num_lines = styled.line_count().max(1);
 
         if self.config.line_numbers {
@@ -1504,7 +1510,7 @@ impl CodeEditor {
 
                     // Check if click is in the gutter → toggle fold only, skip cursor logic
                     if d.config.code_folding && click_x < gutter_w {
-                        let line_height = d.config.font_size * d.config.line_height;
+                        let line_height = d.config.line_height_px();
                         let line_idx = d.line_at_row((adjusted_y / line_height).floor() as usize);
                         d.toggle_fold(line_idx);
                         d.invalidate_all_highlights();
@@ -1547,7 +1553,7 @@ impl CodeEditor {
                                     ctx.bounds_x + click_x,
                                     ctx.bounds_y + click_y,
                                     0.0,
-                                    d.config.font_size * d.config.line_height,
+                                    d.config.line_height_px(),
                                     if d.config.read_only {
                                         edit_menu_actions::COPY | edit_menu_actions::SELECT_ALL
                                     } else {
@@ -1568,7 +1574,7 @@ impl CodeEditor {
                             // long-press UX and stays consistent
                             // with the double-tap behavior above.
                             d.drag_anchor = None;
-                            let line_height = d.config.font_size * d.config.line_height;
+                            let line_height = d.config.line_height_px();
                             let captured_cursor = d.cursor;
                             crate::widgets::text_edit::haptic_selection();
                             crate::widgets::text_edit::hide_edit_menu();
@@ -2597,15 +2603,12 @@ fn build_editor_content(
     let (content_w, h_scroll) = (data.content_width(), Arc::clone(&data.h_scroll));
     // Diagnostics measure text, which needs the editor mutably, before its config is borrowed.
     let diagnostic_overlays = {
-        let (lh, pad) = (
-            data.config.font_size * data.config.line_height,
-            data.config.padding,
-        );
+        let (lh, pad) = (data.config.line_height_px(), data.config.padding);
         let visible = data.visible_lines();
         diagnostics::overlays(data, &visible, lh, pad)
     };
     let config = &data.config;
-    let line_height_px = config.font_size * config.line_height;
+    let line_height_px = config.line_height_px();
     let visible_lines = data.visible_lines();
 
     // The Stateful container uses overflow_y_scroll, so its direct child

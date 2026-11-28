@@ -15,6 +15,7 @@ mod class_when_descendants;
 mod code_bound;
 mod code_control;
 mod code_find_field;
+mod code_folding;
 mod collapsed_when;
 mod css_attribute_selectors;
 mod css_border_sides;
