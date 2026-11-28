@@ -174,6 +174,8 @@ does not use this one.
   and `$$` (a dollar sign).
 - If a pattern is not valid, the bar shows the reason where the match count was.
 - A match is always on one line.
+- While the bar is open, the first line starts below it, and the cursor and the current match stay
+  clear of it.
 
 The `.blinc-find` rules in the default stylesheet give the bar its style. Rules in your CSS replace
 them:
@@ -266,7 +268,8 @@ Your app, or a toolbar that you build, can change the editor with these function
 
 ```rust
 use blinc::layout::widgets::code::{
-    focus_code_editor, refresh_code_editor, replace_all_code_matches, set_code_value,
+    focus_code_editor, refresh_code_editor, replace_all_code_matches, set_code_top_inset,
+    set_code_value,
 };
 
 // Replace all the text. `on_change` does not report this change, and undo cannot reverse it.
@@ -279,6 +282,10 @@ set_code_value(&state, "fn main() {}");
     editor.find_open = true;
 }
 refresh_code_editor(&state);
+
+// A bar that floats over the top of the editor covers 48 pixels. The first line starts
+// below it, and the cursor and the current match stay clear of it. Pass 0.0 when the bar closes.
+set_code_top_inset(&state, 48.0);
 
 // A replacement calls `on_change`.
 replace_all_code_matches(&state);

@@ -32,7 +32,7 @@ use std::sync::Arc;
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId, div};
 use blinc_layout::event_handler::EventContext;
 use blinc_layout::syntax::SyntaxConfig;
-use blinc_layout::widgets::code::{CodeEditor, SharedCodeEditorState};
+use blinc_layout::widgets::code::{CodeEditor, SharedCodeEditorState, set_code_top_inset};
 
 use find::FindUi;
 
@@ -203,7 +203,13 @@ impl CodeEditorBuilder {
                 .foreground()
                 // Only the bar takes presses; the text beside it stays reachable.
                 .pointer_events_none()
-                .show(ui.open, move || find::bar(&state, ui));
+                .show(ui.open, move || {
+                    let editor = Arc::clone(&state);
+                    // The editor leaves room under the bar, whatever its height.
+                    find::bar(&state, ui).on_layout_change(move |bounds| {
+                        set_code_top_inset(&editor, INSET + bounds.height);
+                    })
+                });
             let state = Arc::clone(&self.state);
             root.child(anchor)
                 .on_key_down(move |ctx| on_key(&state, ui, ctx))

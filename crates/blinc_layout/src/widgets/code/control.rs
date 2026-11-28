@@ -55,6 +55,40 @@ pub fn refresh_code_editor(state: &SharedCodeEditorState) {
     }
 }
 
+/// Say how much of the top of the editor's view something floats over, and draw
+/// the editor again: the first line starts below it, and moving the cursor or
+/// stepping through matches scrolls clear of it. A view that is scrolled keeps
+/// the text it shows where it is, unless that would leave the cursor covered.
+pub fn set_code_top_inset(state: &SharedCodeEditorState, inset: f32) {
+    let changed = state.lock().is_ok_and(|mut d| d.apply_top_inset(inset));
+    if changed {
+        refresh_code_editor(state);
+    }
+}
+
+impl CodeEditorData {
+    /// [`set_code_top_inset`] without drawing the editor. Returns whether the
+    /// inset changed.
+    pub(super) fn apply_top_inset(&mut self, inset: f32) -> bool {
+        let inset = inset.max(0.0);
+        let change = inset - self.top_inset;
+        if change == 0.0 {
+            return false;
+        }
+        let showed_cursor = self.cursor_in_view();
+        self.top_inset = inset;
+        if let Ok(mut physics) = self.scroll_physics.lock()
+            && physics.offset_y < 0.0
+        {
+            physics.offset_y = (physics.offset_y - change).min(0.0);
+        }
+        if showed_cursor {
+            self.ensure_cursor_visible();
+        }
+        true
+    }
+}
+
 /// [`CodeEditorData::replace_current`], told to `on_change` and drawn. Returns whether the text
 /// changed.
 pub fn replace_code_match(state: &SharedCodeEditorState) -> bool {

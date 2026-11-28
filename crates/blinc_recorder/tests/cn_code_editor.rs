@@ -369,3 +369,63 @@ fn a_stylesheet_restyles_the_bar() {
     assert!(edge.b > 0.9 && edge.r < 0.1, "border {edge:?}");
     assert!(fill.r > 0.9 && fill.b < 0.1, "fill {fill:?}");
 }
+
+/// The bar floats over the top of the editor: the first line starts below it,
+/// and stepping to a match brings the match clear of it.
+#[test]
+fn matches_are_brought_out_from_under_the_bar() {
+    let lines: Vec<String> = (0..60)
+        .map(|i| match i {
+            0 | 40 => "needle".to_string(),
+            _ => format!("let x{i} = {i};"),
+        })
+        .collect();
+    let state = code_editor_state(lines.join("\n"));
+    let Some(mut ui) = session(&state, 600.0, "", Default::default()) else {
+        return;
+    };
+    start_at_top(&state);
+    let top_of = |ui: &Headless, class: &str, nth: usize| {
+        ui.tree()
+            .get_absolute_bounds(nodes(ui, class)[nth])
+            .unwrap()
+    };
+    let first_line = |ui: &Headless| top_of(ui, "blinc-code-line-number", 0).y;
+    let before = first_line(&ui);
+
+    command(&mut ui, F, false, false);
+    ui.type_text("needle");
+    ui.advance(400);
+    ui.settle();
+    let below_bar = |ui: &Headless, nth: usize, when: &str| {
+        let bar = top_of(ui, "cn-code-editor-find", 0);
+        let editor = top_of(ui, "blinc-code", 0);
+        let found = top_of(ui, "blinc-code-find-match", nth);
+        assert!(
+            found.y >= bar.y + bar.height && found.y + found.height <= editor.y + editor.height,
+            "{when}: the match is at {}, the bar ends at {}",
+            found.y,
+            bar.y + bar.height
+        );
+    };
+    below_bar(&ui, 0, "opened");
+    ui.key(ENTER);
+    ui.advance(300);
+    ui.settle();
+    below_bar(&ui, 1, "stepped down");
+    ui.key(ENTER);
+    ui.advance(300);
+    ui.settle();
+    below_bar(&ui, 0, "stepped around to the top");
+
+    // Closed, the first line goes back to where it was.
+    ui.key(ESC);
+    ui.advance(300);
+    ui.settle();
+    assert_eq!(first_line(&ui), before);
+
+    command(&mut ui, F, false, false);
+    ui.advance(400);
+    ui.settle();
+    below_bar(&ui, 0, "opened again");
+}

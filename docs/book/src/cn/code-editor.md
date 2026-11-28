@@ -1,7 +1,8 @@
 # Code Editor
 
 `cn::code_editor` is the [layout code editor](../widgets/code-editor.md) with a find and replace bar.
-The bar floats at the top right corner of the editor. Both editors use the same
+The bar floats at the top right corner of the editor. While the bar is open, the first line starts
+below it, and the cursor and the current match stay clear of it. Both editors use the same
 `SharedCodeEditorState`. All features of the layout editor, for example syntax highlighting and the
 minimap, also work in this one.
 

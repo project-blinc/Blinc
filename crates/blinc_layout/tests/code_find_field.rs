@@ -102,7 +102,12 @@ fn open_bar(state: &SharedCodeEditorState) -> (CodeEditor, RenderTree) {
         "Cmd+F did not open the find bar"
     );
     blinc_layout::widgets::text_input::process_pending_input_focus();
-    (editor, bar_tree())
+    let bar = bar_tree();
+    // The editor redraws to leave room under the bar. Its tree is gone, and
+    // the bar's tree reuses its node ids, so those updates are dropped.
+    drop(blinc_layout::take_pending_partial_prop_updates());
+    drop(blinc_layout::stateful::take_pending_subtree_rebuilds());
+    (editor, bar)
 }
 
 fn bar_tree() -> RenderTree {
@@ -426,4 +431,51 @@ fn find_starts_from_a_selection_on_one_line() {
     assert_eq!(d.search_query, "child");
     assert_eq!(d.search_input_state.lock().unwrap().value, "child");
     assert_eq!(d.search_matches.len(), 2);
+}
+
+/// Where the editor's first line number sits, in a tree built from the state as it is.
+fn first_line_y(state: &SharedCodeEditorState) -> f32 {
+    let mut tree = RenderTree::from_element(&code_editor(state).line_numbers(true));
+    tree.compute_layout(600.0, 300.0);
+    let mut stack = vec![tree.root().unwrap()];
+    while let Some(n) = stack.pop() {
+        if let Some(ElementType::Text(t)) = tree.get_render_node(n).map(|r| &r.element_type)
+            && t.content == "1"
+        {
+            return tree.get_absolute_bounds(n).unwrap().y;
+        }
+        stack.extend(tree.layout_tree.children(n));
+    }
+    panic!("the editor shows no first line number");
+}
+
+#[test]
+fn the_first_line_starts_below_the_open_bar() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    init();
+    let state = code_editor_state("let child = child;");
+    let _close = CloseBar(Arc::clone(&state));
+    let before = first_line_y(&state);
+    let (editor, bar) = open_bar(&state);
+
+    let height = bar
+        .get_absolute_bounds(node_with(&bar, "blinc-find").expect("no find bar"))
+        .unwrap()
+        .height;
+    let moved = first_line_y(&state) - before;
+    assert!(
+        height > 0.0 && moved >= height,
+        "the first line moved {moved} under a bar of height {height}"
+    );
+
+    let mut escape = EventContext::new(
+        blinc_core::events::event_types::KEY_DOWN,
+        bar.root().unwrap(),
+    );
+    escape.key_code = 27;
+    ElementBuilder::event_handlers(&editor)
+        .unwrap()
+        .dispatch(&escape);
+    assert!(!state.lock().unwrap().search_active);
+    assert_eq!(first_line_y(&state), before);
 }

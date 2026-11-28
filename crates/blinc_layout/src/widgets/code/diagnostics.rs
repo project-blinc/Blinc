@@ -85,7 +85,7 @@ pub(super) fn overlays(
     data: &mut CodeEditorData,
     visible_lines: &[usize],
     line_height: f32,
-    pad: f32,
+    (top_pad, pad): (f32, f32),
 ) -> Vec<Div> {
     let mut out = Vec::new();
     let diagnostics = data.diagnostics.clone();
@@ -93,7 +93,7 @@ pub(super) fn overlays(
         let Some(worst) = worst(&diagnostics, line) else {
             continue;
         };
-        let top = row as f32 * line_height + pad;
+        let top = row as f32 * line_height + top_pad;
         out.push(
             div()
                 .class(format!("blinc-code-line-{}", worst.severity.name()))

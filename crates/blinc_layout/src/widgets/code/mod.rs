@@ -76,7 +76,7 @@ mod ime;
 mod minimap;
 pub use control::{
     focus_code_editor, focus_code_editor_deferred, refresh_code_editor, replace_all_code_matches,
-    replace_code_match, set_code_value,
+    replace_code_match, set_code_top_inset, set_code_value,
 };
 pub use minimap::code_minimap;
 mod control;
@@ -283,6 +283,10 @@ pub struct CodeEditorData {
         Option<crate::stateful::SharedState<crate::stateful::TextFieldState>>,
     /// A find bar other than the built-in one is open, so the matches are marked.
     pub find_open: bool,
+    /// How much of the top of the view something floats over, such as that bar:
+    /// the first line starts below it and the cursor is kept clear of it. Set
+    /// with [`set_code_top_inset`].
+    top_inset: f32,
     /// The editor's node, as of the last press on it, for giving it the focus again.
     pub(crate) editor_node: Option<LayoutNodeId>,
     /// All match positions: (line, start_col, end_col)
@@ -375,6 +379,7 @@ pub fn code_editor_state(content: impl Into<String>) -> SharedCodeEditorState {
         diagnostics: Vec::new(),
         h_scroll: Arc::new(Mutex::new(ScrollPhysics::default())),
         find_open: false,
+        top_inset: 0.0,
         editor_node: None,
         search_matches: Vec::new(),
         search_error: None,
@@ -1024,11 +1029,17 @@ impl CodeEditorData {
         TextPosition::new(line_idx, best_col)
     }
 
+    /// The space above the first line: the padding, and the room under whatever
+    /// floats over the top of the view.
+    pub(crate) fn top_pad(&self) -> f32 {
+        self.config.padding + self.top_inset
+    }
+
     /// Total content height in pixels (includes padding)
     pub fn content_height(&self) -> f32 {
         let line_height = self.config.line_height_px();
-        let pad = self.config.padding;
-        self.visible_lines().len() as f32 * line_height + pad * 2.0
+        let pad = self.top_pad() + self.config.padding;
+        self.visible_lines().len() as f32 * line_height + pad
     }
 
     /// The height of the view: the box as laid out, or the height asked for before that.
@@ -1044,6 +1055,14 @@ impl CodeEditorData {
         }
     }
 
+    /// Whether the cursor's row is at least partly in the view.
+    pub(crate) fn cursor_in_view(&self) -> bool {
+        let line_height = self.config.line_height_px();
+        let top = self.row_of(self.cursor.line) as f32 * line_height + self.top_pad();
+        let offset = self.scroll_physics.lock().map_or(0.0, |p| -p.offset_y);
+        top + line_height > offset && top < offset + self.view_height()
+    }
+
     /// Ensure cursor is within the visible scroll viewport.
     /// Only scrolls when cursor would be outside the visible area.
     pub fn ensure_cursor_visible(&mut self) {
@@ -1051,7 +1070,7 @@ impl CodeEditorData {
         self.reveal_cursor();
         self.keep_caret_in_view_x();
         let line_height = self.config.line_height_px();
-        let pad = self.config.padding;
+        let (pad, covered) = (self.top_pad(), self.top_inset);
         let viewport = self.view_height();
         if viewport <= 0.0 {
             return;
@@ -1065,14 +1084,16 @@ impl CodeEditorData {
         let current_offset = -physics.offset_y;
         let visible_bottom = current_offset + viewport;
 
-        // Only scroll if cursor is outside the visible range
-        if cursor_y >= current_offset && cursor_bottom <= visible_bottom {
+        // Only scroll if cursor is outside the visible range, which starts below
+        // what covers the top of the view.
+        let clear_top = cursor_y - covered;
+        if clear_top >= current_offset && cursor_bottom <= visible_bottom {
             return; // Cursor is visible, no scroll needed
         }
 
         let mut new_offset = current_offset;
-        if cursor_y < current_offset {
-            new_offset = cursor_y;
+        if clear_top < current_offset {
+            new_offset = clear_top;
         }
         if cursor_bottom > visible_bottom {
             new_offset = cursor_bottom - viewport;
@@ -1281,7 +1302,7 @@ impl Code {
                 &[],
                 &[],
                 None,
-                self.config.padding,
+                (self.config.padding, self.config.padding),
             ));
         }
 
@@ -1506,7 +1527,7 @@ impl CodeEditor {
                         0.0
                     };
                     let scroll_offset = d.scroll_physics.lock().map(|p| -p.offset_y).unwrap_or(0.0);
-                    let adjusted_y = (click_y - d.config.padding + scroll_offset).max(0.0);
+                    let adjusted_y = (click_y - d.top_pad() + scroll_offset).max(0.0);
 
                     // Check if click is in the gutter → toggle fold only, skip cursor logic
                     if d.config.code_folding && click_x < gutter_w {
@@ -1650,7 +1671,7 @@ impl CodeEditor {
                 let adjusted_x =
                     (ctx.local_x - gutter_offset - d.config.padding).max(0.0) + d.scroll_x();
                 let scroll_offset = d.scroll_physics.lock().map(|p| -p.offset_y).unwrap_or(0.0);
-                let adjusted_y = (ctx.local_y - d.config.padding + scroll_offset).max(0.0);
+                let adjusted_y = (ctx.local_y - d.top_pad() + scroll_offset).max(0.0);
 
                 // Move cursor to drag position (selection_start stays at mouse-down position)
                 let new_cursor = d.position_at(adjusted_x, adjusted_y);
@@ -2288,11 +2309,12 @@ fn build_gutter(
     fold_regions: &[FoldRegion],
     folded_starts: &[usize],
     diagnostics: Option<&[CodeDiagnostic]>,
-    pad: f32,
+    (top, pad): (f32, f32),
 ) -> Div {
     let has_fold = config.code_folding;
 
     let mut col = div().flex_col().justify_start().padding_y_px(pad);
+    col.style.padding.top = taffy::LengthPercentage::length(top);
     let number = |line_idx: usize| {
         let txt = code_face(
             text(format!("{}", line_idx + 1))
@@ -2534,7 +2556,7 @@ fn build_indent_guides(
     data: &CodeEditorData,
     visible_lines: &[usize],
     line_height_px: f32,
-    pad: f32,
+    (top_pad, pad): (f32, f32),
 ) -> Vec<Div> {
     let guide_color = data.config.indent_guide_color;
     let fold_regions = data.detect_fold_regions();
@@ -2564,7 +2586,7 @@ fn build_indent_guides(
         if let (Some(&vis_start), Some(&vis_end)) =
             (line_to_vis.get(&guide_start), line_to_vis.get(&guide_end))
         {
-            let top = vis_start as f32 * line_height_px + pad;
+            let top = vis_start as f32 * line_height_px + top_pad;
             let h = (vis_end - vis_start + 1) as f32 * line_height_px;
             if h > 0.0 {
                 let guide = div()
@@ -2605,8 +2627,9 @@ fn build_editor_content(
     let diagnostic_overlays = {
         let (lh, pad) = (data.config.line_height_px(), data.config.padding);
         let visible = data.visible_lines();
-        diagnostics::overlays(data, &visible, lh, pad)
+        diagnostics::overlays(data, &visible, lh, (data.top_pad(), pad))
     };
+    let top = data.top_pad();
     let config = &data.config;
     let line_height_px = config.line_height_px();
     let visible_lines = data.visible_lines();
@@ -2620,12 +2643,12 @@ fn build_editor_content(
     let mut container = div()
         .flex_row()
         .w_full()
-        .min_h(visible_lines.len() as f32 * line_height_px + 2.0 * pad);
+        .min_h(visible_lines.len() as f32 * line_height_px + top + pad);
     let mut code_area = div().flex_col().flex_grow().relative();
 
     // Current line highlight (subtle background behind active line)
     if is_focused && data.selection_start.is_none() {
-        let line_top = data.row_of(data.cursor.line) as f32 * line_height_px + pad;
+        let line_top = data.row_of(data.cursor.line) as f32 * line_height_px + top;
         let line = div()
             .class("blinc-code-active-line")
             .absolute()
@@ -2680,7 +2703,7 @@ fn build_editor_content(
                 };
 
                 if width > 0.0 {
-                    let sel_top = row as f32 * line_height_px + pad;
+                    let sel_top = row as f32 * line_height_px + top;
                     let sel = div()
                         .class("blinc-code-selection")
                         .absolute()
@@ -2715,7 +2738,7 @@ fn build_editor_content(
                             .take(1)
                             .collect::<String>(),
                     );
-                    let y = vis_row as f32 * line_height_px + pad;
+                    let y = vis_row as f32 * line_height_px + top;
                     code_area = code_area.child(
                         div()
                             .class("blinc-code-bracket")
@@ -2733,7 +2756,7 @@ fn build_editor_content(
 
     // Indentation guides (behind text)
     if config.indent_guides {
-        for guide_div in build_indent_guides(data, &visible_lines, line_height_px, pad) {
+        for guide_div in build_indent_guides(data, &visible_lines, line_height_px, (top, pad)) {
             code_area = code_area.child(guide_div);
         }
     }
@@ -2752,7 +2775,7 @@ fn build_editor_content(
                     .collect();
                 let x = data.measure_mono(&before) + pad;
                 let w = data.measure_mono(&matched);
-                let y = vis_row as f32 * line_height_px + pad;
+                let y = vis_row as f32 * line_height_px + top;
                 let mut mark = div()
                     .class("blinc-code-find-match")
                     .absolute()
@@ -2781,7 +2804,7 @@ fn build_editor_content(
                 .class("blinc-code-placeholder")
                 .absolute()
                 .left(pad)
-                .top(pad)
+                .top(top)
                 .h(line_height_px)
                 .pointer_events_none()
                 .child(
@@ -2800,6 +2823,7 @@ fn build_editor_content(
         .justify_start()
         .padding_x_px(pad)
         .padding_y_px(pad);
+    text_wrapper.style.padding.top = taffy::LengthPercentage::length(top);
     for &line_idx in &visible_lines {
         let line_div = if line_idx < styled.lines.len() {
             let mut ld = build_styled_line(&styled.lines[line_idx], config, line_height_px);
@@ -2847,7 +2871,7 @@ fn build_editor_content(
 
         let cursor_row = visible_lines.binary_search(&cursor_line).unwrap_or(0);
         let cursor_top =
-            (cursor_row as f32 * line_height_px) + (line_height_px - cursor_height) / 2.0 + pad;
+            (cursor_row as f32 * line_height_px) + (line_height_px - cursor_height) / 2.0 + top;
 
         let cursor_state_clone = Arc::clone(&data.cursor_state);
         let cursor_color = config.cursor_color.unwrap_or_else(caret_ink);
@@ -2908,7 +2932,7 @@ fn build_editor_content(
             &fold_regions,
             &folded_starts,
             Some(&data.diagnostics),
-            pad,
+            (top, pad),
         ));
     }
     // Search bar is rendered as an overlay (not inside scroll content). The code area scrolls

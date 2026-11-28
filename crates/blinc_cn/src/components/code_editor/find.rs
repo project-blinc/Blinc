@@ -10,7 +10,7 @@ use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::{Div, div};
 use blinc_layout::widgets::code::{
     CodeEditorData, SharedCodeEditorState, focus_code_editor_deferred, refresh_code_editor,
-    replace_all_code_matches, replace_code_match,
+    replace_all_code_matches, replace_code_match, set_code_top_inset,
 };
 use blinc_layout::widgets::text_input::{
     SharedTextInputData, blur_all_text_inputs, focus_text_input_deferred,
@@ -140,6 +140,7 @@ impl FindUi {
         if let Ok(mut d) = state.lock() {
             d.find_open = false;
         }
+        set_code_top_inset(state, 0.0);
         self.open.set(false);
         // After every handler of this key or press, so none takes the keyboard back.
         focus_code_editor_deferred(state);

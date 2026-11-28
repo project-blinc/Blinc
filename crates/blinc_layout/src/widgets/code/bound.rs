@@ -70,7 +70,7 @@ pub(super) fn structure(
                     &[],
                     &[],
                     None,
-                    gutter_config.padding,
+                    (gutter_config.padding, gutter_config.padding),
                 )
             },
         ));

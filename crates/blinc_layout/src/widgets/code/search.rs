@@ -10,6 +10,7 @@ pub(super) fn close_search_overlay(data: &mut CodeEditorData) {
     data.replace_active = false;
     data.search_query.clear();
     data.search_matches.clear();
+    data.apply_top_inset(0.0);
     if let Some(handle) = data.search_overlay_handle.take()
         && let Some(ctx) = crate::overlay_state::OverlayContext::try_get()
     {
@@ -24,6 +25,9 @@ pub(super) fn close_search_overlay(data: &mut CodeEditorData) {
         i.cursor = 0;
     }
 }
+
+/// How far below the editor's top edge the find bar opens.
+const BAR_OFFSET: f32 = 4.0;
 
 /// Open the find bar as an overlay, bound to a signal the editor bumps.
 pub(super) fn open_search_overlay(shared_state: &SharedCodeEditorState, instance_key: &str) {
@@ -43,13 +47,23 @@ pub(super) fn open_search_overlay(shared_state: &SharedCodeEditorState, instance
     {
         let mut d = shared_state.lock().unwrap();
         d.search_signal_id = Some(signal_id);
+        // The field shows the search in force: the editor reads the query back
+        // from it when it draws.
+        if let Ok(mut field) = d.search_input_state.lock()
+            && field.value.is_empty()
+            && !d.search_query.is_empty()
+        {
+            field.value = d.search_query.clone();
+            field.cursor = field.value.chars().count();
+            field.selection_start = Some(0);
+        }
     }
 
     // Position at top-right of editor bounds
     let (ex, ey, ew, _eh) = shared_state.lock().unwrap().editor_bounds;
     let bar_w = bar_width(shared_state.lock().unwrap().config.font_size);
     let overlay_x = (ex + ew - bar_w - 8.0).max(ex);
-    let overlay_y = ey + 4.0;
+    let overlay_y = ey + BAR_OFFSET;
 
     let state_for_content = Arc::clone(shared_state);
     let key = instance_key.to_string();
@@ -67,6 +81,7 @@ pub(super) fn open_search_overlay(shared_state: &SharedCodeEditorState, instance
                     d.replace_active = false;
                     d.search_overlay_handle = None;
                     d.search_signal_id = None;
+                    d.apply_top_inset(0.0);
                 }
                 // The matches leave the editor with the bar.
                 refresh_editor(&state_for_close);
@@ -74,7 +89,13 @@ pub(super) fn open_search_overlay(shared_state: &SharedCodeEditorState, instance
         })
         .content(move || {
             let revision = blinc_core::reactive::Signal::<u64>::from_id(signal_id);
-            build_search_bar(&state_for_content, &key, revision)
+            let editor = Arc::clone(&state_for_content);
+            // The editor leaves room under the bar, whatever its height.
+            build_search_bar(&state_for_content, &key, revision).on_layout_change(move |bounds| {
+                if editor.lock().is_ok_and(|d| d.search_active) {
+                    super::control::set_code_top_inset(&editor, BAR_OFFSET + bounds.height);
+                }
+            })
         })
         .show();
 
