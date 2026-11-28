@@ -4,6 +4,8 @@ All notable changes to `blinc_app` will be documented in this file.
 
 ## [Unreleased]
 
+- `Text::word_spacing` is drawn.
+
 - The bold and italic runs of a rich text draw on the baseline of the text beside them. An underline on text positioned by its baseline follows the glyphs.
 
 - Desktop accessibility delivers semantic snapshots, focus and actions through AccessKit. Collection starts on native activation, updates retain stable IDs, unchanged nodes are omitted and deactivation frees the cache. The iOS bridge accepts the expanded role names.

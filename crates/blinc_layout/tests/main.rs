@@ -70,3 +70,4 @@ mod update_text;
 mod viewport_cull_nested_scroll;
 mod visible_updates;
 mod when_reactive;
+mod word_spacing;

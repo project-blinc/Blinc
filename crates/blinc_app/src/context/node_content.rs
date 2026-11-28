@@ -346,8 +346,8 @@ impl RenderContext {
                         line_height: text_data.line_height,
                         measured_width: scaled_measured_width,
                         font_family: text_data.font_family.clone(),
-                        word_spacing: text_data.word_spacing,
                         // Device pixels, like the font size it is drawn with.
+                        word_spacing: text_data.word_spacing * scale,
                         letter_spacing: render_node
                             .props
                             .letter_spacing

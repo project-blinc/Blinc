@@ -74,4 +74,5 @@ mod scroll_perf;
 mod shadow_current_color;
 mod stateful_ids;
 mod style_pass_cost;
+mod text_word_spacing;
 mod virtual_list_gap;

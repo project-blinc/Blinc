@@ -533,6 +533,7 @@ impl Text {
     /// Default is 0.0 (normal spacing).
     pub fn word_spacing(mut self, spacing: f32) -> Self {
         self.word_spacing = spacing;
+        self.update_size_estimate();
         self
     }
 
@@ -545,6 +546,7 @@ impl Text {
             |text, spacing| {
                 text.explicit_font |= crate::div::font_field::LETTER_SPACING;
                 text.letter_spacing = *spacing;
+                text.update_size_estimate();
             },
             |props, spacing| props.letter_spacing = Some(spacing),
         )
@@ -579,7 +581,9 @@ impl Text {
     /// Update size using actual text measurement if available, otherwise estimate
     fn update_size_estimate(&mut self) {
         // Use the global text measurer with font family info
-        let options = estimate_options(&self.font_family, self.weight, self.italic);
+        let mut options = estimate_options(&self.font_family, self.weight, self.italic);
+        options.letter_spacing = self.letter_spacing;
+        options.word_spacing = self.word_spacing;
 
         let metrics =
             crate::text_measure::measure_text_with_options(&self.content, self.font_size, &options);
@@ -768,6 +772,7 @@ impl ElementBuilder for Text {
                 font_size: self.font_size,
                 line_height: self.line_height,
                 letter_spacing: self.letter_spacing,
+                word_spacing: self.word_spacing,
                 wrap: self.wrap,
                 font_name: self.font_family.name.clone(),
                 generic_font: self.font_family.generic,
@@ -925,13 +930,12 @@ pub(crate) fn measured_content_width(
     family: &FontFamily,
     weight: FontWeight,
     italic: bool,
+    (letter_spacing, word_spacing): (f32, f32),
 ) -> f32 {
-    crate::text_measure::measure_text_with_options(
-        content,
-        font_size,
-        &estimate_options(family, weight, italic),
-    )
-    .width
+    let mut options = estimate_options(family, weight, italic);
+    options.letter_spacing = letter_spacing;
+    options.word_spacing = word_spacing;
+    crate::text_measure::measure_text_with_options(content, font_size, &options).width
 }
 
 #[cfg(test)]

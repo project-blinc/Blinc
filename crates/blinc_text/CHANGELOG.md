@@ -5,6 +5,7 @@ All notable changes to `blinc_text` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `LayoutOptions::word_spacing` adds pixels after each word separator. A `LayoutOptions` literal without `..Default::default()` needs the field.
 - `FaceChoice::Joined` and `FallbackFaces::apply_to`; see the emoji sequence fix below. A `match` on `FaceChoice` needs the new arm.
 - `use_fontconfig_sans()`, opt-in: on Linux it asks `fc-match` for fontconfig's default sans and makes it the face `system-ui` resolves to, through the new `FontRegistry::set_system_ui_family`. Nothing changes unless an app calls it; the default stays the built-in list, which costs nothing at startup. Call it once before drawing text.
 

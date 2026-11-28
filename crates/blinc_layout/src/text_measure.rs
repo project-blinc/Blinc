@@ -200,12 +200,15 @@ impl EstimatedTextMeasurer {
     /// Width of a run under the estimation formula
     fn estimate_run_width(text: &str, font_size: f32, options: &TextLayoutOptions) -> f32 {
         let char_count = text.chars().count() as f32;
-        let word_count = text.split_whitespace().count().max(1) as f32;
+        let separators = text
+            .chars()
+            .filter(|c| blinc_core::draw::is_word_separator(*c))
+            .count();
         let base = char_count * font_size * 0.55;
         // Every character carries its spacing, the last one included,
         // matching what the renderer advances by and what CSS does.
         let letters = char_count * options.letter_spacing;
-        let words = (word_count - 1.0).max(0.0) * options.word_spacing;
+        let words = separators as f32 * options.word_spacing;
         base + letters + words
     }
 
@@ -267,7 +270,6 @@ impl TextMeasurer for EstimatedTextMeasurer {
         options: &TextLayoutOptions,
     ) -> TextMetrics {
         let char_count = text.chars().count() as f32;
-        let word_count = text.split_whitespace().count().max(1) as f32;
 
         // Base width: ~0.55 * font_size per character (conservative for proportional fonts)
         let base_char_width = font_size * 0.55;
@@ -279,12 +281,11 @@ impl TextMeasurer for EstimatedTextMeasurer {
         // box one spacing narrower than the line in it.
         let letter_spacing_total = char_count * options.letter_spacing;
 
-        // Add word spacing (per word gap)
-        let word_spacing_total = if word_count > 1.0 {
-            (word_count - 1.0) * options.word_spacing
-        } else {
-            0.0
-        };
+        let separators = text
+            .chars()
+            .filter(|c| blinc_core::draw::is_word_separator(*c))
+            .count();
+        let word_spacing_total = separators as f32 * options.word_spacing;
 
         let total_width = base_width + letter_spacing_total + word_spacing_total;
 

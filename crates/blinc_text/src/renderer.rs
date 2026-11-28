@@ -62,6 +62,8 @@ struct LayoutCacheKey {
     line_height_bits: u32,
     /// `f32::to_bits(letter_spacing)`.
     letter_spacing_bits: u32,
+    /// `f32::to_bits(word_spacing)`.
+    word_spacing_bits: u32,
     /// Which fallback faces the layout was given. The same text lays out
     /// differently with and without them, and they load on first use.
     fallbacks: u8,
@@ -569,6 +571,7 @@ impl TextRenderer {
             line_break: options.line_break,
             line_height_bits: options.line_height.to_bits(),
             letter_spacing_bits: options.letter_spacing.to_bits(),
+            word_spacing_bits: options.word_spacing.to_bits(),
             fallbacks: fallbacks.signature(),
         };
         let layout = if let Some(cached) = self.layout_cache.get(&cache_key) {
@@ -814,6 +817,7 @@ impl TextRenderer {
             line_break: options.line_break,
             line_height_bits: options.line_height.to_bits(),
             letter_spacing_bits: options.letter_spacing.to_bits(),
+            word_spacing_bits: options.word_spacing.to_bits(),
             // Styled text has always drawn on the primary face alone, and
             // still does; no fallback faces are resolved on this path.
             fallbacks: 0,

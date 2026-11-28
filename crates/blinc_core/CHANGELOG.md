@@ -7,6 +7,7 @@ All notable changes to `blinc_core` will be documented in this file.
 - Focus requests enter a queue for the runtime to apply after layout. Resolved focus updates do not create another request.
 
 ### Added
+- `draw::is_word_separator` says whether CSS `word-spacing` applies after a character.
 - `DrawContext::tag_background_color` optionally identifies an owning solid fill and reports its baked opacity for retained colour updates. Contexts that do not support it keep the full-paint path.
 - `DrawContext::begin_row_clips`, `end_row_clips` and `current_row_clip_aabb`: mark the clips pushed inside content that rows move, and read the clip around that content.
 - `DrawContext::current_path_clip`: the path clip pointer a primitive emitted now would carry, zero by default.

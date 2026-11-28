@@ -295,6 +295,7 @@ impl RenderContext {
                     text.italic,
                     layout_height,
                     text.letter_spacing,
+                    text.word_spacing,
                 ) {
                     let mut owned = text_clip::prepare_glyphs(text, shadow_glyphs, (width, height));
                     if let Some(affine) = text.css_affine {
@@ -330,6 +331,7 @@ impl RenderContext {
                     text.italic,
                     layout_height.map(|h| h * k),
                     text.letter_spacing * k,
+                    text.word_spacing * k,
                 )
                 .map(|mut glyphs| {
                     if k != 1.0 {
@@ -455,6 +457,7 @@ impl RenderContext {
                 text.italic,
                 layout_height,
                 text.letter_spacing,
+                text.word_spacing,
             ) {
                 let mut owned = text_clip::prepare_glyphs(text, glyphs, (width, height));
                 if let Some(affine) = text.css_affine {
@@ -628,6 +631,7 @@ impl RenderContext {
                 text.italic,
                 layout_height.map(|h| h * k),
                 text.letter_spacing * k,
+                text.word_spacing * k,
             )
             .ok()?;
         if k != 1.0 {

@@ -382,7 +382,7 @@ impl TextRenderingContext {
     ) -> Result<Vec<GpuGlyph>, blinc_text::TextError> {
         self.prepare_text_with_style(
             text, x, y, font_size, color, anchor, alignment, width, wrap, font_name, generic, 400,
-            false, None, 0.0,
+            false, None, 0.0, 0.0,
         )
     }
 
@@ -403,6 +403,8 @@ impl TextRenderingContext {
     /// * `weight` - Font weight (100-900, 400=normal, 700=bold)
     /// * `italic` - Whether to use italic variant
     /// * `layout_height` - Optional layout-assigned height for vertical centering
+    /// * `letter_spacing` - Extra pixels after each character
+    /// * `word_spacing` - Extra pixels after each word separator
     #[allow(clippy::too_many_arguments)]
     pub fn prepare_text_with_style(
         &mut self,
@@ -421,11 +423,13 @@ impl TextRenderingContext {
         italic: bool,
         layout_height: Option<f32>,
         letter_spacing: f32,
+        word_spacing: f32,
     ) -> Result<Vec<GpuGlyph>, blinc_text::TextError> {
         let mut options = LayoutOptions {
             anchor,
             alignment,
             letter_spacing,
+            word_spacing,
             ..Default::default()
         };
         if let Some(w) = width {

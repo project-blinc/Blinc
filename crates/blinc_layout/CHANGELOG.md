@@ -96,6 +96,8 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Touch momentum on iOS decays at 2 per second (`ScrollConfig::deceleration` 1000, UIKit's normal deceleration rate) instead of 3, so a flick glides about 1.5 times as far. Other platforms keep 1500.
 
 ### Fixed
+- `Text::word_spacing` is drawn. It counts each word separator, such as a space, and the box is measured with it. `TextMeasureContext` has a `word_spacing` field.
+- A text that does not wrap holds its builder `letter_spacing`: its box was as wide as the text without it.
 - Code editor and code block rows are all the same height when the font size times the line height is not a whole number of pixels. `CodeConfig::line_height_px` is that height.
 - A color set on a text input with `text_color`, `placeholder_color`, `cursor_color` or `selection_color` is kept when a stylesheet rule sets the same color. `TextInputConfig` gains `inline`.
 - `Div::visible` takes effect through an incremental update, and an update no longer shows an element that it hides.

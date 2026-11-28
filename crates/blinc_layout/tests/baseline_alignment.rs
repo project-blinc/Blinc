@@ -30,6 +30,7 @@ fn context(content: &str, font_size: f32, generic: GenericFont) -> TextMeasureCo
         font_size,
         line_height: 1.2,
         letter_spacing: 0.0,
+        word_spacing: 0.0,
         wrap: false,
         font_name: None,
         generic_font: generic,

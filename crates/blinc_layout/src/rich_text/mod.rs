@@ -622,8 +622,9 @@ impl ElementBuilder for RichText {
                 content: self.content.clone(),
                 font_size: self.font_size,
                 line_height: self.line_height,
-                // RichText has no letter-spacing modifier of its own.
+                // RichText has no letter or word spacing modifier of its own.
                 letter_spacing: 0.0,
+                word_spacing: 0.0,
                 wrap: true,
                 font_name: self.font_family.name.clone(),
                 generic_font: self.font_family.generic,

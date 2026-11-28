@@ -38,6 +38,7 @@ struct MeasureKey {
     size: u32,
     line_height: u32,
     letter_spacing: u32,
+    word_spacing: u32,
     max_width: Option<u32>,
 }
 
@@ -115,7 +116,10 @@ impl FontTextMeasurer {
     /// Fallback when the registry has no face for what was asked.
     fn estimate_size(text: &str, font_size: f32, options: &TextLayoutOptions) -> TextMetrics {
         let char_count = text.chars().count() as f32;
-        let word_count = text.split_whitespace().count().max(1) as f32;
+        let separators = text
+            .chars()
+            .filter(|c| blinc_core::draw::is_word_separator(*c))
+            .count();
 
         // Base width: ~0.55 * font_size per character
         let base_char_width = font_size * 0.55;
@@ -126,11 +130,7 @@ impl FontTextMeasurer {
         // path, which gets it from blinc_text's layout.
         let letter_spacing_total = char_count * options.letter_spacing;
 
-        let word_spacing_total = if word_count > 1.0 {
-            (word_count - 1.0) * options.word_spacing
-        } else {
-            0.0
-        };
+        let word_spacing_total = separators as f32 * options.word_spacing;
 
         let total_width = base_width + letter_spacing_total + word_spacing_total;
 
@@ -196,6 +196,7 @@ impl TextMeasurer for FontTextMeasurer {
             size: font_size.to_bits(),
             line_height: options.line_height.to_bits(),
             letter_spacing: options.letter_spacing.to_bits(),
+            word_spacing: options.word_spacing.to_bits(),
             max_width: options.max_width.map(f32::to_bits),
         };
         if cacheable {
@@ -256,6 +257,7 @@ impl TextMeasurer for FontTextMeasurer {
         let probe = LayoutOptions {
             line_height: options.line_height,
             letter_spacing: options.letter_spacing,
+            word_spacing: options.word_spacing,
             max_width: None,
             line_break: blinc_text::LineBreakMode::None,
             ..LayoutOptions::default()
@@ -269,6 +271,7 @@ impl TextMeasurer for FontTextMeasurer {
                 let layout_opts = LayoutOptions {
                     line_height: options.line_height,
                     letter_spacing: options.letter_spacing,
+                    word_spacing: options.word_spacing,
                     max_width: Some(mw),
                     line_break: blinc_text::LineBreakMode::Word,
                     ..LayoutOptions::default()
@@ -357,6 +360,7 @@ impl TextMeasurer for FontTextMeasurer {
         let layout_opts = LayoutOptions {
             line_height: options.line_height,
             letter_spacing: options.letter_spacing,
+            word_spacing: options.word_spacing,
             max_width: Some(max_width),
             line_break: blinc_text::LineBreakMode::Word,
             ..LayoutOptions::default()

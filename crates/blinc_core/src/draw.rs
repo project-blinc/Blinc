@@ -281,6 +281,14 @@ pub enum FontWeight {
     Black,
 }
 
+/// Whether CSS `word-spacing` applies after `c`.
+pub fn is_word_separator(c: char) -> bool {
+    matches!(
+        c,
+        ' ' | '\u{a0}' | '\u{1361}' | '\u{10100}' | '\u{10101}' | '\u{1039f}' | '\u{1091f}'
+    )
+}
+
 /// Text style configuration
 #[derive(Clone, Debug)]
 pub struct TextStyle {

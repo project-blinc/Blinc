@@ -110,6 +110,8 @@ pub struct TextMeasureContext {
     /// Extra spacing between letters in pixels. Measured text must carry
     /// it or a letter-spaced line lays out narrower than it draws.
     pub letter_spacing: f32,
+    /// Extra pixels after each word separator, measured for the same reason
+    pub word_spacing: f32,
     /// Whether text should wrap
     pub wrap: bool,
     /// Font family name (if any)
@@ -203,6 +205,7 @@ fn context_baseline(ctx: &TextMeasureContext) -> f32 {
     options.italic = ctx.italic;
     options.line_height = ctx.line_height;
     options.letter_spacing = ctx.letter_spacing;
+    options.word_spacing = ctx.word_spacing;
 
     let metrics = measure_text_with_options(&ctx.content, ctx.font_size, &options);
     half_leading(&metrics) + metrics.ascender
@@ -240,6 +243,7 @@ fn measure_text_node(
         options.italic = ctx.italic;
         options.line_height = ctx.line_height;
         options.letter_spacing = ctx.letter_spacing;
+        options.word_spacing = ctx.word_spacing;
         // No max_width for non-wrapping
 
         let metrics = measure_text_with_options(&ctx.content, ctx.font_size, &options);
@@ -267,6 +271,7 @@ fn measure_text_node(
     options.italic = ctx.italic;
     options.line_height = ctx.line_height;
     options.letter_spacing = ctx.letter_spacing;
+    options.word_spacing = ctx.word_spacing;
     options.max_width = max_width;
 
     let metrics = measure_text_with_options(&ctx.content, ctx.font_size, &options);

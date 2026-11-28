@@ -44,6 +44,7 @@ text("Hello, World!")
 - `.underline()` - Underline decoration
 - `.line_height(multiplier)` - Line height as multiplier of font size
 - `.letter_spacing(px)` - Space between characters
+- `.word_spacing(px)` - Extra space after each space between words
 - `.align(TextAlign)` - Left, Center, Right, Justify
 
 **Typography Helpers:**

@@ -530,6 +530,7 @@ impl RenderContext {
                     text.italic,
                     layout_height,
                     text.letter_spacing,
+                    text.word_spacing,
                 ) {
                     let owned = text_clip::prepare_layer_glyphs(
                         text,

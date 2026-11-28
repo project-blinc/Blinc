@@ -79,6 +79,7 @@ impl RenderContext {
                 text.italic,
                 height.map(|h| h * k),
                 text.letter_spacing * k,
+                text.word_spacing * k,
             ) {
                 Ok(glyphs) => glyphs,
                 Err(error) => {

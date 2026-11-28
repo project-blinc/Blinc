@@ -10,6 +10,7 @@ fn context(content: &str) -> TextMeasureContext {
         font_size: 16.0,
         line_height: 1.2,
         letter_spacing: 0.0,
+        word_spacing: 0.0,
         wrap: false,
         font_name: None,
         generic_font: GenericFont::System,

@@ -2604,6 +2604,7 @@ impl RenderTree {
         options.italic = look.italic;
         options.line_height = look.line_height;
         options.letter_spacing = look.letter_spacing;
+        options.word_spacing = text.word_spacing;
         let metrics =
             crate::text_measure::measure_text_with_options(&text.content, look.font_size, &options);
 
@@ -3541,6 +3542,7 @@ impl RenderTree {
             &text.font_family,
             text.weight,
             text.italic,
+            (text.letter_spacing, text.word_spacing),
         );
         text.content = content.clone();
         self.layout_tree

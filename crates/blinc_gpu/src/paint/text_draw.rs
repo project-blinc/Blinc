@@ -142,6 +142,7 @@ impl GpuPaintContext<'_> {
             italic_flag,
             None,
             style.letter_spacing,
+            0.0,
         ) {
             // When raster size was clamped (floor for zoom-out OR
             // ceiling for zoom-in), the layout above ran at
