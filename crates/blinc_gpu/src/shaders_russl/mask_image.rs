@@ -1,5 +1,6 @@
-//! Layer effect: multiply a layer by a mask image, `output.a = input.a * mask_value`. Mask mode 0
-//! takes the mask's alpha, mode 1 its luminance.
+//! Layer effect: multiply a layer's alpha by a mask image, `output.a = input.a * mask_value`.
+//! Mask mode 0 takes the mask's alpha, mode 1 its luminance. Layer effects take and give
+//! straight colour, so the colour passes through.
 
 russl::russl! {
     use super::layer_quad::{LayerQuadOut, layer_quad_vertex};
@@ -36,7 +37,6 @@ russl::russl! {
             mask_alpha = mask.w;
         }
 
-        // Multiply source by the mask value (premultiplied alpha)
-        return Vec4::new(src.xyz * mask_alpha, src.w * mask_alpha);
+        return Vec4::new(src.xyz, src.w * mask_alpha);
     }
 }

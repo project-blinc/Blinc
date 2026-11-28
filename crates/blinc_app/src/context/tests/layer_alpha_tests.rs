@@ -3,7 +3,7 @@
 use super::*;
 use crate::tests::{create_test_texture, read_rendered_pixels};
 use blinc_core::{
-    BlendMode, Brush, Color, CornerRadius, DrawContext, LayerConfig, LayerEffect, Rect,
+    BlendMode, Brush, Color, CornerRadius, DrawContext, LayerConfig, LayerEffect, MaskMode, Rect,
 };
 use blinc_gpu::GpuPaintContext;
 
@@ -81,6 +81,42 @@ fn translucent_content_in_a_layer_keeps_its_alpha() {
             );
         }
     }
+}
+
+/// A mask image lowers the alpha of what it masks and leaves the colour alone.
+#[test]
+#[ignore] // Requires GPU
+fn a_mask_image_layer_scales_the_alpha_once() {
+    const SIDE: u32 = 100;
+    let mut context = super::main_text_clip_tests::context(true, 1);
+    context.renderer.resize(SIDE, SIDE);
+    // White at half alpha, as BC and plain textures both keep it.
+    context
+        .renderer
+        .load_mask_image_rgba("half", &[255, 255, 255, 128].repeat(16), 4, 4);
+    let mut paint = GpuPaintContext::new(SIDE as f32, SIDE as f32);
+    paint.push_layer(LayerConfig {
+        effects: vec![LayerEffect::MaskImage {
+            image_url: "half".into(),
+            mask_mode: MaskMode::Alpha,
+        }],
+        ..LayerConfig::new()
+    });
+    paint.fill_rect(
+        Rect::new(10.0, 10.0, 80.0, 80.0),
+        CornerRadius::default(),
+        Brush::Solid(Color::WHITE),
+    );
+    paint.pop_layer();
+    let batch = paint.take_batch();
+    let (texture, view) =
+        create_test_texture(context.device(), context.texture_format(), SIDE, SIDE);
+    context
+        .renderer
+        .render_with_clear(&view, &batch, [0.0, 0.0, 0.0, 1.0]);
+    let page = read_rendered_pixels(context.device(), context.queue(), &texture, SIDE, SIDE);
+    let drawn = page.get_pixel(50, 50).0;
+    assert!(drawn[..3].iter().all(|c| c.abs_diff(128) <= 2), "{drawn:?}");
 }
 
 /// What a frame draws at the middle of a green image over blue, in an element
