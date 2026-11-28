@@ -1472,8 +1472,9 @@ pub struct Transform3DParams {
     pub perspective_d: f32,
 }
 
-/// Configuration for offscreen layers
-#[derive(Clone, Debug, Default)]
+/// Configuration for offscreen layers. The default draws the layer as it is:
+/// opaque, with the normal blend mode and no effects.
+#[derive(Clone, Debug)]
 pub struct LayerConfig {
     /// Layer ID (optional)
     pub id: Option<LayerId>,
@@ -1491,6 +1492,21 @@ pub struct LayerConfig {
     pub effects: Vec<LayerEffect>,
     /// 3D perspective transform for layer compositing (rotate-x/rotate-y on containers)
     pub transform_3d: Option<Transform3DParams>,
+}
+
+impl Default for LayerConfig {
+    fn default() -> Self {
+        Self {
+            id: None,
+            position: None,
+            size: None,
+            blend_mode: BlendMode::default(),
+            opacity: 1.0,
+            depth: false,
+            effects: Vec::new(),
+            transform_3d: None,
+        }
+    }
 }
 
 impl LayerConfig {
@@ -3304,5 +3320,18 @@ mod texture_key_tests {
             .collect();
         assert_eq!(keys.len(), 200);
         assert!(!keys.contains(&first.cache_key()));
+    }
+}
+
+#[cfg(test)]
+mod layer_config_tests {
+    use super::{BlendMode, LayerConfig};
+
+    #[test]
+    fn a_default_layer_is_drawn_as_it_is() {
+        let config = LayerConfig::new();
+        assert_eq!(config.opacity, 1.0);
+        assert_eq!(config.blend_mode, BlendMode::Normal);
+        assert!(config.effects.is_empty());
     }
 }

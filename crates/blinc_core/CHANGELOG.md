@@ -16,6 +16,7 @@ All notable changes to `blinc_core` will be documented in this file.
 - `Shadow::CURRENT_COLOR` stands for CSS `currentColor`, and `Shadow::with_current_color` puts a colour in its place.
 
 ### Fixed
+- `LayerConfig::new` and `LayerConfig::default` have an opacity of 1. It was 0, so a layer built from them drew nothing.
 - `TextureData::cache_key` is never given to a second texture. It was the address of the pixel buffer, which a later texture could get.
 - Dropping a `BuildScope` disposes the builds it holds, so a closed window's effects and computeds stop.
 - Keyed initializers can create nested signals and keyed values without holding the graph or hook locks. Nested reactive values retain the persistent key’s lifetime across fresh builds.
